@@ -6,3 +6,4 @@ licenca.lic
 .env
 .DS_Store
 .claude/
+*.tsbuildinfo
