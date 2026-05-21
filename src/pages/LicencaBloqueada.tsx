@@ -1,4 +1,5 @@
 import { FC, useState } from 'react'
+import logoGnModas from '@/assets/logo.png'
 
 type Props = {
   mensagemInicial: string
@@ -34,11 +35,12 @@ const LicencaBloqueada: FC<Props> = ({ mensagemInicial, onAtivar }) => {
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-2xl font-bold">GN</span>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900">GN Modas</h1>
-          <p className="text-slate-500 text-sm mt-1">Sistema de Gestão de Varejo</p>
+          <img
+            src={logoGnModas}
+            alt="GN Modas"
+            className="w-32 h-32 mx-auto mb-3 object-contain"
+          />
+          <p className="text-slate-500 text-sm">Sistema de Gestão de Varejo</p>
         </div>
 
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
