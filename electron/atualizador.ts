@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, app } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import { registrarBackupPreUpdate } from './backup/BackupPreUpdate'
+import { executarBackupPreUpdate } from './backup/BackupPreUpdate'
 
 type RespostaIPC<T = unknown> =
   | { success: true; data: T }
@@ -38,9 +38,6 @@ export function inicializarAtualizador(obterJanela: () => BrowserWindow | null):
   if (!app.isPackaged) {
     console.log('[atualizador] App em modo dev — checagem de update desativada.')
   }
-
-  // ─── Hook de backup pré-update ───────────────────────────────────────────
-  registrarBackupPreUpdate(autoUpdater)
 
   // ─── Eventos do autoUpdater ──────────────────────────────────────────────
   const enviarEvento = (tipo: string, dados?: unknown): void => {
@@ -104,11 +101,15 @@ export function inicializarAtualizador(obterJanela: () => BrowserWindow | null):
     }
   })
 
-  ipcMain.handle('atualizacao:instalar', (): RespostaIPC => {
+  ipcMain.handle('atualizacao:instalar', async (): Promise<RespostaIPC> => {
     if (!estado.versaoBaixada) {
       return { success: false, error: 'Nenhuma atualização baixada disponível.' }
     }
-    // Fecha o app e dispara o instalador NSIS
+    // Backup antes de fechar — protege contra migrations da nova versão.
+    // O evento 'before-quit-for-update' do electron-updater não serve aqui:
+    // é emitido no autoUpdater nativo do Electron logo antes de app.quit(),
+    // sem tempo de aguardar uma operação assíncrona.
+    await executarBackupPreUpdate()
     setImmediate(() => autoUpdater.quitAndInstall())
     return { success: true, data: null }
   })
