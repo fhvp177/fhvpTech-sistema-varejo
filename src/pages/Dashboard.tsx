@@ -4,6 +4,7 @@ import {
   ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
   RotateCcw, CalendarDays
 } from 'lucide-react'
+import MesPicker from '@/components/MesPicker'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell
@@ -246,24 +247,20 @@ const Dashboard: FC = () => {
         <div className="mb-6 border rounded-lg p-3 bg-muted/30 flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground font-medium">Mês de análise</label>
-            <input
-              type="month"
+            <MesPicker
               value={mesAtual}
-              max={mesMaximo}
-              onChange={(e) => e.target.value && setMesAtual(e.target.value)}
-              className="px-2 py-1.5 text-sm border rounded-md bg-background"
+              onChange={(v) => v && setMesAtual(v)}
+              maxMes={mesMaximo}
             />
           </div>
           <span className="pb-2 text-sm text-muted-foreground font-medium">vs</span>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground font-medium">Comparar com</label>
             <div className="flex items-center gap-1">
-              <input
-                type="month"
+              <MesPicker
                 value={mesComparativo}
-                max={mesMaximo}
-                onChange={(e) => e.target.value && setMesComparativo(e.target.value)}
-                className="px-2 py-1.5 text-sm border rounded-md bg-background"
+                onChange={(v) => v && setMesComparativo(v)}
+                maxMes={mesMaximo}
               />
               <button
                 type="button"

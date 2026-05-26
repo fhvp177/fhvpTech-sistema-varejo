@@ -1,5 +1,6 @@
 import { FC, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, Printer, User, Building2, Percent, DollarSign } from 'lucide-react'
+import MesPicker from '@/components/MesPicker'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -178,6 +179,7 @@ const Vendas: FC = () => {
 const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [lista, setLista] = useState<Venda[]>([])
   const [filtroStatus, setFiltroStatus] = useState<StatusPagamento | 'todos'>('todos')
+  const [filtroMes, setFiltroMes] = useState<string>('') // '' = todas as datas; 'YYYY-MM' = mês específico
   const [vendaDetalhada, setVendaDetalhada] = useState<VendaDetalhada | null>(null)
   const [valorPagamento, setValorPagamento] = useState('')
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
@@ -206,13 +208,24 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
   useEffect(() => { carregar() }, [])
 
+  // Aplica filtro de mês primeiro (usado também nos contadores de cada aba).
+  const listaPorMes = filtroMes
+    ? lista.filter((v) => v.data.slice(0, 7) === filtroMes)
+    : lista
+
   const listaFiltrada = filtroStatus === 'todos'
-    ? lista
-    : lista.filter((v) => v.status_pagamento === filtroStatus)
+    ? listaPorMes
+    : listaPorMes.filter((v) => v.status_pagamento === filtroStatus)
 
   useEffect(() => {
     setPaginaAtual(1)
-  }, [filtroStatus])
+  }, [filtroStatus, filtroMes])
+
+  // Limite máximo do <input type="month"> — não faz sentido escolher futuro.
+  const mesMaximo = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })()
 
   const inicioPagina = (paginaAtual - 1) * ITENS_POR_PAGINA
   const listaPaginada = listaFiltrada.slice(inicioPagina, inicioPagina + ITENS_POR_PAGINA)
@@ -312,26 +325,38 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         </Button>
       </div>
 
-      {/* Filtro de status */}
-      <div className="flex gap-1 mb-4 border-b">
-        {tabs.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setFiltroStatus(key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              filtroStatus === key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {label}
-            <span className="ml-1.5 text-xs bg-muted rounded-full px-1.5 py-0.5">
-              {key === 'todos'
-                ? lista.length
-                : lista.filter((v) => v.status_pagamento === key).length}
-            </span>
-          </button>
-        ))}
+      {/* Filtro de status + filtro de mês */}
+      <div className="flex items-end justify-between gap-3 mb-4 border-b flex-wrap">
+        <div className="flex gap-1">
+          {tabs.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFiltroStatus(key)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                filtroStatus === key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {label}
+              <span className="ml-1.5 text-xs bg-muted rounded-full px-1.5 py-0.5">
+                {key === 'todos'
+                  ? listaPorMes.length
+                  : listaPorMes.filter((v) => v.status_pagamento === key).length}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="pb-1.5">
+          <MesPicker
+            value={filtroMes}
+            onChange={setFiltroMes}
+            allowClear
+            maxMes={mesMaximo}
+            placeholder="Todas as datas"
+            align="right"
+          />
+        </div>
       </div>
 
       <div className="border rounded-lg overflow-hidden">
