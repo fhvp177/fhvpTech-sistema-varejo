@@ -95,6 +95,13 @@ interface Window {
       atualizar: (id: number, nome: string) => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>
     }
+    vendedores: {
+      listar: () => Promise<RespostaIPC<Array<{ id: number; nome: string; ativo: number; vendas_count: number }>>>
+      criar: (nome: string) => Promise<RespostaIPC<{ id: number; nome: string }>>
+      atualizar: (id: number, nome: string) => Promise<RespostaIPC>
+      alternarAtivo: (id: number, ativo: boolean) => Promise<RespostaIPC>
+      deletar: (id: number) => Promise<RespostaIPC>
+    }
     vendas: {
       listar: () => Promise<RespostaIPC>
       criar: (dados: unknown) => Promise<RespostaIPC>
@@ -108,6 +115,18 @@ interface Window {
     licenca: {
       validar: () => Promise<RespostaIPC<StatusLicenca>>
       ativar: (chave: string) => Promise<RespostaIPC<StatusLicenca>>
+    }
+    auth: {
+      obterStatus: () => Promise<RespostaIPC<{
+        pinConfigurado: boolean
+        precisaValidarHoje: boolean
+        autoLockMinutos: number
+      }>>
+      definirPin: (pin: string) => Promise<RespostaIPC>
+      verificarPin: (pin: string) => Promise<RespostaIPC<{ ok: boolean }>>
+      alterarPin: (pinAtual: string, pinNovo: string) => Promise<RespostaIPC>
+      setarAutoLock: (minutos: number) => Promise<RespostaIPC>
+      marcarValidadoHoje: () => Promise<RespostaIPC>
     }
     impressao: {
       imprimir: (html: string) => Promise<RespostaIPC>

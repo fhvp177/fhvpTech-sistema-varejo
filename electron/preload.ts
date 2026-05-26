@@ -50,6 +50,17 @@ const api = {
     deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('categorias:deletar', id)
   },
 
+  // Vendedores
+  vendedores: {
+    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendedores:listar'),
+    criar: (nome: string): Promise<RespostaIPC> => ipcRenderer.invoke('vendedores:criar', nome),
+    atualizar: (id: number, nome: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendedores:atualizar', id, nome),
+    alternarAtivo: (id: number, ativo: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendedores:alternarAtivo', id, ativo),
+    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('vendedores:deletar', id)
+  },
+
   // Vendas
   vendas: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:listar'),
@@ -64,6 +75,20 @@ const api = {
     restaurar: (id: number, snapshot: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:restaurar', id, snapshot),
     resumoDashboard: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:resumoDashboard')
+  },
+
+  // Auth (PIN do sistema)
+  auth: {
+    obterStatus: (): Promise<RespostaIPC> => ipcRenderer.invoke('auth:obterStatus'),
+    definirPin: (pin: string): Promise<RespostaIPC> => ipcRenderer.invoke('auth:definirPin', pin),
+    verificarPin: (pin: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:verificarPin', pin),
+    alterarPin: (pinAtual: string, pinNovo: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:alterarPin', pinAtual, pinNovo),
+    setarAutoLock: (minutos: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:setarAutoLock', minutos),
+    marcarValidadoHoje: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:marcarValidadoHoje')
   },
 
   // Licença

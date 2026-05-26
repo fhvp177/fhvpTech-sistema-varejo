@@ -12,10 +12,12 @@ import { registrarHandlersCategorias } from './ipc/categorias'
 import { registrarHandlersClientes } from './ipc/clientes'
 import { registrarHandlersProdutos } from './ipc/produtos'
 import { registrarHandlersVendas } from './ipc/vendas'
+import { registrarHandlersVendedores } from './ipc/vendedores'
 import { registrarHandlersEtiquetas } from './ipc/etiquetas'
 import { registrarHandlersBackup } from './ipc/backup'
 import { registrarHandlersImpressao } from './ipc/impressao'
 import { registrarHandlersDashboard } from './ipc/dashboard'
+import { registrarHandlersAuth } from './ipc/auth'
 import { inicializarAtualizador } from './atualizador'
 
 let janelaAtual: BrowserWindow | null = null
@@ -69,10 +71,12 @@ app.whenReady().then(() => {
   registrarHandlersClientes()
   registrarHandlersProdutos()
   registrarHandlersVendas()
+  registrarHandlersVendedores()
   registrarHandlersEtiquetas()
   registrarHandlersBackup()
   registrarHandlersImpressao()
   registrarHandlersDashboard()
+  registrarHandlersAuth()
 
   criarJanelaPrincipal()
 

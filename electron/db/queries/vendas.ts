@@ -14,8 +14,10 @@ export type Parcela = {
 export type Venda = {
   id: number
   cliente_id: number | null
+  vendedor_id: number | null
   data: string
   total: number
+  desconto: number
   valor_pago: number
   status_pagamento: StatusPagamento
   data_vencimento: string | null
@@ -28,6 +30,7 @@ export type Venda = {
   cliente_tipo_pessoa?: 'fisica' | 'juridica' | null
   cliente_cnpj?: string | null
   cliente_razao_social?: string | null
+  vendedor_nome?: string | null
 }
 
 export type ItemVenda = {
@@ -63,9 +66,11 @@ function obterSnapshotVenda(id: number): SnapshotVenda | undefined {
 
 export type DadosNovaVenda = {
   cliente_id: number | null
+  vendedor_id: number
   status_pagamento: StatusPagamento
   data_vencimento: string | null
   num_parcelas?: number | null
+  desconto?: number
   itens: Array<{
     produto_id: number
     quantidade: number
@@ -119,9 +124,11 @@ export function listarVendas(): Venda[] {
   return db
     .prepare(
       `SELECT v.*, c.nome AS cliente_nome,
+              vd.nome AS vendedor_nome,
               COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente
        FROM vendas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
+       LEFT JOIN vendedores vd ON vd.id = v.vendedor_id
        LEFT JOIN (
          SELECT venda_id, SUM(valor) AS valor_inadimplente
          FROM parcelas WHERE status = 'inadimplente'
@@ -144,9 +151,11 @@ export function buscarVendaPorId(id: number): VendaDetalhada | undefined {
               c.tipo_pessoa AS cliente_tipo_pessoa,
               c.cnpj AS cliente_cnpj,
               c.razao_social AS cliente_razao_social,
+              vd.nome AS vendedor_nome,
               COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente
        FROM vendas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
+       LEFT JOIN vendedores vd ON vd.id = v.vendedor_id
        LEFT JOIN (
          SELECT venda_id, SUM(valor) AS valor_inadimplente
          FROM parcelas WHERE status = 'inadimplente'
@@ -178,6 +187,16 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   const db = obterBancoDeDados()
   const ehParcelado = dados.status_pagamento === 'parcelado' && dados.num_parcelas && dados.num_parcelas > 1
 
+  if (!dados.vendedor_id) {
+    throw new Error('Selecione o vendedor responsável pela venda.')
+  }
+  const vendedor = db
+    .prepare('SELECT id FROM vendedores WHERE id = ? AND ativo = 1')
+    .get(dados.vendedor_id) as { id: number } | undefined
+  if (!vendedor) {
+    throw new Error('Vendedor inválido ou inativo.')
+  }
+
   for (const item of dados.itens) {
     const produto = db
       .prepare('SELECT nome, estoque FROM produtos WHERE id = ?')
@@ -192,14 +211,19 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
     }
   }
 
-  const total = dados.itens.reduce(
+  const subtotal = dados.itens.reduce(
     (acc, item) => acc + item.quantidade * item.preco_unitario,
     0
   )
+  const desconto = Math.max(0, +(dados.desconto ?? 0).toFixed(2))
+  if (desconto > subtotal) {
+    throw new Error('O desconto não pode ser maior que o subtotal da venda.')
+  }
+  const total = +(subtotal - desconto).toFixed(2)
 
   const inserirVenda = db.prepare(
-    `INSERT INTO vendas (cliente_id, total, status_pagamento, data_vencimento, num_parcelas)
-     VALUES (@cliente_id, @total, @status_pagamento, @data_vencimento, @num_parcelas)`
+    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, status_pagamento, data_vencimento, num_parcelas)
+     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @status_pagamento, @data_vencimento, @num_parcelas)`
   )
   const inserirItem = db.prepare(
     `INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario)
@@ -217,7 +241,9 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   db.transaction(() => {
     const result = inserirVenda.run({
       cliente_id: dados.cliente_id,
+      vendedor_id: dados.vendedor_id,
       total,
+      desconto,
       status_pagamento: dados.status_pagamento,
       data_vencimento: dados.data_vencimento,
       num_parcelas: dados.num_parcelas ?? null

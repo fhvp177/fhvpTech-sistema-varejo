@@ -1,5 +1,9 @@
-import { FC, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Search, X, User, Building2, ChevronDown } from 'lucide-react'
+
+export type ClienteSeletorHandle = {
+  abrir: () => void
+}
 
 export type ClienteSelecionavel = {
   id: number
@@ -20,12 +24,12 @@ type Props = {
 
 const MAX_RESULTADOS = 50
 
-const ClienteSeletor: FC<Props> = ({
+const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
   clientes,
   clienteIdSelecionado,
   onChange,
   placeholder = 'Buscar cliente por nome, telefone, CPF/CNPJ...'
-}) => {
+}, ref) => {
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [indiceFoco, setIndiceFoco] = useState(0)
@@ -78,6 +82,8 @@ const ClienteSeletor: FC<Props> = ({
     setBusca('')
     setTimeout(() => inputRef.current?.focus(), 0)
   }
+
+  useImperativeHandle(ref, () => ({ abrir }), [])
 
   const selecionar = (id: string) => {
     onChange(id)
@@ -207,6 +213,8 @@ const ClienteSeletor: FC<Props> = ({
       )}
     </div>
   )
-}
+})
+
+ClienteSeletor.displayName = 'ClienteSeletor'
 
 export default ClienteSeletor

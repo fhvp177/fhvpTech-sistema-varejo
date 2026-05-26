@@ -22,6 +22,7 @@ export type DadosCupomVenda = {
   id: number
   data: string
   total: number
+  desconto?: number
   valor_pago: number
   status_pagamento: StatusPagamentoCupom
   data_vencimento: string | null
@@ -33,6 +34,7 @@ export type DadosCupomVenda = {
   cliente_tipo_pessoa?: 'fisica' | 'juridica' | null
   cliente_cnpj?: string | null
   cliente_razao_social?: string | null
+  vendedor_nome?: string | null
   itens: ItemCupom[]
   parcelas: ParcelaCupom[]
 }
@@ -43,8 +45,7 @@ const LOJA = {
   cnpj: '',
   endereco: '',
   cidade: '',
-  telefone: '',
-  vendedor: ''
+  telefone: ''
 }
 
 // Dados que aparecem no rodapé do cupom (placeholders genéricos —
@@ -94,7 +95,7 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda): string {
   if (LOJA.endereco) lojaLinhas.push(`<div>${escapar(LOJA.endereco)}</div>`)
   if (LOJA.cidade) lojaLinhas.push(`<div>${escapar(LOJA.cidade)}</div>`)
   if (LOJA.telefone) lojaLinhas.push(`<div>${escapar(LOJA.telefone)}</div>`)
-  if (LOJA.vendedor) lojaLinhas.push(`<div>Vendedor: ${escapar(LOJA.vendedor)}</div>`)
+  if (venda.vendedor_nome) lojaLinhas.push(`<div>Vendedor: ${escapar(venda.vendedor_nome)}</div>`)
 
   const ehPj = venda.cliente_tipo_pessoa === 'juridica'
   const clienteNome = venda.cliente_nome || 'Venda avulsa'
@@ -297,6 +298,15 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda): string {
   <div class="titulo-secao">PAGAMENTO</div>
   <div class="linha-dupla"></div>
 
+  ${(venda.desconto ?? 0) > 0 ? `
+  <div class="total-linha" style="font-weight: normal; font-size: 11px;">
+    <span>Subtotal:</span>
+    <span>${fmt(venda.total + (venda.desconto ?? 0))}</span>
+  </div>
+  <div class="total-linha" style="font-weight: normal; font-size: 11px;">
+    <span>Desconto:</span>
+    <span>- ${fmt(venda.desconto ?? 0)}</span>
+  </div>` : ''}
   <div class="total-linha">
     <span>Total do pedido:</span>
     <span>${fmt(venda.total)}</span>

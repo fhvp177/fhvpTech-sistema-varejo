@@ -1,5 +1,5 @@
 import { FC, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, Printer, User, Building2 } from 'lucide-react'
+import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, Printer, User, Building2, Percent, DollarSign } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,8 +13,10 @@ import {
 } from '@/components/ui/dialog'
 import Paginacao from '@/components/ui/paginacao'
 import { useToast } from '@/components/ui/toast'
-import ClienteSeletor from '@/components/ClienteSeletor'
+import ClienteSeletor, { type ClienteSeletorHandle } from '@/components/ClienteSeletor'
+import ConsultaPreco from '@/components/ConsultaPreco'
 import { gerarHtmlCupomVenda } from '@/utils/cupomVenda'
+import { usePdvMode } from '@/App'
 
 const ITENS_POR_PAGINA = 20
 
@@ -34,8 +36,10 @@ type Parcela = {
 type Venda = {
   id: number
   cliente_id: number | null
+  vendedor_id: number | null
   data: string
   total: number
+  desconto: number
   valor_pago: number
   status_pagamento: StatusPagamento
   data_vencimento: string | null
@@ -45,6 +49,7 @@ type Venda = {
   cliente_telefone?: string | null
   cliente_endereco?: string | null
   cliente_cpf?: string | null
+  vendedor_nome?: string | null
 }
 
 type ItemVenda = {
@@ -82,6 +87,12 @@ type Cliente = {
   cpf?: string | null
   cnpj?: string | null
   razao_social?: string | null
+}
+
+type Vendedor = {
+  id: number
+  nome: string
+  ativo: number
 }
 
 const validarCNPJ = (cnpj: string): boolean => {
@@ -429,6 +440,10 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   {vendaDetalhada.cliente_nome || 'Avulso'}
                 </div>
                 <div>
+                  <span className="font-medium text-foreground">Vendedor: </span>
+                  {vendaDetalhada.vendedor_nome || '—'}
+                </div>
+                <div>
                   <span className="font-medium text-foreground">Data: </span>
                   {fmtData(vendaDetalhada.data)}
                 </div>
@@ -475,6 +490,20 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     ))}
                   </tbody>
                   <tfoot className="bg-muted/50 font-semibold">
+                    {vendaDetalhada.desconto > 0 && (
+                      <>
+                        <tr className="font-normal text-muted-foreground">
+                          <td colSpan={3} className="px-3 py-1 text-right">Subtotal</td>
+                          <td className="px-3 py-1 text-right">
+                            {fmt(vendaDetalhada.total + vendaDetalhada.desconto)}
+                          </td>
+                        </tr>
+                        <tr className="font-normal text-emerald-700">
+                          <td colSpan={3} className="px-3 py-1 text-right">Desconto</td>
+                          <td className="px-3 py-1 text-right">− {fmt(vendaDetalhada.desconto)}</td>
+                        </tr>
+                      </>
+                    )}
                     <tr>
                       <td colSpan={3} className="px-3 py-2 text-right">Total</td>
                       <td className="px-3 py-2 text-right">{fmt(vendaDetalhada.total)}</td>
@@ -592,20 +621,32 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 // ─── PDV (Ponto de Venda) ─────────────────────────────────────────────────────
 
 const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
+  const { setAtivo: setPdvAtivo } = usePdvMode()
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [vendedores, setVendedores] = useState<Vendedor[]>([])
   const [clienteId, setClienteId] = useState('')
+  const [vendedorId, setVendedorId] = useState('')
   const [statusPagamento, setStatusPagamento] = useState<StatusPagamento>('pago')
   const [dataVencimento, setDataVencimento] = useState('')
   const [numParcelas, setNumParcelas] = useState(2)
+  const [descontoTipo, setDescontoTipo] = useState<'R$' | '%'>('R$')
+  const [descontoEntrada, setDescontoEntrada] = useState('')
   const [codigoScan, setCodigoScan] = useState('')
   const [feedbackScan, setFeedbackScan] = useState<{ tipo: 'ok' | 'erro'; msg: string } | null>(null)
   const [buscaProdutos, setBuscaProdutos] = useState(false)
   const [termoBusca, setTermoBusca] = useState('')
+  const [consultaPrecoAberta, setConsultaPrecoAberta] = useState(false)
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const scanRef = useRef<HTMLInputElement>(null)
+  const clienteSeletorRef = useRef<ClienteSeletorHandle>(null)
+
+  useEffect(() => {
+    setPdvAtivo(true)
+    return () => setPdvAtivo(false)
+  }, [setPdvAtivo])
 
   // Cadastro rápido de cliente
   const [modalClienteAberto, setModalClienteAberto] = useState(false)
@@ -618,17 +659,40 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const [salvandoCliente, setSalvandoCliente] = useState(false)
 
   useEffect(() => {
-    Promise.all([window.api.clientes.listar(), window.api.produtos.listar()]).then(
-      ([rClientes, rProdutos]) => {
-        if (rClientes.success) setClientes(rClientes.data as Cliente[])
-        if (rProdutos.success) setProdutos(rProdutos.data as Produto[])
+    Promise.all([
+      window.api.clientes.listar(),
+      window.api.produtos.listar(),
+      window.api.vendedores.listar()
+    ]).then(([rClientes, rProdutos, rVendedores]) => {
+      if (rClientes.success) setClientes(rClientes.data as Cliente[])
+      if (rProdutos.success) setProdutos(rProdutos.data as Produto[])
+      if (rVendedores.success) {
+        const ativos = (rVendedores.data as Vendedor[]).filter((v) => v.ativo === 1)
+        setVendedores(ativos)
+        // Auto-seleciona quando há apenas um vendedor cadastrado
+        if (ativos.length === 1) setVendedorId(String(ativos[0].id))
       }
-    )
+    })
     scanRef.current?.focus()
   }, [])
 
-  const total = carrinho.reduce((acc, item) => acc + item.quantidade * item.preco_unitario, 0)
+  // Refs para callbacks usadas pelos atalhos — evita re-registrar o listener
+  // a cada keystroke. As funções capturam estado via closure e são atualizadas
+  // a cada render através de um useEffect mais abaixo.
+  const finalizarVendaRef = useRef<() => void>(() => {})
+  const abrirClienteRapidoRef = useRef<() => void>(() => {})
+  const onSairRef = useRef(onSair)
+  useEffect(() => { onSairRef.current = onSair }, [onSair])
+
+  const subtotal = carrinho.reduce((acc, item) => acc + item.quantidade * item.preco_unitario, 0)
   const totalItens = carrinho.reduce((acc, item) => acc + item.quantidade, 0)
+
+  const descontoNum = parseFloat(descontoEntrada.replace(',', '.')) || 0
+  const descontoValor =
+    descontoTipo === '%'
+      ? +((subtotal * Math.min(100, Math.max(0, descontoNum))) / 100).toFixed(2)
+      : +Math.min(subtotal, Math.max(0, descontoNum)).toFixed(2)
+  const total = +(subtotal - descontoValor).toFixed(2)
 
   const adicionarProduto = (produto: Produto) => {
     if (produto.estoque <= 0) {
@@ -708,6 +772,14 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
 
   const finalizarVenda = async () => {
     if (carrinho.length === 0) { setErro('Adicione pelo menos um produto.'); return }
+    if (!vendedorId) {
+      setErro(
+        vendedores.length === 0
+          ? 'Cadastre pelo menos um vendedor em Configurações antes de registrar vendas.'
+          : 'Selecione o vendedor responsável pela venda.'
+      )
+      return
+    }
     if (statusPagamento !== 'pago' && !clienteId) {
       setErro('Selecione um cliente para vendas a prazo ou parceladas.')
       return
@@ -724,15 +796,25 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       setErro('O número de parcelas deve ser entre 2 e 24.')
       return
     }
+    if (descontoTipo === '%' && descontoNum > 100) {
+      setErro('Desconto em percentual não pode passar de 100%.')
+      return
+    }
+    if (descontoValor >= subtotal && subtotal > 0) {
+      setErro('Desconto não pode ser maior ou igual ao subtotal da venda.')
+      return
+    }
 
     setSalvando(true)
     setErro('')
 
     const dados = {
       cliente_id: clienteId ? parseInt(clienteId) : null,
+      vendedor_id: parseInt(vendedorId),
       status_pagamento: statusPagamento,
       data_vencimento: dataVencimento || null,
       num_parcelas: statusPagamento === 'parcelado' ? numParcelas : null,
+      desconto: descontoValor,
       itens: carrinho.map((item) => ({
         produto_id: item.produto_id,
         quantidade: item.quantidade,
@@ -748,6 +830,55 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       setSalvando(false)
     }
   }
+
+  // Mantém os refs atualizados para o listener global de atalhos chamar
+  // as versões mais recentes das funções (que capturam estado via closure).
+  useEffect(() => {
+    finalizarVendaRef.current = finalizarVenda
+    abrirClienteRapidoRef.current = abrirClienteRapido
+  })
+
+  // Atalhos de teclado do PDV — registrados uma vez no mount.
+  // Usar refs evita re-registrar listeners a cada keystroke do usuário.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Não interfere com atalhos globais (ex: Ctrl+L = bloquear sistema)
+      if (e.ctrlKey || e.altKey || e.metaKey) return
+
+      switch (e.key) {
+        case 'F2':
+          e.preventDefault()
+          setConsultaPrecoAberta(true)
+          break
+        case 'F3':
+          e.preventDefault()
+          setBuscaProdutos(true)
+          setTermoBusca('')
+          break
+        case 'F4':
+          e.preventDefault()
+          clienteSeletorRef.current?.abrir()
+          break
+        case 'F5':
+          e.preventDefault()
+          abrirClienteRapidoRef.current()
+          break
+        case 'F9':
+          e.preventDefault()
+          finalizarVendaRef.current()
+          break
+        case 'Escape':
+          // Se algum modal estiver aberto, deixa o Radix fechá-lo (não previne).
+          // Só sai do PDV se nada estiver aberto.
+          if (consultaPrecoAberta || buscaProdutos || modalClienteAberto) return
+          e.preventDefault()
+          onSairRef.current()
+          break
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [consultaPrecoAberta, buscaProdutos, modalClienteAberto])
 
   const abrirClienteRapido = () => {
     setTipoPessoaRapido('fisica')
@@ -811,7 +942,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   )
 
   return (
-    <div className="flex h-full">
+    <div className="flex flex-col h-full">
+    <div className="flex flex-1 min-h-0">
       {/* ── Painel esquerdo: scanner + carrinho ── */}
       <div className="flex-1 flex flex-col p-6 overflow-hidden">
         <div className="flex items-center gap-3 mb-4">
@@ -916,7 +1048,31 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       </div>
 
       {/* ── Painel direito: resumo + pagamento ── */}
-      <div className="w-96 border-l bg-muted/20 flex flex-col p-5 gap-4 shrink-0">
+      <div className="w-96 border-l bg-muted/20 flex flex-col p-5 gap-4 shrink-0 overflow-y-auto">
+        {/* Vendedor */}
+        <div>
+          <Label className="text-xs mb-1 block">
+            Vendedor <span className="text-destructive">*</span>
+          </Label>
+          <select
+            value={vendedorId}
+            onChange={(e) => { setVendedorId(e.target.value); setErro('') }}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">
+              {vendedores.length === 0 ? '— nenhum vendedor cadastrado —' : 'Selecione o vendedor...'}
+            </option>
+            {vendedores.map((v) => (
+              <option key={v.id} value={v.id}>{v.nome}</option>
+            ))}
+          </select>
+          {vendedores.length === 0 && (
+            <p className="text-xs text-amber-600 mt-1">
+              Cadastre vendedores em Configurações para registrar vendas.
+            </p>
+          )}
+        </div>
+
         {/* Cliente */}
         <div>
           <Label className="text-xs mb-1 block">
@@ -928,6 +1084,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </Label>
           <div className="flex gap-2">
             <ClienteSeletor
+              ref={clienteSeletorRef}
               clientes={clientes}
               clienteIdSelecionado={clienteId}
               onChange={setClienteId}
@@ -945,17 +1102,64 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </div>
         </div>
 
+        {/* Desconto */}
+        <div>
+          <Label className="text-xs mb-1 block">Desconto</Label>
+          <div className="flex gap-2">
+            <div className="flex p-0.5 bg-muted rounded-md shrink-0">
+              <button
+                type="button"
+                onClick={() => setDescontoTipo('R$')}
+                className={`flex items-center justify-center w-9 h-9 rounded text-xs font-medium transition-colors ${
+                  descontoTipo === 'R$' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Desconto em reais"
+              >
+                <DollarSign className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDescontoTipo('%')}
+                className={`flex items-center justify-center w-9 h-9 rounded text-xs font-medium transition-colors ${
+                  descontoTipo === '%' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Desconto em porcentagem"
+              >
+                <Percent className="w-4 h-4" />
+              </button>
+            </div>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              max={descontoTipo === '%' ? 100 : subtotal}
+              value={descontoEntrada}
+              onChange={(e) => { setDescontoEntrada(e.target.value); setErro('') }}
+              placeholder={descontoTipo === '%' ? '0%' : 'R$ 0,00'}
+              className="flex h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+        </div>
+
         {/* Resumo numérico */}
         <div className="border rounded-lg p-4 bg-background space-y-2 text-base">
-          <div className="flex justify-between text-muted-foreground">
+          <div className="flex justify-between text-muted-foreground text-sm">
             <span>Produtos</span>
-            <span>{carrinho.length} tipo(s)</span>
+            <span>{carrinho.length} tipo(s) — {totalItens} un.</span>
           </div>
-          <div className="flex justify-between text-muted-foreground">
-            <span>Unidades</span>
-            <span>{totalItens}</span>
-          </div>
-          <div className="flex justify-between font-bold text-[1.75rem] pt-2 border-t">
+          {descontoValor > 0 && (
+            <>
+              <div className="flex justify-between text-sm pt-1 border-t">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>{fmt(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-emerald-700">
+                <span>Desconto{descontoTipo === '%' && descontoNum > 0 ? ` (${descontoNum}%)` : ''}</span>
+                <span>− {fmt(descontoValor)}</span>
+              </div>
+            </>
+          )}
+          <div className={`flex justify-between font-bold text-[1.75rem] pt-2 ${descontoValor > 0 ? '' : 'border-t'}`}>
             <span>TOTAL</span>
             <span>{fmt(total)}</span>
           </div>
@@ -1212,8 +1416,35 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Modal Consulta de preço (F2) ── */}
+      <ConsultaPreco
+        aberto={consultaPrecoAberta}
+        onFechar={() => { setConsultaPrecoAberta(false); scanRef.current?.focus() }}
+        produtos={produtos}
+      />
+    </div>
+
+      {/* ── Barra de dicas com atalhos (estilo PDV antigo) ── */}
+      <div className="shrink-0 bg-slate-900 text-slate-300 text-xs px-4 py-1.5 flex items-center justify-center gap-5 flex-wrap select-none">
+        <DicaTecla tecla="F2" acao="Consulta preço" />
+        <DicaTecla tecla="F3" acao="Buscar produto" />
+        <DicaTecla tecla="F4" acao="Cliente" />
+        <DicaTecla tecla="F5" acao="+ Cliente" />
+        <DicaTecla tecla="F9" acao="Finalizar" />
+        <DicaTecla tecla="ESC" acao="Sair" />
+      </div>
     </div>
   )
 }
+
+const DicaTecla: FC<{ tecla: string; acao: string }> = ({ tecla, acao }) => (
+  <span className="flex items-center gap-1.5">
+    <kbd className="px-1.5 py-0.5 bg-slate-700 border border-slate-600 rounded text-[10px] font-mono text-slate-100">
+      {tecla}
+    </kbd>
+    <span>{acao}</span>
+  </span>
+)
 
 export default Vendas

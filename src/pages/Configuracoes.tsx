@@ -2,6 +2,8 @@ import { FC, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RefreshCw } from 'lucide-react'
+import CadastroVendedores from '@/components/CadastroVendedores'
+import ConfigSeguranca from '@/components/ConfigSeguranca'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -203,6 +205,20 @@ const Configuracoes: FC = () => {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="space-y-4 mb-10">
+        <h3 className="text-lg font-semibold border-b pb-2">Segurança</h3>
+        <ConfigSeguranca />
+      </div>
+
+      <div className="space-y-4 mb-10">
+        <h3 className="text-lg font-semibold border-b pb-2">Vendedores</h3>
+        <p className="text-sm text-muted-foreground -mt-1">
+          Cadastre os vendedores da loja. Cada venda registra o vendedor que a realizou,
+          permitindo acompanhar produção individual no histórico.
+        </p>
+        <CadastroVendedores />
       </div>
 
       <div className="space-y-6">

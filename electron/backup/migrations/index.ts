@@ -7,6 +7,10 @@ import { aplicar005Parcelas } from './005_parcelas'
 import { aplicar006ParceladoStatus } from './006_parcelado_status'
 import { aplicar007ValorPago } from './007_valor_pago'
 import { aplicar008ClientesPj } from './008_clientes_pj'
+import { aplicar009Vendedores } from './009_vendedores'
+import { aplicar010DescontoVenda } from './010_desconto_venda'
+import { aplicar011AuthPin } from './011_auth_pin'
+import { aplicar012NormalizarAutoLock } from './012_normalizar_auto_lock'
 
 type Migration = {
   nome: string
@@ -22,6 +26,10 @@ const MIGRATIONS: Migration[] = [
   { nome: '006_parcelado_status', aplicar: aplicar006ParceladoStatus },
   { nome: '007_valor_pago', aplicar: aplicar007ValorPago },
   { nome: '008_clientes_pj', aplicar: aplicar008ClientesPj },
+  { nome: '009_vendedores', aplicar: aplicar009Vendedores },
+  { nome: '010_desconto_venda', aplicar: aplicar010DescontoVenda },
+  { nome: '011_auth_pin', aplicar: aplicar011AuthPin },
+  { nome: '012_normalizar_auto_lock', aplicar: aplicar012NormalizarAutoLock },
 ]
 
 export function executarMigrations(db: Database.Database): void {
