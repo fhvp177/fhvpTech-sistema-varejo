@@ -1,7 +1,8 @@
 import { FC, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package,
-  ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle
+  ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
+  RotateCcw, CalendarDays
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -44,6 +45,84 @@ const PERIODOS: PeriodoOpcao[] = [
   { dias: 365, rotulo: 'Últimos 12 meses', rotuloCurto: '12 meses' }
 ]
 
+type Modo = 'janela' | 'mes'
+
+type Intervalo = {
+  inicio_atual: string
+  fim_atual: string
+  inicio_anterior: string
+  fim_anterior: string
+}
+
+const MESES_NOMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+]
+
+const isoLocal = (d: Date): string => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dia}`
+}
+
+const hojeIso = (): string => isoLocal(new Date())
+
+const subtrairDias = (iso: string, dias: number): string => {
+  const d = new Date(iso + 'T00:00:00')
+  d.setDate(d.getDate() - dias)
+  return isoLocal(d)
+}
+
+const mesAtualPadrao = (): string => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const mesAnoAnteriorDe = (yyyymm: string): string => {
+  const [y, m] = yyyymm.split('-')
+  return `${Number(y) - 1}-${m}`
+}
+
+const primeiroDiaMes = (yyyymm: string): string => `${yyyymm}-01`
+
+const ultimoDiaMes = (yyyymm: string): string => {
+  const [y, m] = yyyymm.split('-').map(Number)
+  // day 0 of (m, no offset because Date month is 0-indexed and m is 1-indexed) → último dia de m
+  const d = new Date(y, m, 0)
+  return `${y}-${String(m).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const rotuloMesAno = (yyyymm: string): string => {
+  const [y, m] = yyyymm.split('-')
+  return `${MESES_NOMES[Number(m) - 1]}/${y}`
+}
+
+const rotuloMesAnoCurto = (yyyymm: string): string => {
+  const [y, m] = yyyymm.split('-')
+  return `${MESES_NOMES[Number(m) - 1].slice(0, 3)}/${y.slice(-2)}`
+}
+
+const intervaloJanela = (periodoDias: number): Intervalo => {
+  const fimAtual = hojeIso()
+  const inicioAtual = subtrairDias(fimAtual, periodoDias - 1)
+  const fimAnterior = subtrairDias(inicioAtual, 1)
+  const inicioAnterior = subtrairDias(fimAnterior, periodoDias - 1)
+  return {
+    inicio_atual: inicioAtual,
+    fim_atual: fimAtual,
+    inicio_anterior: inicioAnterior,
+    fim_anterior: fimAnterior
+  }
+}
+
+const intervaloMes = (mesAtual: string, mesComparativo: string): Intervalo => ({
+  inicio_atual: primeiroDiaMes(mesAtual),
+  fim_atual: ultimoDiaMes(mesAtual),
+  inicio_anterior: primeiroDiaMes(mesComparativo),
+  fim_anterior: ultimoDiaMes(mesComparativo)
+})
+
 const fmt = (valor: number) =>
   valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -60,7 +139,10 @@ const calcularDelta = (atual: number, anterior: number): { pct: number; valido: 
 }
 
 const Dashboard: FC = () => {
+  const [modo, setModo] = useState<Modo>('janela')
   const [periodoDias, setPeriodoDias] = useState(30)
+  const [mesAtual, setMesAtual] = useState<string>(mesAtualPadrao)
+  const [mesComparativo, setMesComparativo] = useState<string>(() => mesAnoAnteriorDe(mesAtualPadrao()))
   const [metricas, setMetricas] = useState<MetricasDashboard | null>(null)
   const [resumo, setResumo] = useState<ResumoBasico | null>(null)
   const [inadimplentes, setInadimplentes] = useState<ClienteInadimplente[]>([])
@@ -68,6 +150,14 @@ const Dashboard: FC = () => {
   const [vendas, setVendas] = useState<VendaDivida[]>([])
   const [clienteDividas, setClienteDividas] = useState<{ id: number; nome: string } | null>(null)
   const [carregandoMetricas, setCarregandoMetricas] = useState(false)
+
+  // Mês máximo permitido no <input type="month"> (não faz sentido escolher futuro).
+  const mesMaximo = mesAtualPadrao()
+
+  const intervalo = useMemo<Intervalo>(
+    () => (modo === 'janela' ? intervaloJanela(periodoDias) : intervaloMes(mesAtual, mesComparativo)),
+    [modo, periodoDias, mesAtual, mesComparativo]
+  )
 
   // Dados que não dependem do período (cadastros, alertas).
   useEffect(() => {
@@ -84,14 +174,14 @@ const Dashboard: FC = () => {
     })
   }, [])
 
-  // Métricas do período (recarrega quando o período muda).
+  // Métricas do período (recarrega quando o intervalo muda).
   useEffect(() => {
     setCarregandoMetricas(true)
-    window.api.dashboard.metricas(periodoDias).then((resp) => {
+    window.api.dashboard.metricas(intervalo).then((resp) => {
       if (resp.success) setMetricas(resp.data)
       setCarregandoMetricas(false)
     })
-  }, [periodoDias])
+  }, [intervalo])
 
   const dividasPorCliente = useMemo(() => calcularDividasPorCliente(vendas), [vendas])
 
@@ -105,27 +195,88 @@ const Dashboard: FC = () => {
     ? calcularDelta(metricas.ticket_medio_atual, metricas.ticket_medio_anterior)
     : { pct: 0, valido: false }
 
+  const rotuloPeriodo = modo === 'janela'
+    ? (PERIODOS.find((p) => p.dias === periodoDias)?.rotulo ?? '')
+    : rotuloMesAno(mesAtual)
+  const rotuloPeriodoCurto = modo === 'janela'
+    ? (PERIODOS.find((p) => p.dias === periodoDias)?.rotuloCurto ?? '')
+    : rotuloMesAnoCurto(mesAtual)
+  const rotuloComparativo = modo === 'janela'
+    ? 'período anterior'
+    : rotuloMesAnoCurto(mesComparativo)
+
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h2 className="text-2xl font-bold">Dashboard</h2>
-        {/* Filtro de período */}
+        {/* Filtro de período: janela móvel ou mês específico */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg">
-          {PERIODOS.map((p) => (
-            <button
-              key={p.dias}
-              onClick={() => setPeriodoDias(p.dias)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                periodoDias === p.dias
-                  ? 'bg-background shadow text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {p.rotuloCurto}
-            </button>
-          ))}
+          {PERIODOS.map((p) => {
+            const ativo = modo === 'janela' && periodoDias === p.dias
+            return (
+              <button
+                key={p.dias}
+                onClick={() => { setModo('janela'); setPeriodoDias(p.dias) }}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  ativo
+                    ? 'bg-background shadow text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {p.rotuloCurto}
+              </button>
+            )
+          })}
+          <button
+            onClick={() => setModo('mes')}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+              modo === 'mes'
+                ? 'bg-background shadow text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            title="Comparar dois meses específicos"
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            Mês
+          </button>
         </div>
       </div>
+
+      {modo === 'mes' && (
+        <div className="mb-6 border rounded-lg p-3 bg-muted/30 flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground font-medium">Mês de análise</label>
+            <input
+              type="month"
+              value={mesAtual}
+              max={mesMaximo}
+              onChange={(e) => e.target.value && setMesAtual(e.target.value)}
+              className="px-2 py-1.5 text-sm border rounded-md bg-background"
+            />
+          </div>
+          <span className="pb-2 text-sm text-muted-foreground font-medium">vs</span>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground font-medium">Comparar com</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="month"
+                value={mesComparativo}
+                max={mesMaximo}
+                onChange={(e) => e.target.value && setMesComparativo(e.target.value)}
+                className="px-2 py-1.5 text-sm border rounded-md bg-background"
+              />
+              <button
+                type="button"
+                onClick={() => setMesComparativo(mesAnoAnteriorDe(mesAtual))}
+                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+                title="Resetar para o mesmo mês do ano anterior"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Alertas de inadimplência (destaque no topo) ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -212,7 +363,8 @@ const Dashboard: FC = () => {
           titulo="Faturamento"
           valor={metricas ? fmt(metricas.faturamento_atual) : '...'}
           delta={deltaFaturamento}
-          sufixoDelta="vs período anterior"
+          valorAnterior={metricas ? fmt(metricas.faturamento_anterior) : '—'}
+          rotuloComparativo={rotuloComparativo}
         />
         <CardKPI
           icone={<Receipt className="w-5 h-5 text-indigo-600" />}
@@ -220,7 +372,8 @@ const Dashboard: FC = () => {
           titulo="Vendas"
           valor={metricas ? String(metricas.num_vendas_atual) : '...'}
           delta={deltaVendas}
-          sufixoDelta="vs período anterior"
+          valorAnterior={metricas ? String(metricas.num_vendas_anterior) : '—'}
+          rotuloComparativo={rotuloComparativo}
         />
         <CardKPI
           icone={<ShoppingBag className="w-5 h-5 text-orange-600" />}
@@ -228,7 +381,8 @@ const Dashboard: FC = () => {
           titulo="Ticket médio"
           valor={metricas ? fmt(metricas.ticket_medio_atual) : '...'}
           delta={deltaTicket}
-          sufixoDelta="vs período anterior"
+          valorAnterior={metricas ? fmt(metricas.ticket_medio_anterior) : '—'}
+          rotuloComparativo={rotuloComparativo}
         />
         <CardEstatico
           icone={<Users className="w-5 h-5 text-purple-600" />}
@@ -247,7 +401,7 @@ const Dashboard: FC = () => {
             <BarChart3 className="w-5 h-5 text-muted-foreground" />
             <h3 className="font-semibold">Vendas no tempo</h3>
             <span className="text-xs text-muted-foreground ml-auto">
-              {PERIODOS.find((p) => p.dias === periodoDias)?.rotulo}
+              {rotuloPeriodo}
             </span>
           </div>
           {carregandoMetricas ? (
@@ -344,7 +498,7 @@ const Dashboard: FC = () => {
         <CardProdutosParados
           metricas={metricas}
           carregando={carregandoMetricas}
-          periodoRotulo={PERIODOS.find((p) => p.dias === periodoDias)?.rotuloCurto ?? ''}
+          periodoRotulo={rotuloPeriodoCurto}
         />
         <CardEstoqueBaixo metricas={metricas} />
       </div>
@@ -367,10 +521,13 @@ type CardKPIProps = {
   titulo: string
   valor: string
   delta: Delta
-  sufixoDelta: string
+  valorAnterior: string
+  rotuloComparativo: string
 }
 
-const CardKPI: FC<CardKPIProps> = ({ icone, corIcone, titulo, valor, delta, sufixoDelta }) => {
+const CardKPI: FC<CardKPIProps> = ({
+  icone, corIcone, titulo, valor, delta, valorAnterior, rotuloComparativo
+}) => {
   const corDelta =
     !delta.valido ? 'text-muted-foreground'
     : delta.pct > 0 ? 'text-green-600'
@@ -391,11 +548,13 @@ const CardKPI: FC<CardKPIProps> = ({ icone, corIcone, titulo, valor, delta, sufi
             : <TrendingDown className="w-3 h-3" />
         )}
         <span>
-          {delta.valido
-            ? `${sinal}${delta.pct.toFixed(1)}% ${sufixoDelta}`
-            : '— ' + sufixoDelta}
+          {delta.valido ? `${sinal}${delta.pct.toFixed(1)}%` : '—'}
         </span>
       </div>
+      <p className="text-xs text-muted-foreground mt-0.5">
+        vs <span className="font-medium">{valorAnterior}</span>{' '}
+        <span className="opacity-70">({rotuloComparativo})</span>
+      </p>
     </div>
   )
 }

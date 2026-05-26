@@ -48,6 +48,13 @@ export type ProdutoEstoqueBaixo = {
   estoque: number
 }
 
+export type IntervaloDashboard = {
+  inicio_atual: string      // ISO 'YYYY-MM-DD' inclusivo
+  fim_atual: string         // ISO 'YYYY-MM-DD' inclusivo
+  inicio_anterior: string   // ISO 'YYYY-MM-DD' inclusivo
+  fim_anterior: string      // ISO 'YYYY-MM-DD' inclusivo
+}
+
 export type MetricasDashboard = {
   periodo_dias: number
   granularidade: GranularidadeSerie
@@ -66,12 +73,12 @@ export type MetricasDashboard = {
   estoque_baixo: ProdutoEstoqueBaixo[]
 }
 
-// Granularidade do gráfico de série temporal por tamanho do período:
-// - 7d/30d: ponto por dia (curto, denso é OK)
-// - 90d: ponto por semana (~13 pontos)
-// - 365d: ponto por mês (12 pontos)
+// Granularidade do gráfico de série temporal pela duração do período:
+// - até 31d: ponto por dia (mês inteiro entra confortável)
+// - até 120d: ponto por semana (~13 pontos)
+// - acima: ponto por mês
 function escolherGranularidade(periodoDias: number): GranularidadeSerie {
-  if (periodoDias <= 30) return 'dia'
+  if (periodoDias <= 31) return 'dia'
   if (periodoDias <= 120) return 'semana'
   return 'mes'
 }
@@ -86,36 +93,40 @@ function formatarRotulo(dataIso: string, gran: GranularidadeSerie): string {
   return `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}`
 }
 
-export function obterMetricasDashboard(periodoDias: number): MetricasDashboard {
+// Diferença em dias entre duas ISO 'YYYY-MM-DD' (inclusiva nos dois lados).
+function diasEntre(inicio: string, fim: string): number {
+  const a = new Date(inicio + 'T00:00:00Z').getTime()
+  const b = new Date(fim + 'T00:00:00Z').getTime()
+  return Math.max(1, Math.round((b - a) / 86400000) + 1)
+}
+
+export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasDashboard {
   const db = obterBancoDeDados()
+  const { inicio_atual, fim_atual, inicio_anterior, fim_anterior } = intervalo
+  const periodoDias = diasEntre(inicio_atual, fim_atual)
   const gran = escolherGranularidade(periodoDias)
 
-  // Agregados do período atual e do período anterior comparável (mesma duração imediatamente antes).
-  // Usa date('now', '-N days') para definir a janela. SQLite arredonda para o início do dia em UTC,
-  // o que é aceitável para uma loja local — relatórios não dependem de horário fino.
+  // Agregados do período atual e do período de comparação. Os dois intervalos chegam
+  // já calculados pelo chamador (rolling window ou mês específico vs mês escolhido).
   const totaisAtual = db
     .prepare(
       `SELECT COALESCE(SUM(total), 0) AS faturamento,
               COUNT(*) AS num_vendas
        FROM vendas
-       WHERE date(data) >= date('now', '-' || ? || ' days')`
+       WHERE date(data) >= ? AND date(data) <= ?`
     )
-    .get(periodoDias) as { faturamento: number; num_vendas: number }
+    .get(inicio_atual, fim_atual) as { faturamento: number; num_vendas: number }
 
   const totaisAnterior = db
     .prepare(
       `SELECT COALESCE(SUM(total), 0) AS faturamento,
               COUNT(*) AS num_vendas
        FROM vendas
-       WHERE date(data) >= date('now', '-' || ? || ' days')
-         AND date(data) <  date('now', '-' || ? || ' days')`
+       WHERE date(data) >= ? AND date(data) <= ?`
     )
-    .get(periodoDias * 2, periodoDias) as { faturamento: number; num_vendas: number }
+    .get(inicio_anterior, fim_anterior) as { faturamento: number; num_vendas: number }
 
   // Série temporal agrupada por granularidade.
-  // strftime('%Y-%m-%d', data) -> dia
-  // strftime('%Y-%W', data) com ajuste -> semana
-  // strftime('%Y-%m', data) -> mês
   let bucketExpr: string
   let bucketParaData: (b: string) => string
   if (gran === 'dia') {
@@ -125,7 +136,7 @@ export function obterMetricasDashboard(periodoDias: number): MetricasDashboard {
     bucketExpr = "strftime('%Y-%m', data)"
     bucketParaData = (b) => `${b}-01`
   } else {
-    // semana: usamos o primeiro dia (segunda-feira) da semana ISO
+    // semana: primeiro dia (segunda-feira) da semana ISO
     bucketExpr = "strftime('%Y-%m-%d', data, 'weekday 1', '-7 days')"
     bucketParaData = (b) => b
   }
@@ -136,11 +147,11 @@ export function obterMetricasDashboard(periodoDias: number): MetricasDashboard {
               COALESCE(SUM(total), 0) AS total,
               COUNT(*) AS num_vendas
        FROM vendas
-       WHERE date(data) >= date('now', '-' || ? || ' days')
+       WHERE date(data) >= ? AND date(data) <= ?
        GROUP BY bucket
        ORDER BY bucket ASC`
     )
-    .all(periodoDias) as Array<{ bucket: string; total: number; num_vendas: number }>
+    .all(inicio_atual, fim_atual) as Array<{ bucket: string; total: number; num_vendas: number }>
 
   const serieTemporal: PontoSerie[] = linhasSerie.map((r) => {
     const dataInicio = bucketParaData(r.bucket)
@@ -161,12 +172,12 @@ export function obterMetricasDashboard(periodoDias: number): MetricasDashboard {
        FROM itens_venda iv
        JOIN vendas v ON v.id = iv.venda_id
        JOIN produtos p ON p.id = iv.produto_id
-       WHERE date(v.data) >= date('now', '-' || ? || ' days')
+       WHERE date(v.data) >= ? AND date(v.data) <= ?
        GROUP BY p.id
        ORDER BY receita DESC
        LIMIT 5`
     )
-    .all(periodoDias) as TopProduto[]
+    .all(inicio_atual, fim_atual) as TopProduto[]
 
   // Top 5 categorias por receita no período. Produtos sem categoria caem em 'Sem categoria'.
   const topCategorias = db
@@ -177,12 +188,12 @@ export function obterMetricasDashboard(periodoDias: number): MetricasDashboard {
        FROM itens_venda iv
        JOIN vendas v ON v.id = iv.venda_id
        JOIN produtos p ON p.id = iv.produto_id
-       WHERE date(v.data) >= date('now', '-' || ? || ' days')
+       WHERE date(v.data) >= ? AND date(v.data) <= ?
        GROUP BY categoria
        ORDER BY receita DESC
        LIMIT 5`
     )
-    .all(periodoDias) as TopCategoria[]
+    .all(inicio_atual, fim_atual) as TopCategoria[]
 
   // Distribuição por forma de pagamento (status_pagamento das vendas do período).
   const linhasPagamento = db
@@ -191,10 +202,10 @@ export function obterMetricasDashboard(periodoDias: number): MetricasDashboard {
               COUNT(*) AS num,
               COALESCE(SUM(total), 0) AS valor
        FROM vendas
-       WHERE date(data) >= date('now', '-' || ? || ' days')
+       WHERE date(data) >= ? AND date(data) <= ?
        GROUP BY status_pagamento`
     )
-    .all(periodoDias) as Array<{ status: string; num: number; valor: number }>
+    .all(inicio_atual, fim_atual) as Array<{ status: string; num: number; valor: number }>
 
   const distribuicaoPagamento: DistribuicaoPagamento = {
     pago: { num: 0, valor: 0 },
@@ -261,12 +272,12 @@ export function obterMetricasDashboard(periodoDias: number): MetricasDashboard {
            SELECT 1 FROM itens_venda iv
            JOIN vendas v ON v.id = iv.venda_id
            WHERE iv.produto_id = p.id
-             AND date(v.data) >= date('now', '-' || ? || ' days')
+             AND date(v.data) >= ? AND date(v.data) <= ?
          )
        ORDER BY p.estoque DESC, p.nome COLLATE NOCASE
        LIMIT 5`
     )
-    .all(periodoDias) as ProdutoParado[]
+    .all(inicio_atual, fim_atual) as ProdutoParado[]
 
   // Estoque baixo — entre 1 e 5 unidades. Zero é descontinuado/sem estoque, não alerta.
   const estoqueBaixo = db

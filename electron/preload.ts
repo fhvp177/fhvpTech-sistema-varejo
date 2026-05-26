@@ -104,8 +104,13 @@ const api = {
 
   // Dashboard (métricas agregadas)
   dashboard: {
-    metricas: (periodoDias: number): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('dashboard:metricas', periodoDias)
+    metricas: (intervalo: {
+      inicio_atual: string
+      fim_atual: string
+      inicio_anterior: string
+      fim_anterior: string
+    }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('dashboard:metricas', intervalo)
   },
 
   // Atualização (electron-updater)

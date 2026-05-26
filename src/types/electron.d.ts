@@ -132,7 +132,12 @@ interface Window {
       imprimir: (html: string) => Promise<RespostaIPC>
     }
     dashboard: {
-      metricas: (periodoDias: number) => Promise<RespostaIPC<MetricasDashboard>>
+      metricas: (intervalo: {
+        inicio_atual: string
+        fim_atual: string
+        inicio_anterior: string
+        fim_anterior: string
+      }) => Promise<RespostaIPC<MetricasDashboard>>
     }
     atualizacao: {
       obterInfo: () => Promise<RespostaIPC<{
