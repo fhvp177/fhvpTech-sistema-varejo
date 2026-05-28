@@ -40,6 +40,7 @@ export type ProdutoParado = {
   nome: string
   estoque: number
   categoria: string | null
+  dias_parado: number
 }
 
 export type ProdutoEstoqueBaixo = {
@@ -262,22 +263,37 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     proximos_90d: recebivelEm(90)
   }
 
-  // Produtos parados — em estoque mas sem vendas no período. Top 5 por estoque (mais grave primeiro).
+  // Produtos parados — janela fixa de 30 dias, independente do filtro da dashboard.
+  // dias_parado = dias desde a última venda do produto, ou desde o cadastro se nunca vendeu.
+  // Aparece se >= 30 dias parado. Top 5 ordenado pelos mais críticos.
   const produtosParados = db
     .prepare(
-      `SELECT p.id AS produto_id, p.nome, p.estoque, p.categoria
-       FROM produtos p
-       WHERE p.estoque > 0
-         AND NOT EXISTS (
-           SELECT 1 FROM itens_venda iv
-           JOIN vendas v ON v.id = iv.venda_id
-           WHERE iv.produto_id = p.id
-             AND date(v.data) >= ? AND date(v.data) <= ?
-         )
-       ORDER BY p.estoque DESC, p.nome COLLATE NOCASE
+      `SELECT * FROM (
+         SELECT
+           p.id AS produto_id,
+           p.nome,
+           p.estoque,
+           p.categoria,
+           CAST(
+             julianday('now') - julianday(
+               COALESCE(
+                 (SELECT MAX(date(v.data))
+                  FROM itens_venda iv
+                  JOIN vendas v ON v.id = iv.venda_id
+                  WHERE iv.produto_id = p.id),
+                 date(p.data_cadastro),
+                 '2000-01-01'
+               )
+             ) AS INTEGER
+           ) AS dias_parado
+         FROM produtos p
+         WHERE p.estoque > 0
+       )
+       WHERE dias_parado >= 30
+       ORDER BY dias_parado DESC, estoque DESC, nome COLLATE NOCASE
        LIMIT 5`
     )
-    .all(inicio_atual, fim_atual) as ProdutoParado[]
+    .all() as ProdutoParado[]
 
   // Estoque baixo — entre 1 e 5 unidades. Zero é descontinuado/sem estoque, não alerta.
   const estoqueBaixo = db

@@ -1,4 +1,4 @@
-import { createContext, FC, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, FC, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { MemoryRouter, Routes, Route, NavLink } from 'react-router-dom'
 import { Lock } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
@@ -15,7 +15,7 @@ import IndicadorBackupAtivo from './components/backup/IndicadorBackupAtivo'
 import AlertaBackupFalhando from './components/backup/AlertaBackupFalhando'
 import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
 import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
-import { ToastProvider } from './components/ui/toast'
+import { ToastProvider, useToast } from './components/ui/toast'
 import { useAutoLock } from './hooks/useAutoLock'
 
 type EstadoLicenca = 'verificando' | 'valida' | 'invalida'
@@ -38,6 +38,7 @@ const App: FC = () => {
   const [estadoLicenca, setEstadoLicenca] = useState<EstadoLicenca>('verificando')
   const [mensagemLicenca, setMensagemLicenca] = useState('')
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
+  const [avisoLicenca, setAvisoLicenca] = useState<string | null>(null)
   const [pdvAtivo, setPdvAtivo] = useState(false)
   const [estadoAuth, setEstadoAuth] = useState<EstadoAuth>('verificando')
   const [autoLockMinutos, setAutoLockMinutos] = useState(15)
@@ -45,11 +46,14 @@ const App: FC = () => {
   useEffect(() => {
     window.api.licenca.validar().then((resp) => {
       if (resp.success) {
-        const status = resp.data as { valida: boolean; mensagem: string; diasRestantes?: number }
+        const status = resp.data
         setMensagemLicenca(status.mensagem)
         setEstadoLicenca(status.valida ? 'valida' : 'invalida')
         if (status.valida && status.diasRestantes !== undefined) {
           setDiasRestantes(status.diasRestantes)
+        }
+        if (status.valida && status.aviso) {
+          setAvisoLicenca(status.aviso)
         }
       } else {
         setMensagemLicenca(resp.error)
@@ -122,6 +126,7 @@ const App: FC = () => {
 
   return (
     <ToastProvider>
+      <ToastInicial aviso={avisoLicenca} onMostrado={() => setAvisoLicenca(null)} />
       <LockContext.Provider value={{ bloquear, autoLockMinutos, setAutoLockMinutos }}>
         <PdvModeContext.Provider value={{ ativo: pdvAtivo, setAtivo: setPdvAtivo }}>
           <MemoryRouter>
@@ -157,6 +162,26 @@ const App: FC = () => {
       )}
     </ToastProvider>
   )
+}
+
+// Exibe um toast assim que `aviso` muda para uma string. Precisa viver dentro do
+// ToastProvider, por isso é um componente filho separado. O ref garante que o
+// mesmo aviso não dispare dois toasts — necessário por causa do double-invoke
+// de useEffect no React.StrictMode em dev.
+const ToastInicial: FC<{ aviso: string | null; onMostrado: () => void }> = ({
+  aviso,
+  onMostrado
+}) => {
+  const { showToast } = useToast()
+  const ultimoMostrado = useRef<string | null>(null)
+  useEffect(() => {
+    if (aviso && ultimoMostrado.current !== aviso) {
+      ultimoMostrado.current = aviso
+      showToast({ message: aviso, variant: 'destructive', durationMs: 15000 })
+      onMostrado()
+    }
+  }, [aviso, showToast, onMostrado])
+  return null
 }
 
 const Sidebar: FC<{ diasRestantes: number | null; onBloquear: () => void }> = ({

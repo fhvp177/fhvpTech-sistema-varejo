@@ -199,9 +199,6 @@ const Dashboard: FC = () => {
   const rotuloPeriodo = modo === 'janela'
     ? (PERIODOS.find((p) => p.dias === periodoDias)?.rotulo ?? '')
     : rotuloMesAno(mesAtual)
-  const rotuloPeriodoCurto = modo === 'janela'
-    ? (PERIODOS.find((p) => p.dias === periodoDias)?.rotuloCurto ?? '')
-    : rotuloMesAnoCurto(mesAtual)
   const rotuloComparativo = modo === 'janela'
     ? 'período anterior'
     : rotuloMesAnoCurto(mesComparativo)
@@ -492,11 +489,7 @@ const Dashboard: FC = () => {
       {/* ── Recebível futuro + Produtos parados + Estoque baixo ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
         <CardRecebivel metricas={metricas} />
-        <CardProdutosParados
-          metricas={metricas}
-          carregando={carregandoMetricas}
-          periodoRotulo={rotuloPeriodoCurto}
-        />
+        <CardProdutosParados metricas={metricas} carregando={carregandoMetricas} />
         <CardEstoqueBaixo metricas={metricas} />
       </div>
 
@@ -729,9 +722,7 @@ const CardRecebivel: FC<{ metricas: MetricasDashboard | null }> = ({ metricas })
   )
 }
 
-const CardProdutosParados: FC<WidgetProps & { periodoRotulo: string }> = ({
-  metricas, carregando, periodoRotulo
-}) => {
+const CardProdutosParados: FC<WidgetProps> = ({ metricas, carregando }) => {
   const produtos = metricas?.produtos_parados ?? []
   return (
     <div className="border rounded-xl p-4 bg-card">
@@ -740,7 +731,7 @@ const CardProdutosParados: FC<WidgetProps & { periodoRotulo: string }> = ({
         <h3 className="font-semibold">Produtos parados</h3>
       </div>
       <p className="text-xs text-muted-foreground -mt-2 mb-3">
-        Em estoque, sem vendas em {periodoRotulo}
+        Em estoque, parados há mais de 30 dias
       </p>
       {carregando ? (
         <p className="text-sm text-muted-foreground text-center py-6">Carregando...</p>
@@ -753,13 +744,13 @@ const CardProdutosParados: FC<WidgetProps & { periodoRotulo: string }> = ({
           {produtos.map((p) => (
             <li key={p.produto_id} className="flex items-start gap-2 text-sm">
               <span className="text-xs font-bold bg-muted rounded px-1.5 py-0.5 mt-0.5 shrink-0">
-                {p.estoque}
+                {p.dias_parado}d
               </span>
               <div className="min-w-0">
                 <p className="truncate font-medium" title={p.nome}>{p.nome}</p>
-                {p.categoria && (
-                  <p className="text-xs text-muted-foreground truncate">{p.categoria}</p>
-                )}
+                <p className="text-xs text-muted-foreground truncate">
+                  {p.estoque} em estoque{p.categoria ? ` · ${p.categoria}` : ''}
+                </p>
               </div>
             </li>
           ))}

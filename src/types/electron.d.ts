@@ -8,6 +8,7 @@ type StatusLicenca = {
   diasRestantes?: number
   mensagem: string
   clienteId?: string
+  aviso?: string
 }
 
 type SnapshotVenda = {
@@ -58,6 +59,7 @@ type MetricasDashboard = {
     nome: string
     estoque: number
     categoria: string | null
+    dias_parado: number
   }>
   estoque_baixo: Array<{
     produto_id: number
