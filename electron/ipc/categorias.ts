@@ -6,6 +6,7 @@ import {
   deletarCategoria
 } from '../db/queries/categorias'
 import { obterBackupManager } from '../backup/BackupManager'
+import { requerDono } from '../sessao'
 
 export function registrarHandlersCategorias(): void {
   ipcMain.handle('categorias:listar', () => {
@@ -18,6 +19,7 @@ export function registrarHandlersCategorias(): void {
 
   ipcMain.handle('categorias:criar', (_event, nome: string) => {
     try {
+      requerDono()
       const resultado = criarCategoria(nome)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: resultado }
@@ -32,6 +34,7 @@ export function registrarHandlersCategorias(): void {
 
   ipcMain.handle('categorias:atualizar', (_event, id: number, nome: string) => {
     try {
+      requerDono()
       atualizarCategoria(id, nome)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }
@@ -46,6 +49,7 @@ export function registrarHandlersCategorias(): void {
 
   ipcMain.handle('categorias:deletar', (_event, id: number) => {
     try {
+      requerDono()
       deletarCategoria(id)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }

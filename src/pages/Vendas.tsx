@@ -17,7 +17,8 @@ import { useToast } from '@/components/ui/toast'
 import ClienteSeletor, { type ClienteSeletorHandle } from '@/components/ClienteSeletor'
 import ConsultaPreco from '@/components/ConsultaPreco'
 import { gerarHtmlCupomVenda } from '@/utils/cupomVenda'
-import { usePdvMode } from '@/App'
+import { usePdvMode, useSessao } from '@/App'
+import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 
 const ITENS_POR_PAGINA = 20
 
@@ -88,12 +89,6 @@ type Cliente = {
   cpf?: string | null
   cnpj?: string | null
   razao_social?: string | null
-}
-
-type Vendedor = {
-  id: number
-  nome: string
-  ativo: number
 }
 
 const validarCNPJ = (cnpj: string): boolean => {
@@ -647,12 +642,13 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
 const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { setAtivo: setPdvAtivo } = usePdvMode()
+  const { ehDono } = useSessao()
+  const [tetoDesconto, setTetoDesconto] = useState(10)
+  const [modalElevarAberto, setModalElevarAberto] = useState(false)
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
-  const [vendedores, setVendedores] = useState<Vendedor[]>([])
   const [clienteId, setClienteId] = useState('')
-  const [vendedorId, setVendedorId] = useState('')
   const [statusPagamento, setStatusPagamento] = useState<StatusPagamento>('pago')
   const [dataVencimento, setDataVencimento] = useState('')
   const [numParcelas, setNumParcelas] = useState(2)
@@ -687,16 +683,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     Promise.all([
       window.api.clientes.listar(),
       window.api.produtos.listar(),
-      window.api.vendedores.listar()
-    ]).then(([rClientes, rProdutos, rVendedores]) => {
+      window.api.auth.lerTetoDesconto()
+    ]).then(([rClientes, rProdutos, rTeto]) => {
       if (rClientes.success) setClientes(rClientes.data as Cliente[])
       if (rProdutos.success) setProdutos(rProdutos.data as Produto[])
-      if (rVendedores.success) {
-        const ativos = (rVendedores.data as Vendedor[]).filter((v) => v.ativo === 1)
-        setVendedores(ativos)
-        // Auto-seleciona quando há apenas um vendedor cadastrado
-        if (ativos.length === 1) setVendedorId(String(ativos[0].id))
-      }
+      if (rTeto.success) setTetoDesconto(rTeto.data)
     })
     scanRef.current?.focus()
   }, [])
@@ -795,16 +786,41 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     )
   }
 
+  // % de desconto efetivo aplicado — usado pra checar contra o teto do vendedor
+  const descontoPctReal = subtotal > 0 ? (descontoValor / subtotal) * 100 : 0
+  const descontoAcimaDoTeto = !ehDono && descontoValor > 0 && descontoPctReal > tetoDesconto
+
+  const persistirVenda = async () => {
+    setSalvando(true)
+    setErro('')
+
+    // vendedor_id é forçado no backend a partir da sessão — passamos 0 só pra
+    // satisfazer o tipo, o handler ignora.
+    const dados = {
+      cliente_id: clienteId ? parseInt(clienteId) : null,
+      vendedor_id: 0,
+      status_pagamento: statusPagamento,
+      data_vencimento: dataVencimento || null,
+      num_parcelas: statusPagamento === 'parcelado' ? numParcelas : null,
+      desconto: descontoValor,
+      itens: carrinho.map((item) => ({
+        produto_id: item.produto_id,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario
+      }))
+    }
+
+    const resp = await window.api.vendas.criar(dados)
+    if (resp.success) {
+      onSair()
+    } else {
+      setErro(resp.error)
+      setSalvando(false)
+    }
+  }
+
   const finalizarVenda = async () => {
     if (carrinho.length === 0) { setErro('Adicione pelo menos um produto.'); return }
-    if (!vendedorId) {
-      setErro(
-        vendedores.length === 0
-          ? 'Cadastre pelo menos um vendedor em Configurações antes de registrar vendas.'
-          : 'Selecione o vendedor responsável pela venda.'
-      )
-      return
-    }
     if (statusPagamento !== 'pago' && !clienteId) {
       setErro('Selecione um cliente para vendas a prazo ou parceladas.')
       return
@@ -830,30 +846,14 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       return
     }
 
-    setSalvando(true)
-    setErro('')
-
-    const dados = {
-      cliente_id: clienteId ? parseInt(clienteId) : null,
-      vendedor_id: parseInt(vendedorId),
-      status_pagamento: statusPagamento,
-      data_vencimento: dataVencimento || null,
-      num_parcelas: statusPagamento === 'parcelado' ? numParcelas : null,
-      desconto: descontoValor,
-      itens: carrinho.map((item) => ({
-        produto_id: item.produto_id,
-        quantidade: item.quantidade,
-        preco_unitario: item.preco_unitario
-      }))
+    // Vendedor (não-dono) só finaliza desconto acima do teto se um dono autorizar
+    if (descontoAcimaDoTeto) {
+      setErro('')
+      setModalElevarAberto(true)
+      return
     }
 
-    const resp = await window.api.vendas.criar(dados)
-    if (resp.success) {
-      onSair()
-    } else {
-      setErro(resp.error)
-      setSalvando(false)
-    }
+    await persistirVenda()
   }
 
   // Mantém os refs atualizados para o listener global de atalhos chamar
@@ -1074,30 +1074,6 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
 
       {/* ── Painel direito: resumo + pagamento ── */}
       <div className="w-96 border-l bg-muted/20 flex flex-col p-5 gap-4 shrink-0 overflow-y-auto">
-        {/* Vendedor */}
-        <div>
-          <Label className="text-xs mb-1 block">
-            Vendedor <span className="text-destructive">*</span>
-          </Label>
-          <select
-            value={vendedorId}
-            onChange={(e) => { setVendedorId(e.target.value); setErro('') }}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">
-              {vendedores.length === 0 ? '— nenhum vendedor cadastrado —' : 'Selecione o vendedor...'}
-            </option>
-            {vendedores.map((v) => (
-              <option key={v.id} value={v.id}>{v.nome}</option>
-            ))}
-          </select>
-          {vendedores.length === 0 && (
-            <p className="text-xs text-amber-600 mt-1">
-              Cadastre vendedores em Configurações para registrar vendas.
-            </p>
-          )}
-        </div>
-
         {/* Cliente */}
         <div>
           <Label className="text-xs mb-1 block">
@@ -1164,6 +1140,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
               className="flex h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
+          {!ehDono && (
+            <p className={`text-[11px] mt-1 ${descontoAcimaDoTeto ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
+              Teto sem PIN do dono: {tetoDesconto}%
+              {descontoAcimaDoTeto && ' — vai exigir autorização ao finalizar'}
+            </p>
+          )}
         </div>
 
         {/* Resumo numérico */}
@@ -1447,6 +1429,17 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         aberto={consultaPrecoAberta}
         onFechar={() => { setConsultaPrecoAberta(false); scanRef.current?.focus() }}
         produtos={produtos}
+      />
+
+      {/* ── Autorização do dono pra desconto acima do teto ── */}
+      <ModalElevarPrivilegio
+        aberto={modalElevarAberto}
+        onClose={() => setModalElevarAberto(false)}
+        onAutorizar={() => {
+          setModalElevarAberto(false)
+          persistirVenda()
+        }}
+        motivo={`O desconto aplicado (${descontoPctReal.toFixed(1)}%) ultrapassa o teto de ${tetoDesconto}% sem PIN do dono. Peça pra um dono digitar o PIN dele pra autorizar esta venda.`}
       />
     </div>
 

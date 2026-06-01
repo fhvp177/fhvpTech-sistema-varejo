@@ -115,11 +115,26 @@ interface Window {
       deletar: (id: number) => Promise<RespostaIPC>
     }
     vendedores: {
-      listar: () => Promise<RespostaIPC<Array<{ id: number; nome: string; ativo: number; vendas_count: number }>>>
-      criar: (nome: string) => Promise<RespostaIPC<{ id: number; nome: string }>>
-      atualizar: (id: number, nome: string) => Promise<RespostaIPC>
+      listar: () => Promise<RespostaIPC<Array<{
+        id: number
+        nome: string
+        ativo: number
+        papel: 'dono' | 'vendedor'
+        email: string | null
+        tem_pin: number
+        vendas_count: number
+      }>>>
+      criar: (
+        dados: { nome: string; email?: string | null } | string
+      ) => Promise<RespostaIPC<{ id: number; nome: string }>>
+      atualizar: (
+        id: number,
+        dados: { nome?: string; email?: string | null } | string
+      ) => Promise<RespostaIPC>
       alternarAtivo: (id: number, ativo: boolean) => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>
+      alterarPapel: (id: number, papel: 'dono' | 'vendedor') => Promise<RespostaIPC>
+      redefinirPin: (id: number, novoPin: string) => Promise<RespostaIPC>
     }
     vendas: {
       listar: () => Promise<RespostaIPC>
@@ -144,14 +159,46 @@ interface Window {
     auth: {
       obterStatus: () => Promise<RespostaIPC<{
         pinConfigurado: boolean
-        precisaValidarHoje: boolean
         autoLockMinutos: number
       }>>
-      definirPin: (pin: string) => Promise<RespostaIPC>
-      verificarPin: (pin: string) => Promise<RespostaIPC<{ ok: boolean }>>
-      alterarPin: (pinAtual: string, pinNovo: string) => Promise<RespostaIPC>
+      listarVendedoresParaLogin: () => Promise<RespostaIPC<Array<{
+        id: number
+        nome: string
+        papel: 'dono' | 'vendedor'
+        tem_pin: number
+      }>>>
+      login: (vendedorId: number, pin: string) => Promise<RespostaIPC<{
+        ok: boolean
+        sessao?: {
+          id: number
+          nome: string
+          ativo: number
+          papel: 'dono' | 'vendedor'
+          email: string | null
+          tem_pin: number
+          vendas_count: number
+        } | null
+      }>>
+      logout: () => Promise<RespostaIPC>
+      sessaoAtual: () => Promise<RespostaIPC<{
+        id: number
+        nome: string
+        ativo: number
+        papel: 'dono' | 'vendedor'
+        email: string | null
+        tem_pin: number
+        vendas_count: number
+      } | null>>
+      elevar: (pin: string) => Promise<RespostaIPC<{ ok: boolean; donoId: number | null }>>
+      cadastrarPinPrimeiroUso: (vendedorId: number, pin: string) => Promise<RespostaIPC>
+      alterarPinVendedor: (
+        vendedorId: number,
+        pinAtual: string,
+        pinNovo: string
+      ) => Promise<RespostaIPC>
       setarAutoLock: (minutos: number) => Promise<RespostaIPC>
-      marcarValidadoHoje: () => Promise<RespostaIPC>
+      lerTetoDesconto: () => Promise<RespostaIPC<number>>
+      setarTetoDesconto: (pct: number) => Promise<RespostaIPC>
     }
     impressao: {
       imprimir: (html: string) => Promise<RespostaIPC>

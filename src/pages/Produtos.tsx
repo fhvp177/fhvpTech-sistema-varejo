@@ -13,6 +13,7 @@ import {
 import BarcodeGenerator, { gerarEAN13 } from '@/components/BarcodeGenerator'
 import Paginacao from '@/components/ui/paginacao'
 import ModalCategorias from '@/components/ModalCategorias'
+import { useSessao } from '@/App'
 
 const ITENS_POR_PAGINA = 20
 
@@ -138,12 +139,13 @@ function gerarHtmlRelatorio(produtos: Produto[]): string {
     <div>Total de itens em estoque: <span>${totalItens}</span></div>
   </div>
   ${tabelasHtml}
-  <div class="rodape">GN Modas — Balanço de Estoque</div>
+  <div class="rodape">FHVP Tech — Balanço de Estoque</div>
 </body>
 </html>`
 }
 
 const Produtos: FC = () => {
+  const { ehDono } = useSessao()
   const [lista, setLista] = useState<Produto[]>([])
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
@@ -328,18 +330,22 @@ const Produtos: FC = () => {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Produtos</h2>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setModalCategoriasAberto(true)}>
-            <Tag className="w-4 h-4 mr-2" />
-            Categorias
-          </Button>
+          {ehDono && (
+            <Button variant="outline" onClick={() => setModalCategoriasAberto(true)}>
+              <Tag className="w-4 h-4 mr-2" />
+              Categorias
+            </Button>
+          )}
           <Button variant="outline" onClick={imprimirRelatorio} disabled={lista.length === 0}>
             <Printer className="w-4 h-4 mr-2" />
             Imprimir Estoque
           </Button>
-          <Button onClick={abrirNovo}>
-            <Plus className="w-4 h-4 mr-2" />
-            Novo Produto
-          </Button>
+          {ehDono && (
+            <Button onClick={abrirNovo}>
+              <Plus className="w-4 h-4 mr-2" />
+              Novo Produto
+            </Button>
+          )}
         </div>
       </div>
 
@@ -402,19 +408,21 @@ const Produtos: FC = () => {
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{p.fornecedor_nome || '—'}</td>
                 <td className="px-4 py-3">
-                  <div className="flex gap-1 justify-end">
-                    <Button variant="ghost" size="icon" onClick={() => abrirEdicao(p)}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => excluir(p.id, p.nome)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  {ehDono && (
+                    <div className="flex gap-1 justify-end">
+                      <Button variant="ghost" size="icon" onClick={() => abrirEdicao(p)}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => excluir(p.id, p.nome)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

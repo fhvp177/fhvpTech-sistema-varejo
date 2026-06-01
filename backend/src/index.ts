@@ -1,4 +1,4 @@
-// Backend de licenciamento + pagamento PIX do Sistema GN Modas.
+// Backend de licenciamento + pagamento PIX do Sistema FHVP Tech.
 // Roda em Node.js com Hono + @hono/node-server, hospedado no Fly.io.
 //
 // Fluxo simplificado:
@@ -50,7 +50,7 @@ const app = new Hono()
 
 app.use('*', cors())
 
-app.get('/', (c) => c.text('GN Modas — licenca API ok'))
+app.get('/', (c) => c.text('FHVP Tech — licenca API ok'))
 
 // ───── Admin ─────────────────────────────────────────────────────────
 // Protege rotas /admin/* com Bearer token (vem do env ADMIN_TOKEN).

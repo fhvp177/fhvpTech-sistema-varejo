@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from 'react'
-import { KeyRound, Clock } from 'lucide-react'
+import { KeyRound, Clock, Percent } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogFooter
 } from '@/components/ui/dialog'
-import { useLock } from '@/App'
+import { useLock, useSessao } from '@/App'
 
 const OPCOES_AUTO_LOCK: Array<{ valor: number; label: string }> = [
   { valor: 0, label: 'Desativado' },
@@ -23,6 +23,7 @@ const sanitizarPin = (v: string) => v.replace(/\D/g, '').slice(0, 6)
 
 const ConfigSeguranca: FC = () => {
   const { autoLockMinutos, setAutoLockMinutos, bloquear } = useLock()
+  const { vendedor, ehDono } = useSessao()
   const [modalAberto, setModalAberto] = useState(false)
   const [pinAtual, setPinAtual] = useState('')
   const [pinNovo, setPinNovo] = useState('')
@@ -30,6 +31,11 @@ const ConfigSeguranca: FC = () => {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [feedback, setFeedback] = useState<string>('')
+
+  const [tetoDesconto, setTetoDesconto] = useState<number>(10)
+  const [tetoEditado, setTetoEditado] = useState<string>('10')
+  const [salvandoTeto, setSalvandoTeto] = useState(false)
+  const [erroTeto, setErroTeto] = useState('')
 
   useEffect(() => {
     if (modalAberto) {
@@ -39,6 +45,15 @@ const ConfigSeguranca: FC = () => {
       setErro('')
     }
   }, [modalAberto])
+
+  useEffect(() => {
+    window.api.auth.lerTetoDesconto().then((resp) => {
+      if (resp.success) {
+        setTetoDesconto(resp.data)
+        setTetoEditado(String(resp.data))
+      }
+    })
+  }, [])
 
   const salvarAutoLock = async (minutos: number) => {
     const resp = await window.api.auth.setarAutoLock(minutos)
@@ -54,8 +69,31 @@ const ConfigSeguranca: FC = () => {
     }
   }
 
+  const salvarTeto = async () => {
+    setErroTeto('')
+    const valor = parseFloat(tetoEditado.replace(',', '.'))
+    if (isNaN(valor) || valor < 0 || valor > 100) {
+      setErroTeto('Informe um valor entre 0 e 100.')
+      return
+    }
+    setSalvandoTeto(true)
+    const resp = await window.api.auth.setarTetoDesconto(valor)
+    setSalvandoTeto(false)
+    if (!resp.success) {
+      setErroTeto(resp.error)
+      return
+    }
+    setTetoDesconto(valor)
+    setFeedback(`Teto de desconto ajustado para ${valor}%.`)
+    setTimeout(() => setFeedback(''), 3000)
+  }
+
   const alterarPin = async () => {
     setErro('')
+    if (!vendedor) {
+      setErro('Sessão expirada. Faça login novamente.')
+      return
+    }
     if (!/^\d{4,6}$/.test(pinNovo)) {
       setErro('O novo PIN deve ter de 4 a 6 dígitos numéricos.')
       return
@@ -69,7 +107,7 @@ const ConfigSeguranca: FC = () => {
       return
     }
     setSalvando(true)
-    const resp = await window.api.auth.alterarPin(pinAtual, pinNovo)
+    const resp = await window.api.auth.alterarPinVendedor(vendedor.id, pinAtual, pinNovo)
     setSalvando(false)
     if (!resp.success) {
       setErro(resp.error)
@@ -77,9 +115,10 @@ const ConfigSeguranca: FC = () => {
     }
     setModalAberto(false)
     setFeedback('PIN alterado com sucesso. O sistema será bloqueado por segurança.')
-    // Pequena espera para o feedback ser percebido antes de bloquear
     setTimeout(() => bloquear(), 1200)
   }
+
+  const tetoMudou = parseFloat(tetoEditado.replace(',', '.')) !== tetoDesconto
 
   return (
     <div className="space-y-5">
@@ -88,14 +127,21 @@ const ConfigSeguranca: FC = () => {
         <div className="flex items-start gap-3">
           <KeyRound className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
           <div>
-            <p className="font-medium text-sm">PIN de acesso</p>
+            <p className="font-medium text-sm">Seu PIN de acesso</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Senha numérica usada para destravar o sistema.
-              Após alterar, o sistema será bloqueado e o novo PIN será exigido.
+              {vendedor
+                ? `Altera apenas o PIN de ${vendedor.nome}. Após alterar, o sistema será bloqueado.`
+                : 'Faça login pra alterar o PIN.'}
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setModalAberto(true)} className="shrink-0">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setModalAberto(true)}
+          className="shrink-0"
+          disabled={!vendedor}
+        >
           Alterar PIN
         </Button>
       </div>
@@ -120,6 +166,55 @@ const ConfigSeguranca: FC = () => {
         </p>
       </div>
 
+      {/* Teto de desconto */}
+      <div>
+        <div className="flex items-center gap-2 mb-1.5">
+          <Percent className="w-4 h-4 text-muted-foreground" />
+          <Label className="text-sm font-medium">
+            Teto de desconto sem PIN do dono
+          </Label>
+        </div>
+        <div className="flex items-center gap-2 max-w-xs">
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={100}
+            step={0.5}
+            value={tetoEditado}
+            onChange={(e) => {
+              setTetoEditado(e.target.value)
+              setErroTeto('')
+            }}
+            disabled={!ehDono}
+            className="flex h-10 w-24 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:bg-muted disabled:text-muted-foreground"
+          />
+          <span className="text-sm text-muted-foreground">%</span>
+          {ehDono && (
+            <Button
+              size="sm"
+              variant={tetoMudou ? 'default' : 'outline'}
+              onClick={salvarTeto}
+              disabled={!tetoMudou || salvandoTeto}
+            >
+              {salvandoTeto ? 'Salvando...' : 'Salvar'}
+            </Button>
+          )}
+        </div>
+        {erroTeto && (
+          <p className="text-destructive text-xs mt-1.5">{erroTeto}</p>
+        )}
+        <p className="text-xs text-muted-foreground mt-1">
+          Vendedor pode dar até este desconto. Acima disso, o sistema pedirá o PIN do dono.
+          {' '}<span className="italic">0% exige PIN pra qualquer desconto.</span>
+          {!ehDono && (
+            <span className="block mt-1 text-amber-600">
+              Somente o dono pode alterar este valor.
+            </span>
+          )}
+        </p>
+      </div>
+
       {feedback && (
         <p className="text-sm font-medium text-green-600">{feedback}</p>
       )}
@@ -132,7 +227,7 @@ const ConfigSeguranca: FC = () => {
       <Dialog open={modalAberto} onOpenChange={setModalAberto}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Alterar PIN</DialogTitle>
+            <DialogTitle>Alterar PIN — {vendedor?.nome}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-1">
             <div>

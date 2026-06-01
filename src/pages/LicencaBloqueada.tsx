@@ -1,6 +1,6 @@
 import { FC, useEffect, useState } from 'react'
 import { QrCode } from 'lucide-react'
-import logoGnModas from '@/assets/logo.png'
+import logoEmpresa from '@/assets/logo.png'
 
 type Props = {
   mensagemInicial: string
@@ -48,8 +48,8 @@ const LicencaBloqueada: FC<Props> = ({ mensagemInicial, onAtivar, onRenovarComPi
       <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl">
         <div className="text-center mb-8">
           <img
-            src={logoGnModas}
-            alt="GN Modas"
+            src={logoEmpresa}
+            alt="FHVP Tech"
             className="w-32 h-32 mx-auto mb-3 object-contain"
           />
           <p className="text-slate-500 text-sm">Sistema de Gestão de Varejo</p>

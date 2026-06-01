@@ -14,6 +14,7 @@ import {
 } from '../db/queries/vendas'
 import { obterBackupManager } from '../backup/BackupManager'
 import { lerConfig } from '../backup/configBackup'
+import { requerSessao } from '../sessao'
 
 // Dispara um backup ZIP em background após uma venda, se a opção estiver ativa.
 // Não bloqueia o handler IPC e nunca propaga erros — o usuário não pode esperar
@@ -44,9 +45,12 @@ export function registrarHandlersVendas(): void {
     }
   })
 
+  // A venda é sempre atribuída ao vendedor logado. Ignora qualquer vendedor_id
+  // que venha do renderer — a sessão é fonte da verdade pra rastreabilidade.
   ipcMain.handle('vendas:criar', (_event, dados: DadosNovaVenda) => {
     try {
-      const resultado = criarVenda(dados)
+      const sessao = requerSessao()
+      const resultado = criarVenda({ ...dados, vendedor_id: sessao.id })
       obterBackupManager().marcarAlteracao()
       dispararBackupPorVendaSeAtivo()
       return { success: true, data: resultado }

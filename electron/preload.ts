@@ -53,12 +53,19 @@ const api = {
   // Vendedores
   vendedores: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendedores:listar'),
-    criar: (nome: string): Promise<RespostaIPC> => ipcRenderer.invoke('vendedores:criar', nome),
-    atualizar: (id: number, nome: string): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('vendedores:atualizar', id, nome),
+    criar: (dados: { nome: string; email?: string | null } | string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendedores:criar', dados),
+    atualizar: (
+      id: number,
+      dados: { nome?: string; email?: string | null } | string
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('vendedores:atualizar', id, dados),
     alternarAtivo: (id: number, ativo: boolean): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendedores:alternarAtivo', id, ativo),
-    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('vendedores:deletar', id)
+    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('vendedores:deletar', id),
+    alterarPapel: (id: number, papel: 'dono' | 'vendedor'): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendedores:alterarPapel', id, papel),
+    redefinirPin: (id: number, novoPin: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendedores:redefinirPin', id, novoPin)
   },
 
   // Vendas
@@ -77,18 +84,29 @@ const api = {
     resumoDashboard: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:resumoDashboard')
   },
 
-  // Auth (PIN do sistema)
+  // Auth (PIN do sistema + sessão por vendedor)
   auth: {
     obterStatus: (): Promise<RespostaIPC> => ipcRenderer.invoke('auth:obterStatus'),
-    definirPin: (pin: string): Promise<RespostaIPC> => ipcRenderer.invoke('auth:definirPin', pin),
-    verificarPin: (pin: string): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('auth:verificarPin', pin),
-    alterarPin: (pinAtual: string, pinNovo: string): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('auth:alterarPin', pinAtual, pinNovo),
+    listarVendedoresParaLogin: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:listarVendedoresParaLogin'),
+    login: (vendedorId: number, pin: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:login', vendedorId, pin),
+    logout: (): Promise<RespostaIPC> => ipcRenderer.invoke('auth:logout'),
+    sessaoAtual: (): Promise<RespostaIPC> => ipcRenderer.invoke('auth:sessaoAtual'),
+    elevar: (pin: string): Promise<RespostaIPC> => ipcRenderer.invoke('auth:elevar', pin),
+    cadastrarPinPrimeiroUso: (vendedorId: number, pin: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:cadastrarPinPrimeiroUso', vendedorId, pin),
+    alterarPinVendedor: (
+      vendedorId: number,
+      pinAtual: string,
+      pinNovo: string
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:alterarPinVendedor', vendedorId, pinAtual, pinNovo),
     setarAutoLock: (minutos: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('auth:setarAutoLock', minutos),
-    marcarValidadoHoje: (): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('auth:marcarValidadoHoje')
+    lerTetoDesconto: (): Promise<RespostaIPC> => ipcRenderer.invoke('auth:lerTetoDesconto'),
+    setarTetoDesconto: (pct: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:setarTetoDesconto', pct)
   },
 
   // Licença

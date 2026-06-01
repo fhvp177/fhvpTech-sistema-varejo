@@ -1,9 +1,15 @@
 import bcrypt from 'bcryptjs'
 import { lerConfig, gravarConfig } from './backup/configBackup'
+import {
+  contarDonosAtivos,
+  gravarPinHash,
+  listarParaLogin,
+  obterPinHash,
+  obterVendedor
+} from './db/queries/vendedores'
 
-const CHAVE_HASH = 'pin_sistema_hash'
 const CHAVE_AUTO_LOCK = 'auto_lock_minutos'
-const CHAVE_ULTIMA_VALIDACAO = 'ultima_validacao_pin_data'
+const CHAVE_TETO_DESCONTO = 'teto_desconto_vendedor_pct'
 const BCRYPT_ROUNDS = 12
 
 // Aceita PIN de 4 a 6 dígitos numéricos
@@ -15,43 +21,66 @@ function validarFormatoPin(pin: string): void {
   }
 }
 
-function hojeIso(): string {
-  // Data local em YYYY-MM-DD (ignora hora — "abertura do dia" é local, não UTC)
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const dia = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${dia}`
+async function gerarHash(pin: string): Promise<string> {
+  return bcrypt.hash(pin, BCRYPT_ROUNDS)
 }
 
-export function temPinConfigurado(): boolean {
-  return !!lerConfig(CHAVE_HASH)
-}
+// ───── Auth por vendedor ─────────────────────────────────────────────
 
-export async function verificarPin(pin: string): Promise<boolean> {
-  const hash = lerConfig(CHAVE_HASH)
+export async function verificarPinVendedor(
+  vendedorId: number,
+  pin: string
+): Promise<boolean> {
+  const hash = obterPinHash(vendedorId)
   if (!hash) return false
   return bcrypt.compare(pin, hash)
 }
 
-// Define o PIN pela primeira vez. Falha se já houver PIN configurado —
-// para trocar use alterarPin (que exige o atual).
-export async function definirPin(pin: string): Promise<void> {
+export async function definirPinVendedor(vendedorId: number, pin: string): Promise<void> {
   validarFormatoPin(pin)
-  if (temPinConfigurado()) {
-    throw new Error('Já existe um PIN configurado. Use a opção de alterar.')
+  const v = obterVendedor(vendedorId)
+  if (!v) throw new Error('Vendedor não encontrado.')
+  if (v.tem_pin === 1) {
+    throw new Error('Este vendedor já tem PIN definido. Use a opção de alterar.')
   }
-  const hash = await bcrypt.hash(pin, BCRYPT_ROUNDS)
-  gravarConfig(CHAVE_HASH, hash)
+  const hash = await gerarHash(pin)
+  gravarPinHash(vendedorId, hash)
 }
 
-export async function alterarPin(pinAtual: string, pinNovo: string): Promise<void> {
+export async function alterarPinVendedor(
+  vendedorId: number,
+  pinAtual: string,
+  pinNovo: string
+): Promise<void> {
   validarFormatoPin(pinNovo)
-  const ok = await verificarPin(pinAtual)
+  const ok = await verificarPinVendedor(vendedorId, pinAtual)
   if (!ok) throw new Error('PIN atual incorreto.')
-  const hash = await bcrypt.hash(pinNovo, BCRYPT_ROUNDS)
-  gravarConfig(CHAVE_HASH, hash)
+  const hash = await gerarHash(pinNovo)
+  gravarPinHash(vendedorId, hash)
 }
+
+// Usado pelo modal "elevar privilégio": qualquer dono ativo cujo PIN bate libera.
+// Retorna o id do dono que autenticou (pra auditoria futura) ou null.
+export async function verificarPinDono(pin: string): Promise<number | null> {
+  for (const v of listarParaLogin()) {
+    if (v.papel !== 'dono' || v.tem_pin !== 1) continue
+    const hash = obterPinHash(v.id)
+    if (!hash) continue
+    if (await bcrypt.compare(pin, hash)) return v.id
+  }
+  return null
+}
+
+// Indica se existe ao menos um dono ativo com PIN — usado pela tela de login
+// pra decidir se mostra o fluxo de "primeiro acesso" no dono.
+export function temPinConfigurado(): boolean {
+  return (
+    contarDonosAtivos() > 0 &&
+    listarParaLogin().some((v) => v.papel === 'dono' && v.tem_pin === 1)
+  )
+}
+
+// ───── Auto-lock ──────────────────────────────────────────────────────
 
 export function lerAutoLockMinutos(): number {
   const raw = lerConfig(CHAVE_AUTO_LOCK)
@@ -66,13 +95,22 @@ export function setarAutoLockMinutos(minutos: number): void {
   gravarConfig(CHAVE_AUTO_LOCK, String(seguro))
 }
 
-// Registra que o PIN foi validado hoje — usado para não pedir de novo
-// na mesma data caso o usuário reinicie o app por algum motivo.
-export function marcarValidadoHoje(): void {
-  gravarConfig(CHAVE_ULTIMA_VALIDACAO, hojeIso())
+// ───── Teto de desconto por vendedor ──────────────────────────────────
+// Limite máximo de desconto (em %) que um vendedor pode aplicar sem PIN do dono.
+// 0 = qualquer desconto exige PIN do dono. 100 = vendedor pode dar qualquer.
+
+export function lerTetoDescontoPct(): number {
+  const raw = lerConfig(CHAVE_TETO_DESCONTO)
+  const n = parseFloat(raw)
+  if (isNaN(n) || n < 0) return 10
+  return Math.min(100, n)
 }
 
-export function precisaValidarHoje(): boolean {
-  if (!temPinConfigurado()) return false
-  return lerConfig(CHAVE_ULTIMA_VALIDACAO) !== hojeIso()
+export function setarTetoDescontoPct(pct: number): void {
+  const n = Number(pct)
+  if (isNaN(n) || n < 0 || n > 100) {
+    throw new Error('O teto de desconto deve estar entre 0 e 100.')
+  }
+  // Guarda como string com até 2 casas pra evitar lixo flutuante
+  gravarConfig(CHAVE_TETO_DESCONTO, String(Math.round(n * 100) / 100))
 }

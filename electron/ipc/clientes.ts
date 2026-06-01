@@ -9,6 +9,7 @@ import {
   type DadosCliente
 } from '../db/queries/clientes'
 import { obterBackupManager } from '../backup/BackupManager'
+import { requerDono } from '../sessao'
 
 export function registrarHandlersClientes(): void {
   ipcMain.handle('clientes:listar', () => {
@@ -19,6 +20,7 @@ export function registrarHandlersClientes(): void {
     }
   })
 
+  // criar é liberado pro vendedor — frequente no PDV (cadastra cliente novo na hora)
   ipcMain.handle('clientes:criar', (_event, dados: DadosCliente) => {
     try {
       const resultado = criarCliente(dados)
@@ -31,6 +33,7 @@ export function registrarHandlersClientes(): void {
 
   ipcMain.handle('clientes:atualizar', (_event, id: number, dados: DadosCliente) => {
     try {
+      requerDono()
       atualizarCliente(id, dados)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }
@@ -41,6 +44,7 @@ export function registrarHandlersClientes(): void {
 
   ipcMain.handle('clientes:deletar', (_event, id: number) => {
     try {
+      requerDono()
       deletarCliente(id)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }

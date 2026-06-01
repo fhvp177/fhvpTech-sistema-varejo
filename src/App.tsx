@@ -12,6 +12,9 @@ import {
   DatabaseBackup,
   MessageCircle,
   QrCode,
+  Crown,
+  ChevronDown,
+  LogOut,
   LucideIcon
 } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
@@ -29,11 +32,22 @@ import AlertaBackupFalhando from './components/backup/AlertaBackupFalhando'
 import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
 import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
 import ModalPagamentoPix from './components/ModalPagamentoPix'
+import RotaSomenteDono from './components/RotaSomenteDono'
 import { ToastProvider, useToast } from './components/ui/toast'
 import { useAutoLock } from './hooks/useAutoLock'
 
 type EstadoLicenca = 'verificando' | 'valida' | 'invalida'
-type EstadoAuth = 'verificando' | 'cadastro' | 'bloqueado' | 'desbloqueado'
+type EstadoAuth = 'verificando' | 'bloqueado' | 'desbloqueado'
+
+export type SessaoVendedor = {
+  id: number
+  nome: string
+  ativo: number
+  papel: 'dono' | 'vendedor'
+  email: string | null
+  tem_pin: number
+  vendas_count: number
+}
 
 // Permite que a tela do PDV oculte a barra lateral enquanto está ativa,
 // liberando a tela inteira para a operação de venda.
@@ -47,6 +61,20 @@ type LockCtx = { bloquear: () => void; autoLockMinutos: number; setAutoLockMinut
 const LockContext = createContext<LockCtx>({ bloquear: () => {}, autoLockMinutos: 15, setAutoLockMinutos: () => {} })
 export const useLock = () => useContext(LockContext)
 
+// Quem está logado agora. ehDono é o atalho usado em quase toda regra de
+// permissão; recarregar permite atualizar após alterar email/PIN.
+type SessaoCtx = {
+  vendedor: SessaoVendedor | null
+  ehDono: boolean
+  recarregar: () => Promise<SessaoVendedor | null>
+}
+const SessaoContext = createContext<SessaoCtx>({
+  vendedor: null,
+  ehDono: false,
+  recarregar: async () => null
+})
+export const useSessao = () => useContext(SessaoContext)
+
 // MemoryRouter é necessário no Electron: não existe servidor HTTP nem hash routing
 const App: FC = () => {
   const [estadoLicenca, setEstadoLicenca] = useState<EstadoLicenca>('verificando')
@@ -57,6 +85,7 @@ const App: FC = () => {
   const [estadoAuth, setEstadoAuth] = useState<EstadoAuth>('verificando')
   const [autoLockMinutos, setAutoLockMinutos] = useState(15)
   const [mostrarPagamento, setMostrarPagamento] = useState(false)
+  const [vendedor, setVendedor] = useState<SessaoVendedor | null>(null)
 
   const validarLicenca = useCallback(async (): Promise<void> => {
     const resp = await window.api.licenca.validar()
@@ -84,26 +113,37 @@ const App: FC = () => {
     await validarLicenca()
   }, [validarLicenca])
 
-  // Verifica status do PIN apenas depois da licença passar
+  const recarregarSessao = useCallback(async (): Promise<SessaoVendedor | null> => {
+    const resp = await window.api.auth.sessaoAtual()
+    const v = resp.success ? resp.data : null
+    setVendedor(v)
+    return v
+  }, [])
+
+  // Verifica status de auth + sessão depois que a licença passa
   useEffect(() => {
     if (estadoLicenca !== 'valida') return
-    window.api.auth.obterStatus().then((resp) => {
-      if (!resp.success) {
-        // Falha grave: se nem o status carrega, melhor não travar o usuário
-        setEstadoAuth('desbloqueado')
-        return
+    ;(async () => {
+      const respStatus = await window.api.auth.obterStatus()
+      if (respStatus.success) {
+        setAutoLockMinutos(respStatus.data.autoLockMinutos)
       }
-      const { pinConfigurado, precisaValidarHoje, autoLockMinutos: m } = resp.data
-      setAutoLockMinutos(m)
-      if (!pinConfigurado) setEstadoAuth('cadastro')
-      else if (precisaValidarHoje) setEstadoAuth('bloqueado')
-      else setEstadoAuth('desbloqueado')
-    })
-  }, [estadoLicenca])
+      const sessao = await recarregarSessao()
+      setEstadoAuth(sessao ? 'desbloqueado' : 'bloqueado')
+    })()
+  }, [estadoLicenca, recarregarSessao])
 
   const bloquear = useCallback(() => {
+    // logout é fire-and-forget — a UI já some, e o resultado não bloqueia
+    window.api.auth.logout().catch(() => {})
+    setVendedor(null)
     setEstadoAuth((prev) => (prev === 'desbloqueado' ? 'bloqueado' : prev))
   }, [])
+
+  const aoLogar = useCallback(async () => {
+    await recarregarSessao()
+    setEstadoAuth('desbloqueado')
+  }, [recarregarSessao])
 
   // Atalho global Ctrl+L bloqueia o sistema imediatamente
   useEffect(() => {
@@ -157,50 +197,71 @@ const App: FC = () => {
   return (
     <ToastProvider>
       <ToastInicial aviso={avisoLicenca} onMostrado={() => setAvisoLicenca(null)} />
-      <LockContext.Provider value={{ bloquear, autoLockMinutos, setAutoLockMinutos }}>
-        <PdvModeContext.Provider value={{ ativo: pdvAtivo, setAtivo: setPdvAtivo }}>
-          <MemoryRouter>
-            <div className="flex h-screen bg-background">
-              {!pdvAtivo && (
-                <Sidebar
-                  diasRestantes={diasRestantes}
-                  onBloquear={bloquear}
-                  onRenovarComPix={abrirPagamento}
-                />
-              )}
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {!pdvAtivo && <AlertaBackupFalhando />}
-                <main className="flex-1 overflow-auto">
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/fornecedores" element={<Fornecedores />} />
-                    <Route path="/produtos" element={<Produtos />} />
-                    <Route path="/clientes" element={<Clientes />} />
-                    <Route path="/vendas" element={<Vendas />} />
-                    <Route path="/etiquetas" element={<EtiquetasA4 />} />
-                    <Route path="/configuracoes" element={<Configuracoes />} />
-                    <Route path="/restauracao" element={<TelaRestauracao />} />
-                  </Routes>
-                </main>
+      <SessaoContext.Provider
+        value={{ vendedor, ehDono: vendedor?.papel === 'dono', recarregar: recarregarSessao }}
+      >
+        <LockContext.Provider value={{ bloquear, autoLockMinutos, setAutoLockMinutos }}>
+          <PdvModeContext.Provider value={{ ativo: pdvAtivo, setAtivo: setPdvAtivo }}>
+            <MemoryRouter>
+              <div className="flex h-screen bg-background">
+                {!pdvAtivo && (
+                  <Sidebar
+                    diasRestantes={diasRestantes}
+                    onBloquear={bloquear}
+                    onRenovarComPix={abrirPagamento}
+                    vendedor={vendedor}
+                  />
+                )}
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {!pdvAtivo && <AlertaBackupFalhando />}
+                  <main className="flex-1 overflow-auto">
+                    <Routes>
+                      <Route
+                        path="/"
+                        element={
+                          <RotaSomenteDono titulo="Dashboard">
+                            <Dashboard />
+                          </RotaSomenteDono>
+                        }
+                      />
+                      <Route path="/fornecedores" element={<Fornecedores />} />
+                      <Route path="/produtos" element={<Produtos />} />
+                      <Route path="/clientes" element={<Clientes />} />
+                      <Route path="/vendas" element={<Vendas />} />
+                      <Route path="/etiquetas" element={<EtiquetasA4 />} />
+                      <Route
+                        path="/configuracoes"
+                        element={
+                          <RotaSomenteDono titulo="Configurações">
+                            <Configuracoes />
+                          </RotaSomenteDono>
+                        }
+                      />
+                      <Route
+                        path="/restauracao"
+                        element={
+                          <RotaSomenteDono titulo="Restauração">
+                            <TelaRestauracao />
+                          </RotaSomenteDono>
+                        }
+                      />
+                    </Routes>
+                  </main>
+                </div>
               </div>
-            </div>
-            <IndicadorBackupAtivo />
-            <DialogoBackupAoFechar />
-            <ModalAtualizacaoDisponivel />
-            <ModalPagamentoPix
-              aberto={mostrarPagamento}
-              onClose={fecharPagamento}
-              onLicencaRenovada={aoRenovar}
-            />
-          </MemoryRouter>
-        </PdvModeContext.Provider>
-      </LockContext.Provider>
-      {(estadoAuth === 'bloqueado' || estadoAuth === 'cadastro') && (
-        <LoginSistema
-          modoCadastro={estadoAuth === 'cadastro'}
-          onDesbloquear={() => setEstadoAuth('desbloqueado')}
-        />
-      )}
+              <IndicadorBackupAtivo />
+              <DialogoBackupAoFechar />
+              <ModalAtualizacaoDisponivel />
+              <ModalPagamentoPix
+                aberto={mostrarPagamento}
+                onClose={fecharPagamento}
+                onLicencaRenovada={aoRenovar}
+              />
+            </MemoryRouter>
+          </PdvModeContext.Provider>
+        </LockContext.Provider>
+      </SessaoContext.Provider>
+      {estadoAuth === 'bloqueado' && <LoginSistema onDesbloquear={aoLogar} />}
     </ToastProvider>
   )
 }
@@ -225,13 +286,11 @@ const ToastInicial: FC<{ aviso: string | null; onMostrado: () => void }> = ({
   return null
 }
 
-const CATEGORIAS_SIDEBAR: {
-  titulo: string
-  itens: { to: string; label: string; icon: LucideIcon }[]
-}[] = [
+type ItemSidebar = { to: string; label: string; icon: LucideIcon; somenteDono?: boolean }
+const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Visão geral',
-    itens: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard }]
+    itens: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, somenteDono: true }]
   },
   {
     titulo: 'Cadastros',
@@ -251,26 +310,87 @@ const CATEGORIAS_SIDEBAR: {
   {
     titulo: 'Sistema',
     itens: [
-      { to: '/configuracoes', label: 'Configurações', icon: Settings },
-      { to: '/restauracao', label: 'Restauração', icon: DatabaseBackup }
+      { to: '/configuracoes', label: 'Configurações', icon: Settings, somenteDono: true },
+      { to: '/restauracao', label: 'Restauração', icon: DatabaseBackup, somenteDono: true }
     ]
   }
 ]
 
 const URL_SUPORTE_WHATSAPP = `https://wa.me/5585921871975?text=${encodeURIComponent(
-  `Olá, sou usuário do Sistema GN Modas (versão ${__APP_VERSION__}) e preciso de suporte.`
+  `Olá, sou usuário do Sistema FHVP Tech (versão ${__APP_VERSION__}) e preciso de suporte.`
 )}`
+
+const UserMenu: FC<{ vendedor: SessaoVendedor; onSair: () => void }> = ({
+  vendedor,
+  onSair
+}) => {
+  const [aberto, setAberto] = useState(false)
+  const inicial = vendedor.nome.trim().slice(0, 1).toUpperCase() || '?'
+  const ehDono = vendedor.papel === 'dono'
+  return (
+    <div className="bg-slate-800/60 rounded-lg p-3 mb-4">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="w-full flex items-center gap-2.5 text-left"
+        title={aberto ? 'Recolher menu' : 'Abrir menu'}
+      >
+        <div
+          className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0 ${
+            ehDono ? 'bg-amber-500' : 'bg-slate-500'
+          }`}
+        >
+          {inicial}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white truncate" title={vendedor.nome}>
+            {vendedor.nome}
+          </p>
+          <p className="text-[11px] text-slate-400 flex items-center gap-1">
+            {ehDono ? (
+              <>
+                <Crown className="w-3 h-3 text-amber-400" /> Dono
+              </>
+            ) : (
+              'Vendedor'
+            )}
+          </p>
+        </div>
+        <ChevronDown
+          className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${aberto ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {vendedor.email && (
+        <p className="text-[11px] text-slate-400 mt-1.5 truncate" title={vendedor.email}>
+          {vendedor.email}
+        </p>
+      )}
+      {aberto && (
+        <button
+          onClick={onSair}
+          className="mt-2 w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-300 hover:text-white bg-slate-900/60 hover:bg-slate-900 rounded px-2 py-1.5 transition-colors"
+        >
+          <LogOut className="w-3 h-3" />
+          Sair
+        </button>
+      )}
+    </div>
+  )
+}
 
 const Sidebar: FC<{
   diasRestantes: number | null
   onBloquear: () => void
   onRenovarComPix: () => void
-}> = ({ diasRestantes, onBloquear, onRenovarComPix }) => (
+  vendedor: SessaoVendedor | null
+}> = ({ diasRestantes, onBloquear, onRenovarComPix, vendedor }) => (
   <nav className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
-    <div className="mb-6">
-      <h1 className="text-lg font-bold text-white">GN Modas</h1>
+    <div className="mb-4">
+      <h1 className="text-lg font-bold text-white">FHVP Tech</h1>
       <p className="text-xs text-slate-400">Sistema de Gestão de Varejo</p>
     </div>
+
+    {vendedor && <UserMenu vendedor={vendedor} onSair={onBloquear} />}
 
     <div className="flex-1 overflow-y-auto -mr-2 pr-2 space-y-4">
       {CATEGORIAS_SIDEBAR.map((cat) => (
@@ -279,23 +399,30 @@ const Sidebar: FC<{
             {cat.titulo}
           </p>
           <div className="flex flex-col gap-1">
-            {cat.itens.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
-                className={({ isActive }) =>
-                  `flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`
-                }
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {label}
-              </NavLink>
-            ))}
+            {cat.itens.map(({ to, label, icon: Icon, somenteDono }) => {
+              const bloqueado = somenteDono && vendedor?.papel !== 'dono'
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  title={bloqueado ? 'Restrito ao dono' : undefined}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+                      isActive
+                        ? 'bg-blue-600 text-white'
+                        : bloqueado
+                          ? 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-400'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`
+                  }
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="flex-1">{label}</span>
+                  {bloqueado && <Lock className="w-3 h-3 shrink-0 text-amber-500/80" />}
+                </NavLink>
+              )
+            })}
           </div>
         </div>
       ))}
@@ -314,7 +441,7 @@ const Sidebar: FC<{
           </p>
         </div>
       )}
-      {diasRestantes !== null && diasRestantes <= 7 && (
+      {diasRestantes !== null && diasRestantes <= 7 && vendedor?.papel === 'dono' && (
         <button
           onClick={onRenovarComPix}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 hover:text-emerald-200 transition-colors"
@@ -343,15 +470,6 @@ const Sidebar: FC<{
       </button>
     </div>
   </nav>
-)
-
-const Placeholder: FC<{ titulo: string; etapa: number }> = ({ titulo, etapa }) => (
-  <div className="p-8 flex items-center justify-center h-full">
-    <div className="text-center text-muted-foreground">
-      <p className="text-2xl font-semibold text-foreground mb-2">{titulo}</p>
-      <p>Será implementado na etapa {etapa}.</p>
-    </div>
-  </div>
 )
 
 export default App

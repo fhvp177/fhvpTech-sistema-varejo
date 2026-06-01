@@ -8,6 +8,7 @@ import {
   type DadosProduto
 } from '../db/queries/produtos'
 import { obterBackupManager } from '../backup/BackupManager'
+import { requerDono } from '../sessao'
 
 export function registrarHandlersProdutos(): void {
   ipcMain.handle('produtos:listar', () => {
@@ -29,6 +30,7 @@ export function registrarHandlersProdutos(): void {
 
   ipcMain.handle('produtos:criar', (_event, dados: DadosProduto) => {
     try {
+      requerDono()
       const resultado = criarProduto(dados)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: resultado }
@@ -39,6 +41,7 @@ export function registrarHandlersProdutos(): void {
 
   ipcMain.handle('produtos:atualizar', (_event, id: number, dados: DadosProduto) => {
     try {
+      requerDono()
       atualizarProduto(id, dados)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }
@@ -49,6 +52,7 @@ export function registrarHandlersProdutos(): void {
 
   ipcMain.handle('produtos:deletar', (_event, id: number) => {
     try {
+      requerDono()
       deletarProduto(id)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }

@@ -16,6 +16,7 @@ import DividasClienteDialog, {
   calcularDividasPorCliente,
   type VendaDivida
 } from '@/components/DividasClienteDialog'
+import { useSessao } from '@/App'
 
 const ITENS_POR_PAGINA = 20
 
@@ -111,6 +112,7 @@ const validarDataBr = (ddmmyyyy: string): boolean => {
 }
 
 const Clientes: FC = () => {
+  const { ehDono } = useSessao()
   const [lista, setLista] = useState<Cliente[]>([])
   const [vendas, setVendas] = useState<VendaDivida[]>([])
   const [busca, setBusca] = useState('')
@@ -344,17 +346,21 @@ const Clientes: FC = () => {
                         <Wallet className="w-4 h-4" />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => abrirEdicao(c)}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => excluir(c.id, c.nome)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {ehDono && (
+                      <>
+                        <Button variant="ghost" size="icon" onClick={() => abrirEdicao(c)}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => excluir(c.id, c.nome)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>

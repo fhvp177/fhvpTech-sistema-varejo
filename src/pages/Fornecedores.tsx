@@ -12,6 +12,7 @@ import {
   DialogFooter
 } from '@/components/ui/dialog'
 import Paginacao from '@/components/ui/paginacao'
+import { useSessao } from '@/App'
 
 const ITENS_POR_PAGINA = 20
 
@@ -53,6 +54,7 @@ const validarEmail = (email: string): boolean =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
 const Fornecedores: FC = () => {
+  const { ehDono } = useSessao()
   const [lista, setLista] = useState<Fornecedor[]>([])
   const [busca, setBusca] = useState('')
   const [dialogAberto, setDialogAberto] = useState(false)
@@ -173,10 +175,12 @@ const Fornecedores: FC = () => {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Fornecedores</h2>
-        <Button onClick={abrirNovo}>
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Fornecedor
-        </Button>
+        {ehDono && (
+          <Button onClick={abrirNovo}>
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Fornecedor
+          </Button>
+        )}
       </div>
 
       {/* Busca */}
@@ -217,19 +221,21 @@ const Fornecedores: FC = () => {
                 <td className="px-4 py-3 text-muted-foreground">{f.telefone || '—'}</td>
                 <td className="px-4 py-3 text-muted-foreground">{f.email || '—'}</td>
                 <td className="px-4 py-3">
-                  <div className="flex gap-1 justify-end">
-                    <Button variant="ghost" size="icon" onClick={() => abrirEdicao(f)}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => excluir(f.id, f.nome)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  {ehDono && (
+                    <div className="flex gap-1 justify-end">
+                      <Button variant="ghost" size="icon" onClick={() => abrirEdicao(f)}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => excluir(f.id, f.nome)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

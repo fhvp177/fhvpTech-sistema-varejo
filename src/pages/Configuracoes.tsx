@@ -166,7 +166,7 @@ const Configuracoes: FC = () => {
         <div className="border rounded-lg p-4 bg-muted/30 space-y-3">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-medium text-sm">GN Modas — Sistema de Gestão</p>
+              <p className="font-medium text-sm">FHVP Tech — Sistema de Gestão</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Versão atual: <span className="font-mono font-semibold text-foreground">
                   {infoAtualizacao?.versaoAtual ?? '—'}

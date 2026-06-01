@@ -107,7 +107,7 @@ export async function criarCobrancaPIX(
     calendario: { expiracao: expiracaoSegundos },
     valor: { original: valor },
     chave: chavePix,
-    solicitacaoPagador: 'Renovação licença Sistema GN Modas'
+    solicitacaoPagador: 'Renovação licença Sistema FHVP Tech'
   }
 
   const r = await fetch(`${baseUrl}/v2/cob`, {
