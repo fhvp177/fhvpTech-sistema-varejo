@@ -7,8 +7,11 @@
  * O arquivo licenca.lic armazena a chave criptografada com AES-256-CBC
  * para dificultar inspeção manual.
  *
- * ATENÇÃO: as constantes CHAVE_HMAC e CHAVE_AES devem ser idênticas
- * às definidas em tools/gerar-licenca.ts.
+ * ATENÇÃO: CHAVE_HMAC, CHAVE_AES e SALT_AES são injetadas em build-time pelo
+ * electron-vite (define), lidas do .env (não versionado) — NÃO ficam no
+ * código-fonte porque o repo é público. A CHAVE_HMAC precisa ser idêntica ao
+ * secret `CHAVE_HMAC` do backend (Fly), que gera as chaves de licença. Veja
+ * .env.example para o conjunto de variáveis necessárias.
  */
 import { createHmac, createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
 import { app } from 'electron'
@@ -16,9 +19,14 @@ import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { obterBancoDeDados } from './db/conexao'
 
-const CHAVE_HMAC = 'SR-2024-hmac-varejo-k9x3mz'
-const CHAVE_AES = 'SR-2024-aes-varejo-file-k7z1qp'
-const SALT_AES = 'sistema-rt-2024-salt'
+// Substituídas por literais em build-time via `define` no electron.vite.config.ts.
+declare const __CHAVE_HMAC__: string
+declare const __CHAVE_AES__: string
+declare const __SALT_AES__: string
+
+const CHAVE_HMAC = __CHAVE_HMAC__
+const CHAVE_AES = __CHAVE_AES__
+const SALT_AES = __SALT_AES__
 
 // Tolerância para o guard de relógio. Ajustes menores que isso (correções de
 // timezone, fuso, drift) não disparam o bloqueio.
