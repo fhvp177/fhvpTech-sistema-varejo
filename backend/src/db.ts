@@ -27,6 +27,12 @@ db.exec(`
     txid TEXT PRIMARY KEY,
     data TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS chat_uso (
+    cliente_id TEXT NOT NULL,
+    dia TEXT NOT NULL,
+    total INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (cliente_id, dia)
+  );
 `)
 
 const stmts = {
@@ -37,6 +43,11 @@ const stmts = {
   getCobranca: db.prepare('SELECT data FROM cobrancas WHERE txid = ?'),
   setCobranca: db.prepare(
     'INSERT INTO cobrancas (txid, data) VALUES (?, ?) ON CONFLICT(txid) DO UPDATE SET data = excluded.data'
+  ),
+  getUsoChat: db.prepare('SELECT total FROM chat_uso WHERE cliente_id = ? AND dia = ?'),
+  incUsoChat: db.prepare(
+    `INSERT INTO chat_uso (cliente_id, dia, total) VALUES (?, ?, 1)
+     ON CONFLICT(cliente_id, dia) DO UPDATE SET total = total + 1`
   )
 }
 
@@ -56,4 +67,19 @@ export function obterCobranca(txid: string): Cobranca | null {
 
 export function gravarCobranca(cobranca: Cobranca): void {
   stmts.setCobranca.run(cobranca.txid, JSON.stringify(cobranca))
+}
+
+// Contador diário de perguntas ao chatbot por cliente. Conta PERGUNTAS, não
+// rodadas de tool — o app só marca a 1ª chamada de cada pergunta. Se já atingiu
+// o limite do dia, não incrementa e devolve permitido=false. Dia em UTC.
+export function registrarPerguntaChat(
+  clienteId: string,
+  limiteDiario: number
+): { permitido: boolean; usadas: number } {
+  const dia = new Date().toISOString().slice(0, 10) // AAAA-MM-DD
+  const row = stmts.getUsoChat.get(clienteId, dia) as { total: number } | undefined
+  const usadas = row?.total ?? 0
+  if (usadas >= limiteDiario) return { permitido: false, usadas }
+  stmts.incUsoChat.run(clienteId, dia)
+  return { permitido: true, usadas: usadas + 1 }
 }

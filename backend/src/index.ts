@@ -16,11 +16,13 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
 import type { Cliente, Cobranca, Config } from './tipos.ts'
+import { proxyChat, type ChatRequest } from './chat.ts'
 import {
   obterCliente,
   gravarCliente,
   obterCobranca,
-  gravarCobranca
+  gravarCobranca,
+  registrarPerguntaChat
 } from './db.ts'
 import {
   calcularExpiracao,
@@ -123,6 +125,61 @@ app.post('/admin/marcar-pago', async (c) => {
   const resultado = await confirmarPagamento(txid)
   if (!resultado.ok) return c.json({ erro: resultado.mensagem }, 400)
   return c.json({ ok: true, chave: resultado.chave, cobranca: resultado.cobranca })
+})
+
+// ───── Chatbot (proxy autenticado pra Claude API) ─────────────────────
+// Licença válida até o fim do dia de validadeAtual (AAAA-MM-DD).
+function licencaAtiva(cliente: Cliente): boolean {
+  if (!cliente.validadeAtual) return false
+  const exp = new Date(cliente.validadeAtual + 'T23:59:59Z')
+  return !isNaN(exp.getTime()) && exp.getTime() >= Date.now()
+}
+
+// Limite diário de PERGUNTAS ao assistente por cliente. Guarda contra abuso /
+// custo descontrolado na API. Conta perguntas, não rodadas de tool — o app
+// envia novaPergunta:true só na 1ª chamada de cada pergunta.
+const LIMITE_PERGUNTAS_DIA = 150
+
+// O app monta system+tools+messages (executa as tools no SQLite local) e manda
+// pra cá só pra adicionar a API key e chamar a Anthropic. Ver chat.ts.
+app.post('/chat', async (c) => {
+  const body = await c.req.json<
+    {
+      clienteId: string
+      novaPergunta?: boolean
+    } & ChatRequest
+  >()
+  if (!body.clienteId) return c.json({ erro: 'clienteId obrigatório' }, 400)
+
+  const cliente = obterCliente(body.clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+  if (!licencaAtiva(cliente)) return c.json({ erro: 'licença inativa' }, 403)
+
+  // Só conta no limite as chamadas de pergunta nova (não as rodadas de tool).
+  // Default = conta, a menos que o app diga explicitamente que é continuação.
+  if (body.novaPergunta !== false) {
+    const uso = registrarPerguntaChat(body.clienteId, LIMITE_PERGUNTAS_DIA)
+    if (!uso.permitido) {
+      return c.json(
+        {
+          erro:
+            `Você já usou suas ${LIMITE_PERGUNTAS_DIA} perguntas de hoje ao assistente. ` +
+            `O limite reseta amanhã. Quer aproveitar mais? Fale com o suporte sobre um upgrade do plano — ` +
+            `pelo botão "Suporte" na barra lateral ou no WhatsApp (85) 9.2187-1975.`
+        },
+        429
+      )
+    }
+  }
+
+  const r = await proxyChat({
+    system: body.system,
+    tools: body.tools,
+    messages: body.messages,
+    max_tokens: body.max_tokens
+  })
+  if (!r.ok) return c.json({ erro: r.erro }, r.status as 400)
+  return c.json(r.message)
 })
 
 // ───── App ───────────────────────────────────────────────────────────

@@ -127,6 +127,13 @@ const api = {
     imprimir: (html: string): Promise<RespostaIPC> => ipcRenderer.invoke('impressao:imprimir', html)
   },
 
+  // Chatbot (assistente de IA)
+  chat: {
+    enviar: (
+      historico: Array<{ role: 'user' | 'assistant'; content: string }>
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('chat:enviar', historico)
+  },
+
   // Dashboard (métricas agregadas)
   dashboard: {
     metricas: (intervalo: {

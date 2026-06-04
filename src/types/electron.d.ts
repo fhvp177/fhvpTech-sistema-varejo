@@ -203,6 +203,11 @@ interface Window {
     impressao: {
       imprimir: (html: string) => Promise<RespostaIPC>
     }
+    chat: {
+      enviar: (
+        historico: Array<{ role: 'user' | 'assistant'; content: string }>
+      ) => Promise<RespostaIPC<string>>
+    }
     dashboard: {
       metricas: (intervalo: {
         inicio_atual: string

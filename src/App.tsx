@@ -32,6 +32,7 @@ import AlertaBackupFalhando from './components/backup/AlertaBackupFalhando'
 import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
 import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
 import ModalPagamentoPix from './components/ModalPagamentoPix'
+import ChatAssistente from './components/ChatAssistente'
 import RotaSomenteDono from './components/RotaSomenteDono'
 import { ToastProvider, useToast } from './components/ui/toast'
 import { useAutoLock } from './hooks/useAutoLock'
@@ -214,7 +215,7 @@ const App: FC = () => {
                 )}
                 <div className="flex-1 flex flex-col overflow-hidden">
                   {!pdvAtivo && <AlertaBackupFalhando />}
-                  <main className="flex-1 overflow-auto">
+                  <main className={`flex-1 overflow-auto ${pdvAtivo ? '' : 'pb-24'}`}>
                     <Routes>
                       <Route
                         path="/"
@@ -250,6 +251,7 @@ const App: FC = () => {
                 </div>
               </div>
               <IndicadorBackupAtivo />
+              {vendedor && !pdvAtivo && <ChatAssistente />}
               <DialogoBackupAoFechar />
               <ModalAtualizacaoDisponivel />
               <ModalPagamentoPix
