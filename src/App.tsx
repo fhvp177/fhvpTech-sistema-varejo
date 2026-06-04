@@ -33,6 +33,7 @@ import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
 import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
 import ModalPagamentoPix from './components/ModalPagamentoPix'
 import ChatAssistente from './components/ChatAssistente'
+import ErrorBoundary from './components/ErrorBoundary'
 import RotaSomenteDono from './components/RotaSomenteDono'
 import { ToastProvider, useToast } from './components/ui/toast'
 import { useAutoLock } from './hooks/useAutoLock'
@@ -251,7 +252,11 @@ const App: FC = () => {
                 </div>
               </div>
               <IndicadorBackupAtivo />
-              {vendedor && !pdvAtivo && <ChatAssistente />}
+              {vendedor && !pdvAtivo && (
+                <ErrorBoundary rotulo="ChatAssistente">
+                  <ChatAssistente />
+                </ErrorBoundary>
+              )}
               <DialogoBackupAoFechar />
               <ModalAtualizacaoDisponivel />
               <ModalPagamentoPix
