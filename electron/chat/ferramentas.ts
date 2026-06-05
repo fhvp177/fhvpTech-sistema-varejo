@@ -6,7 +6,7 @@
 // (quem fala com a Anthropic é o backend). Aqui só montamos JSON e lemos a
 // resposta crua da Messages API.
 
-import { buscarProdutos, giroProduto, vendasRecentes } from '../db/queries/chat'
+import { buscarProdutos, giroProduto, vendasRecentes, clientesDevedores } from '../db/queries/chat'
 import { resumoDashboard } from '../db/queries/vendas'
 
 export type DefinicaoTool = {
@@ -60,11 +60,33 @@ export const TOOLS: DefinicaoTool[] = [
     name: 'vendas_recentes',
     description:
       'Lista as vendas mais recentes (data, cliente, total, status de pagamento). Use para ' +
-      'perguntas sobre últimas vendas, vendas em aberto ou inadimplência recente.',
+      'perguntas sobre as últimas vendas. Para inadimplência/cobrança/quem deve, use ' +
+      'contas_a_receber (esta aqui só traz as mais recentes, não calcula atraso).',
     input_schema: {
       type: 'object',
       properties: {
         limite: { type: 'integer', description: 'Quantas vendas retornar (padrão 20, máx 100).' }
+      }
+    }
+  },
+  {
+    name: 'contas_a_receber',
+    description:
+      'Lista, por cliente, o que ele deve à loja, separando "em_atraso" (vendas a prazo ou ' +
+      'parcelas já VENCIDAS e não pagas = INADIMPLÊNCIA) de "a_vencer" (ainda dentro do prazo). ' +
+      'Também traz "vencimento_mais_antigo" da parte em atraso e o telefone do cliente. Cobre ' +
+      'vendas a prazo e parceladas. Use SEMPRE que perguntarem sobre inadimplentes, devedores, ' +
+      'quem está em atraso, contas a receber ou cobrança. Para listar SOMENTE os inadimplentes ' +
+      '(em atraso), passe apenas_em_atraso=true — não inclua quem só tem valor "a_vencer".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        apenas_em_atraso: {
+          type: 'boolean',
+          description:
+            'true = só clientes com valor em atraso (inadimplentes). false (padrão) = todos que devem.'
+        },
+        limite: { type: 'integer', description: 'Máximo de clientes (padrão 50, máx 200).' }
       }
     }
   },
@@ -98,6 +120,13 @@ export function executarTool(nome: string, input: Record<string, unknown>): Resu
       }
       case 'vendas_recentes':
         return ok(vendasRecentes(typeof input.limite === 'number' ? input.limite : 20))
+      case 'contas_a_receber':
+        return ok(
+          clientesDevedores(
+            input.apenas_em_atraso === true,
+            typeof input.limite === 'number' ? input.limite : 50
+          )
+        )
       case 'resumo_loja':
         return ok(resumoDashboard())
       default:

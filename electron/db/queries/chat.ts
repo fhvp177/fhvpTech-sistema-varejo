@@ -72,3 +72,66 @@ export function vendasRecentes(limite = 20): VendaChat[] {
     )
     .all({ limite: Math.min(Math.max(1, limite), 100) }) as VendaChat[]
 }
+
+export type DevedorChat = {
+  cliente: string
+  telefone: string
+  em_atraso: number                       // vencido e NÃO pago = inadimplência
+  a_vencer: number                        // ainda dentro do prazo
+  vencimento_mais_antigo: string | null   // da parte em atraso (ISO 'YYYY-MM-DD')
+}
+
+// Contas a receber por cliente, separando o que JÁ venceu e não foi pago
+// (`em_atraso` = inadimplência) do que ainda está no prazo (`a_vencer`). Cobre
+// vendas a prazo simples (num_parcelas IS NULL) e parceladas (tabela parcelas).
+// A inadimplência é derivada de data_vencimento < hoje — não depende de o status
+// já ter sido promovido a 'inadimplente' (o dashboard faz isso preguiçosamente).
+export function clientesDevedores(apenasEmAtraso = false, limite = 50): DevedorChat[] {
+  const db = obterBancoDeDados()
+  const lim = Math.min(Math.max(1, Math.floor(limite)), 200)
+  const filtro = apenasEmAtraso ? 'em_atraso > 0' : 'em_atraso > 0 OR a_vencer > 0'
+  return db
+    .prepare(
+      `SELECT * FROM (
+         SELECT
+           c.nome AS cliente,
+           c.telefone AS telefone,
+           ROUND(
+             COALESCE((SELECT SUM(v.total - v.valor_pago) FROM vendas v
+                       WHERE v.cliente_id = c.id AND v.num_parcelas IS NULL
+                         AND v.status_pagamento IN ('pendente','inadimplente')
+                         AND v.data_vencimento IS NOT NULL
+                         AND date(v.data_vencimento) < date('now')), 0)
+             + COALESCE((SELECT SUM(p.valor) FROM parcelas p JOIN vendas v ON v.id = p.venda_id
+                         WHERE v.cliente_id = c.id AND p.status != 'pago'
+                           AND date(p.data_vencimento) < date('now')), 0)
+           , 2) AS em_atraso,
+           ROUND(
+             COALESCE((SELECT SUM(v.total - v.valor_pago) FROM vendas v
+                       WHERE v.cliente_id = c.id AND v.num_parcelas IS NULL
+                         AND v.status_pagamento = 'pendente'
+                         AND v.data_vencimento IS NOT NULL
+                         AND date(v.data_vencimento) >= date('now')), 0)
+             + COALESCE((SELECT SUM(p.valor) FROM parcelas p JOIN vendas v ON v.id = p.venda_id
+                         WHERE v.cliente_id = c.id AND p.status != 'pago'
+                           AND date(p.data_vencimento) >= date('now')), 0)
+           , 2) AS a_vencer,
+           (SELECT MIN(d) FROM (
+              SELECT MIN(date(v.data_vencimento)) AS d FROM vendas v
+                WHERE v.cliente_id = c.id AND v.num_parcelas IS NULL
+                  AND v.status_pagamento IN ('pendente','inadimplente')
+                  AND v.data_vencimento IS NOT NULL
+                  AND date(v.data_vencimento) < date('now')
+              UNION ALL
+              SELECT MIN(date(p.data_vencimento)) AS d FROM parcelas p JOIN vendas v ON v.id = p.venda_id
+                WHERE v.cliente_id = c.id AND p.status != 'pago'
+                  AND date(p.data_vencimento) < date('now')
+           )) AS vencimento_mais_antigo
+         FROM clientes c
+       )
+       WHERE ${filtro}
+       ORDER BY em_atraso DESC, a_vencer DESC
+       LIMIT @lim`
+    )
+    .all({ lim }) as DevedorChat[]
+}
