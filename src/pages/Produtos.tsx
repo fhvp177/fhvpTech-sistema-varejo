@@ -11,6 +11,7 @@ import {
   DialogFooter
 } from '@/components/ui/dialog'
 import BarcodeGenerator, { gerarEAN13 } from '@/components/BarcodeGenerator'
+import { nomeImpressao } from '@/utils/nomeImpressao'
 import Paginacao from '@/components/ui/paginacao'
 import ModalCategorias from '@/components/ModalCategorias'
 import { useSessao } from '@/App'
@@ -104,7 +105,7 @@ function gerarHtmlRelatorio(produtos: Produto[]): string {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Relatório de Estoque</title>
+  <title>${nomeImpressao.relatorioEstoque()}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; font-size: 11px; color: #000; }
@@ -321,7 +322,7 @@ const Produtos: FC = () => {
 
   const imprimirRelatorio = async () => {
     const html = gerarHtmlRelatorio(lista)
-    const resp = await window.api.impressao.imprimir(html)
+    const resp = await window.api.impressao.imprimir(html, nomeImpressao.relatorioEstoque())
     if (!resp.success) alert(`Erro ao imprimir: ${resp.error}`)
   }
 

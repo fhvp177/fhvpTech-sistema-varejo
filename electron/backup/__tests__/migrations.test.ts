@@ -24,6 +24,15 @@ describe.skip('aplicar001ModuloBackup', () => {
   it('registra a migration na tabela _migrations')
 })
 
+describe.skip('aplicar016Devolucoes', () => {
+  it('cria as tabelas devolucoes, itens_devolucao e creditos_cliente')
+  it('devolucoes.tipo aceita apenas credito ou dinheiro')
+  it('creditos_cliente.tipo aceita apenas entrada, uso ou ajuste')
+  it('cria os índices de cliente_id, devolucao_id e venda_id')
+  it('é idempotente — CREATE TABLE IF NOT EXISTS não duplica em segunda execução')
+  it('registra a migration na tabela _migrations')
+})
+
 describe.skip('executarMigrations', () => {
   it('cria as tabelas em banco vazio')
   it('é idempotente — segunda chamada não lança erro nem duplica dados')

@@ -23,6 +23,7 @@ export type Venda = {
   data_vencimento: string | null
   num_parcelas: number | null
   valor_inadimplente: number
+  valor_devolvido: number
   cliente_nome?: string | null
   cliente_telefone?: string | null
   cliente_endereco?: string | null
@@ -71,6 +72,9 @@ export type DadosNovaVenda = {
   data_vencimento: string | null
   num_parcelas?: number | null
   desconto?: number
+  // Crédito na loja do cliente abatido nesta venda (forma de pagamento "usar
+  // crédito"). v1: só em venda à vista ('pago'). Lança um 'uso' no ledger.
+  valor_credito_usado?: number
   itens: Array<{
     produto_id: number
     quantidade: number
@@ -125,7 +129,8 @@ export function listarVendas(): Venda[] {
     .prepare(
       `SELECT v.*, c.nome AS cliente_nome,
               vd.nome AS vendedor_nome,
-              COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente
+              COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente,
+              COALESCE(dev.valor_devolvido, 0) AS valor_devolvido
        FROM vendas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
        LEFT JOIN vendedores vd ON vd.id = v.vendedor_id
@@ -134,6 +139,11 @@ export function listarVendas(): Venda[] {
          FROM parcelas WHERE status = 'inadimplente'
          GROUP BY venda_id
        ) p_late ON p_late.venda_id = v.id
+       LEFT JOIN (
+         SELECT venda_id, SUM(valor_total) AS valor_devolvido
+         FROM devolucoes
+         GROUP BY venda_id
+       ) dev ON dev.venda_id = v.id
        ORDER BY v.data DESC
        LIMIT 300`
     )
@@ -152,7 +162,8 @@ export function buscarVendaPorId(id: number): VendaDetalhada | undefined {
               c.cnpj AS cliente_cnpj,
               c.razao_social AS cliente_razao_social,
               vd.nome AS vendedor_nome,
-              COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente
+              COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente,
+              COALESCE(dev.valor_devolvido, 0) AS valor_devolvido
        FROM vendas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
        LEFT JOIN vendedores vd ON vd.id = v.vendedor_id
@@ -161,6 +172,11 @@ export function buscarVendaPorId(id: number): VendaDetalhada | undefined {
          FROM parcelas WHERE status = 'inadimplente'
          GROUP BY venda_id
        ) p_late ON p_late.venda_id = v.id
+       LEFT JOIN (
+         SELECT venda_id, SUM(valor_total) AS valor_devolvido
+         FROM devolucoes
+         GROUP BY venda_id
+       ) dev ON dev.venda_id = v.id
        WHERE v.id = ?`
     )
     .get(id) as Venda | undefined
@@ -221,6 +237,26 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   }
   const total = +(subtotal - desconto).toFixed(2)
 
+  // Uso de crédito da loja (forma de pagamento "usar crédito"). v1: só à vista.
+  const creditoUsado = Math.max(0, +(dados.valor_credito_usado ?? 0).toFixed(2))
+  if (creditoUsado > 0) {
+    if (!dados.cliente_id) {
+      throw new Error('Para usar crédito, selecione o cliente dono do crédito.')
+    }
+    if (dados.status_pagamento !== 'pago') {
+      throw new Error('Crédito da loja só pode ser usado em venda à vista.')
+    }
+    if (creditoUsado > total) {
+      throw new Error('O crédito usado não pode ser maior que o total da venda.')
+    }
+    const { saldo } = db
+      .prepare('SELECT COALESCE(SUM(valor), 0) AS saldo FROM creditos_cliente WHERE cliente_id = ?')
+      .get(dados.cliente_id) as { saldo: number }
+    if (creditoUsado > +saldo.toFixed(2)) {
+      throw new Error(`Crédito insuficiente. Saldo disponível: R$ ${saldo.toFixed(2).replace('.', ',')}.`)
+    }
+  }
+
   const inserirVenda = db.prepare(
     `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, status_pagamento, data_vencimento, num_parcelas)
      VALUES (@cliente_id, @vendedor_id, @total, @desconto, @status_pagamento, @data_vencimento, @num_parcelas)`
@@ -267,6 +303,13 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
           data_vencimento: adicionarMeses(dados.data_vencimento, i)
         })
       }
+    }
+
+    if (creditoUsado > 0) {
+      db.prepare(
+        `INSERT INTO creditos_cliente (cliente_id, tipo, valor, venda_id)
+         VALUES (?, 'uso', ?, ?)`
+      ).run(dados.cliente_id, -creditoUsado, vendaId)
     }
   })()
 

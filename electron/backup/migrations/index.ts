@@ -14,6 +14,7 @@ import { aplicar012NormalizarAutoLock } from './012_normalizar_auto_lock'
 import { aplicar013VendedoresAuth } from './013_vendedores_auth'
 import { aplicar014TetoDesconto } from './014_teto_desconto'
 import { aplicar015CleanupPinLegado } from './015_cleanup_pin_legado'
+import { aplicar016Devolucoes } from './016_devolucoes'
 
 type Migration = {
   nome: string
@@ -36,6 +37,7 @@ const MIGRATIONS: Migration[] = [
   { nome: '013_vendedores_auth', aplicar: aplicar013VendedoresAuth },
   { nome: '014_teto_desconto', aplicar: aplicar014TetoDesconto },
   { nome: '015_cleanup_pin_legado', aplicar: aplicar015CleanupPinLegado },
+  { nome: '016_devolucoes', aplicar: aplicar016Devolucoes },
 ]
 
 export function executarMigrations(db: Database.Database): void {

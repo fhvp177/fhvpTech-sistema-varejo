@@ -124,7 +124,10 @@ const api = {
 
   // Impressão
   impressao: {
-    imprimir: (html: string): Promise<RespostaIPC> => ipcRenderer.invoke('impressao:imprimir', html)
+    imprimir: (html: string, nomeArquivo?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:imprimir', html, nomeArquivo),
+    salvarPdf: (html: string, nomeArquivo?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:salvarPdf', html, nomeArquivo)
   },
 
   // Chatbot (assistente de IA)
@@ -132,6 +135,24 @@ const api = {
     enviar: (
       historico: Array<{ role: 'user' | 'assistant'; content: string }>
     ): Promise<RespostaIPC> => ipcRenderer.invoke('chat:enviar', historico)
+  },
+
+  // Devolução / troca
+  devolucoes: {
+    itensDevolviveis: (vendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('devolucoes:itensDevolviveis', vendaId),
+    saldoCredito: (clienteId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('devolucoes:saldoCredito', clienteId),
+    porVenda: (vendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('devolucoes:porVenda', vendaId),
+    registrar: (entrada: {
+      venda_id: number
+      tipo: 'credito' | 'dinheiro'
+      cliente_id?: number | null
+      motivo?: string | null
+      itens: Array<{ item_venda_id: number; quantidade: number; restocar: boolean }>
+      pinDono?: string
+    }): Promise<RespostaIPC> => ipcRenderer.invoke('devolucoes:registrar', entrada)
   },
 
   // Dashboard (métricas agregadas)

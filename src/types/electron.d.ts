@@ -39,6 +39,8 @@ type MetricasDashboard = {
   granularidade: 'dia' | 'semana' | 'mes'
   faturamento_atual: number
   faturamento_anterior: number
+  devolucoes_atual: number
+  devolucoes_anterior: number
   num_vendas_atual: number
   num_vendas_anterior: number
   ticket_medio_atual: number
@@ -201,12 +203,69 @@ interface Window {
       setarTetoDesconto: (pct: number) => Promise<RespostaIPC>
     }
     impressao: {
-      imprimir: (html: string) => Promise<RespostaIPC>
+      imprimir: (html: string, nomeArquivo?: string) => Promise<RespostaIPC>
+      salvarPdf: (html: string, nomeArquivo?: string) => Promise<RespostaIPC>
     }
     chat: {
       enviar: (
         historico: Array<{ role: 'user' | 'assistant'; content: string }>
       ) => Promise<RespostaIPC<string>>
+    }
+    devolucoes: {
+      itensDevolviveis: (
+        vendaId: number
+      ) => Promise<
+        RespostaIPC<
+          Array<{
+            item_venda_id: number
+            produto_id: number
+            produto_nome: string
+            quantidade_vendida: number
+            quantidade_devolvida: number
+            quantidade_disponivel: number
+            preco_unitario: number
+            valor_unitario_devolvido: number
+          }>
+        >
+      >
+      saldoCredito: (clienteId: number) => Promise<RespostaIPC<number>>
+      porVenda: (
+        vendaId: number
+      ) => Promise<
+        RespostaIPC<
+          Array<{
+            id: number
+            venda_id: number
+            data: string
+            vendedor_id: number
+            autorizado_por_id: number | null
+            tipo: 'credito' | 'dinheiro'
+            valor_total: number
+            motivo: string | null
+            cliente_nome: string | null
+            itens: Array<{ produto_nome: string; quantidade: number; valor_unitario_devolvido: number }>
+          }>
+        >
+      >
+      registrar: (entrada: {
+        venda_id: number
+        tipo: 'credito' | 'dinheiro'
+        cliente_id?: number | null
+        motivo?: string | null
+        itens: Array<{ item_venda_id: number; quantidade: number; restocar: boolean }>
+        pinDono?: string
+      }) => Promise<
+        RespostaIPC<{
+          id: number
+          venda_id: number
+          data: string
+          vendedor_id: number
+          autorizado_por_id: number | null
+          tipo: 'credito' | 'dinheiro'
+          valor_total: number
+          motivo: string | null
+        }>
+      >
     }
     dashboard: {
       metricas: (intervalo: {

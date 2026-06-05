@@ -1,5 +1,5 @@
 import { FC, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, Printer, User, Building2, Percent, DollarSign } from 'lucide-react'
+import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Wallet, FileDown } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@/components/ui/button'
@@ -17,8 +17,11 @@ import { useToast } from '@/components/ui/toast'
 import ClienteSeletor, { type ClienteSeletorHandle } from '@/components/ClienteSeletor'
 import ConsultaPreco from '@/components/ConsultaPreco'
 import { gerarHtmlCupomVenda } from '@/utils/cupomVenda'
+import { nomeImpressao } from '@/utils/nomeImpressao'
+import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 import { usePdvMode, useSessao } from '@/App'
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
+import ModalDevolucao from '@/components/ModalDevolucao'
 
 const ITENS_POR_PAGINA = 20
 
@@ -47,6 +50,7 @@ type Venda = {
   data_vencimento: string | null
   num_parcelas: number | null
   valor_inadimplente: number
+  valor_devolvido: number
   cliente_nome?: string | null
   cliente_telefone?: string | null
   cliente_endereco?: string | null
@@ -63,6 +67,17 @@ type ItemVenda = {
 }
 
 type VendaDetalhada = Venda & { itens: ItemVenda[]; parcelas: Parcela[] }
+
+type DevolucaoComItens = {
+  id: number
+  venda_id: number
+  data: string
+  tipo: 'credito' | 'dinheiro'
+  valor_total: number
+  motivo: string | null
+  cliente_nome: string | null
+  itens: Array<{ produto_nome: string; quantidade: number; valor_unitario_devolvido: number }>
+}
 
 type ItemCarrinho = {
   produto_id: number
@@ -148,6 +163,20 @@ const badgeVenda = (v: Venda): string => {
   return LABEL_STATUS[v.status_pagamento]
 }
 
+// Indicador de devolução — dimensão separada do status de pagamento, mostrado
+// como ícone ↩ discreto (não como pílula, pra não competir com o status).
+// Vermelho = totalmente devolvida (valor devolvido cobre ~todo o total, com
+// tolerância p/ o arredondamento do rateio do desconto); laranja = parcial.
+const seloDevolucao = (
+  v: { total: number; valor_devolvido?: number }
+): { label: string; cor: string } | null => {
+  const devolvido = v.valor_devolvido ?? 0
+  if (devolvido <= 0) return null
+  return devolvido >= v.total - 0.05
+    ? { label: 'Totalmente devolvida', cor: 'text-rose-600' }
+    : { label: 'Devolução parcial', cor: 'text-orange-500' }
+}
+
 const fmt = (valor: number) =>
   valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -175,12 +204,16 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [lista, setLista] = useState<Venda[]>([])
   const [filtroStatus, setFiltroStatus] = useState<StatusPagamento | 'todos'>('todos')
   const [filtroMes, setFiltroMes] = useState<string>('') // '' = todas as datas; 'YYYY-MM' = mês específico
+  const [busca, setBusca] = useState('')
   const [vendaDetalhada, setVendaDetalhada] = useState<VendaDetalhada | null>(null)
   const [valorPagamento, setValorPagamento] = useState('')
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
   const [erroPagamento, setErroPagamento] = useState('')
   const [paginaAtual, setPaginaAtual] = useState(1)
+  const [devolverVendaId, setDevolverVendaId] = useState<number | null>(null)
+  const [menuImprimir, setMenuImprimir] = useState<{ vendaId: number; devolucoes: DevolucaoComItens[] } | null>(null)
   const { showToast } = useToast()
+  const { ehDono } = useSessao()
 
   const carregar = async () => {
     const resp = await window.api.vendas.listar()
@@ -203,18 +236,27 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
   useEffect(() => { carregar() }, [])
 
-  // Aplica filtro de mês primeiro (usado também nos contadores de cada aba).
+  // Aplica mês + busca primeiro (a base usada também nos contadores de cada aba).
   const listaPorMes = filtroMes
     ? lista.filter((v) => v.data.slice(0, 7) === filtroMes)
     : lista
 
+  const termo = busca.trim().toLowerCase()
+  const listaBase = termo
+    ? listaPorMes.filter(
+        (v) =>
+          (v.cliente_nome || 'venda avulsa').toLowerCase().includes(termo) ||
+          String(v.id).includes(termo)
+      )
+    : listaPorMes
+
   const listaFiltrada = filtroStatus === 'todos'
-    ? listaPorMes
-    : listaPorMes.filter((v) => v.status_pagamento === filtroStatus)
+    ? listaBase
+    : listaBase.filter((v) => v.status_pagamento === filtroStatus)
 
   useEffect(() => {
     setPaginaAtual(1)
-  }, [filtroStatus, filtroMes])
+  }, [filtroStatus, filtroMes, busca])
 
   // Limite máximo do <input type="month"> — não faz sentido escolher futuro.
   const mesMaximo = (() => {
@@ -275,15 +317,81 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     }
   }
 
-  const imprimirCupom = async (id: number) => {
+  // Monta o HTML + nome do cupom de uma venda (reusado por Imprimir e Salvar PDF).
+  const gerarCupom = async (id: number): Promise<{ html: string; nome: string } | null> => {
     const resp = await window.api.vendas.buscarPorId(id)
     if (!resp.success || !resp.data) {
       alert('Não foi possível carregar os dados da venda.')
-      return
+      return null
     }
     const html = gerarHtmlCupomVenda(resp.data as VendaDetalhada)
-    const r = await window.api.impressao.imprimir(html)
+    return { html, nome: nomeImpressao.cupomVenda(id) }
+  }
+
+  const imprimirCupom = async (id: number) => {
+    const doc = await gerarCupom(id)
+    if (!doc) return
+    const r = await window.api.impressao.imprimir(doc.html, doc.nome)
     if (!r.success) alert(`Erro ao imprimir: ${r.error}`)
+  }
+
+  const salvarPdfCupom = async (id: number) => {
+    const doc = await gerarCupom(id)
+    if (!doc) return
+    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome)
+    if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
+  }
+
+  // Clique em Imprimir/Salvar PDF: sem devolução age direto no cupom; com
+  // devolução, abre um menu pra escolher cupom da compra ou comprovante(s).
+  const aoClicarImprimir = async (v: Venda) => {
+    if (!v.valor_devolvido || v.valor_devolvido <= 0) {
+      imprimirCupom(v.id)
+      return
+    }
+    const resp = await window.api.devolucoes.porVenda(v.id)
+    setMenuImprimir({ vendaId: v.id, devolucoes: resp.success ? resp.data : [] })
+  }
+
+  const aoClicarSalvarPdf = async (v: Venda) => {
+    if (!v.valor_devolvido || v.valor_devolvido <= 0) {
+      salvarPdfCupom(v.id)
+      return
+    }
+    const resp = await window.api.devolucoes.porVenda(v.id)
+    setMenuImprimir({ vendaId: v.id, devolucoes: resp.success ? resp.data : [] })
+  }
+
+  // Monta o HTML + nome do comprovante de uma devolução.
+  const gerarComprovanteDevolucao = (dev: DevolucaoComItens): { html: string; nome: string } => {
+    const html = gerarHtmlComprovanteDevolucao({
+      id: dev.id,
+      venda_id: dev.venda_id,
+      data: dev.data,
+      tipo: dev.tipo,
+      valor_total: dev.valor_total,
+      cliente_nome: dev.cliente_nome,
+      motivo: dev.motivo,
+      saldo_credito_novo: null,
+      itens: dev.itens.map((it) => ({
+        produto_nome: it.produto_nome,
+        quantidade: it.quantidade,
+        valor_unitario: it.valor_unitario_devolvido
+      }))
+    })
+    return { html, nome: nomeImpressao.devolucao(dev.id, dev.venda_id) }
+  }
+
+  const imprimirComprovanteDevolucao = async (dev: DevolucaoComItens) => {
+    const doc = gerarComprovanteDevolucao(dev)
+    const r = await window.api.impressao.imprimir(doc.html, doc.nome)
+    if (!r.success) alert(`Erro ao imprimir: ${r.error}`)
+  }
+
+  const salvarPdfComprovanteDevolucao = async (dev: DevolucaoComItens) => {
+    const doc = gerarComprovanteDevolucao(dev)
+    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome)
+    if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
   }
 
   const pagarParcela = async (parcelaId: number) => {
@@ -320,6 +428,17 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         </Button>
       </div>
 
+      {/* Busca por cliente ou nº da venda */}
+      <div className="relative mb-4 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por cliente ou nº da venda..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       {/* Filtro de status + filtro de mês */}
       <div className="flex items-end justify-between gap-3 mb-4 border-b flex-wrap">
         <div className="flex gap-1">
@@ -336,8 +455,8 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
               {label}
               <span className="ml-1.5 text-xs bg-muted rounded-full px-1.5 py-0.5">
                 {key === 'todos'
-                  ? listaPorMes.length
-                  : listaPorMes.filter((v) => v.status_pagamento === key).length}
+                  ? listaBase.length
+                  : listaBase.filter((v) => v.status_pagamento === key).length}
               </span>
             </button>
           ))}
@@ -403,8 +522,18 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     : v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
-                    {badgeVenda(v)}
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
+                      {badgeVenda(v)}
+                    </span>
+                    {(() => {
+                      const selo = seloDevolucao(v)
+                      return selo ? (
+                        <span title={selo.label} className="inline-flex">
+                          <RotateCcw className={`w-3.5 h-3.5 ${selo.cor}`} />
+                        </span>
+                      ) : null
+                    })()}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -426,11 +555,30 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => imprimirCupom(v.id)}
+                      onClick={() => aoClicarImprimir(v)}
                       title="Imprimir cupom"
                     >
                       <Printer className="w-4 h-4" />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => aoClicarSalvarPdf(v)}
+                      title="Salvar cupom em PDF"
+                    >
+                      <FileDown className="w-4 h-4" />
+                    </Button>
+                    {v.status_pagamento === 'pago' && seloDevolucao(v)?.label !== 'Totalmente devolvida' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-blue-600 hover:text-blue-700"
+                        onClick={() => setDevolverVendaId(v.id)}
+                        title="Devolução / troca"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -472,6 +620,15 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CORES_STATUS[vendaDetalhada.status_pagamento]}`}>
                     {badgeVenda(vendaDetalhada)}
                   </span>
+                  {(() => {
+                    const selo = seloDevolucao(vendaDetalhada)
+                    return selo ? (
+                      <span className={`ml-2 inline-flex items-center gap-1 text-xs font-medium ${selo.cor}`}>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        {selo.label}
+                      </span>
+                    ) : null
+                  })()}
                 </div>
                 {vendaDetalhada.num_parcelas ? (
                   <div>
@@ -630,10 +787,117 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   </div>
                 </div>
               )}
+
+              {vendaDetalhada.status_pagamento === 'pago' && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    const id = vendaDetalhada.id
+                    setVendaDetalhada(null)
+                    setDevolverVendaId(id)
+                  }}
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Devolução / troca
+                </Button>
+              )}
             </div>
           </DialogContent>
         )}
       </Dialog>
+
+      {/* Menu: o que imprimir (compra ou comprovante de devolução) */}
+      <Dialog open={!!menuImprimir} onOpenChange={(open) => !open && setMenuImprimir(null)}>
+        {menuImprimir && (
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Cupom ou comprovante?</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              {/* Cupom da compra */}
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                  <Printer className="w-4 h-4 shrink-0 text-muted-foreground" />
+                  Cupom da compra
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      imprimirCupom(menuImprimir.vendaId)
+                      setMenuImprimir(null)
+                    }}
+                  >
+                    <Printer className="w-3.5 h-3.5 mr-1.5" />
+                    Imprimir
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      salvarPdfCupom(menuImprimir.vendaId)
+                      setMenuImprimir(null)
+                    }}
+                  >
+                    <FileDown className="w-3.5 h-3.5 mr-1.5" />
+                    Salvar PDF
+                  </Button>
+                </div>
+              </div>
+
+              {/* Comprovantes de devolução */}
+              {menuImprimir.devolucoes.map((dev) => (
+                <div key={dev.id} className="rounded-lg border p-3">
+                  <div className="flex items-start gap-2 text-sm font-medium mb-2 leading-snug">
+                    <RotateCcw className="w-4 h-4 shrink-0 text-muted-foreground mt-0.5" />
+                    <span>
+                      Devolução Nº {String(dev.id).padStart(3, '0')} — {fmt(dev.valor_total)}{' '}
+                      ({dev.tipo === 'credito' ? 'crédito' : 'dinheiro'})
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        imprimirComprovanteDevolucao(dev)
+                        setMenuImprimir(null)
+                      }}
+                    >
+                      <Printer className="w-3.5 h-3.5 mr-1.5" />
+                      Imprimir
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        salvarPdfComprovanteDevolucao(dev)
+                        setMenuImprimir(null)
+                      }}
+                    >
+                      <FileDown className="w-3.5 h-3.5 mr-1.5" />
+                      Salvar PDF
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
+
+      <ModalDevolucao
+        vendaId={devolverVendaId}
+        ehDono={ehDono}
+        onClose={() => setDevolverVendaId(null)}
+        onConcluido={carregar}
+      />
     </div>
   )
 }
@@ -650,6 +914,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clienteId, setClienteId] = useState('')
   const [statusPagamento, setStatusPagamento] = useState<StatusPagamento>('pago')
+  const [creditoDisponivel, setCreditoDisponivel] = useState(0)
+  const [usarCredito, setUsarCredito] = useState(false)
   const [dataVencimento, setDataVencimento] = useState('')
   const [numParcelas, setNumParcelas] = useState(2)
   const [descontoTipo, setDescontoTipo] = useState<'R$' | '%'>('R$')
@@ -692,6 +958,19 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     scanRef.current?.focus()
   }, [])
 
+  // Saldo de crédito do cliente selecionado (pra oferecer "usar crédito" no à
+  // vista). Reseta o toggle ao trocar de cliente.
+  useEffect(() => {
+    setUsarCredito(false)
+    if (!clienteId) {
+      setCreditoDisponivel(0)
+      return
+    }
+    window.api.devolucoes.saldoCredito(parseInt(clienteId)).then((r) => {
+      if (r.success) setCreditoDisponivel(r.data)
+    })
+  }, [clienteId])
+
   // Refs para callbacks usadas pelos atalhos — evita re-registrar o listener
   // a cada keystroke. As funções capturam estado via closure e são atualizadas
   // a cada render através de um useEffect mais abaixo.
@@ -709,6 +988,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       ? +((subtotal * Math.min(100, Math.max(0, descontoNum))) / 100).toFixed(2)
       : +Math.min(subtotal, Math.max(0, descontoNum)).toFixed(2)
   const total = +(subtotal - descontoValor).toFixed(2)
+
+  // Crédito da loja só abate no à vista. Aplica o menor entre saldo e total.
+  const creditoAplicado =
+    usarCredito && statusPagamento === 'pago' ? +Math.min(creditoDisponivel, total).toFixed(2) : 0
+  const aPagar = +(total - creditoAplicado).toFixed(2)
 
   const adicionarProduto = (produto: Produto) => {
     if (produto.estoque <= 0) {
@@ -803,6 +1087,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       data_vencimento: dataVencimento || null,
       num_parcelas: statusPagamento === 'parcelado' ? numParcelas : null,
       desconto: descontoValor,
+      valor_credito_usado: creditoAplicado,
       itens: carrinho.map((item) => ({
         produto_id: item.produto_id,
         quantidade: item.quantidade,
@@ -1148,6 +1433,27 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           )}
         </div>
 
+        {/* Usar crédito da loja — só à vista, cliente com saldo */}
+        {statusPagamento === 'pago' && clienteId && creditoDisponivel > 0 && (
+          <label
+            className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer text-sm transition-colors ${
+              usarCredito ? 'bg-blue-50 text-blue-700 border-blue-300' : 'bg-background hover:bg-muted/30'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={usarCredito}
+              onChange={(e) => setUsarCredito(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <Wallet className="w-4 h-4 shrink-0" />
+            <div className="flex-1">
+              <div className="font-medium">Usar crédito do cliente</div>
+              <div className="text-xs opacity-80">Saldo disponível: {fmt(creditoDisponivel)}</div>
+            </div>
+          </label>
+        )}
+
         {/* Resumo numérico */}
         <div className="border rounded-lg p-4 bg-background space-y-2 text-base">
           <div className="flex justify-between text-muted-foreground text-sm">
@@ -1170,6 +1476,18 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             <span>TOTAL</span>
             <span>{fmt(total)}</span>
           </div>
+          {creditoAplicado > 0 && (
+            <>
+              <div className="flex justify-between text-sm text-blue-600 pt-1 border-t">
+                <span>Crédito do cliente</span>
+                <span>− {fmt(creditoAplicado)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-xl">
+                <span>A PAGAR</span>
+                <span>{fmt(aPagar)}</span>
+              </div>
+            </>
+          )}
           {statusPagamento === 'parcelado' && total > 0 && numParcelas >= 2 && (
             <div className="flex justify-between text-sm text-blue-600 font-medium pt-0.5">
               <span>{numParcelas}x de</span>
@@ -1256,7 +1574,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             onClick={finalizarVenda}
             disabled={salvando || carrinho.length === 0}
           >
-            {salvando ? 'Registrando...' : `Finalizar — ${fmt(total)}`}
+            {salvando ? 'Registrando...' : `Finalizar — ${fmt(aPagar)}`}
           </Button>
           <Button variant="outline" className="w-full" onClick={onSair}>
             Cancelar

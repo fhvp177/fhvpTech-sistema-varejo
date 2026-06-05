@@ -2,6 +2,8 @@
 // (largura ~76mm) mas compatível também com impressão em folha comum (A4),
 // onde o conteúdo aparece centralizado.
 
+import { nomeImpressao } from './nomeImpressao'
+
 type ItemCupom = {
   produto_nome?: string
   codigo_barras?: string
@@ -40,7 +42,8 @@ export type DadosCupomVenda = {
 }
 
 // Dados fixos da loja — pode ser ajustado conforme o estabelecimento.
-const LOJA = {
+// Exportado pra ser fonte única reusada pelo comprovante de devolução.
+export const LOJA = {
   nome: 'GN MODAS',
   cnpj: '',
   endereco: '',
@@ -50,7 +53,7 @@ const LOJA = {
 
 // Dados que aparecem no rodapé do cupom (placeholders genéricos —
 // substituir quando os dados oficiais do estabelecimento forem confirmados).
-const RODAPE_LOJA = {
+export const RODAPE_LOJA = {
   nome: 'GN Modas',
   razao_social: 'Razão Social Ltda. — ME',
   cnpj: '00.000.000/0001-00',
@@ -160,7 +163,7 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda): string {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Cupom — Pedido N° ${numeroPedido}</title>
+  <title>${nomeImpressao.cupomVenda(venda.id)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     @page { margin: 4mm; }

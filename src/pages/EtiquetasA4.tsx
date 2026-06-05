@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Printer, Tag, Search } from 'lucide-react'
 import { PRESETS, PRESET_PADRAO, LayoutEtiqueta } from '../utils/presetsLayoutA4'
 import FolhaA4Preview, { SlotDado } from '../components/FolhaA4Preview'
+import { nomeImpressao } from '../utils/nomeImpressao'
 
 type Produto = {
   id: number
@@ -257,7 +258,15 @@ const EtiquetasA4: FC = () => {
               </span>
             )}
             <button
-              onClick={() => window.print()}
+              onClick={() => {
+                // Nomeia o PDF/job de impressão (o nome herda document.title).
+                const anterior = document.title
+                window.addEventListener('afterprint', () => { document.title = anterior }, {
+                  once: true
+                })
+                document.title = nomeImpressao.etiquetas()
+                window.print()
+              }}
               disabled={totalEtiquetas === 0}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >

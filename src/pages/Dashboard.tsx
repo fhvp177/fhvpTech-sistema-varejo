@@ -1,10 +1,9 @@
 import { FC, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package,
-  ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
-  RotateCcw, CalendarDays
+  ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle
 } from 'lucide-react'
-import MesPicker from '@/components/MesPicker'
+import FiltroMesPopover from '@/components/FiltroMesPopover'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell
@@ -144,6 +143,7 @@ const Dashboard: FC = () => {
   const [periodoDias, setPeriodoDias] = useState(30)
   const [mesAtual, setMesAtual] = useState<string>(mesAtualPadrao)
   const [mesComparativo, setMesComparativo] = useState<string>(() => mesAnoAnteriorDe(mesAtualPadrao()))
+  const [compararMes, setCompararMes] = useState(false)
   const [metricas, setMetricas] = useState<MetricasDashboard | null>(null)
   const [resumo, setResumo] = useState<ResumoBasico | null>(null)
   const [inadimplentes, setInadimplentes] = useState<ClienteInadimplente[]>([])
@@ -203,6 +203,17 @@ const Dashboard: FC = () => {
     ? 'período anterior'
     : rotuloMesAnoCurto(mesComparativo)
 
+  // No modo mês, a comparação só aparece se o usuário ligar o toggle.
+  // A janela móvel sempre compara com o período anterior.
+  const mostrarComparativo = modo === 'janela' || compararMes
+
+  const aplicarMes = (mes: string, comparar: boolean, mesComp: string) => {
+    setModo('mes')
+    setMesAtual(mes)
+    setCompararMes(comparar)
+    setMesComparativo(mesComp)
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -225,52 +236,16 @@ const Dashboard: FC = () => {
               </button>
             )
           })}
-          <button
-            onClick={() => setModo('mes')}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${
-              modo === 'mes'
-                ? 'bg-background shadow text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-            title="Comparar dois meses específicos"
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            Mês
-          </button>
+          <FiltroMesPopover
+            mes={mesAtual}
+            comparar={compararMes}
+            mesComparativo={mesComparativo}
+            ativo={modo === 'mes'}
+            maxMes={mesMaximo}
+            onApply={aplicarMes}
+          />
         </div>
       </div>
-
-      {modo === 'mes' && (
-        <div className="mb-6 border rounded-lg p-3 bg-muted/30 flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground font-medium">Mês de análise</label>
-            <MesPicker
-              value={mesAtual}
-              onChange={(v) => v && setMesAtual(v)}
-              maxMes={mesMaximo}
-            />
-          </div>
-          <span className="pb-2 text-sm text-muted-foreground font-medium">vs</span>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground font-medium">Comparar com</label>
-            <div className="flex items-center gap-1">
-              <MesPicker
-                value={mesComparativo}
-                onChange={(v) => v && setMesComparativo(v)}
-                maxMes={mesMaximo}
-              />
-              <button
-                type="button"
-                onClick={() => setMesComparativo(mesAnoAnteriorDe(mesAtual))}
-                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-                title="Resetar para o mesmo mês do ano anterior"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Alertas de inadimplência (destaque no topo) ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -359,6 +334,17 @@ const Dashboard: FC = () => {
           delta={deltaFaturamento}
           valorAnterior={metricas ? fmt(metricas.faturamento_anterior) : '—'}
           rotuloComparativo={rotuloComparativo}
+          mostrarComparativo={mostrarComparativo}
+          subtexto={
+            metricas && metricas.devolucoes_atual > 0 ? (
+              <p className="text-xs text-amber-600 mt-1">
+                − {fmt(metricas.devolucoes_atual)} em devoluções · líquido{' '}
+                <span className="font-medium">
+                  {fmt(metricas.faturamento_atual - metricas.devolucoes_atual)}
+                </span>
+              </p>
+            ) : null
+          }
         />
         <CardKPI
           icone={<Receipt className="w-5 h-5 text-indigo-600" />}
@@ -368,6 +354,7 @@ const Dashboard: FC = () => {
           delta={deltaVendas}
           valorAnterior={metricas ? String(metricas.num_vendas_anterior) : '—'}
           rotuloComparativo={rotuloComparativo}
+          mostrarComparativo={mostrarComparativo}
         />
         <CardKPI
           icone={<ShoppingBag className="w-5 h-5 text-orange-600" />}
@@ -377,6 +364,7 @@ const Dashboard: FC = () => {
           delta={deltaTicket}
           valorAnterior={metricas ? fmt(metricas.ticket_medio_anterior) : '—'}
           rotuloComparativo={rotuloComparativo}
+          mostrarComparativo={mostrarComparativo}
         />
         <CardEstatico
           icone={<Users className="w-5 h-5 text-purple-600" />}
@@ -422,7 +410,7 @@ const Dashboard: FC = () => {
                     tickFormatter={fmtCompacto}
                   />
                   <Tooltip
-                    formatter={(valor: number) => [fmt(valor), 'Faturamento']}
+                    formatter={(valor) => [fmt(Number(valor)), 'Faturamento']}
                     labelFormatter={(rotulo) => rotulo}
                     contentStyle={{
                       backgroundColor: 'hsl(var(--background))',
@@ -513,10 +501,12 @@ type CardKPIProps = {
   delta: Delta
   valorAnterior: string
   rotuloComparativo: string
+  mostrarComparativo: boolean
+  subtexto?: React.ReactNode
 }
 
 const CardKPI: FC<CardKPIProps> = ({
-  icone, corIcone, titulo, valor, delta, valorAnterior, rotuloComparativo
+  icone, corIcone, titulo, valor, delta, valorAnterior, rotuloComparativo, mostrarComparativo, subtexto
 }) => {
   const corDelta =
     !delta.valido ? 'text-muted-foreground'
@@ -531,20 +521,25 @@ const CardKPI: FC<CardKPIProps> = ({
       </div>
       <p className="text-sm text-muted-foreground">{titulo}</p>
       <p className="text-2xl font-bold mt-0.5">{valor}</p>
-      <div className={`flex items-center gap-1 mt-1 text-xs ${corDelta}`}>
-        {delta.valido && delta.pct !== 0 && (
-          delta.pct > 0
-            ? <TrendingUp className="w-3 h-3" />
-            : <TrendingDown className="w-3 h-3" />
-        )}
-        <span>
-          {delta.valido ? `${sinal}${delta.pct.toFixed(1)}%` : '—'}
-        </span>
-      </div>
-      <p className="text-xs text-muted-foreground mt-0.5">
-        vs <span className="font-medium">{valorAnterior}</span>{' '}
-        <span className="opacity-70">({rotuloComparativo})</span>
-      </p>
+      {mostrarComparativo && (
+        <>
+          <div className={`flex items-center gap-1 mt-1 text-xs ${corDelta}`}>
+            {delta.valido && delta.pct !== 0 && (
+              delta.pct > 0
+                ? <TrendingUp className="w-3 h-3" />
+                : <TrendingDown className="w-3 h-3" />
+            )}
+            <span>
+              {delta.valido ? `${sinal}${delta.pct.toFixed(1)}%` : '—'}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            vs <span className="font-medium">{valorAnterior}</span>{' '}
+            <span className="opacity-70">({rotuloComparativo})</span>
+          </p>
+        </>
+      )}
+      {subtexto}
     </div>
   )
 }
@@ -620,7 +615,7 @@ const CardFormaPagamento: FC<WidgetProps> = ({ metricas, carregando }) => {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(valor: number, _name, props) => {
+                  formatter={(valor, _name, props) => {
                     const item = props.payload as { valor: number; num: number }
                     return [`${valor} venda(s) · ${fmt(item.valor)}`, '']
                   }}

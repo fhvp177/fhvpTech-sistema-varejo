@@ -61,6 +61,8 @@ export type MetricasDashboard = {
   granularidade: GranularidadeSerie
   faturamento_atual: number
   faturamento_anterior: number
+  devolucoes_atual: number
+  devolucoes_anterior: number
   num_vendas_atual: number
   num_vendas_anterior: number
   ticket_medio_atual: number
@@ -126,6 +128,20 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
        WHERE date(data) >= ? AND date(data) <= ?`
     )
     .get(inicio_anterior, fim_anterior) as { faturamento: number; num_vendas: number }
+
+  // Devoluções de cada período (pra faturamento líquido = vendas − devoluções).
+  const devAtual = db
+    .prepare(
+      `SELECT COALESCE(SUM(valor_total), 0) AS total FROM devolucoes
+       WHERE date(data) >= ? AND date(data) <= ?`
+    )
+    .get(inicio_atual, fim_atual) as { total: number }
+  const devAnterior = db
+    .prepare(
+      `SELECT COALESCE(SUM(valor_total), 0) AS total FROM devolucoes
+       WHERE date(data) >= ? AND date(data) <= ?`
+    )
+    .get(inicio_anterior, fim_anterior) as { total: number }
 
   // Série temporal agrupada por granularidade.
   let bucketExpr: string
@@ -316,6 +332,8 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     granularidade: gran,
     faturamento_atual: totaisAtual.faturamento,
     faturamento_anterior: totaisAnterior.faturamento,
+    devolucoes_atual: devAtual.total,
+    devolucoes_anterior: devAnterior.total,
     num_vendas_atual: totaisAtual.num_vendas,
     num_vendas_anterior: totaisAnterior.num_vendas,
     ticket_medio_atual: ticketAtual,
