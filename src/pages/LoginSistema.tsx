@@ -1,6 +1,7 @@
 import { FC, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Lock, ShieldCheck, Crown, User as UserIcon } from 'lucide-react'
 import logoEmpresa from '@/assets/logo.png'
+import ModalRecuperacaoPin from '@/components/ModalRecuperacaoPin'
 
 type VendedorLogin = {
   id: number
@@ -27,6 +28,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
   const [carregando, setCarregando] = useState(false)
   const [tentativas, setTentativas] = useState(0)
   const [segundosTravado, setSegundosTravado] = useState(0)
+  const [mostrarRecuperacao, setMostrarRecuperacao] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -295,6 +297,16 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
         >
           {carregando ? 'Validando...' : modoCadastro ? 'Definir PIN e entrar' : 'Entrar'}
         </button>
+
+        {!modoCadastro && (
+          <button
+            onClick={() => setMostrarRecuperacao(true)}
+            disabled={carregando}
+            className="w-full text-xs text-blue-600 hover:text-blue-700 hover:underline"
+          >
+            Esqueci meu PIN
+          </button>
+        )}
       </div>
     )
   }, [
@@ -336,6 +348,13 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
           </p>
         )}
       </div>
+
+      {mostrarRecuperacao && (
+        <ModalRecuperacaoPin
+          onCancelar={() => setMostrarRecuperacao(false)}
+          onSucesso={onDesbloquear}
+        />
+      )}
     </div>
   )
 }

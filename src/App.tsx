@@ -27,6 +27,7 @@ import Configuracoes from './pages/Configuracoes'
 import TelaRestauracao from './pages/TelaRestauracao'
 import LicencaBloqueada from './pages/LicencaBloqueada'
 import LoginSistema from './pages/LoginSistema'
+import ModalCadastrarEmailDono from './components/ModalCadastrarEmailDono'
 import IndicadorBackupAtivo from './components/backup/IndicadorBackupAtivo'
 import AlertaBackupFalhando from './components/backup/AlertaBackupFalhando'
 import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
@@ -88,6 +89,8 @@ const App: FC = () => {
   const [autoLockMinutos, setAutoLockMinutos] = useState(15)
   const [mostrarPagamento, setMostrarPagamento] = useState(false)
   const [vendedor, setVendedor] = useState<SessaoVendedor | null>(null)
+  // Dono adiou o cadastro de email de recuperação — esconde só nesta sessão.
+  const [pulouEmailDono, setPulouEmailDono] = useState(false)
 
   const validarLicenca = useCallback(async (): Promise<void> => {
     const resp = await window.api.licenca.validar()
@@ -269,6 +272,18 @@ const App: FC = () => {
         </LockContext.Provider>
       </SessaoContext.Provider>
       {estadoAuth === 'bloqueado' && <LoginSistema onDesbloquear={aoLogar} />}
+      {estadoAuth === 'desbloqueado' &&
+        vendedor?.papel === 'dono' &&
+        !vendedor.email &&
+        !pulouEmailDono && (
+          <ModalCadastrarEmailDono
+            vendedorId={vendedor.id}
+            onSalvo={() => {
+              recarregarSessao()
+            }}
+            onPular={() => setPulouEmailDono(true)}
+          />
+        )}
     </ToastProvider>
   )
 }

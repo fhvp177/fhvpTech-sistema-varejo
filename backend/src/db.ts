@@ -33,6 +33,12 @@ db.exec(`
     total INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (cliente_id, dia)
   );
+  CREATE TABLE IF NOT EXISTS recuperacao_uso (
+    email TEXT NOT NULL,
+    hora TEXT NOT NULL,
+    total INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (email, hora)
+  );
 `)
 
 const stmts = {
@@ -48,6 +54,11 @@ const stmts = {
   incUsoChat: db.prepare(
     `INSERT INTO chat_uso (cliente_id, dia, total) VALUES (?, ?, 1)
      ON CONFLICT(cliente_id, dia) DO UPDATE SET total = total + 1`
+  ),
+  getUsoRecuperacao: db.prepare('SELECT total FROM recuperacao_uso WHERE email = ? AND hora = ?'),
+  incUsoRecuperacao: db.prepare(
+    `INSERT INTO recuperacao_uso (email, hora, total) VALUES (?, ?, 1)
+     ON CONFLICT(email, hora) DO UPDATE SET total = total + 1`
   )
 }
 
@@ -81,5 +92,20 @@ export function registrarPerguntaChat(
   const usadas = row?.total ?? 0
   if (usadas >= limiteDiario) return { permitido: false, usadas }
   stmts.incUsoChat.run(clienteId, dia)
+  return { permitido: true, usadas: usadas + 1 }
+}
+
+// Rate-limit de envio de código de recuperação por email, por janela de hora
+// (UTC). Protege contra alguém usar o endpoint como gerador de spam pro email
+// de um dono. Sem validade > 1h: a chave (email, hora) muda sozinha na virada.
+export function registrarEnvioRecuperacao(
+  email: string,
+  limitePorHora: number
+): { permitido: boolean; usadas: number } {
+  const hora = new Date().toISOString().slice(0, 13) // AAAA-MM-DDTHH (UTC)
+  const row = stmts.getUsoRecuperacao.get(email, hora) as { total: number } | undefined
+  const usadas = row?.total ?? 0
+  if (usadas >= limitePorHora) return { permitido: false, usadas }
+  stmts.incUsoRecuperacao.run(email, hora)
   return { permitido: true, usadas: usadas + 1 }
 }

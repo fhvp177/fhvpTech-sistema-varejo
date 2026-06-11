@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs'
+import { randomInt } from 'crypto'
 import { lerConfig, gravarConfig } from './backup/configBackup'
 import {
   contarDonosAtivos,
@@ -7,10 +8,21 @@ import {
   obterPinHash,
   obterVendedor
 } from './db/queries/vendedores'
+import {
+  apagarCodigosRecuperacao,
+  incrementarTentativasCodigo,
+  obterCodigoRecuperacao,
+  obterUsuarioAtivoPorEmail,
+  salvarCodigoRecuperacao
+} from './db/queries/recuperacao'
 
 const CHAVE_AUTO_LOCK = 'auto_lock_minutos'
 const CHAVE_TETO_DESCONTO = 'teto_desconto_vendedor_pct'
 const BCRYPT_ROUNDS = 12
+
+// Recuperação de PIN do dono por email.
+const MINUTOS_VALIDADE_RECUPERACAO = 15
+const MAX_TENTATIVAS_RECUPERACAO = 3
 
 // Aceita PIN de 4 a 6 dígitos numéricos
 const REGEX_PIN = /^\d{4,6}$/
@@ -78,6 +90,73 @@ export function temPinConfigurado(): boolean {
     contarDonosAtivos() > 0 &&
     listarParaLogin().some((v) => v.papel === 'dono' && v.tem_pin === 1)
   )
+}
+
+// ───── Recuperação de PIN do dono por email ───────────────────────────
+
+export type CodigoGerado = {
+  vendedorId: number
+  nome: string
+  email: string
+  codigo: string
+}
+
+// Gera e PERSISTE (com hash bcrypt) um código de 6 dígitos pro usuário ativo
+// (dono ou vendedor) daquele email, válido por MINUTOS_VALIDADE_RECUPERACAO.
+// Retorna o código em CLARO só pra quem chamou enviar por email — o código
+// nunca fica salvo em claro. Retorna null se nenhum usuário ativo tem esse
+// email (anti-vazamento fica a cargo do chamador; num app local de loja,
+// feedback claro vale mais).
+export async function gerarCodigoRecuperacao(email: string): Promise<CodigoGerado | null> {
+  const usuario = obterUsuarioAtivoPorEmail(email)
+  if (!usuario) return null
+  const codigo = String(randomInt(0, 1_000_000)).padStart(6, '0')
+  const hash = await gerarHash(codigo)
+  const expiraEm = new Date(Date.now() + MINUTOS_VALIDADE_RECUPERACAO * 60_000).toISOString()
+  salvarCodigoRecuperacao(usuario.id, hash, expiraEm)
+  return { vendedorId: usuario.id, nome: usuario.nome, email: usuario.email, codigo }
+}
+
+// Valida o código e redefine o PIN do usuário. Retorna o vendedorId pra
+// auto-login. Lança erro em: PIN novo inválido, usuário inexistente, sem código
+// pendente, código expirado, código errado (conta tentativa; 3 erradas invalidam).
+export async function redefinirComCodigo(
+  email: string,
+  codigo: string,
+  novoPin: string
+): Promise<number> {
+  validarFormatoPin(novoPin)
+  const usuario = obterUsuarioAtivoPorEmail(email)
+  if (!usuario) throw new Error('Não encontramos um usuário ativo com esse email.')
+
+  const registro = obterCodigoRecuperacao(usuario.id)
+  if (!registro) {
+    throw new Error('Nenhum código pendente. Solicite um novo código.')
+  }
+  if (new Date(registro.expira_em).getTime() < Date.now()) {
+    apagarCodigosRecuperacao(usuario.id)
+    throw new Error('Código expirado. Solicite um novo código.')
+  }
+  if (registro.tentativas >= MAX_TENTATIVAS_RECUPERACAO) {
+    apagarCodigosRecuperacao(usuario.id)
+    throw new Error('Muitas tentativas. Solicite um novo código.')
+  }
+
+  const confere = await bcrypt.compare(codigo, registro.codigo_hash)
+  if (!confere) {
+    incrementarTentativasCodigo(registro.id)
+    const restantes = MAX_TENTATIVAS_RECUPERACAO - (registro.tentativas + 1)
+    if (restantes <= 0) {
+      apagarCodigosRecuperacao(usuario.id)
+      throw new Error('Código incorreto. Tentativas esgotadas — solicite um novo código.')
+    }
+    throw new Error(`Código incorreto. Você tem mais ${restantes} tentativa(s).`)
+  }
+
+  const hash = await gerarHash(novoPin)
+  gravarPinHash(usuario.id, hash)
+  apagarCodigosRecuperacao(usuario.id)
+  return usuario.id
 }
 
 // ───── Auto-lock ──────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ export type Cliente = {
   tipo_pessoa: TipoPessoa
   cnpj: string | null
   razao_social: string | null
+  observacao: string | null
   data_cadastro: string
 }
 
@@ -24,6 +25,7 @@ export type DadosCliente = {
   tipo_pessoa: TipoPessoa
   cnpj: string | null
   razao_social: string | null
+  observacao: string | null
 }
 
 export type ClienteInadimplente = {
@@ -53,8 +55,8 @@ export function criarCliente(dados: DadosCliente): Cliente {
   const db = obterBancoDeDados()
   const result = db
     .prepare(
-      `INSERT INTO clientes (nome, telefone, endereco, cpf, data_nascimento, tipo_pessoa, cnpj, razao_social)
-       VALUES (@nome, @telefone, @endereco, @cpf, @data_nascimento, @tipo_pessoa, @cnpj, @razao_social)`
+      `INSERT INTO clientes (nome, telefone, endereco, cpf, data_nascimento, tipo_pessoa, cnpj, razao_social, observacao)
+       VALUES (@nome, @telefone, @endereco, @cpf, @data_nascimento, @tipo_pessoa, @cnpj, @razao_social, @observacao)`
     )
     .run(dados)
   return { id: result.lastInsertRowid as number, data_cadastro: new Date().toISOString(), ...dados }
@@ -65,7 +67,8 @@ export function atualizarCliente(id: number, dados: DadosCliente): void {
   db.prepare(
     `UPDATE clientes SET nome = @nome, telefone = @telefone, endereco = @endereco,
      cpf = @cpf, data_nascimento = @data_nascimento,
-     tipo_pessoa = @tipo_pessoa, cnpj = @cnpj, razao_social = @razao_social
+     tipo_pessoa = @tipo_pessoa, cnpj = @cnpj, razao_social = @razao_social,
+     observacao = @observacao
      WHERE id = @id`
   ).run({ ...dados, id })
 }

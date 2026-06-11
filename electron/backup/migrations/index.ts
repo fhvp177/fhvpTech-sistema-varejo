@@ -15,6 +15,8 @@ import { aplicar013VendedoresAuth } from './013_vendedores_auth'
 import { aplicar014TetoDesconto } from './014_teto_desconto'
 import { aplicar015CleanupPinLegado } from './015_cleanup_pin_legado'
 import { aplicar016Devolucoes } from './016_devolucoes'
+import { aplicar017RecuperacaoCodigos } from './017_recuperacao_codigos'
+import { aplicar018ClientesObservacao } from './018_clientes_observacao'
 
 type Migration = {
   nome: string
@@ -38,6 +40,8 @@ const MIGRATIONS: Migration[] = [
   { nome: '014_teto_desconto', aplicar: aplicar014TetoDesconto },
   { nome: '015_cleanup_pin_legado', aplicar: aplicar015CleanupPinLegado },
   { nome: '016_devolucoes', aplicar: aplicar016Devolucoes },
+  { nome: '017_recuperacao_codigos', aplicar: aplicar017RecuperacaoCodigos },
+  { nome: '018_clientes_observacao', aplicar: aplicar018ClientesObservacao },
 ]
 
 export function executarMigrations(db: Database.Database): void {

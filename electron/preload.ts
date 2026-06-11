@@ -102,6 +102,14 @@ const api = {
       pinNovo: string
     ): Promise<RespostaIPC> =>
       ipcRenderer.invoke('auth:alterarPinVendedor', vendedorId, pinAtual, pinNovo),
+    solicitarRecuperacao: (email: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:solicitarRecuperacao', email),
+    redefinirComCodigo: (
+      email: string,
+      codigo: string,
+      novoPin: string
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('auth:redefinirComCodigo', email, codigo, novoPin),
     setarAutoLock: (minutos: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('auth:setarAutoLock', minutos),
     lerTetoDesconto: (): Promise<RespostaIPC> => ipcRenderer.invoke('auth:lerTetoDesconto'),

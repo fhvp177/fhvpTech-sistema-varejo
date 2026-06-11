@@ -152,7 +152,8 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
       data_nascimento: null,
       tipo_pessoa: 'fisica',
       cnpj: null,
-      razao_social: null
+      razao_social: null,
+      observacao: null
     })
     if (resp.success) {
       const novo = resp.data as Cliente

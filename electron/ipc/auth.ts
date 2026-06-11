@@ -2,8 +2,10 @@ import { ipcMain } from 'electron'
 import {
   alterarPinVendedor,
   definirPinVendedor,
+  gerarCodigoRecuperacao,
   lerAutoLockMinutos,
   lerTetoDescontoPct,
+  redefinirComCodigo,
   setarAutoLockMinutos,
   setarTetoDescontoPct,
   temPinConfigurado,
@@ -11,7 +13,11 @@ import {
   verificarPinVendedor
 } from '../auth'
 import { definirSessao, limparSessao, obterSessao, requerDono } from '../sessao'
+import { extrairClienteIdLocal } from '../licenca'
 import { listarParaLogin } from '../db/queries/vendedores'
+
+// Mesmo backend do chat/renovação (ipc/chat.ts, ipc/licenca-pagamento.ts).
+const URL_BACKEND = 'https://licenca-gnmodas.fly.dev'
 
 export function registrarHandlersAuth(): void {
   // Status geral usado pelo App pra ler auto-lock e saber se há PIN configurado
@@ -97,6 +103,63 @@ export function registrarHandlersAuth(): void {
       try {
         await alterarPinVendedor(vendedorId, pinAtual, pinNovo)
         return { success: true, data: null }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  // ─── Recuperação de PIN por email (dono ou vendedor) ─────────────────
+  // Gera o código local (hash bcrypt, 6 dígitos, 15 min) e pede ao backend Fly
+  // pra enviar por email. `enviado: false` = nenhum usuário ativo com esse email.
+  ipcMain.handle('auth:solicitarRecuperacao', async (_event, email: string) => {
+    try {
+      const gerado = await gerarCodigoRecuperacao(email)
+      if (!gerado) {
+        return { success: true, data: { enviado: false } }
+      }
+      const clienteId = extrairClienteIdLocal()
+      if (!clienteId) {
+        return {
+          success: false,
+          error: 'Não foi possível identificar a licença deste computador.'
+        }
+      }
+      const r = await fetch(`${URL_BACKEND}/recuperacao/enviar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clienteId,
+          para: gerado.email,
+          codigo: gerado.codigo,
+          nome: gerado.nome
+        })
+      })
+      if (!r.ok) {
+        let msg = `Falha ao enviar o email (erro ${r.status}).`
+        try {
+          const corpo = (await r.json()) as { erro?: string }
+          if (corpo.erro) msg = corpo.erro
+        } catch {
+          // corpo não-JSON; mantém a mensagem genérica
+        }
+        return { success: false, error: msg }
+      }
+      return { success: true, data: { enviado: true } }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Valida o código e redefine o PIN. Em sucesso, já abre a sessão do dono
+  // (login automático) — ele acabou de provar a identidade pelo email.
+  ipcMain.handle(
+    'auth:redefinirComCodigo',
+    async (_event, email: string, codigo: string, novoPin: string) => {
+      try {
+        const vendedorId = await redefinirComCodigo(email, codigo, novoPin)
+        definirSessao(vendedorId)
+        return { success: true, data: { ok: true, sessao: obterSessao() } }
       } catch (error) {
         return { success: false, error: (error as Error).message }
       }

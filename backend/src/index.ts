@@ -22,8 +22,10 @@ import {
   gravarCliente,
   obterCobranca,
   gravarCobranca,
-  registrarPerguntaChat
+  registrarPerguntaChat,
+  registrarEnvioRecuperacao
 } from './db.ts'
+import { enviarCodigoRecuperacao } from './email.ts'
 import {
   calcularExpiracao,
   somarDiasNaExpiracao,
@@ -180,6 +182,57 @@ app.post('/chat', async (c) => {
   })
   if (!r.ok) return c.json({ erro: r.erro }, r.status as 400)
   return c.json(r.message)
+})
+
+// ───── Recuperação de acesso (envia código de PIN por email) ──────────
+// O app gera o código de 6 dígitos, guarda o HASH localmente e manda o código
+// pra cá só pra enviar por email. Este endpoint NÃO guarda nem valida o código
+// (isso é local, no app) — é um relay fino, gateado por licença + rate-limit.
+const LIMITE_RECUPERACAO_HORA = 3
+const MINUTOS_VALIDADE_CODIGO = 15
+
+app.post('/recuperacao/enviar', async (c) => {
+  const body = await c.req.json<{
+    clienteId: string
+    para: string
+    codigo: string
+    nome?: string
+  }>()
+
+  if (!body.clienteId || !body.para || !body.codigo) {
+    return c.json({ erro: 'clienteId, para e codigo são obrigatórios' }, 400)
+  }
+
+  const cliente = obterCliente(body.clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+  if (!licencaAtiva(cliente)) return c.json({ erro: 'licença inativa' }, 403)
+
+  const email = body.para.trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return c.json({ erro: 'email inválido' }, 400)
+  }
+  // O corpo do email só aceita um código de 6 dígitos — trava o endpoint como
+  // canal de texto arbitrário (anti-abuso) além do escape de HTML no nome.
+  if (!/^\d{6}$/.test(body.codigo)) {
+    return c.json({ erro: 'codigo deve ter 6 dígitos' }, 400)
+  }
+
+  const uso = registrarEnvioRecuperacao(email, LIMITE_RECUPERACAO_HORA)
+  if (!uso.permitido) {
+    return c.json(
+      { erro: 'Muitas solicitações. Aguarde alguns minutos antes de pedir um novo código.' },
+      429
+    )
+  }
+
+  const r = await enviarCodigoRecuperacao({
+    para: email,
+    codigo: body.codigo,
+    nome: body.nome,
+    minutosValidade: MINUTOS_VALIDADE_CODIGO
+  })
+  if (!r.ok) return c.json({ erro: r.erro }, r.status as 400)
+  return c.json({ ok: true })
 })
 
 // ───── App ───────────────────────────────────────────────────────────

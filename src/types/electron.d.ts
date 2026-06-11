@@ -198,6 +198,25 @@ interface Window {
         pinAtual: string,
         pinNovo: string
       ) => Promise<RespostaIPC>
+      solicitarRecuperacao: (
+        email: string
+      ) => Promise<RespostaIPC<{ enviado: boolean }>>
+      redefinirComCodigo: (
+        email: string,
+        codigo: string,
+        novoPin: string
+      ) => Promise<RespostaIPC<{
+        ok: boolean
+        sessao?: {
+          id: number
+          nome: string
+          ativo: number
+          papel: 'dono' | 'vendedor'
+          email: string | null
+          tem_pin: number
+          vendas_count: number
+        } | null
+      }>>
       setarAutoLock: (minutos: number) => Promise<RespostaIPC>
       lerTetoDesconto: () => Promise<RespostaIPC<number>>
       setarTetoDesconto: (pct: number) => Promise<RespostaIPC>

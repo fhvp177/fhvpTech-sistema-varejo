@@ -32,6 +32,7 @@ type Cliente = {
   tipo_pessoa: TipoPessoa
   cnpj: string | null
   razao_social: string | null
+  observacao: string | null
   data_cadastro: string
 }
 
@@ -47,11 +48,12 @@ type FormCliente = {
   tipo_pessoa: TipoPessoa
   cnpj: string
   razao_social: string
+  observacao: string
 }
 
 const FORM_VAZIO: FormCliente = {
   nome: '', telefone: '', endereco: '', cpf: '', data_nascimento: '',
-  tipo_pessoa: 'fisica', cnpj: '', razao_social: ''
+  tipo_pessoa: 'fisica', cnpj: '', razao_social: '', observacao: ''
 }
 
 // YYYY-MM-DD → DD/MM/YYYY
@@ -150,7 +152,8 @@ const Clientes: FC = () => {
       (c.endereco ?? '').toLowerCase().includes(t) ||
       (c.cpf ?? '').includes(t) ||
       (c.cnpj ?? '').includes(t) ||
-      (c.razao_social ?? '').toLowerCase().includes(t)
+      (c.razao_social ?? '').toLowerCase().includes(t) ||
+      (c.observacao ?? '').toLowerCase().includes(t)
     )
   })
 
@@ -180,6 +183,7 @@ const Clientes: FC = () => {
       tipo_pessoa: c.tipo_pessoa,
       cnpj: c.cnpj ?? '',
       razao_social: c.razao_social ?? '',
+      observacao: c.observacao ?? '',
     })
     setErro('')
     setDialogAberto(true)
@@ -248,6 +252,7 @@ const Clientes: FC = () => {
       tipo_pessoa: form.tipo_pessoa,
       cnpj: ehPj ? form.cnpj : null,
       razao_social: ehPj ? (form.razao_social.trim() || null) : null,
+      observacao: form.observacao.trim() || null,
     }
 
     const resp = editando
@@ -286,7 +291,7 @@ const Clientes: FC = () => {
       <div className="relative mb-4 max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="Buscar por nome, telefone, endereço..."
+          placeholder="Buscar por nome, telefone, endereço, observação..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           className="pl-9"
@@ -325,6 +330,14 @@ const Clientes: FC = () => {
                   {c.nome}
                   {c.tipo_pessoa === 'juridica' && c.razao_social && (
                     <div className="text-xs text-muted-foreground font-normal">{c.razao_social}</div>
+                  )}
+                  {c.observacao && (
+                    <div
+                      className="text-xs text-muted-foreground font-normal italic truncate max-w-[260px]"
+                      title={c.observacao}
+                    >
+                      {c.observacao}
+                    </div>
                   )}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
@@ -495,6 +508,18 @@ const Clientes: FC = () => {
                 value={form.endereco}
                 onChange={(e) => setForm((f) => ({ ...f, endereco: e.target.value }))}
                 placeholder="Rua, número, bairro, cidade"
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="observacao">Observação (opcional)</Label>
+              <textarea
+                id="observacao"
+                value={form.observacao}
+                onChange={(e) => setForm((f) => ({ ...f, observacao: e.target.value }))}
+                placeholder="Ex.: compra todo dia 10, prefere entrega à tarde, sempre leva 2 peças..."
+                rows={2}
+                className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
               />
             </div>
 

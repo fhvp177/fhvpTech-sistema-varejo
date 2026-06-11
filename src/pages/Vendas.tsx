@@ -1232,6 +1232,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       tipo_pessoa: tipoPessoaRapido,
       cnpj: ehPj ? cnpjClienteRapido : null,
       razao_social: ehPj ? (razaoSocialRapido.trim() || null) : null,
+      observacao: null,
     })
     if (resp.success) {
       const novoCliente = resp.data as Cliente
@@ -1260,7 +1261,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           <Button variant="ghost" size="icon" onClick={onSair}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h2 className="text-xl font-bold">Nova Venda — PDV</h2>
+          <h2 className="text-[2rem] font-bold">CAIXA ABERTO</h2>
         </div>
 
         <div className="mb-3">
@@ -1472,7 +1473,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
               </div>
             </>
           )}
-          <div className={`flex justify-between font-bold text-[1.75rem] pt-2 ${descontoValor > 0 ? '' : 'border-t'}`}>
+          <div className={`flex justify-between font-bold text-[2rem] pt-2 ${descontoValor > 0 ? '' : 'border-t'}`}>
             <span>TOTAL</span>
             <span>{fmt(total)}</span>
           </div>
