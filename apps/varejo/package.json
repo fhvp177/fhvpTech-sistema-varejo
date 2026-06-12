@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@electron-toolkit/utils": "^3.0.0",
+    "@fhvptech/core": "*",
     "adm-zip": "^0.5.17",
     "archiver": "^6.0.2",
     "bcryptjs": "^3.0.3",

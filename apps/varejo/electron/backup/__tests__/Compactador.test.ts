@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from 'vitest'
 import { mkdtempSync, writeFileSync, existsSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { criarZip, extrairZip, type MetadadoBackup } from '../Compactador'
+import { criarZip, extrairZip, type MetadadoBackup } from '@fhvptech/core/electron/backup/Compactador'
 
 const tmpBase = mkdtempSync(join(tmpdir(), 'compactador-test-'))
 

@@ -9,7 +9,7 @@ import {
   precisaPromocaoMensal,
   aplicarPoliticaCompleta,
   type ArquivoBackup,
-} from '../PoliticaRetencao'
+} from '@fhvptech/core/electron/backup/PoliticaRetencao'
 
 // ─── parsearDataDoNome ────────────────────────────────────────────────────────
 

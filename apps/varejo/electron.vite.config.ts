@@ -60,7 +60,10 @@ if (!FEATURES) {
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // @fhvptech/core é consumido por fonte (.ts) — precisa ser bundlado, não
+    // externalizado, senão o runtime tentaria require() num .ts. Os demais
+    // node_modules seguem externalizados normalmente.
+    plugins: [externalizeDepsPlugin({ exclude: ['@fhvptech/core'] })],
     define: {
       __CHAVE_HMAC__: JSON.stringify(SEGREDOS.CHAVE_HMAC),
       __CHAVE_AES__: JSON.stringify(SEGREDOS.CHAVE_AES),

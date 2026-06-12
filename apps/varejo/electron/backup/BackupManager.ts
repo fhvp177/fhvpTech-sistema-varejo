@@ -4,10 +4,10 @@ import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'fs'
 import { randomUUID } from 'crypto'
 import { obterBancoDeDados } from '../db/conexao'
 import { validarLicenca } from '../licenca'
-import { criarZip, type MetadadoBackup } from './Compactador'
+import { criarZip, type MetadadoBackup } from '@fhvptech/core/electron/backup/Compactador'
 import { lerConfig, gravarConfig } from './configBackup'
-import { aplicarPoliticaCompleta } from './PoliticaRetencao'
-import { espelharBackup } from './EspelhoSecundario'
+import { aplicarPoliticaCompleta } from '@fhvptech/core/electron/backup/PoliticaRetencao'
+import { espelharBackup } from '@fhvptech/core/electron/backup/EspelhoSecundario'
 
 export type TipoBackup =
   | 'automatico'

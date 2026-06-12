@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from 'vitest'
 import { mkdtempSync, writeFileSync, readdirSync, existsSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { espelharBackup } from '../EspelhoSecundario'
+import { espelharBackup } from '@fhvptech/core/electron/backup/EspelhoSecundario'
 
 const tmpBase = mkdtempSync(join(tmpdir(), 'espelho-test-'))
 
