@@ -1,4 +1,4 @@
-import { obterBancoDeDados } from '../conexao'
+import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { buscarVendaPorId } from './vendas'
 
 export type TipoDevolucao = 'credito' | 'dinheiro'

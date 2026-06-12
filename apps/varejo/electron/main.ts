@@ -1,7 +1,8 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { inicializarBancoDeDados, obterBancoDeDados } from './db/conexao'
+import { inicializarBancoDeDados, obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { criarTabelas } from './db/schema'
 import { executarMigrations } from '@fhvptech/core/electron/db/migrations'
 import { MIGRATIONS } from './backup/migrations'
 import { inicializarBackupManager } from './backup/BackupManager'
@@ -63,7 +64,7 @@ function criarJanelaPrincipal(): void {
 }
 
 app.whenReady().then(() => {
-  inicializarBancoDeDados()
+  inicializarBancoDeDados(criarTabelas)
   executarMigrations(obterBancoDeDados(), MIGRATIONS)
   inicializarBackupManager()
   inicializarBackupAutomatico()

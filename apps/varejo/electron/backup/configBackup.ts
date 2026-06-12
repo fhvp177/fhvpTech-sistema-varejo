@@ -1,4 +1,4 @@
-import { obterBancoDeDados } from '../db/conexao'
+import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 
 export function lerConfig(chave: string): string {
   const db = obterBancoDeDados()

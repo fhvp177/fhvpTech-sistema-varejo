@@ -2,7 +2,7 @@
 // queries de domínio pra deixar explícito que o assistente de IA só LÊ o banco
 // — nunca escreve. Toda tool do chat resolve aqui.
 
-import { obterBancoDeDados } from '../conexao'
+import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 
 export type ProdutoChat = {
   nome: string

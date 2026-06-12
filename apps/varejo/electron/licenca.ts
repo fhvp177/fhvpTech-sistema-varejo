@@ -17,7 +17,7 @@ import { createHmac, createCipheriv, createDecipheriv, randomBytes, scryptSync }
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { obterBancoDeDados } from './db/conexao'
+import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 
 // Substituídas por literais em build-time via `define` no electron.vite.config.ts.
 declare const __CHAVE_HMAC__: string
