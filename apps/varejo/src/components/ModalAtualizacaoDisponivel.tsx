@@ -1,13 +1,13 @@
 import { FC, useEffect, useState } from 'react'
 import { Download } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@fhvptech/core/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter
-} from '@/components/ui/dialog'
+} from '@fhvptech/core/ui/dialog'
 
 type EventoAtualizacao = { tipo: string; dados?: unknown }
 type DadosPronta = { versao: string; notas: string | null }

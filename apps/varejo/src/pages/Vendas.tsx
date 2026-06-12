@@ -2,18 +2,18 @@ import { FC, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Wallet, FileDown, FileText } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
 import { IMaskInput } from 'react-imask'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Button } from '@fhvptech/core/ui/button'
+import { Input } from '@fhvptech/core/ui/input'
+import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter
-} from '@/components/ui/dialog'
-import Paginacao from '@/components/ui/paginacao'
-import { useToast } from '@/components/ui/toast'
+} from '@fhvptech/core/ui/dialog'
+import Paginacao from '@fhvptech/core/ui/paginacao'
+import { useToast } from '@fhvptech/core/ui/toast'
 import ClienteSeletor, { type ClienteSeletorHandle } from '@/components/ClienteSeletor'
 import ConsultaPreco from '@/components/ConsultaPreco'
 import { gerarHtmlCupomVenda } from '@/utils/cupomVenda'

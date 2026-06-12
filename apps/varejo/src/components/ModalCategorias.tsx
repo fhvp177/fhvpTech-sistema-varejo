@@ -1,8 +1,8 @@
 import { FC, useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@fhvptech/core/ui/button'
+import { Input } from '@fhvptech/core/ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@fhvptech/core/ui/dialog'
 
 type Categoria = { id: number; nome: string; produtos_count: number }
 

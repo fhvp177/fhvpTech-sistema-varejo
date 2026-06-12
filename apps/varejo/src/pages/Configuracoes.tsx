@@ -1,6 +1,6 @@
 import { FC, useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
+import { Button } from '@fhvptech/core/ui/button'
+import { Label } from '@fhvptech/core/ui/label'
 import { RefreshCw } from 'lucide-react'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigSeguranca from '@/components/ConfigSeguranca'

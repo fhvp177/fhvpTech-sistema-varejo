@@ -3,7 +3,10 @@ module.exports = {
   darkMode: ['class'],
   content: [
     './index.html',
-    './src/**/*.{js,ts,jsx,tsx}'
+    './src/**/*.{js,ts,jsx,tsx}',
+    // O UI kit (shadcn) vive em @fhvptech/core — sem isso o Tailwind purga as
+    // classes usadas só lá e o estilo quebra.
+    '../../packages/core/src/**/*.{js,ts,jsx,tsx}'
   ],
   theme: {
     extend: {

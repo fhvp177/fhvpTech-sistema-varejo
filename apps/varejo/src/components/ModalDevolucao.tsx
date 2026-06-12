@@ -6,13 +6,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
+} from '@fhvptech/core/ui/dialog'
+import { Button } from '@fhvptech/core/ui/button'
+import { Label } from '@fhvptech/core/ui/label'
+import { Input } from '@fhvptech/core/ui/input'
 import { IMaskInput } from 'react-imask'
 import ClienteSeletor from '@/components/ClienteSeletor'
-import { useToast } from '@/components/ui/toast'
+import { useToast } from '@fhvptech/core/ui/toast'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 
 type ItemDevolvivel = {

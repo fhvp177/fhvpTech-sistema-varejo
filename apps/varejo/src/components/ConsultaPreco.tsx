@@ -1,12 +1,12 @@
 import { FC, useEffect, useRef, useState } from 'react'
 import { Search, Tag } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { Input } from '@fhvptech/core/ui/input'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle
-} from '@/components/ui/dialog'
+} from '@fhvptech/core/ui/dialog'
 
 export type ProdutoConsulta = {
   id: number

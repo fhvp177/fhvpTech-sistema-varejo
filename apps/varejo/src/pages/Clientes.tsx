@@ -1,17 +1,17 @@
 import { FC, useEffect, useMemo, useState } from 'react'
 import { IMaskInput } from 'react-imask'
 import { Pencil, Trash2, Plus, Search, Wallet, User, Building2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Button } from '@fhvptech/core/ui/button'
+import { Input } from '@fhvptech/core/ui/input'
+import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter
-} from '@/components/ui/dialog'
-import Paginacao from '@/components/ui/paginacao'
+} from '@fhvptech/core/ui/dialog'
+import Paginacao from '@fhvptech/core/ui/paginacao'
 import DividasClienteDialog, {
   calcularDividasPorCliente,
   type VendaDivida

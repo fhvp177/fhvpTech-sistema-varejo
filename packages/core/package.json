@@ -5,6 +5,7 @@
   "description": "Núcleo compartilhado entre os sistemas FHVP Tech (update, licença, auth, backup, PIX, UI kit). Consumido por fonte (.ts) — sem passo de build.",
   "exports": {
     "./electron/*": "./src/electron/*.ts",
-    "./ui/*": "./src/ui/*.tsx"
+    "./ui/*": "./src/ui/*.tsx",
+    "./lib/*": "./src/lib/*.ts"
   }
 }

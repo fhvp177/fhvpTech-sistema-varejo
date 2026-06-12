@@ -33,7 +33,7 @@ import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
 import ModalPagamentoPix from './components/ModalPagamentoPix'
 import ErrorBoundary from './components/ErrorBoundary'
 import RotaSomenteDono from './components/RotaSomenteDono'
-import { ToastProvider, useToast } from './components/ui/toast'
+import { ToastProvider, useToast } from '@fhvptech/core/ui/toast'
 import { useAutoLock } from './hooks/useAutoLock'
 
 // Features opcionais carregadas sob demanda e gateadas por edição (build-time).

@@ -1,18 +1,18 @@
 import { FC, useEffect, useRef, useState } from 'react'
 import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Button } from '@fhvptech/core/ui/button'
+import { Input } from '@fhvptech/core/ui/input'
+import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter
-} from '@/components/ui/dialog'
+} from '@fhvptech/core/ui/dialog'
 import BarcodeGenerator, { gerarEAN13 } from '@/components/BarcodeGenerator'
 import { nomeImpressao } from '@/utils/nomeImpressao'
-import Paginacao from '@/components/ui/paginacao'
+import Paginacao from '@fhvptech/core/ui/paginacao'
 import ModalCategorias from '@/components/ModalCategorias'
 import { useSessao } from '@/App'
 

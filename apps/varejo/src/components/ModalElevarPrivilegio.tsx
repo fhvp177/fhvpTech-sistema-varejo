@@ -6,9 +6,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
+} from '@fhvptech/core/ui/dialog'
+import { Button } from '@fhvptech/core/ui/button'
+import { Label } from '@fhvptech/core/ui/label'
 
 type Props = {
   aberto: boolean

@@ -1,14 +1,14 @@
 import { FC, useEffect, useState } from 'react'
 import { KeyRound, Clock, Percent } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
+import { Button } from '@fhvptech/core/ui/button'
+import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter
-} from '@/components/ui/dialog'
+} from '@fhvptech/core/ui/dialog'
 import { useLock, useSessao } from '@/App'
 
 const OPCOES_AUTO_LOCK: Array<{ valor: number; label: string }> = [

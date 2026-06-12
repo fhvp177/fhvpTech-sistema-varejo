@@ -1,12 +1,12 @@
 import { FC, useEffect, useState } from 'react'
 import { Lock, ShieldAlert, RotateCcw, AlertTriangle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@fhvptech/core/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@fhvptech/core/ui/dialog'
 import ModalSenhaRestauracao from '@/components/backup/ModalSenhaRestauracao'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────

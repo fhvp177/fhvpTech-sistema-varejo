@@ -1,13 +1,13 @@
 import { FC, useCallback, useEffect, useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Check, Copy, Loader2, QrCode } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@fhvptech/core/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle
-} from '@/components/ui/dialog'
+} from '@fhvptech/core/ui/dialog'
 
 // Intervalo entre consultas ao backend enquanto o QR está aberto. 4 segundos
 // é confortável pro Worker (no free tier) e rápido o suficiente pro cliente

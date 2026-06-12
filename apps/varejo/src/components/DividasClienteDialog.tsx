@@ -1,12 +1,12 @@
 import { FC } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@fhvptech/core/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter
-} from '@/components/ui/dialog'
+} from '@fhvptech/core/ui/dialog'
 
 export type StatusPagamento = 'pago' | 'pendente' | 'inadimplente' | 'parcelado'
 

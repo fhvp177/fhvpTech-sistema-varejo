@@ -1,6 +1,6 @@
 import { FC } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from './button'
 
 type PaginacaoProps = {
   paginaAtual: number
