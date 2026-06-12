@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { adicionarColunaSeAusente } from './_util'
+import { adicionarColunaSeAusente } from '@fhvptech/core/electron/db/migrationUtils'
 
 // Adiciona suporte a clientes pessoa jurídica (PJ).
 // - tipo_pessoa: discrimina PF de PJ. Default 'fisica' preserva os clientes existentes.

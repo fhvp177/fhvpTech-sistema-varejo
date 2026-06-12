@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { adicionarColunaSeAusente } from './_util'
+import { adicionarColunaSeAusente } from '@fhvptech/core/electron/db/migrationUtils'
 
 // Campo livre de observação no cadastro de cliente (ex.: "compra todo dia 10",
 // preferências, combinados). Pesquisável na tela de clientes. Nullable — clientes

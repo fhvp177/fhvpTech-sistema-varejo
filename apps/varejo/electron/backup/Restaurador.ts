@@ -6,7 +6,8 @@ import { extrairZip } from '@fhvptech/core/electron/backup/Compactador'
 import { lerConfig } from './configBackup'
 import { obterBackupManager } from './BackupManager'
 import { fecharBancoDeDados, inicializarBancoDeDados, obterBancoDeDados } from '../db/conexao'
-import { executarMigrations } from './migrations'
+import { executarMigrations } from '@fhvptech/core/electron/db/migrations'
+import { MIGRATIONS } from './migrations'
 
 const SUBPASTAS_ORDEM = [
   'manuais',
@@ -99,7 +100,7 @@ export async function restaurarBackup(caminhoZip: string): Promise<ResultadoRest
 
     // 7. Reabre o banco e re-executa migrations (garante schema atualizado)
     inicializarBancoDeDados()
-    executarMigrations(obterBancoDeDados())
+    executarMigrations(obterBancoDeDados(), MIGRATIONS)
 
     return { sucesso: true }
   } catch (err) {

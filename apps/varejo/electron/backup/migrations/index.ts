@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { Migration } from '@fhvptech/core/electron/db/migrations'
 import { aplicar001ModuloBackup } from './001_modulo_backup'
 import { aplicar002AtivarBackup } from './002_ativar_backup'
 import { aplicar003HashSenhaRestauracao } from './003_hash_senha_restauracao'
@@ -18,12 +18,10 @@ import { aplicar016Devolucoes } from './016_devolucoes'
 import { aplicar017RecuperacaoCodigos } from './017_recuperacao_codigos'
 import { aplicar018ClientesObservacao } from './018_clientes_observacao'
 
-type Migration = {
-  nome: string
-  aplicar: (db: Database.Database) => void
-}
-
-const MIGRATIONS: Migration[] = [
+// Lista de migrations do varejo, na ordem de aplicação. O runner genérico
+// (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
+// só o conteúdo, que é domínio deste app. Cada nicho terá a sua própria lista.
+export const MIGRATIONS: Migration[] = [
   { nome: '001_modulo_backup', aplicar: aplicar001ModuloBackup },
   { nome: '002_ativar_backup', aplicar: aplicar002AtivarBackup },
   { nome: '003_hash_senha_restauracao', aplicar: aplicar003HashSenhaRestauracao },
@@ -43,26 +41,3 @@ const MIGRATIONS: Migration[] = [
   { nome: '017_recuperacao_codigos', aplicar: aplicar017RecuperacaoCodigos },
   { nome: '018_clientes_observacao', aplicar: aplicar018ClientesObservacao },
 ]
-
-export function executarMigrations(db: Database.Database): void {
-  // Garante que a tabela de controle existe antes de qualquer verificação
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS _migrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome TEXT UNIQUE NOT NULL,
-      data_aplicacao DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `)
-
-  for (const migration of MIGRATIONS) {
-    const jaAplicada = db
-      .prepare('SELECT 1 FROM _migrations WHERE nome = ?')
-      .get(migration.nome)
-
-    if (!jaAplicada) {
-      console.log(`[migrations] Aplicando: ${migration.nome}`)
-      migration.aplicar(db)
-      console.log(`[migrations] Concluído: ${migration.nome}`)
-    }
-  }
-}
