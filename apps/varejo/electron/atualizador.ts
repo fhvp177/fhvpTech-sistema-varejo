@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, app } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import { executarBackupPreUpdate } from './backup/BackupPreUpdate'
+import { executarBackupPreUpdate } from '@fhvptech/core/electron/backup/BackupPreUpdate'
 
 type RespostaIPC<T = unknown> =
   | { success: true; data: T }

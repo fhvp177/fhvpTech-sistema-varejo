@@ -6,7 +6,7 @@ import {
   deletarFornecedor,
   type DadosFornecedor
 } from '../db/queries/fornecedores'
-import { obterBackupManager } from '../backup/BackupManager'
+import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { requerDono } from '../sessao'
 
 export function registrarHandlersFornecedores(): void {

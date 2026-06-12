@@ -6,9 +6,8 @@ import { extrairZip } from '@fhvptech/core/electron/backup/Compactador'
 import { lerConfig } from './configBackup'
 import { obterBackupManager } from './BackupManager'
 import { fecharBancoDeDados, inicializarBancoDeDados, obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
-import { criarTabelas } from '../db/schema'
 import { executarMigrations } from '@fhvptech/core/electron/db/migrations'
-import { MIGRATIONS } from './migrations'
+import { obterConfigNucleo } from '@fhvptech/core/electron/nucleo'
 
 const SUBPASTAS_ORDEM = [
   'manuais',
@@ -100,13 +99,13 @@ export async function restaurarBackup(caminhoZip: string): Promise<ResultadoRest
     copyFileSync(extracao.caminhoDb, caminhoDb)
 
     // 7. Reabre o banco e re-executa migrations (garante schema atualizado)
-    inicializarBancoDeDados(criarTabelas)
-    executarMigrations(obterBancoDeDados(), MIGRATIONS)
+    inicializarBancoDeDados(obterConfigNucleo().criarTabelas)
+    executarMigrations(obterBancoDeDados(), obterConfigNucleo().migrations)
 
     return { sucesso: true }
   } catch (err) {
     // Garante que o banco seja reaberto mesmo em caso de erro parcial
-    try { inicializarBancoDeDados(criarTabelas) } catch { /* ignora */ }
+    try { inicializarBancoDeDados(obterConfigNucleo().criarTabelas) } catch { /* ignora */ }
     return { sucesso: false, erro: (err as Error).message }
   } finally {
     if (existsSync(caminhoTemp)) rmSync(caminhoTemp, { recursive: true, force: true })

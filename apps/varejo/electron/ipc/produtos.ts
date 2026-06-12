@@ -7,7 +7,7 @@ import {
   deletarProduto,
   type DadosProduto
 } from '../db/queries/produtos'
-import { obterBackupManager } from '../backup/BackupManager'
+import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { requerDono } from '../sessao'
 
 export function registrarHandlersProdutos(): void {

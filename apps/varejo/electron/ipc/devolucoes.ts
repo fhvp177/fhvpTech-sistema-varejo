@@ -7,7 +7,7 @@ import {
   type TipoDevolucao,
   type ItemDevolverEntrada
 } from '../db/queries/devolucoes'
-import { obterBackupManager } from '../backup/BackupManager'
+import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { requerSessao, ehDono } from '../sessao'
 import { verificarPinDono } from '../auth'
 

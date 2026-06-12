@@ -3,7 +3,7 @@ import { join } from 'path'
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'fs'
 import { randomUUID } from 'crypto'
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
-import { validarLicenca } from '../licenca'
+import { obterConfigNucleo } from '@fhvptech/core/electron/nucleo'
 import { criarZip, type MetadadoBackup } from '@fhvptech/core/electron/backup/Compactador'
 import { lerConfig, gravarConfig } from './configBackup'
 import { aplicarPoliticaCompleta } from '@fhvptech/core/electron/backup/PoliticaRetencao'
@@ -75,7 +75,7 @@ class BackupManager {
 
     if (!lerConfig('cliente_id')) {
       try {
-        const status = validarLicenca()
+        const status = obterConfigNucleo().validarLicenca()
         gravarConfig('cliente_id', status.clienteId ?? randomUUID())
       } catch {
         gravarConfig('cliente_id', randomUUID())

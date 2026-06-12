@@ -5,9 +5,11 @@ import { inicializarBancoDeDados, obterBancoDeDados } from '@fhvptech/core/elect
 import { criarTabelas } from './db/schema'
 import { executarMigrations } from '@fhvptech/core/electron/db/migrations'
 import { MIGRATIONS } from './backup/migrations'
-import { inicializarBackupManager } from './backup/BackupManager'
-import { inicializarBackupAutomatico } from './backup/BackupAutomatico'
-import { registrarBackupAoFechar } from './backup/BackupAoFechar'
+import { configurarNucleo } from '@fhvptech/core/electron/nucleo'
+import { validarLicenca } from './licenca'
+import { inicializarBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
+import { inicializarBackupAutomatico } from '@fhvptech/core/electron/backup/BackupAutomatico'
+import { registrarBackupAoFechar } from '@fhvptech/core/electron/backup/BackupAoFechar'
 import { registrarHandlersLicenca } from './ipc/licenca'
 import { registrarHandlersLicencaPagamento } from './ipc/licenca-pagamento'
 import { registrarHandlersFornecedores } from './ipc/fornecedores'
@@ -64,6 +66,9 @@ function criarJanelaPrincipal(): void {
 }
 
 app.whenReady().then(() => {
+  // Injeta os ganchos de domínio no núcleo (schema, migrations, licença) antes
+  // de inicializar banco e backup, que dependem deles.
+  configurarNucleo({ criarTabelas, migrations: MIGRATIONS, validarLicenca })
   inicializarBancoDeDados(criarTabelas)
   executarMigrations(obterBancoDeDados(), MIGRATIONS)
   inicializarBackupManager()

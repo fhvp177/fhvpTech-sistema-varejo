@@ -13,8 +13,8 @@ import {
   type StatusPagamento,
   type SnapshotVenda
 } from '../db/queries/vendas'
-import { obterBackupManager } from '../backup/BackupManager'
-import { lerConfig } from '../backup/configBackup'
+import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
+import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { requerSessao } from '../sessao'
 
 // Dispara um backup ZIP em background após uma venda, se a opção estiver ativa.

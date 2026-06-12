@@ -10,7 +10,7 @@ import {
   listarVendedores,
   type PapelVendedor
 } from '../db/queries/vendedores'
-import { obterBackupManager } from '../backup/BackupManager'
+import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { requerDono } from '../sessao'
 
 const BCRYPT_ROUNDS = 12

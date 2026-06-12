@@ -5,7 +5,7 @@ import {
   atualizarCategoria,
   deletarCategoria
 } from '../db/queries/categorias'
-import { obterBackupManager } from '../backup/BackupManager'
+import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { requerDono } from '../sessao'
 
 export function registrarHandlersCategorias(): void {

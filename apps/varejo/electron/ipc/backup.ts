@@ -1,9 +1,9 @@
 import { ipcMain, dialog } from 'electron'
-import { fazerBackupManual } from '../backup/BackupManual'
-import { lerConfig, gravarConfig } from '../backup/configBackup'
-import { obterBackupAutomatico } from '../backup/BackupAutomatico'
-import { verificarSenha, temSenhaConfigurada } from '../backup/SenhaRestauracao'
-import { listarBackupsDisponiveis, restaurarBackup } from '../backup/Restaurador'
+import { fazerBackupManual } from '@fhvptech/core/electron/backup/BackupManual'
+import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
+import { obterBackupAutomatico } from '@fhvptech/core/electron/backup/BackupAutomatico'
+import { verificarSenha, temSenhaConfigurada } from '@fhvptech/core/electron/backup/SenhaRestauracao'
+import { listarBackupsDisponiveis, restaurarBackup } from '@fhvptech/core/electron/backup/Restaurador'
 
 export function registrarHandlersBackup(): void {
   ipcMain.handle('backup:fazerManual', async () => {

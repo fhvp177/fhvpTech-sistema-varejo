@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { randomInt } from 'crypto'
-import { lerConfig, gravarConfig } from './backup/configBackup'
+import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 import {
   contarDonosAtivos,
   gravarPinHash,

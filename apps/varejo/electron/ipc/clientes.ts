@@ -8,7 +8,7 @@ import {
   listarVencendoHoje,
   type DadosCliente
 } from '../db/queries/clientes'
-import { obterBackupManager } from '../backup/BackupManager'
+import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { requerDono } from '../sessao'
 
 export function registrarHandlersClientes(): void {

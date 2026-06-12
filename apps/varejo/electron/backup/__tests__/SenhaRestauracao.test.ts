@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import bcrypt from 'bcryptjs'
 
-vi.mock('../configBackup')
+vi.mock('@fhvptech/core/electron/backup/configBackup')
 
-import { lerConfig, gravarConfig } from '../configBackup'
-import { temSenhaConfigurada, verificarSenha, definirSenha } from '../SenhaRestauracao'
+import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
+import { temSenhaConfigurada, verificarSenha, definirSenha } from '@fhvptech/core/electron/backup/SenhaRestauracao'
 
 const CHAVE_HASH = 'backup_hash_senha_restauracao'
 
