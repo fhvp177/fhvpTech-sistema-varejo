@@ -4,6 +4,14 @@
 // Injetado em build-time pelo electron.vite.config.ts a partir de package.json.version
 declare const __APP_VERSION__: string
 
+// Edição e flags de features injetadas em build-time (electron.vite.config.ts).
+// Booleanos literais no build → o bundler faz tree-shaking das features desligadas.
+declare const __EDICAO__: string
+declare const __FEAT_DASHBOARD__: boolean
+declare const __FEAT_CHATBOT__: boolean
+declare const __FEAT_ETIQUETAS__: boolean
+declare const __FEAT_TEF__: boolean
+
 type RespostaIPC<T = unknown> = { success: true; data: T } | { success: false; error: string }
 
 type StatusLicenca = {

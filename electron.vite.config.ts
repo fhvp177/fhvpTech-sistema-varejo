@@ -37,6 +37,27 @@ function lerSegredosLicenca(): Record<string, string> {
 
 const SEGREDOS = lerSegredosLicenca()
 
+// Edição do build — controla quais features entram no bundle. As flags viram
+// constantes literais (`define`), então o bundler faz dead-code elimination das
+// features desligadas: o código E suas libs exclusivas somem do binário daquela
+// edição (não ficam só escondidos). Default 'completa' = tudo ligado (dev e build
+// padrão, sem regressão). Cada edição é gerada com a env EDICAO: ex. EDICAO=basico.
+type Features = Record<'dashboard' | 'chatbot' | 'etiquetas' | 'tef', boolean>
+const FEATURES_POR_EDICAO: Record<string, Features> = {
+  basico: { dashboard: false, chatbot: false, etiquetas: true, tef: false },
+  pro: { dashboard: true, chatbot: true, etiquetas: true, tef: false },
+  'pro-tef': { dashboard: true, chatbot: true, etiquetas: true, tef: true },
+  completa: { dashboard: true, chatbot: true, etiquetas: true, tef: true }
+}
+const EDICAO = process.env.EDICAO ?? 'completa'
+const FEATURES = FEATURES_POR_EDICAO[EDICAO]
+if (!FEATURES) {
+  throw new Error(
+    `[electron.vite.config] EDICAO desconhecida: "${EDICAO}". ` +
+      `Use uma de: ${Object.keys(FEATURES_POR_EDICAO).join(', ')}.`
+  )
+}
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
@@ -78,7 +99,12 @@ export default defineConfig({
       }
     },
     define: {
-      __APP_VERSION__: JSON.stringify(APP_VERSION)
+      __APP_VERSION__: JSON.stringify(APP_VERSION),
+      __EDICAO__: JSON.stringify(EDICAO),
+      __FEAT_DASHBOARD__: JSON.stringify(FEATURES.dashboard),
+      __FEAT_CHATBOT__: JSON.stringify(FEATURES.chatbot),
+      __FEAT_ETIQUETAS__: JSON.stringify(FEATURES.etiquetas),
+      __FEAT_TEF__: JSON.stringify(FEATURES.tef)
     },
     plugins: [react()]
   }

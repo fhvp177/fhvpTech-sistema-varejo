@@ -1,5 +1,5 @@
-import { createContext, FC, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { MemoryRouter, Routes, Route, NavLink } from 'react-router-dom'
+import { createContext, FC, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { MemoryRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import {
   Lock,
   LayoutDashboard,
@@ -17,12 +17,10 @@ import {
   LogOut,
   LucideIcon
 } from 'lucide-react'
-import Dashboard from './pages/Dashboard'
 import Fornecedores from './pages/Fornecedores'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
-import EtiquetasA4 from './pages/EtiquetasA4'
 import Configuracoes from './pages/Configuracoes'
 import TelaRestauracao from './pages/TelaRestauracao'
 import LicencaBloqueada from './pages/LicencaBloqueada'
@@ -33,11 +31,23 @@ import AlertaBackupFalhando from './components/backup/AlertaBackupFalhando'
 import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
 import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
 import ModalPagamentoPix from './components/ModalPagamentoPix'
-import ChatAssistente from './components/ChatAssistente'
 import ErrorBoundary from './components/ErrorBoundary'
 import RotaSomenteDono from './components/RotaSomenteDono'
 import { ToastProvider, useToast } from './components/ui/toast'
 import { useAutoLock } from './hooks/useAutoLock'
+
+// Features opcionais carregadas sob demanda e gateadas por edição (build-time).
+// Quando a flag é `false`, o `lazy(import())` vira `null` e o bundler remove o
+// chunk e suas libs exclusivas do binário (ex.: recharts sai junto do Dashboard).
+const Dashboard = __FEAT_DASHBOARD__ ? lazy(() => import('./pages/Dashboard')) : null
+const EtiquetasA4 = __FEAT_ETIQUETAS__ ? lazy(() => import('./pages/EtiquetasA4')) : null
+const ChatAssistente = __FEAT_CHATBOT__ ? lazy(() => import('./components/ChatAssistente')) : null
+
+const FallbackCarregando: FC = () => (
+  <div className="flex-1 flex items-center justify-center p-8">
+    <p className="text-sm text-muted-foreground">Carregando…</p>
+  </div>
+)
 
 type EstadoLicenca = 'verificando' | 'valida' | 'invalida'
 type EstadoAuth = 'verificando' | 'bloqueado' | 'desbloqueado'
@@ -221,19 +231,34 @@ const App: FC = () => {
                   {!pdvAtivo && <AlertaBackupFalhando />}
                   <main className={`flex-1 overflow-auto ${pdvAtivo ? '' : 'pb-24'}`}>
                     <Routes>
-                      <Route
-                        path="/"
-                        element={
-                          <RotaSomenteDono titulo="Dashboard">
-                            <Dashboard />
-                          </RotaSomenteDono>
-                        }
-                      />
+                      {Dashboard ? (
+                        <Route
+                          path="/"
+                          element={
+                            <RotaSomenteDono titulo="Dashboard">
+                              <Suspense fallback={<FallbackCarregando />}>
+                                <Dashboard />
+                              </Suspense>
+                            </RotaSomenteDono>
+                          }
+                        />
+                      ) : (
+                        <Route path="/" element={<Navigate to="/produtos" replace />} />
+                      )}
                       <Route path="/fornecedores" element={<Fornecedores />} />
                       <Route path="/produtos" element={<Produtos />} />
                       <Route path="/clientes" element={<Clientes />} />
                       <Route path="/vendas" element={<Vendas />} />
-                      <Route path="/etiquetas" element={<EtiquetasA4 />} />
+                      {EtiquetasA4 && (
+                        <Route
+                          path="/etiquetas"
+                          element={
+                            <Suspense fallback={<FallbackCarregando />}>
+                              <EtiquetasA4 />
+                            </Suspense>
+                          }
+                        />
+                      )}
                       <Route
                         path="/configuracoes"
                         element={
@@ -255,9 +280,11 @@ const App: FC = () => {
                 </div>
               </div>
               <IndicadorBackupAtivo />
-              {vendedor && !pdvAtivo && (
+              {ChatAssistente && vendedor && !pdvAtivo && (
                 <ErrorBoundary rotulo="ChatAssistente">
-                  <ChatAssistente />
+                  <Suspense fallback={null}>
+                    <ChatAssistente />
+                  </Suspense>
                 </ErrorBoundary>
               )}
               <DialogoBackupAoFechar />
@@ -310,10 +337,14 @@ const ToastInicial: FC<{ aviso: string | null; onMostrado: () => void }> = ({
 
 type ItemSidebar = { to: string; label: string; icon: LucideIcon; somenteDono?: boolean }
 const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
-  {
-    titulo: 'Visão geral',
-    itens: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, somenteDono: true }]
-  },
+  ...(__FEAT_DASHBOARD__
+    ? [
+        {
+          titulo: 'Visão geral',
+          itens: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, somenteDono: true }]
+        }
+      ]
+    : []),
   {
     titulo: 'Cadastros',
     itens: [
@@ -326,7 +357,9 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
     titulo: 'Operação',
     itens: [
       { to: '/vendas', label: 'Vendas', icon: ShoppingCart },
-      { to: '/etiquetas', label: 'Etiquetas A4', icon: Tags }
+      ...(__FEAT_ETIQUETAS__
+        ? [{ to: '/etiquetas', label: 'Etiquetas A4', icon: Tags }]
+        : [])
     ]
   },
   {
