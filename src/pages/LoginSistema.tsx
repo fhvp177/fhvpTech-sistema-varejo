@@ -341,7 +341,14 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
 
         {!selecionado && (
           <p className="text-center text-xs text-slate-400 mt-6">
-            Esqueceu o PIN? Entre em contato com o suporte:{' '}
+            Esqueceu o PIN?{' '}
+            <button
+              onClick={() => setMostrarRecuperacao(true)}
+              className="font-medium text-blue-600 hover:text-blue-700 hover:underline"
+            >
+              Recupere por e-mail
+            </button>{' '}
+            ou fale com o suporte:{' '}
             <span className="font-semibold text-slate-600 whitespace-nowrap">
               (85) 9.2187-1975
             </span>
