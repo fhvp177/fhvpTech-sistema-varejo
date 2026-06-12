@@ -1,0 +1,103 @@
+{
+  "name": "sistema-rt",
+  "version": "1.10.0",
+  "description": "Sistema de gestão para pequenas lojas de varejo",
+  "main": "out/main/index.js",
+  "author": "",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "setup": "npm install --ignore-scripts && node node_modules/electron/install.js && electron-builder install-app-deps",
+    "rebuild-native": "electron-builder install-app-deps",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "senha:gerar": "tsx scripts/gerar-senha-restauracao.ts",
+    "hash:gerar": "tsx scripts/gerar-hash-migration.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "^3.0.0",
+    "@fhvptech/core": "*",
+    "adm-zip": "^0.5.17",
+    "archiver": "^6.0.2",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.10.0",
+    "electron-updater": "^6.8.3",
+    "jsbarcode": "^3.12.3",
+    "nodemailer": "^6.9.13",
+    "qrcode.react": "^4.2.0",
+    "recharts": "^3.8.1"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@radix-ui/react-dialog": "^1.1.0",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@types/adm-zip": "^0.5.8",
+    "@types/archiver": "^7.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.14.0",
+    "@types/nodemailer": "^6.4.15",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "imask": "^7.6.1",
+    "lucide-react": "^0.400.0",
+    "postcss": "^8.4.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-imask": "^7.6.1",
+    "react-router-dom": "^6.24.0",
+    "tailwind-merge": "^2.3.0",
+    "tailwindcss": "^3.4.4",
+    "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.22.1",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.1",
+    "vitest": "^4.1.6"
+  },
+  "build": {
+    "appId": "com.sistemaRT.app",
+    "productName": "Sistema RT",
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "resources/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "resources/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "resources/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "fhvp177",
+      "repo": "fhvpTech-sistema-varejo"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@fhvptech/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Núcleo compartilhado entre os sistemas FHVP Tech (update, licença, auth, backup, PIX, UI kit). Consumido por fonte (.ts) — sem passo de build.",
+  "exports": {
+    "./electron/*": "./src/electron/*.ts",
+    "./ui/*": "./src/ui/*.tsx"
+  }
+}
