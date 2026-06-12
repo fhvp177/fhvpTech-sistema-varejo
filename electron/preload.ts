@@ -81,7 +81,9 @@ const api = {
       ipcRenderer.invoke('vendas:registrarPagamentoParcial', id, valor),
     restaurar: (id: number, snapshot: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:restaurar', id, snapshot),
-    resumoDashboard: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:resumoDashboard')
+    resumoDashboard: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:resumoDashboard'),
+    produtosMaisVendidos: (mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendas:produtosMaisVendidos', mes)
   },
 
   // Auth (PIN do sistema + sessão por vendedor)

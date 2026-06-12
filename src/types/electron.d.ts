@@ -147,6 +147,7 @@ interface Window {
       registrarPagamentoParcial: (id: number, valor: number) => Promise<RespostaIPC<{ snapshot?: SnapshotVenda }>>
       restaurar: (id: number, snapshot: SnapshotVenda) => Promise<RespostaIPC>
       resumoDashboard: () => Promise<RespostaIPC>
+      produtosMaisVendidos: (mes: string) => Promise<RespostaIPC>
     }
     licenca: {
       validar: () => Promise<RespostaIPC<StatusLicenca>>

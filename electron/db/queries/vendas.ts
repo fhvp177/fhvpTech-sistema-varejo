@@ -407,6 +407,33 @@ export function restaurarVenda(id: number, snapshot: SnapshotVenda): void {
   })()
 }
 
+export type ProdutoMaisVendido = {
+  produto_nome: string
+  quantidade: number
+  receita: number
+}
+
+// Produtos mais vendidos em um mês ('YYYY-MM'), ordenados por quantidade.
+// Usa substr(v.data, 1, 7) (e não strftime) pra casar exatamente com o filtro
+// de mês do histórico no front, que compara os 7 primeiros caracteres da data.
+export function produtosMaisVendidosNoMes(mes: string): ProdutoMaisVendido[] {
+  const db = obterBancoDeDados()
+  return db
+    .prepare(
+      `SELECT p.nome AS produto_nome,
+              SUM(iv.quantidade) AS quantidade,
+              SUM(iv.quantidade * iv.preco_unitario) AS receita
+       FROM itens_venda iv
+       JOIN vendas v ON v.id = iv.venda_id
+       JOIN produtos p ON p.id = iv.produto_id
+       WHERE substr(v.data, 1, 7) = ?
+       GROUP BY iv.produto_id
+       ORDER BY quantidade DESC, receita DESC
+       LIMIT 50`
+    )
+    .all(mes) as ProdutoMaisVendido[]
+}
+
 export function resumoDashboard(): ResumoDashboard {
   promoverVendasVencidas()
   const db = obterBancoDeDados()

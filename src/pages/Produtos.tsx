@@ -1,5 +1,5 @@
 import { FC, useEffect, useRef, useState } from 'react'
-import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag } from 'lucide-react'
+import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -164,6 +164,8 @@ const Produtos: FC = () => {
   const [nomeFornecedorRapido, setNomeFornecedorRapido] = useState('')
   const [erroFornecedor, setErroFornecedor] = useState('')
   const [salvandoFornecedor, setSalvandoFornecedor] = useState(false)
+  const [relatorioAberto, setRelatorioAberto] = useState(false)
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
   // Controle do leitor USB — detecta leitura rápida (< 80ms entre teclas)
   const scanBuffer = useRef('')
@@ -320,10 +322,24 @@ const Produtos: FC = () => {
     else alert(`Erro: ${resp.error}`)
   }
 
-  const imprimirRelatorio = async () => {
-    const html = gerarHtmlRelatorio(lista)
-    const resp = await window.api.impressao.imprimir(html, nomeImpressao.relatorioEstoque())
-    if (!resp.success) alert(`Erro ao imprimir: ${resp.error}`)
+  const gerarRelatorio = async (acao: 'pdf' | 'imprimir') => {
+    if (lista.length === 0) return
+    setGerandoRelatorio(true)
+    try {
+      const html = gerarHtmlRelatorio(lista)
+      const nome = nomeImpressao.relatorioEstoque()
+      const resp =
+        acao === 'pdf'
+          ? await window.api.impressao.salvarPdf(html, nome)
+          : await window.api.impressao.imprimir(html, nome)
+      if (!resp.success) {
+        alert(`Erro ao gerar relatório: ${resp.error}`)
+        return
+      }
+      setRelatorioAberto(false)
+    } finally {
+      setGerandoRelatorio(false)
+    }
   }
 
   return (
@@ -337,7 +353,11 @@ const Produtos: FC = () => {
               Categorias
             </Button>
           )}
-          <Button variant="outline" onClick={imprimirRelatorio} disabled={lista.length === 0}>
+          <Button
+            variant="outline"
+            onClick={() => setRelatorioAberto(true)}
+            disabled={lista.length === 0}
+          >
             <Printer className="w-4 h-4 mr-2" />
             Imprimir Estoque
           </Button>
@@ -633,6 +653,37 @@ const Produtos: FC = () => {
               {salvandoFornecedor ? 'Salvando...' : 'Cadastrar Fornecedor'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={relatorioAberto} onOpenChange={(open) => !open && setRelatorioAberto(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Relatório de estoque</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {lista.length} produto(s) em estoque. Escolha como deseja gerar o relatório.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => gerarRelatorio('pdf')}
+                disabled={gerandoRelatorio || lista.length === 0}
+              >
+                <FileDown className="w-3.5 h-3.5 mr-1.5" /> Salvar PDF
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => gerarRelatorio('imprimir')}
+                disabled={gerandoRelatorio || lista.length === 0}
+              >
+                <Printer className="w-3.5 h-3.5 mr-1.5" /> Imprimir
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

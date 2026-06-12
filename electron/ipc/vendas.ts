@@ -8,6 +8,7 @@ import {
   registrarPagamentoParcial,
   restaurarVenda,
   resumoDashboard,
+  produtosMaisVendidosNoMes,
   type DadosNovaVenda,
   type StatusPagamento,
   type SnapshotVenda
@@ -102,6 +103,14 @@ export function registrarHandlersVendas(): void {
   ipcMain.handle('vendas:resumoDashboard', () => {
     try {
       return { success: true, data: resumoDashboard() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('vendas:produtosMaisVendidos', (_event, mes: string) => {
+    try {
+      return { success: true, data: produtosMaisVendidosNoMes(mes) }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

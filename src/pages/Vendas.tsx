@@ -1,5 +1,5 @@
 import { FC, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Wallet, FileDown } from 'lucide-react'
+import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Wallet, FileDown, FileText } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ import ConsultaPreco from '@/components/ConsultaPreco'
 import { gerarHtmlCupomVenda } from '@/utils/cupomVenda'
 import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
+import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido } from '@/utils/relatorioVendas'
 import { usePdvMode, useSessao } from '@/App'
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
@@ -212,6 +213,10 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [devolverVendaId, setDevolverVendaId] = useState<number | null>(null)
   const [menuImprimir, setMenuImprimir] = useState<{ vendaId: number; devolucoes: DevolucaoComItens[] } | null>(null)
+  const [relatorioAberto, setRelatorioAberto] = useState(false)
+  const [relMes, setRelMes] = useState('') // mês escolhido dentro do diálogo de relatório
+  const [relIncluiProdutos, setRelIncluiProdutos] = useState(false)
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const { showToast } = useToast()
   const { ehDono } = useSessao()
 
@@ -266,6 +271,9 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
   const inicioPagina = (paginaAtual - 1) * ITENS_POR_PAGINA
   const listaPaginada = listaFiltrada.slice(inicioPagina, inicioPagina + ITENS_POR_PAGINA)
+
+  // Vendas do mês escolhido no diálogo de relatório — independente do filtro da lista.
+  const vendasDoMesRelatorio = relMes ? lista.filter((v) => v.data.slice(0, 7) === relMes) : []
 
   const verDetalhes = async (id: number) => {
     const resp = await window.api.vendas.buscarPorId(id)
@@ -342,20 +350,12 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
   }
 
-  // Clique em Imprimir/Salvar PDF: sem devolução age direto no cupom; com
-  // devolução, abre um menu pra escolher cupom da compra ou comprovante(s).
-  const aoClicarImprimir = async (v: Venda) => {
+  // Clique na impressora: abre um menu pra escolher Imprimir ou Salvar PDF.
+  // Sem devolução, mostra só o cupom da compra; com devolução, também os
+  // comprovante(s) de devolução.
+  const abrirMenuImprimir = async (v: Venda) => {
     if (!v.valor_devolvido || v.valor_devolvido <= 0) {
-      imprimirCupom(v.id)
-      return
-    }
-    const resp = await window.api.devolucoes.porVenda(v.id)
-    setMenuImprimir({ vendaId: v.id, devolucoes: resp.success ? resp.data : [] })
-  }
-
-  const aoClicarSalvarPdf = async (v: Venda) => {
-    if (!v.valor_devolvido || v.valor_devolvido <= 0) {
-      salvarPdfCupom(v.id)
+      setMenuImprimir({ vendaId: v.id, devolucoes: [] })
       return
     }
     const resp = await window.api.devolucoes.porVenda(v.id)
@@ -394,6 +394,33 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
   }
 
+  // Relatório de vendas do mês selecionado. O resumo gerencial sai de listaPorMes
+  // (já em memória); "mais vendidos" exige a query agregada no backend.
+  const gerarRelatorio = async (acao: 'pdf' | 'imprimir') => {
+    if (!relMes || vendasDoMesRelatorio.length === 0) return
+    setGerandoRelatorio(true)
+    try {
+      let maisVendidos: ProdutoMaisVendido[] | undefined
+      if (relIncluiProdutos) {
+        const r = await window.api.vendas.produtosMaisVendidos(relMes)
+        maisVendidos = r.success ? (r.data as ProdutoMaisVendido[]) : []
+      }
+      const html = gerarHtmlRelatorioVendas(vendasDoMesRelatorio, relMes, maisVendidos)
+      const nome = nomeImpressao.relatorioVendas(relMes)
+      const r =
+        acao === 'pdf'
+          ? await window.api.impressao.salvarPdf(html, nome)
+          : await window.api.impressao.imprimir(html, nome)
+      if (!r.success) {
+        showToast({ message: `Erro ao gerar relatório: ${r.error}`, variant: 'destructive' })
+        return
+      }
+      setRelatorioAberto(false)
+    } finally {
+      setGerandoRelatorio(false)
+    }
+  }
+
   const pagarParcela = async (parcelaId: number) => {
     const resp = await window.api.vendas.pagarParcela(parcelaId)
     if (vendaDetalhada) {
@@ -422,10 +449,20 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Vendas</h2>
-        <Button onClick={onNova}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Venda (PDV)
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => { setRelMes(filtroMes || mesMaximo); setRelatorioAberto(true) }}
+            disabled={lista.length === 0}
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Relatório do mês
+          </Button>
+          <Button onClick={onNova}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nova Venda (PDV)
+          </Button>
+        </div>
       </div>
 
       {/* Busca por cliente ou nº da venda */}
@@ -555,18 +592,10 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => aoClicarImprimir(v)}
-                      title="Imprimir cupom"
+                      onClick={() => abrirMenuImprimir(v)}
+                      title="Imprimir ou salvar cupom"
                     >
                       <Printer className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => aoClicarSalvarPdf(v)}
-                      title="Salvar cupom em PDF"
-                    >
-                      <FileDown className="w-4 h-4" />
                     </Button>
                     {v.status_pagamento === 'pago' && seloDevolucao(v)?.label !== 'Totalmente devolvida' && (
                       <Button
@@ -812,7 +841,9 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         {menuImprimir && (
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>Cupom ou comprovante?</DialogTitle>
+              <DialogTitle>
+                {menuImprimir.devolucoes.length > 0 ? 'Cupom ou comprovante?' : 'Cupom da venda'}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               {/* Cupom da compra */}
@@ -890,6 +921,77 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
             </div>
           </DialogContent>
         )}
+      </Dialog>
+
+      {/* Relatório do mês: escolhe o mês, o conteúdo e gera em PDF ou impressão */}
+      <Dialog open={relatorioAberto} onOpenChange={(open) => !open && setRelatorioAberto(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Relatório de {relMes ? rotuloMes(relMes) : 'vendas'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">Mês de referência</p>
+              <MesPicker
+                value={relMes}
+                onChange={setRelMes}
+                maxMes={mesMaximo}
+                placeholder="Selecione o mês"
+              />
+              {relMes && (
+                <p className="text-xs text-muted-foreground">
+                  {vendasDoMesRelatorio.length === 0
+                    ? 'Nenhuma venda neste mês.'
+                    : `${vendasDoMesRelatorio.length} venda(s) no mês.`}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => setRelIncluiProdutos(false)}
+                className={`w-full text-left rounded-lg border p-3 transition-colors ${
+                  !relIncluiProdutos ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'
+                }`}
+              >
+                <p className="text-sm font-medium">Resumo gerencial</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Faturamento, ticket médio, totais por status e por vendedor, e a lista das vendas.
+                </p>
+              </button>
+              <button
+                onClick={() => setRelIncluiProdutos(true)}
+                className={`w-full text-left rounded-lg border p-3 transition-colors ${
+                  relIncluiProdutos ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'
+                }`}
+              >
+                <p className="text-sm font-medium">Resumo + produtos mais vendidos</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tudo do resumo, mais o ranking de produtos vendidos no mês.
+                </p>
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => gerarRelatorio('pdf')}
+                disabled={gerandoRelatorio || !relMes || vendasDoMesRelatorio.length === 0}
+              >
+                <FileDown className="w-3.5 h-3.5 mr-1.5" />
+                Salvar PDF
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => gerarRelatorio('imprimir')}
+                disabled={gerandoRelatorio || !relMes || vendasDoMesRelatorio.length === 0}
+              >
+                <Printer className="w-3.5 h-3.5 mr-1.5" />
+                Imprimir
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
       </Dialog>
 
       <ModalDevolucao

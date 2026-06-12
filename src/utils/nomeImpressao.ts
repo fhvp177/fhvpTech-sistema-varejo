@@ -19,5 +19,7 @@ export const nomeImpressao = {
   devolucao: (devId: number, vendaId: number): string =>
     `Devolucao-${pad(devId)}-ref-Venda-${pad(vendaId)}`,
   relatorioEstoque: (d: Date = new Date()): string => `Relatorio-Estoque-${dataSlug(d)}`,
+  // mes vem como 'YYYY-MM' (já filesystem-safe) — ex.: Relatorio-Vendas-2026-06
+  relatorioVendas: (mes: string): string => `Relatorio-Vendas-${mes}`,
   etiquetas: (d: Date = new Date()): string => `Etiquetas-${dataHoraSlug(d)}`
 }
