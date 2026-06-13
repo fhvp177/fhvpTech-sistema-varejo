@@ -23,14 +23,14 @@ import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
 import Configuracoes from './pages/Configuracoes'
 import TelaRestauracao from './pages/TelaRestauracao'
-import LicencaBloqueada from './pages/LicencaBloqueada'
+import LicencaBloqueada from '@fhvptech/core/ui/LicencaBloqueada'
 import LoginSistema from './pages/LoginSistema'
 import ModalCadastrarEmailDono from './components/ModalCadastrarEmailDono'
 import IndicadorBackupAtivo from './components/backup/IndicadorBackupAtivo'
 import AlertaBackupFalhando from './components/backup/AlertaBackupFalhando'
 import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
 import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
-import ModalPagamentoPix from './components/ModalPagamentoPix'
+import ModalPagamentoPix from '@fhvptech/core/ui/ModalPagamentoPix'
 import ErrorBoundary from './components/ErrorBoundary'
 import RotaSomenteDono from './components/RotaSomenteDono'
 import { ToastProvider, useToast } from '@fhvptech/core/ui/toast'
@@ -189,6 +189,7 @@ const App: FC = () => {
       <>
         <LicencaBloqueada
           mensagemInicial={mensagemLicenca}
+          subtitulo="Sistema de Gestão de Varejo"
           onAtivar={(dias) => { setEstadoLicenca('valida'); if (dias !== undefined) setDiasRestantes(dias) }}
           onRenovarComPix={abrirPagamento}
         />

@@ -1,14 +1,16 @@
 import { FC, useEffect, useState } from 'react'
 import { QrCode } from 'lucide-react'
-import logoEmpresa from '@/assets/logo.png'
+import logoEmpresa from './assets/logo.png'
 
 type Props = {
   mensagemInicial: string
+  // Subtítulo sob o logo — varia por nicho (ex.: "Sistema de Gestão Veterinária").
+  subtitulo: string
   onAtivar: (diasRestantes?: number) => void
   onRenovarComPix: () => void
 }
 
-const LicencaBloqueada: FC<Props> = ({ mensagemInicial, onAtivar, onRenovarComPix }) => {
+const LicencaBloqueada: FC<Props> = ({ mensagemInicial, subtitulo, onAtivar, onRenovarComPix }) => {
   const [chave, setChave] = useState('')
   const [erro, setErro] = useState(mensagemInicial)
   const [carregando, setCarregando] = useState(false)
@@ -52,7 +54,7 @@ const LicencaBloqueada: FC<Props> = ({ mensagemInicial, onAtivar, onRenovarComPi
             alt="FHVP Tech"
             className="w-32 h-32 mx-auto mb-3 object-contain"
           />
-          <p className="text-slate-500 text-sm">Sistema de Gestão de Varejo</p>
+          <p className="text-slate-500 text-sm">{subtitulo}</p>
         </div>
 
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">

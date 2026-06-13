@@ -14,20 +14,47 @@ import {
 // não achar que travou após pagar.
 const INTERVALO_POLLING_MS = 4000
 
-// Plano único por enquanto. Quando tiver mais opções, vira um seletor.
-const PLANO_PADRAO = {
+type PlanoLicenca = {
+  diasContratados: number
+  valorCentavos: number
+  rotulo: string
+}
+
+// Plano padrão (varejo). Cada nicho pode passar o seu via prop `plano` — o
+// preço é de cada app; o código de pagamento é que é compartilhado.
+const PLANO_PADRAO: PlanoLicenca = {
   diasContratados: 30,
   valorCentavos: 8000,
   rotulo: '30 dias'
+}
+
+type CobrancaPix = {
+  txid: string
+  clienteId: string
+  valorCentavos: number
+  diasContratados: number
+  status: 'pendente' | 'paga' | 'expirada'
+  qrcode: string
+  qrcodeBase64: string
+  criadaEm: string
+  expiraEm: string
+  pagaEm?: string
+  chaveLicencaGerada?: string
 }
 
 type Props = {
   aberto: boolean
   onClose: () => void
   onLicencaRenovada: () => void
+  plano?: PlanoLicenca
 }
 
-const ModalPagamentoPix: FC<Props> = ({ aberto, onClose, onLicencaRenovada }) => {
+const ModalPagamentoPix: FC<Props> = ({
+  aberto,
+  onClose,
+  onLicencaRenovada,
+  plano = PLANO_PADRAO
+}) => {
   const [cobranca, setCobranca] = useState<CobrancaPix | null>(null)
   const [carregando, setCarregando] = useState(false)
   const [ativando, setAtivando] = useState(false)
@@ -39,8 +66,8 @@ const ModalPagamentoPix: FC<Props> = ({ aberto, onClose, onLicencaRenovada }) =>
     setCarregando(true)
     setErro(null)
     const resp = await window.api.licenca.criarCobranca({
-      diasContratados: PLANO_PADRAO.diasContratados,
-      valorCentavos: PLANO_PADRAO.valorCentavos
+      diasContratados: plano.diasContratados,
+      valorCentavos: plano.valorCentavos
     })
     setCarregando(false)
     if (!resp.success) {
@@ -150,7 +177,7 @@ const ModalPagamentoPix: FC<Props> = ({ aberto, onClose, onLicencaRenovada }) =>
             <div className="text-center">
               <p className="text-2xl font-bold">{valorFormatado}</p>
               <p className="text-sm text-muted-foreground">
-                Plano de {PLANO_PADRAO.rotulo}
+                Plano de {plano.rotulo}
               </p>
             </div>
 
