@@ -5,6 +5,8 @@ import { inicializarBancoDeDados, obterBancoDeDados } from '@fhvptech/core/elect
 import { executarMigrations } from '@fhvptech/core/electron/db/migrations'
 import { criarTabelas } from './db/schema'
 import { MIGRATIONS } from './db/migrations'
+import { registrarHandlersLicenca } from '@fhvptech/core/electron/ipc/licenca'
+import { registrarHandlersLicencaPagamento } from '@fhvptech/core/electron/ipc/licenca-pagamento'
 
 function criarJanela(): void {
   const janela = new BrowserWindow({
@@ -40,11 +42,12 @@ function criarJanela(): void {
 }
 
 app.whenReady().then(() => {
-  // Reaproveita a camada de banco e o runner de migrations do @fhvptech/core —
-  // exatamente o que a gente extraiu pro core. Backup e licença entram nos
-  // próximos passos (backup precisa virar migration do core; licença será movida).
+  // Reaproveita banco, migrations e licença do @fhvptech/core (compartilhados
+  // com o varejo). Backup entra quando suas tabelas virarem migration do core.
   inicializarBancoDeDados(criarTabelas)
   executarMigrations(obterBancoDeDados(), MIGRATIONS)
+  registrarHandlersLicenca()
+  registrarHandlersLicencaPagamento()
 
   criarJanela()
 
