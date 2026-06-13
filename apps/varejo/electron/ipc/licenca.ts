@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { validarLicenca, ativarLicenca } from '../licenca'
+import { validarLicenca, ativarLicenca } from '@fhvptech/core/electron/licenca'
 
 export function registrarHandlersLicenca(): void {
   ipcMain.handle('licenca:validar', () => {

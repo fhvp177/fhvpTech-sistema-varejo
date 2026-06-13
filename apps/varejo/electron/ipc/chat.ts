@@ -7,7 +7,7 @@
 // Ver electron/chat/ferramentas.ts (tools) e backend/src/chat.ts (proxy).
 
 import { ipcMain } from 'electron'
-import { extrairClienteIdLocal } from '../licenca'
+import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
 import { TOOLS, executarTool } from '../chat/ferramentas'
 
 // Mesmo backend usado na renovação de licença (ipc/licenca-pagamento.ts).

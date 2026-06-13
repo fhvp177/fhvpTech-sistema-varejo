@@ -6,7 +6,7 @@
 // dá pra renovar (primeira venda continua sendo manual).
 
 import { ipcMain } from 'electron'
-import { extrairClienteIdLocal } from '../licenca'
+import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
 
 // URL do backend de licenciamento. Mude pra http://localhost:8080 se quiser
 // testar contra o backend rodando localmente (npm run dev em backend/).

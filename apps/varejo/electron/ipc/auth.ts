@@ -13,7 +13,7 @@ import {
   verificarPinVendedor
 } from '../auth'
 import { definirSessao, limparSessao, obterSessao, requerDono } from '../sessao'
-import { extrairClienteIdLocal } from '../licenca'
+import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
 import { listarParaLogin } from '../db/queries/vendedores'
 
 // Mesmo backend do chat/renovação (ipc/chat.ts, ipc/licenca-pagamento.ts).
