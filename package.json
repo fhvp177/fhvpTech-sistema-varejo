@@ -11,6 +11,8 @@
     "dev:varejo": "npm run dev --workspace apps/varejo",
     "build:varejo": "npm run build --workspace apps/varejo",
     "dist:varejo:win": "npm run dist:win --workspace apps/varejo",
+    "dev:vet": "npm run dev --workspace apps/veterinaria",
+    "build:vet": "npm run build --workspace apps/veterinaria",
     "test": "npm run test --workspaces --if-present"
   }
 }

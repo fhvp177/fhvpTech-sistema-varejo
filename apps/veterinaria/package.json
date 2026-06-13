@@ -1,0 +1,35 @@
+{
+  "name": "@fhvptech/veterinaria",
+  "version": "0.1.0",
+  "description": "Sistema de gestão para clínica veterinária (FHVP Tech)",
+  "main": "out/main/index.js",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "rebuild-native": "electron-builder install-app-deps",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "@fhvptech/core": "*",
+    "better-sqlite3": "^12.10.0",
+    "electron-updater": "^6.8.3"
+  },
+  "build": {
+    "appId": "com.fhvp.vet",
+    "productName": "FHVP Tech Veterinária",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
