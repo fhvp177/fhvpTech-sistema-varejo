@@ -24,5 +24,15 @@ export function criarTabelas(db: Database.Database): void {
       data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tutor_id) REFERENCES tutores(id)
     );
+
+    -- Tabela de plataforma (licença). Mesma estrutura do varejo; o código que
+    -- a usa vem do @fhvptech/core. A licença em si é validada/assinada pelo
+    -- mesmo backend (mesmas chaves), só muda o identificador de cada cliente.
+    CREATE TABLE IF NOT EXISTS licenca (
+      id INTEGER PRIMARY KEY,
+      chave TEXT NOT NULL,
+      data_expiracao DATE NOT NULL,
+      ativo BOOLEAN DEFAULT 1
+    );
   `)
 }
