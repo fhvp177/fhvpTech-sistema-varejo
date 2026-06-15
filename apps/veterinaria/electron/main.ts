@@ -7,6 +7,22 @@ import { criarTabelas } from './db/schema'
 import { MIGRATIONS } from './db/migrations'
 import { registrarHandlersLicenca } from '@fhvptech/core/electron/ipc/licenca'
 import { registrarHandlersLicencaPagamento } from '@fhvptech/core/electron/ipc/licenca-pagamento'
+import { configurarAuthStore } from '@fhvptech/core/electron/auth/store'
+import { registrarHandlersAuth } from '@fhvptech/core/electron/ipc/auth'
+import {
+  obterUsuario,
+  listarParaLogin,
+  obterPinHash,
+  gravarPinHash,
+  contarDonosAtivos
+} from './db/queries/usuarios'
+import {
+  obterUsuarioAtivoPorEmail,
+  salvarCodigoRecuperacao,
+  obterCodigoRecuperacao,
+  incrementarTentativasCodigo,
+  apagarCodigosRecuperacao
+} from './db/queries/recuperacao'
 
 function criarJanela(): void {
   const janela = new BrowserWindow({
@@ -46,8 +62,25 @@ app.whenReady().then(() => {
   // com o varejo). Backup entra quando suas tabelas virarem migration do core.
   inicializarBancoDeDados(criarTabelas)
   executarMigrations(obterBancoDeDados(), MIGRATIONS)
+
+  // Injeta a "loja de usuários" da vet no motor de auth do core ANTES de
+  // registrar os handlers (que dependem dela). Tabela `usuarios` + recuperação.
+  configurarAuthStore({
+    obterUsuario,
+    listarParaLogin,
+    obterPinHash,
+    gravarPinHash,
+    contarDonosAtivos,
+    obterUsuarioAtivoPorEmail,
+    salvarCodigoRecuperacao,
+    obterCodigoRecuperacao,
+    incrementarTentativasCodigo,
+    apagarCodigosRecuperacao
+  })
+
   registrarHandlersLicenca()
   registrarHandlersLicencaPagamento()
+  registrarHandlersAuth()
 
   criarJanela()
 

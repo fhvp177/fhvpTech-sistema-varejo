@@ -34,5 +34,41 @@ export function criarTabelas(db: Database.Database): void {
       data_expiracao DATE NOT NULL,
       ativo BOOLEAN DEFAULT 1
     );
+
+    -- Tabela de plataforma (config chave/valor). O auto-lock do auth lê/grava
+    -- aqui via @fhvptech/core/electron/backup/configBackup. No varejo nasce na
+    -- migration de backup; na vet criamos direto pois o backup ainda não entrou.
+    CREATE TABLE IF NOT EXISTS config (
+      chave TEXT PRIMARY KEY,
+      valor TEXT
+    );
+
+    -- Usuários do sistema (dono + funcionários da clínica). É a "loja de
+    -- usuários" que o motor de auth do @fhvptech/core consome (ver AuthStore).
+    -- pin_hash NUNCA sai do main process. papel: 'dono' | 'funcionario'.
+    CREATE TABLE IF NOT EXISTS usuarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      ativo INTEGER NOT NULL DEFAULT 1,
+      papel TEXT NOT NULL DEFAULT 'funcionario',
+      pin_hash TEXT,
+      email TEXT,
+      data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Códigos de recuperação de PIN por email (hash bcrypt, validade, tentativas).
+    -- 1 código ativo por usuário. Gerado/validado localmente; o backend Fly só
+    -- envia o email.
+    CREATE TABLE IF NOT EXISTS recuperacao_codigos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario_id INTEGER NOT NULL,
+      codigo_hash TEXT NOT NULL,
+      expira_em TEXT NOT NULL,
+      tentativas INTEGER NOT NULL DEFAULT 0,
+      criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_recuperacao_usuario ON recuperacao_codigos(usuario_id);
   `)
 }
