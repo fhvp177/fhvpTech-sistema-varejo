@@ -13,7 +13,8 @@
   "dependencies": {
     "@fhvptech/core": "*",
     "better-sqlite3": "^12.10.0",
-    "electron-updater": "^6.8.3"
+    "electron-updater": "^6.8.3",
+    "react-router-dom": "^6.24.0"
   },
   "build": {
     "appId": "com.fhvp.vet",

@@ -2,6 +2,9 @@
 // Mantido em sync com electron/preload.ts. A vet usa os canais GENÉRICOS de auth
 // do @fhvptech/core (usuario, papel 'dono' | 'funcionario').
 
+// Injetado em build-time pelo electron.vite.config.ts a partir de package.json.version
+declare const __APP_VERSION__: string
+
 type RespostaIPC<T = unknown> = { success: true; data: T } | { success: false; error: string }
 
 type StatusLicenca = {
