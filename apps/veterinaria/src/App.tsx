@@ -26,6 +26,9 @@ import ModalPagamentoPix from '@fhvptech/core/ui/ModalPagamentoPix'
 import LoginSistema from '@fhvptech/core/ui/LoginSistema'
 import { useAutoLock } from '@fhvptech/core/lib/useAutoLock'
 import Configuracoes from './pages/Configuracoes'
+import Tutores from './pages/Tutores'
+import Servicos from './pages/Servicos'
+import Produtos from './pages/Produtos'
 
 type EstadoLicenca = 'verificando' | 'valida' | 'invalida'
 type EstadoAuth = 'verificando' | 'bloqueado' | 'desbloqueado'
@@ -203,33 +206,9 @@ export default function App() {
                     />
                   }
                 />
-                <Route
-                  path="/tutores"
-                  element={
-                    <EmConstrucao
-                      titulo="Tutores & Pets"
-                      descricao="Cadastro de tutores e seus pets."
-                    />
-                  }
-                />
-                <Route
-                  path="/servicos"
-                  element={
-                    <EmConstrucao
-                      titulo="Serviços"
-                      descricao="Catálogo de serviços (consulta, banho, cirurgia)."
-                    />
-                  }
-                />
-                <Route
-                  path="/produtos"
-                  element={
-                    <EmConstrucao
-                      titulo="Produtos"
-                      descricao="Catálogo de produtos e medicamentos, com estoque."
-                    />
-                  }
-                />
+                <Route path="/tutores" element={<Tutores />} />
+                <Route path="/servicos" element={<Servicos />} />
+                <Route path="/produtos" element={<Produtos />} />
                 <Route
                   path="/configuracoes"
                   element={

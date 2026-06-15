@@ -51,6 +51,60 @@ const api = {
       ipcRenderer.invoke('usuarios:redefinirPin', id, novoPin)
   },
 
+  // Cadastro de tutores e seus pets.
+  tutores: {
+    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('tutores:listar'),
+    criar: (dados: {
+      nome: string
+      telefone?: string | null
+      email?: string | null
+    }): Promise<RespostaIPC> => ipcRenderer.invoke('tutores:criar', dados),
+    atualizar: (
+      id: number,
+      dados: { nome?: string; telefone?: string | null; email?: string | null }
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('tutores:atualizar', id, dados),
+    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('tutores:deletar', id)
+  },
+
+  pets: {
+    listar: (tutorId: number): Promise<RespostaIPC> => ipcRenderer.invoke('pets:listar', tutorId),
+    criar: (
+      tutorId: number,
+      dados: { nome: string; especie?: string | null; raca?: string | null; nascimento?: string | null }
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('pets:criar', tutorId, dados),
+    atualizar: (
+      id: number,
+      dados: { nome?: string; especie?: string | null; raca?: string | null; nascimento?: string | null }
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('pets:atualizar', id, dados),
+    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('pets:deletar', id)
+  },
+
+  // Catálogo de serviços.
+  servicos: {
+    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('servicos:listar'),
+    criar: (dados: { nome: string; preco: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('servicos:criar', dados),
+    atualizar: (id: number, dados: { nome?: string; preco?: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('servicos:atualizar', id, dados),
+    alternarAtivo: (id: number, ativo: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('servicos:alternarAtivo', id, ativo),
+    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('servicos:deletar', id)
+  },
+
+  // Catálogo de produtos/medicamentos.
+  produtos: {
+    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('produtos:listar'),
+    criar: (dados: { nome: string; preco: number; estoque?: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('produtos:criar', dados),
+    atualizar: (
+      id: number,
+      dados: { nome?: string; preco?: number; estoque?: number }
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('produtos:atualizar', id, dados),
+    alternarAtivo: (id: number, ativo: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('produtos:alternarAtivo', id, ativo),
+    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('produtos:deletar', id)
+  },
+
   licenca: {
     validar: (): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:validar'),
     ativar: (chave: string): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:ativar', chave),

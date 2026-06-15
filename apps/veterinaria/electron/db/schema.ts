@@ -70,5 +70,25 @@ export function criarTabelas(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_recuperacao_usuario ON recuperacao_codigos(usuario_id);
+
+    -- Catálogo de serviços (consulta, banho, cirurgia, vacina aplicada...).
+    -- ativo permite aposentar um serviço sem apagar o histórico de vendas.
+    CREATE TABLE IF NOT EXISTS servicos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL,
+      preco REAL NOT NULL DEFAULT 0,
+      ativo INTEGER NOT NULL DEFAULT 1,
+      data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Catálogo de produtos/medicamentos com estoque simples (ração, remédio...).
+    CREATE TABLE IF NOT EXISTS produtos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL,
+      preco REAL NOT NULL DEFAULT 0,
+      estoque INTEGER NOT NULL DEFAULT 0,
+      ativo INTEGER NOT NULL DEFAULT 1,
+      data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `)
 }

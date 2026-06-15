@@ -38,6 +38,36 @@ type SessaoUsuario = {
   tem_pin: number
 }
 
+type Tutor = {
+  id: number
+  nome: string
+  telefone: string | null
+  email: string | null
+  data_cadastro: string
+  pets_count: number
+}
+
+type Pet = {
+  id: number
+  tutor_id: number
+  nome: string
+  especie: string | null
+  raca: string | null
+  nascimento: string | null
+  data_cadastro: string
+}
+
+type Servico = { id: number; nome: string; preco: number; ativo: number; data_cadastro: string }
+
+type Produto = {
+  id: number
+  nome: string
+  preco: number
+  estoque: number
+  ativo: number
+  data_cadastro: string
+}
+
 interface Window {
   api: {
     licenca: {
@@ -93,6 +123,62 @@ interface Window {
       alterarPapel: (id: number, papel: 'dono' | 'funcionario') => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>
       redefinirPin: (id: number, novoPin: string) => Promise<RespostaIPC>
+    }
+    tutores: {
+      listar: () => Promise<RespostaIPC<Tutor[]>>
+      criar: (dados: {
+        nome: string
+        telefone?: string | null
+        email?: string | null
+      }) => Promise<RespostaIPC<{ id: number }>>
+      atualizar: (
+        id: number,
+        dados: { nome?: string; telefone?: string | null; email?: string | null }
+      ) => Promise<RespostaIPC>
+      deletar: (id: number) => Promise<RespostaIPC>
+    }
+    pets: {
+      listar: (tutorId: number) => Promise<RespostaIPC<Pet[]>>
+      criar: (
+        tutorId: number,
+        dados: {
+          nome: string
+          especie?: string | null
+          raca?: string | null
+          nascimento?: string | null
+        }
+      ) => Promise<RespostaIPC<{ id: number }>>
+      atualizar: (
+        id: number,
+        dados: {
+          nome?: string
+          especie?: string | null
+          raca?: string | null
+          nascimento?: string | null
+        }
+      ) => Promise<RespostaIPC>
+      deletar: (id: number) => Promise<RespostaIPC>
+    }
+    servicos: {
+      listar: () => Promise<RespostaIPC<Servico[]>>
+      criar: (dados: { nome: string; preco: number }) => Promise<RespostaIPC<{ id: number }>>
+      atualizar: (id: number, dados: { nome?: string; preco?: number }) => Promise<RespostaIPC>
+      alternarAtivo: (id: number, ativo: boolean) => Promise<RespostaIPC>
+      deletar: (id: number) => Promise<RespostaIPC>
+    }
+    produtos: {
+      listar: () => Promise<RespostaIPC<Produto[]>>
+      criar: (dados: {
+        nome: string
+        preco: number
+        estoque?: number
+      }) => Promise<RespostaIPC<{ id: number }>>
+      atualizar: (
+        id: number,
+        dados: { nome?: string; preco?: number; estoque?: number }
+      ) => Promise<RespostaIPC>
+      alternarAtivo: (id: number, ativo: boolean) => Promise<RespostaIPC>
+      deletar: (id: number) => Promise<RespostaIPC>
     }
   }
 }
