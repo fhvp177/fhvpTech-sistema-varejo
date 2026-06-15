@@ -9,6 +9,7 @@ import { registrarHandlersLicenca } from '@fhvptech/core/electron/ipc/licenca'
 import { registrarHandlersLicencaPagamento } from '@fhvptech/core/electron/ipc/licenca-pagamento'
 import { configurarAuthStore } from '@fhvptech/core/electron/auth/store'
 import { registrarHandlersAuth } from '@fhvptech/core/electron/ipc/auth'
+import { registrarHandlersUsuarios } from './ipc/usuarios'
 import {
   obterUsuario,
   listarParaLogin,
@@ -81,6 +82,7 @@ app.whenReady().then(() => {
   registrarHandlersLicenca()
   registrarHandlersLicencaPagamento()
   registrarHandlersAuth()
+  registrarHandlersUsuarios()
 
   criarJanela()
 

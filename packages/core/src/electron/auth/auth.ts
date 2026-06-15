@@ -60,6 +60,16 @@ export async function alterarPin(
   obterAuthStore().gravarPinHash(usuarioId, hash)
 }
 
+// Redefinição forçada pelo dono (ex.: usuário esqueceu o PIN). Não exige o PIN
+// atual — quem chama deve garantir a permissão (requerDono no handler).
+export async function redefinirPin(usuarioId: number, novoPin: string): Promise<void> {
+  validarFormatoPin(novoPin)
+  const store = obterAuthStore()
+  if (!store.obterUsuario(usuarioId)) throw new Error('Usuário não encontrado.')
+  const hash = await gerarHash(novoPin)
+  store.gravarPinHash(usuarioId, hash)
+}
+
 // Usado pelo modal "elevar privilégio": qualquer dono ativo cujo PIN bate libera.
 // Retorna o id do dono que autenticou (pra auditoria futura) ou null.
 export async function verificarPinDono(pin: string): Promise<number | null> {

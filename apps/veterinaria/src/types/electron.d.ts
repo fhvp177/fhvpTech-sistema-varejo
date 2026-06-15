@@ -80,5 +80,19 @@ interface Window {
       ) => Promise<RespostaIPC<{ ok: boolean; sessao?: SessaoUsuario | null }>>
       setarAutoLock: (minutos: number) => Promise<RespostaIPC>
     }
+    usuarios: {
+      listar: () => Promise<RespostaIPC<SessaoUsuario[]>>
+      criar: (dados: { nome: string; email?: string | null }) => Promise<
+        RespostaIPC<{ id: number; nome: string }>
+      >
+      atualizar: (
+        id: number,
+        dados: { nome?: string; email?: string | null }
+      ) => Promise<RespostaIPC>
+      alternarAtivo: (id: number, ativo: boolean) => Promise<RespostaIPC>
+      alterarPapel: (id: number, papel: 'dono' | 'funcionario') => Promise<RespostaIPC>
+      deletar: (id: number) => Promise<RespostaIPC>
+      redefinirPin: (id: number, novoPin: string) => Promise<RespostaIPC>
+    }
   }
 }

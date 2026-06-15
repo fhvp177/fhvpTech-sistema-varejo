@@ -25,6 +25,7 @@ import LicencaBloqueada from '@fhvptech/core/ui/LicencaBloqueada'
 import ModalPagamentoPix from '@fhvptech/core/ui/ModalPagamentoPix'
 import LoginSistema from '@fhvptech/core/ui/LoginSistema'
 import { useAutoLock } from '@fhvptech/core/lib/useAutoLock'
+import Configuracoes from './pages/Configuracoes'
 
 type EstadoLicenca = 'verificando' | 'valida' | 'invalida'
 type EstadoAuth = 'verificando' | 'bloqueado' | 'desbloqueado'
@@ -233,10 +234,7 @@ export default function App() {
                   path="/configuracoes"
                   element={
                     <RotaSomenteDono titulo="Configurações">
-                      <EmConstrucao
-                        titulo="Configurações"
-                        descricao="Segurança (auto-lock, e-mail de recuperação) e gestão de usuários entram aqui."
-                      />
+                      <Configuracoes />
                     </RotaSomenteDono>
                   }
                 />

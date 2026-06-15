@@ -35,6 +35,22 @@ const api = {
       ipcRenderer.invoke('auth:setarAutoLock', minutos)
   },
 
+  // Gestão de usuários (área do dono).
+  usuarios: {
+    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('usuarios:listar'),
+    criar: (dados: { nome: string; email?: string | null }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('usuarios:criar', dados),
+    atualizar: (id: number, dados: { nome?: string; email?: string | null }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('usuarios:atualizar', id, dados),
+    alternarAtivo: (id: number, ativo: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('usuarios:alternarAtivo', id, ativo),
+    alterarPapel: (id: number, papel: 'dono' | 'funcionario'): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('usuarios:alterarPapel', id, papel),
+    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('usuarios:deletar', id),
+    redefinirPin: (id: number, novoPin: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('usuarios:redefinirPin', id, novoPin)
+  },
+
   licenca: {
     validar: (): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:validar'),
     ativar: (chave: string): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:ativar', chave),
