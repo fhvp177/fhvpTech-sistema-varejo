@@ -28,6 +28,14 @@ import { registrarHandlersDevolucoes } from './ipc/devolucoes'
 import { registrarHandlersLoja } from './ipc/loja'
 import { inicializarAtualizador } from './atualizador'
 
+// A pasta de dados (banco + licença + heartbeat) segue, por padrão, o
+// productName do Electron. Como renomeamos o productName de "Sistema RT" para
+// "FHVP Tech Varejo" SEM migrar a pasta das instalações que já existem, fixamos
+// o userData no nome legado. Assim os clientes atuais continuam achando o banco
+// e a licença depois da atualização, e instalações novas usam a mesma pasta.
+// NÃO ALTERAR: mudar este caminho órfã o banco e a licença de TODAS as máquinas.
+app.setPath('userData', join(app.getPath('appData'), 'Sistema RT'))
+
 let janelaAtual: BrowserWindow | null = null
 
 function criarJanelaPrincipal(): void {

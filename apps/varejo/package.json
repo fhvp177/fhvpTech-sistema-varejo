@@ -1,6 +1,6 @@
 {
   "name": "sistema-rt",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "Sistema de gestão para pequenas lojas de varejo",
   "main": "out/main/index.js",
   "author": "",
@@ -68,7 +68,7 @@
   },
   "build": {
     "appId": "com.sistemaRT.app",
-    "productName": "Sistema RT",
+    "productName": "FHVP Tech Varejo",
     "directories": {
       "output": "dist",
       "buildResources": "resources"
