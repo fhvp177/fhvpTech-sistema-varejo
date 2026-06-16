@@ -17,6 +17,7 @@ import { aplicar015CleanupPinLegado } from './015_cleanup_pin_legado'
 import { aplicar016Devolucoes } from './016_devolucoes'
 import { aplicar017RecuperacaoCodigos } from './017_recuperacao_codigos'
 import { aplicar018ClientesObservacao } from './018_clientes_observacao'
+import { aplicar019EntradaVenda } from './019_entrada_venda'
 
 // Lista de migrations do varejo, na ordem de aplicação. O runner genérico
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
@@ -40,4 +41,5 @@ export const MIGRATIONS: Migration[] = [
   { nome: '016_devolucoes', aplicar: aplicar016Devolucoes },
   { nome: '017_recuperacao_codigos', aplicar: aplicar017RecuperacaoCodigos },
   { nome: '018_clientes_observacao', aplicar: aplicar018ClientesObservacao },
+  { nome: '019_entrada_venda', aplicar: aplicar019EntradaVenda },
 ]

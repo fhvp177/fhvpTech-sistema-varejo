@@ -14,6 +14,7 @@ import { IMaskInput } from 'react-imask'
 import ClienteSeletor from '@/components/ClienteSeletor'
 import { useToast } from '@fhvptech/core/ui/toast'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
+import { obterDadosLoja } from '@/utils/dadosLoja'
 
 type ItemDevolvivel = {
   item_venda_id: number
@@ -214,6 +215,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
           valor_unitario: it.valor_unitario_devolvido
         }))
       // Imprime o comprovante; não bloqueia nem reverte o sucesso se falhar.
+      const loja = await obterDadosLoja()
       window.api.impressao.imprimir(
         gerarHtmlComprovanteDevolucao({
           id: dev.id,
@@ -228,7 +230,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
               ? +(saldoAtual + totalDevolver).toFixed(2)
               : null,
           itens: itensComprovante
-        })
+        }, loja)
       )
       showToast({
         message:

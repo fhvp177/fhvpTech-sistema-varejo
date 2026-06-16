@@ -1,9 +1,11 @@
-import { FC, useEffect, useState } from 'react'
+import { FC, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
+import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store } from 'lucide-react'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
+import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,13 @@ const Configuracoes: FC = () => {
   const [fazendoBackup, setFazendoBackup] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
 
+  // Dados da loja (identidade no cupom)
+  const [loja, setLoja] = useState<DadosLoja | null>(null)
+  const [salvandoLoja, setSalvandoLoja] = useState(false)
+  const [feedbackLoja, setFeedbackLoja] = useState<Feedback | null>(null)
+  const [erroLogo, setErroLogo] = useState('')
+  const inputLogoRef = useRef<HTMLInputElement>(null)
+
   const carregarStatus = async () => {
     const resp = await window.api.backup.obterStatus()
     if (resp.success) {
@@ -67,6 +76,38 @@ const Configuracoes: FC = () => {
   }
 
   useEffect(() => { carregarStatus() }, [])
+
+  useEffect(() => { obterDadosLoja().then(setLoja) }, [])
+
+  const atualizarLoja = (campo: keyof DadosLoja, valor: string | boolean | null) =>
+    setLoja((prev) => (prev ? { ...prev, [campo]: valor } : prev))
+
+  const onSelecionarLogo = async (e: ChangeEvent<HTMLInputElement>) => {
+    const arquivo = e.target.files?.[0]
+    e.target.value = '' // permite re-selecionar o mesmo arquivo depois
+    if (!arquivo) return
+    setErroLogo('')
+    try {
+      const dataUri = await redimensionarLogo(arquivo)
+      // Ao subir uma logo, já liga a exibição (foi o que o usuário quis ao subir).
+      setLoja((prev) => (prev ? { ...prev, logo: dataUri, exibir_logo: true } : prev))
+    } catch (err) {
+      setErroLogo((err as Error).message)
+    }
+  }
+
+  const salvarLoja = async () => {
+    if (!loja) return
+    setSalvandoLoja(true)
+    const r = await window.api.loja.salvar(loja)
+    setSalvandoLoja(false)
+    setFeedbackLoja(
+      r.success
+        ? { tipo: 'ok', msg: 'Dados da loja salvos! Já valem no próximo cupom.' }
+        : { tipo: 'erro', msg: r.error }
+    )
+    setTimeout(() => setFeedbackLoja(null), 4000)
+  }
 
   const carregarInfoAtualizacao = async (): Promise<void> => {
     const resp = await window.api.atualizacao.obterInfo()
@@ -210,6 +251,149 @@ const Configuracoes: FC = () => {
       <div className="space-y-4 mb-10">
         <h3 className="text-lg font-semibold border-b pb-2">Segurança</h3>
         <ConfigSeguranca />
+      </div>
+
+      {/* ── Dados da loja (identidade no cupom) ── */}
+      <div className="space-y-4 mb-10">
+        <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
+          <Store className="w-4 h-4" /> Dados da loja
+        </h3>
+        <p className="text-sm text-muted-foreground -mt-1">
+          Nome, CNPJ e endereço que aparecem no cupom e no comprovante de devolução.
+          A logo é opcional e pode ser exibida no topo dos cupons.
+        </p>
+
+        {loja && (
+          <div className="space-y-4">
+            {/* Logo */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-4">
+                <div className="w-24 h-24 rounded-lg border bg-muted/30 flex items-center justify-center overflow-hidden shrink-0">
+                  {loja.logo ? (
+                    <img src={loja.logo} alt="Logo da loja" className="max-w-full max-h-full object-contain" />
+                  ) : (
+                    <Store className="w-8 h-8 text-muted-foreground/40" />
+                  )}
+                </div>
+                <div className="flex-1 space-y-2">
+                  <input
+                    ref={inputLogoRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={onSelecionarLogo}
+                    className="hidden"
+                  />
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => inputLogoRef.current?.click()}>
+                      <Upload className="w-3.5 h-3.5 mr-1.5" />
+                      {loja.logo ? 'Trocar logo' : 'Enviar logo'}
+                    </Button>
+                    {loja.logo && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => atualizarLoja('logo', null)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                        Remover
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    PNG ou JPG. A imagem é reduzida automaticamente para caber no cupom.
+                  </p>
+                  {erroLogo && <p className="text-xs text-destructive">{erroLogo}</p>}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-t pt-3">
+                <div>
+                  <p className="font-medium text-sm">Exibir logo nos cupons</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Mostra a logo no topo do cupom e do comprovante de devolução.
+                  </p>
+                </div>
+                <button
+                  onClick={() => atualizarLoja('exibir_logo', !loja.exibir_logo)}
+                  disabled={!loja.logo}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ml-4 disabled:opacity-40 ${
+                    loja.exibir_logo ? 'bg-primary' : 'bg-muted-foreground/30'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      loja.exibir_logo ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Campos de texto */}
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <Label className="text-sm mb-1.5 block">Nome da loja</Label>
+                <Input
+                  value={loja.nome}
+                  onChange={(e) => atualizarLoja('nome', e.target.value)}
+                  placeholder="Ex.: GN Modas"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-sm mb-1.5 block">Razão social</Label>
+                <Input
+                  value={loja.razao_social}
+                  onChange={(e) => atualizarLoja('razao_social', e.target.value)}
+                  placeholder="Razão social (rodapé do cupom)"
+                />
+              </div>
+              <div>
+                <Label className="text-sm mb-1.5 block">CNPJ</Label>
+                <Input
+                  value={loja.cnpj}
+                  onChange={(e) => atualizarLoja('cnpj', e.target.value)}
+                  placeholder="00.000.000/0001-00"
+                />
+              </div>
+              <div>
+                <Label className="text-sm mb-1.5 block">Telefone</Label>
+                <Input
+                  value={loja.telefone}
+                  onChange={(e) => atualizarLoja('telefone', e.target.value)}
+                  placeholder="(00) 0000-0000"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-sm mb-1.5 block">Endereço</Label>
+                <Input
+                  value={loja.endereco}
+                  onChange={(e) => atualizarLoja('endereco', e.target.value)}
+                  placeholder="Rua, nº, bairro"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-sm mb-1.5 block">Cidade / UF / CEP</Label>
+                <Input
+                  value={loja.cidade}
+                  onChange={(e) => atualizarLoja('cidade', e.target.value)}
+                  placeholder="Cidade-UF  00000-000"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button onClick={salvarLoja} disabled={salvandoLoja}>
+                {salvandoLoja ? 'Salvando...' : 'Salvar dados da loja'}
+              </Button>
+              {feedbackLoja && (
+                <p className={`text-sm font-medium ${feedbackLoja.tipo === 'ok' ? 'text-green-600' : 'text-destructive'}`}>
+                  {feedbackLoja.msg}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4 mb-10">

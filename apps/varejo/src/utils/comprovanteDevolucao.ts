@@ -1,8 +1,9 @@
 // Gera o HTML do comprovante de devolução, no mesmo estilo térmico (~76mm) do
 // cupom de venda. Reusa os dados da loja de cupomVenda (fonte única).
 
-import { LOJA, RODAPE_LOJA } from './cupomVenda'
+import { logoHtml } from './cupomVenda'
 import { nomeImpressao } from './nomeImpressao'
+import type { DadosLoja } from './dadosLoja'
 
 export type DadosComprovanteDevolucao = {
   id: number
@@ -31,15 +32,24 @@ const escapar = (s: string): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 
-export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao): string {
+export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao, loja: DadosLoja): string {
   const numeroDev = String(dev.id).padStart(3, '0')
   const numeroPedido = String(dev.venda_id).padStart(3, '0')
 
-  const lojaLinhas: string[] = [`<div class="loja-nome">${escapar(LOJA.nome)}</div>`]
-  if (LOJA.cnpj) lojaLinhas.push(`<div>CNPJ: ${escapar(LOJA.cnpj)}</div>`)
-  if (LOJA.endereco) lojaLinhas.push(`<div>${escapar(LOJA.endereco)}</div>`)
-  if (LOJA.cidade) lojaLinhas.push(`<div>${escapar(LOJA.cidade)}</div>`)
+  const lojaLinhas: string[] = [`<div class="loja-nome">${escapar(loja.nome)}</div>`]
+  if (loja.telefone) lojaLinhas.push(`<div>${escapar(loja.telefone)}</div>`)
   if (dev.vendedor_nome) lojaLinhas.push(`<div>Atendente: ${escapar(dev.vendedor_nome)}</div>`)
+
+  // Rodapé legal — só as linhas preenchidas; some inteiro se não houver dados.
+  const rodapeLinhas: string[] = []
+  if (loja.nome) rodapeLinhas.push(`<div class="nome-loja">${escapar(loja.nome)}</div>`)
+  if (loja.razao_social) rodapeLinhas.push(`<div>${escapar(loja.razao_social)}</div>`)
+  if (loja.cnpj) rodapeLinhas.push(`<div>CNPJ: ${escapar(loja.cnpj)}</div>`)
+  if (loja.endereco) rodapeLinhas.push(`<div>${escapar(loja.endereco)}</div>`)
+  if (loja.cidade) rodapeLinhas.push(`<div>${escapar(loja.cidade)}</div>`)
+  const rodapeHtml = rodapeLinhas.length
+    ? `<div class="rodape-loja">\n    ${rodapeLinhas.join('\n    ')}\n  </div>`
+    : ''
 
   const itensHtml = dev.itens
     .map((item) => {
@@ -73,6 +83,8 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao): s
     }
     body { width: 76mm; max-width: 100%; margin: 0 auto; padding: 2mm 1mm; line-height: 1.35; }
     .cabecalho { margin-bottom: 4px; }
+    .logo-wrap { text-align: center; margin-bottom: 4px; }
+    .logo { max-width: 60mm; max-height: 22mm; object-fit: contain; }
     .loja-nome { font-weight: bold; font-size: 13px; }
     .linha-dupla { border-top: 2px double #000; margin: 4px 0; }
     .linha-simples { border-top: 1px dashed #000; margin: 4px 0; }
@@ -96,6 +108,7 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao): s
 </head>
 <body>
   <div class="cabecalho">
+    ${logoHtml(loja)}
     ${lojaLinhas.join('\n    ')}
   </div>
 
@@ -157,13 +170,7 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao): s
     Assinatura do cliente
   </div>
 
-  <div class="rodape-loja">
-    <div class="nome-loja">${escapar(RODAPE_LOJA.nome)}</div>
-    <div>${escapar(RODAPE_LOJA.razao_social)}</div>
-    <div>CNPJ: ${escapar(RODAPE_LOJA.cnpj)}</div>
-    <div>${escapar(RODAPE_LOJA.endereco)}</div>
-    <div>${escapar(RODAPE_LOJA.cidade)}</div>
-  </div>
+  ${rodapeHtml}
 </body>
 </html>`
 }

@@ -25,6 +25,7 @@ import { registrarHandlersDashboard } from './ipc/dashboard'
 import { registrarHandlersAuth } from './ipc/auth'
 import { registrarHandlersChat } from './ipc/chat'
 import { registrarHandlersDevolucoes } from './ipc/devolucoes'
+import { registrarHandlersLoja } from './ipc/loja'
 import { inicializarAtualizador } from './atualizador'
 
 let janelaAtual: BrowserWindow | null = null
@@ -90,6 +91,7 @@ app.whenReady().then(() => {
   registrarHandlersAuth()
   registrarHandlersChat()
   registrarHandlersDevolucoes()
+  registrarHandlersLoja()
 
   criarJanelaPrincipal()
 

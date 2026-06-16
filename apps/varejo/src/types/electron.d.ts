@@ -157,6 +157,10 @@ interface Window {
       resumoDashboard: () => Promise<RespostaIPC>
       produtosMaisVendidos: (mes: string) => Promise<RespostaIPC>
     }
+    loja: {
+      obter: () => Promise<RespostaIPC>
+      salvar: (dados: unknown) => Promise<RespostaIPC>
+    }
     licenca: {
       validar: () => Promise<RespostaIPC<StatusLicenca>>
       ativar: (chave: string) => Promise<RespostaIPC<StatusLicenca>>

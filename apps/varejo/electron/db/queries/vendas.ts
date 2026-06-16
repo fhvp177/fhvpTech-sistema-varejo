@@ -18,6 +18,7 @@ export type Venda = {
   data: string
   total: number
   desconto: number
+  entrada: number
   valor_pago: number
   status_pagamento: StatusPagamento
   data_vencimento: string | null
@@ -72,6 +73,9 @@ export type DadosNovaVenda = {
   data_vencimento: string | null
   num_parcelas?: number | null
   desconto?: number
+  // Entrada paga no ato — só em venda parcelada ou a prazo. Reduz o valor
+  // financiado/devido e já entra como valor_pago. Em venda à vista é ignorada.
+  entrada?: number
   // Crédito na loja do cliente abatido nesta venda (forma de pagamento "usar
   // crédito"). v1: só em venda à vista ('pago'). Lança um 'uso' no ledger.
   valor_credito_usado?: number
@@ -237,6 +241,18 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   }
   const total = +(subtotal - desconto).toFixed(2)
 
+  // Entrada paga no ato (parcelado ou a prazo). Reduz o valor financiado/devido
+  // e entra como valor_pago. O total da venda permanece o valor cheio.
+  const entrada = Math.max(0, +(dados.entrada ?? 0).toFixed(2))
+  if (entrada > 0) {
+    if (dados.status_pagamento === 'pago') {
+      throw new Error('Venda à vista não tem entrada — o cliente paga o total.')
+    }
+    if (entrada >= total) {
+      throw new Error('A entrada não pode ser igual ou maior que o total. Para receber tudo agora, use "À vista".')
+    }
+  }
+
   // Uso de crédito da loja (forma de pagamento "usar crédito"). v1: só à vista.
   const creditoUsado = Math.max(0, +(dados.valor_credito_usado ?? 0).toFixed(2))
   if (creditoUsado > 0) {
@@ -258,8 +274,8 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   }
 
   const inserirVenda = db.prepare(
-    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, status_pagamento, data_vencimento, num_parcelas)
-     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @status_pagamento, @data_vencimento, @num_parcelas)`
+    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas)
+     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas)`
   )
   const inserirItem = db.prepare(
     `INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario)
@@ -280,6 +296,8 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       vendedor_id: dados.vendedor_id,
       total,
       desconto,
+      entrada,
+      valor_pago: entrada,
       status_pagamento: dados.status_pagamento,
       data_vencimento: dados.data_vencimento,
       num_parcelas: dados.num_parcelas ?? null
@@ -293,8 +311,10 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
 
     if (ehParcelado && dados.data_vencimento && dados.num_parcelas) {
       const n = dados.num_parcelas
-      const valorBase = Math.floor((total * 100) / n) / 100
-      const valorUltima = +(total - valorBase * (n - 1)).toFixed(2)
+      // Só o que sobra depois da entrada é parcelado.
+      const valorFinanciado = +(total - entrada).toFixed(2)
+      const valorBase = Math.floor((valorFinanciado * 100) / n) / 100
+      const valorUltima = +(valorFinanciado - valorBase * (n - 1)).toFixed(2)
       for (let i = 0; i < n; i++) {
         inserirParcela.run({
           venda_id: vendaId,

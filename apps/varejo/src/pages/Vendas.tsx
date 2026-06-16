@@ -17,6 +17,7 @@ import { useToast } from '@fhvptech/core/ui/toast'
 import ClienteSeletor, { type ClienteSeletorHandle } from '@/components/ClienteSeletor'
 import ConsultaPreco from '@/components/ConsultaPreco'
 import { gerarHtmlCupomVenda } from '@/utils/cupomVenda'
+import { obterDadosLoja } from '@/utils/dadosLoja'
 import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido } from '@/utils/relatorioVendas'
@@ -46,6 +47,7 @@ type Venda = {
   data: string
   total: number
   desconto: number
+  entrada: number
   valor_pago: number
   status_pagamento: StatusPagamento
   data_vencimento: string | null
@@ -332,7 +334,8 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
       alert('Não foi possível carregar os dados da venda.')
       return null
     }
-    const html = gerarHtmlCupomVenda(resp.data as VendaDetalhada)
+    const loja = await obterDadosLoja()
+    const html = gerarHtmlCupomVenda(resp.data as VendaDetalhada, loja)
     return { html, nome: nomeImpressao.cupomVenda(id) }
   }
 
@@ -363,7 +366,8 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   }
 
   // Monta o HTML + nome do comprovante de uma devolução.
-  const gerarComprovanteDevolucao = (dev: DevolucaoComItens): { html: string; nome: string } => {
+  const gerarComprovanteDevolucao = async (dev: DevolucaoComItens): Promise<{ html: string; nome: string }> => {
+    const loja = await obterDadosLoja()
     const html = gerarHtmlComprovanteDevolucao({
       id: dev.id,
       venda_id: dev.venda_id,
@@ -378,18 +382,18 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         quantidade: it.quantidade,
         valor_unitario: it.valor_unitario_devolvido
       }))
-    })
+    }, loja)
     return { html, nome: nomeImpressao.devolucao(dev.id, dev.venda_id) }
   }
 
   const imprimirComprovanteDevolucao = async (dev: DevolucaoComItens) => {
-    const doc = gerarComprovanteDevolucao(dev)
+    const doc = await gerarComprovanteDevolucao(dev)
     const r = await window.api.impressao.imprimir(doc.html, doc.nome)
     if (!r.success) alert(`Erro ao imprimir: ${r.error}`)
   }
 
   const salvarPdfComprovanteDevolucao = async (dev: DevolucaoComItens) => {
-    const doc = gerarComprovanteDevolucao(dev)
+    const doc = await gerarComprovanteDevolucao(dev)
     const r = await window.api.impressao.salvarPdf(doc.html, doc.nome)
     if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
   }
@@ -662,7 +666,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                 {vendaDetalhada.num_parcelas ? (
                   <div>
                     <span className="font-medium text-foreground">Parcelamento: </span>
-                    {vendaDetalhada.num_parcelas}x de ≈ {fmt(vendaDetalhada.total / vendaDetalhada.num_parcelas)}
+                    {vendaDetalhada.num_parcelas}x de ≈ {fmt((vendaDetalhada.total - vendaDetalhada.entrada) / vendaDetalhada.num_parcelas)}
                   </div>
                 ) : vendaDetalhada.data_vencimento ? (
                   <div>
@@ -670,6 +674,12 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     {fmtDataCurta(vendaDetalhada.data_vencimento)}
                   </div>
                 ) : null}
+                {vendaDetalhada.entrada > 0 && (
+                  <div>
+                    <span className="font-medium text-foreground">Entrada: </span>
+                    {fmt(vendaDetalhada.entrada)}
+                  </div>
+                )}
               </div>
 
               {/* Itens da venda */}
@@ -1009,6 +1019,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { setAtivo: setPdvAtivo } = usePdvMode()
   const { ehDono } = useSessao()
+  const { showToast } = useToast()
   const [tetoDesconto, setTetoDesconto] = useState(10)
   const [modalElevarAberto, setModalElevarAberto] = useState(false)
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
@@ -1020,6 +1031,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const [usarCredito, setUsarCredito] = useState(false)
   const [dataVencimento, setDataVencimento] = useState('')
   const [numParcelas, setNumParcelas] = useState(2)
+  const [entradaInput, setEntradaInput] = useState('')
   const [descontoTipo, setDescontoTipo] = useState<'R$' | '%'>('R$')
   const [descontoEntrada, setDescontoEntrada] = useState('')
   const [codigoScan, setCodigoScan] = useState('')
@@ -1095,6 +1107,13 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const creditoAplicado =
     usarCredito && statusPagamento === 'pago' ? +Math.min(creditoDisponivel, total).toFixed(2) : 0
   const aPagar = +(total - creditoAplicado).toFixed(2)
+
+  // Entrada paga no ato — só em parcelado/a prazo. O que sobra (valorFinanciado)
+  // é o que vai pras parcelas ou fica devido na data de vencimento.
+  const entradaNum = parseFloat(entradaInput.replace(',', '.')) || 0
+  const entradaValor =
+    statusPagamento !== 'pago' ? +Math.min(total, Math.max(0, entradaNum)).toFixed(2) : 0
+  const valorFinanciado = +(total - entradaValor).toFixed(2)
 
   const adicionarProduto = (produto: Produto) => {
     if (produto.estoque <= 0) {
@@ -1176,6 +1195,34 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const descontoPctReal = subtotal > 0 ? (descontoValor / subtotal) * 100 : 0
   const descontoAcimaDoTeto = !ehDono && descontoValor > 0 && descontoPctReal > tetoDesconto
 
+  // Zera o PDV para a próxima venda sem sair da tela — mantém o caixa fluido
+  // quando há fila. Limpar o cliente reseta crédito/usarCredito via efeito.
+  const limparParaProximaVenda = () => {
+    setCarrinho([])
+    setClienteId('')
+    setStatusPagamento('pago')
+    setDataVencimento('')
+    setNumParcelas(2)
+    setEntradaInput('')
+    setDescontoTipo('R$')
+    setDescontoEntrada('')
+    setCodigoScan('')
+    setErro('')
+    setFeedbackScan(null)
+    scanRef.current?.focus()
+  }
+
+  // Imprime o cupom direto da venda recém-criada (criarVenda já devolve itens,
+  // parcelas e vendedor) — evita uma ida extra ao banco e não sai do caixa.
+  const imprimirCupomVenda = async (venda: VendaDetalhada) => {
+    const loja = await obterDadosLoja()
+    const html = gerarHtmlCupomVenda(venda, loja)
+    const r = await window.api.impressao.imprimir(html, nomeImpressao.cupomVenda(venda.id))
+    if (!r.success) {
+      showToast({ message: `Erro ao imprimir: ${r.error}`, variant: 'destructive' })
+    }
+  }
+
   const persistirVenda = async () => {
     setSalvando(true)
     setErro('')
@@ -1189,6 +1236,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       data_vencimento: dataVencimento || null,
       num_parcelas: statusPagamento === 'parcelado' ? numParcelas : null,
       desconto: descontoValor,
+      entrada: entradaValor,
       valor_credito_usado: creditoAplicado,
       itens: carrinho.map((item) => ({
         produto_id: item.produto_id,
@@ -1199,7 +1247,20 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
 
     const resp = await window.api.vendas.criar(dados)
     if (resp.success) {
-      onSair()
+      const venda = resp.data as VendaDetalhada | null
+      limparParaProximaVenda()
+      setSalvando(false)
+      showToast({
+        message: venda?.id ? `Venda #${venda.id} registrada.` : 'Venda registrada.',
+        variant: 'success',
+        action: venda
+          ? {
+              label: 'Imprimir cupom',
+              icon: <Printer className="w-3 h-3" />,
+              onClick: () => imprimirCupomVenda(venda)
+            }
+          : undefined
+      })
     } else {
       setErro(resp.error)
       setSalvando(false)
@@ -1230,6 +1291,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     }
     if (descontoValor >= subtotal && subtotal > 0) {
       setErro('Desconto não pode ser maior ou igual ao subtotal da venda.')
+      return
+    }
+    if (statusPagamento !== 'pago' && entradaValor >= total && total > 0) {
+      setErro('A entrada não pode ser igual ou maior que o total. Para receber tudo agora, use "À vista".')
       return
     }
 
@@ -1591,10 +1656,22 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
               </div>
             </>
           )}
-          {statusPagamento === 'parcelado' && total > 0 && numParcelas >= 2 && (
+          {entradaValor > 0 && (
+            <div className="flex justify-between text-sm text-emerald-700 pt-1 border-t">
+              <span>Entrada (agora)</span>
+              <span>− {fmt(entradaValor)}</span>
+            </div>
+          )}
+          {entradaValor > 0 && (
+            <div className="flex justify-between text-sm font-medium">
+              <span>{statusPagamento === 'parcelado' ? 'Restante (a parcelar)' : 'Restante (a prazo)'}</span>
+              <span>{fmt(valorFinanciado)}</span>
+            </div>
+          )}
+          {statusPagamento === 'parcelado' && valorFinanciado > 0 && numParcelas >= 2 && (
             <div className="flex justify-between text-sm text-blue-600 font-medium pt-0.5">
               <span>{numParcelas}x de</span>
-              <span>≈ {fmt(total / numParcelas)}</span>
+              <span>≈ {fmt(valorFinanciado / numParcelas)}</span>
             </div>
           )}
         </div>
@@ -1617,7 +1694,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   name="status"
                   value={s}
                   checked={statusPagamento === s}
-                  onChange={() => setStatusPagamento(s)}
+                  onChange={() => { setStatusPagamento(s); setErro(''); if (s === 'pago') setEntradaInput('') }}
                   className="hidden"
                 />
                 <span
@@ -1630,6 +1707,37 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             ))}
           </div>
         </div>
+
+        {/* Entrada — paga no ato, abate do valor financiado (parcelado) ou
+            devido (a prazo). Não aparece no à vista. */}
+        {statusPagamento !== 'pago' && (
+          <div>
+            <Label htmlFor="entrada" className="text-xs mb-1 block">
+              Entrada <span className="text-muted-foreground">(opcional)</span>
+            </Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                R$
+              </span>
+              <input
+                id="entrada"
+                type="number"
+                min="0"
+                step="0.01"
+                max={total}
+                value={entradaInput}
+                onChange={(e) => { setEntradaInput(e.target.value); setErro('') }}
+                placeholder="0,00"
+                className="flex h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+            <p className="text-[11px] mt-1 text-muted-foreground">
+              {statusPagamento === 'parcelado'
+                ? 'Pago agora; o restante é dividido nas parcelas.'
+                : 'Pago agora; o restante fica devido no vencimento.'}
+            </p>
+          </div>
+        )}
 
         {/* Número de parcelas (apenas para parcelado) */}
         {statusPagamento === 'parcelado' && (
@@ -1677,7 +1785,13 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             onClick={finalizarVenda}
             disabled={salvando || carrinho.length === 0}
           >
-            {salvando ? 'Registrando...' : `Finalizar — ${fmt(aPagar)}`}
+            {salvando
+              ? 'Registrando...'
+              : statusPagamento === 'pago'
+                ? `Finalizar — ${fmt(aPagar)}`
+                : entradaValor > 0
+                  ? `Finalizar — entrada ${fmt(entradaValor)}`
+                  : 'Finalizar venda'}
           </Button>
           <Button variant="outline" className="w-full" onClick={onSair}>
             Cancelar

@@ -3,6 +3,7 @@
 // onde o conteúdo aparece centralizado.
 
 import { nomeImpressao } from './nomeImpressao'
+import type { DadosLoja } from './dadosLoja'
 
 type ItemCupom = {
   produto_nome?: string
@@ -25,6 +26,7 @@ export type DadosCupomVenda = {
   data: string
   total: number
   desconto?: number
+  entrada?: number
   valor_pago: number
   status_pagamento: StatusPagamentoCupom
   data_vencimento: string | null
@@ -41,24 +43,12 @@ export type DadosCupomVenda = {
   parcelas: ParcelaCupom[]
 }
 
-// Dados fixos da loja — pode ser ajustado conforme o estabelecimento.
-// Exportado pra ser fonte única reusada pelo comprovante de devolução.
-export const LOJA = {
-  nome: 'GN MODAS',
-  cnpj: '',
-  endereco: '',
-  cidade: '',
-  telefone: ''
-}
-
-// Dados que aparecem no rodapé do cupom (placeholders genéricos —
-// substituir quando os dados oficiais do estabelecimento forem confirmados).
-export const RODAPE_LOJA = {
-  nome: 'GN Modas',
-  razao_social: 'Razão Social Ltda. — ME',
-  cnpj: '00.000.000/0001-00',
-  endereco: 'Praça Claudemiro Lopes Bezerra - Mercado Central',
-  cidade: 'Pacoti-CE  62770-000'
+// Monta o <img> da logo só quando há logo configurada e a exibição está ligada.
+// Valida o prefixo data:image/ por segurança (o valor vem da config local).
+// Exportado pra ser reusado pelo comprovante de devolução (mesma fonte).
+export function logoHtml(loja: DadosLoja): string {
+  if (!loja.exibir_logo || !loja.logo || !loja.logo.startsWith('data:image/')) return ''
+  return `<div class="logo-wrap"><img class="logo" src="${loja.logo}" alt="" /></div>`
 }
 
 const fmt = (valor: number): string =>
@@ -87,18 +77,28 @@ const escapar = (s: string): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 
-export function gerarHtmlCupomVenda(venda: DadosCupomVenda): string {
+export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): string {
   const dataPedido = fmtDataHora(venda.data)
   const numeroPedido = String(venda.id).padStart(3, '0')
+  const entrada = venda.entrada ?? 0
 
   const lojaLinhas: string[] = [
-    `<div class="loja-nome">${escapar(LOJA.nome)}</div>`
+    `<div class="loja-nome">${escapar(loja.nome)}</div>`
   ]
-  if (LOJA.cnpj) lojaLinhas.push(`<div>CNPJ: ${escapar(LOJA.cnpj)}</div>`)
-  if (LOJA.endereco) lojaLinhas.push(`<div>${escapar(LOJA.endereco)}</div>`)
-  if (LOJA.cidade) lojaLinhas.push(`<div>${escapar(LOJA.cidade)}</div>`)
-  if (LOJA.telefone) lojaLinhas.push(`<div>${escapar(LOJA.telefone)}</div>`)
+  if (loja.telefone) lojaLinhas.push(`<div>${escapar(loja.telefone)}</div>`)
   if (venda.vendedor_nome) lojaLinhas.push(`<div>Vendedor: ${escapar(venda.vendedor_nome)}</div>`)
+
+  // Rodapé legal — só inclui as linhas preenchidas. Some inteiro se a loja não
+  // tiver nenhum dado de rodapé configurado.
+  const rodapeLinhas: string[] = []
+  if (loja.nome) rodapeLinhas.push(`<div class="nome-loja">${escapar(loja.nome)}</div>`)
+  if (loja.razao_social) rodapeLinhas.push(`<div>${escapar(loja.razao_social)}</div>`)
+  if (loja.cnpj) rodapeLinhas.push(`<div>CNPJ: ${escapar(loja.cnpj)}</div>`)
+  if (loja.endereco) rodapeLinhas.push(`<div>${escapar(loja.endereco)}</div>`)
+  if (loja.cidade) rodapeLinhas.push(`<div>${escapar(loja.cidade)}</div>`)
+  const rodapeHtml = rodapeLinhas.length
+    ? `<div class="rodape-loja">\n    ${rodapeLinhas.join('\n    ')}\n  </div>`
+    : ''
 
   const ehPj = venda.cliente_tipo_pessoa === 'juridica'
   const clienteNome = venda.cliente_nome || 'Venda avulsa'
@@ -150,10 +150,11 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda): string {
         : venda.status_pagamento === 'inadimplente'
           ? 'Em atraso'
           : '-'
+    // Com entrada, a linha mostra o saldo devido no vencimento (não o total cheio).
     linhasPagamento.push(`
       <tr>
         <td>${venc}</td>
-        <td class="col-num">${fmt(venda.total)}</td>
+        <td class="col-num">${fmt(venda.total - entrada)}</td>
         <td>${formaPgto}</td>
         <td>${obs}</td>
       </tr>`)
@@ -181,6 +182,8 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda): string {
       line-height: 1.35;
     }
     .cabecalho { margin-bottom: 4px; }
+    .logo-wrap { text-align: center; margin-bottom: 4px; }
+    .logo { max-width: 60mm; max-height: 22mm; object-fit: contain; }
     .loja-nome { font-weight: bold; font-size: 13px; }
     .linha-dupla { border-top: 2px double #000; margin: 4px 0; }
     .linha-simples { border-top: 1px dashed #000; margin: 4px 0; }
@@ -259,6 +262,7 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda): string {
 </head>
 <body>
   <div class="cabecalho">
+    ${logoHtml(loja)}
     ${lojaLinhas.join('\n    ')}
   </div>
 
@@ -314,6 +318,15 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda): string {
     <span>Total do pedido:</span>
     <span>${fmt(venda.total)}</span>
   </div>
+  ${entrada > 0 ? `
+  <div class="total-linha" style="font-weight: normal; font-size: 11px;">
+    <span>Entrada (paga):</span>
+    <span>- ${fmt(entrada)}</span>
+  </div>
+  <div class="total-linha" style="font-weight: normal; font-size: 11px;">
+    <span>${venda.num_parcelas ? 'A parcelar:' : 'Saldo a prazo:'}</span>
+    <span>${fmt(venda.total - entrada)}</span>
+  </div>` : ''}
 
   <div class="linha-simples"></div>
 
@@ -340,13 +353,7 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda): string {
     Assinatura do cliente
   </div>
 
-  <div class="rodape-loja">
-    <div class="nome-loja">${escapar(RODAPE_LOJA.nome)}</div>
-    <div>${escapar(RODAPE_LOJA.razao_social)}</div>
-    <div>CNPJ: ${escapar(RODAPE_LOJA.cnpj)}</div>
-    <div>${escapar(RODAPE_LOJA.endereco)}</div>
-    <div>${escapar(RODAPE_LOJA.cidade)}</div>
-  </div>
+  ${rodapeHtml}
 </body>
 </html>`
 }

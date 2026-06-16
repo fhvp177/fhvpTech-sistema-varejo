@@ -147,6 +147,12 @@ const api = {
     ): Promise<RespostaIPC> => ipcRenderer.invoke('chat:enviar', historico)
   },
 
+  // Dados da loja (identidade nos cupons: nome, CNPJ, logo)
+  loja: {
+    obter: (): Promise<RespostaIPC> => ipcRenderer.invoke('loja:obter'),
+    salvar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('loja:salvar', dados)
+  },
+
   // Devolução / troca
   devolucoes: {
     itensDevolviveis: (vendaId: number): Promise<RespostaIPC> =>

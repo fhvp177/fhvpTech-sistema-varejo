@@ -7,7 +7,9 @@ type ToastOptions = {
   message: string
   variant?: ToastVariant
   durationMs?: number
-  action?: { label: string; onClick: () => void }
+  // `icon` é opcional: sem ele, mostra o ícone de desfazer (Undo2), que é o uso
+  // mais comum da ação. Passe um ícone próprio para ações como imprimir.
+  action?: { label: string; onClick: () => void; icon?: ReactNode }
 }
 
 type ToastInterno = ToastOptions & {
@@ -87,7 +89,7 @@ const ToastItem: FC<{ toast: ToastInterno; onClose: () => void }> = ({ toast, on
             onClick={() => { toast.action!.onClick(); onClose() }}
             className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0 px-2 py-1"
           >
-            <Undo2 className="w-3 h-3" />
+            {toast.action.icon ?? <Undo2 className="w-3 h-3" />}
             {toast.action.label}
           </button>
         )}
