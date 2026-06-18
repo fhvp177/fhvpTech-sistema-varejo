@@ -11,6 +11,8 @@ export type DadosLoja = {
   cnpj: string
   endereco: string
   cidade: string
+  uf: string
+  cep: string
   telefone: string
   logo: string | null
   exibir_logo: boolean
@@ -24,7 +26,9 @@ const LOJA_LEGADA: DadosLoja = {
   razao_social: 'Razão Social Ltda. — ME',
   cnpj: '00.000.000/0001-00',
   endereco: 'Praça Claudemiro Lopes Bezerra - Mercado Central',
-  cidade: 'Pacoti-CE  62770-000',
+  cidade: 'Pacoti',
+  uf: 'CE',
+  cep: '62770-000',
   telefone: '',
   logo: null,
   exibir_logo: false
@@ -41,6 +45,8 @@ function obterDadosLoja(): DadosLoja {
     cnpj: lerConfig('loja_cnpj'),
     endereco: lerConfig('loja_endereco'),
     cidade: lerConfig('loja_cidade'),
+    uf: lerConfig('loja_uf'),
+    cep: lerConfig('loja_cep'),
     telefone: lerConfig('loja_telefone'),
     logo: logo || null,
     exibir_logo: lerConfig('loja_exibir_logo') === '1'
@@ -63,6 +69,8 @@ export function registrarHandlersLoja(): void {
       gravarConfig('loja_cnpj', dados.cnpj ?? '')
       gravarConfig('loja_endereco', dados.endereco ?? '')
       gravarConfig('loja_cidade', dados.cidade ?? '')
+      gravarConfig('loja_uf', dados.uf ?? '')
+      gravarConfig('loja_cep', dados.cep ?? '')
       gravarConfig('loja_telefone', dados.telefone ?? '')
       gravarConfig('loja_logo', dados.logo ?? '')
       gravarConfig('loja_exibir_logo', dados.exibir_logo ? '1' : '0')

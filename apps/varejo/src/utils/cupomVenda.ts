@@ -3,7 +3,7 @@
 // onde o conteúdo aparece centralizado.
 
 import { nomeImpressao } from './nomeImpressao'
-import type { DadosLoja } from './dadosLoja'
+import { linhaCidadeUf, type DadosLoja } from './dadosLoja'
 
 type ItemCupom = {
   produto_nome?: string
@@ -95,7 +95,8 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
   if (loja.razao_social) rodapeLinhas.push(`<div>${escapar(loja.razao_social)}</div>`)
   if (loja.cnpj) rodapeLinhas.push(`<div>CNPJ: ${escapar(loja.cnpj)}</div>`)
   if (loja.endereco) rodapeLinhas.push(`<div>${escapar(loja.endereco)}</div>`)
-  if (loja.cidade) rodapeLinhas.push(`<div>${escapar(loja.cidade)}</div>`)
+  const cidadeUfCep = linhaCidadeUf(loja)
+  if (cidadeUfCep) rodapeLinhas.push(`<div>${escapar(cidadeUfCep)}</div>`)
   const rodapeHtml = rodapeLinhas.length
     ? `<div class="rodape-loja">\n    ${rodapeLinhas.join('\n    ')}\n  </div>`
     : ''

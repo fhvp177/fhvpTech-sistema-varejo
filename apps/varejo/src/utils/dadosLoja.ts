@@ -7,6 +7,8 @@ export type DadosLoja = {
   cnpj: string
   endereco: string
   cidade: string
+  uf: string
+  cep: string
   telefone: string
   logo: string | null // data URI (base64) ou null
   exibir_logo: boolean
@@ -20,9 +22,19 @@ export const LOJA_PADRAO: DadosLoja = {
   cnpj: '',
   endereco: '',
   cidade: '',
+  uf: '',
+  cep: '',
   telefone: '',
   logo: null,
   exibir_logo: false
+}
+
+// Monta a linha "Cidade-UF  CEP" do cupom a partir dos campos separados.
+// Tolera instalações antigas: quem gravou tudo junto no campo `cidade` (antes da
+// separação) e tem uf/cep vazios continua imprimindo exatamente o que digitou.
+export function linhaCidadeUf(loja: Pick<DadosLoja, 'cidade' | 'uf' | 'cep'>): string {
+  const cidadeUf = [loja.cidade, loja.uf].map((s) => (s || '').trim()).filter(Boolean).join('-')
+  return [cidadeUf, (loja.cep || '').trim()].filter(Boolean).join('  ')
 }
 
 export async function obterDadosLoja(): Promise<DadosLoja> {

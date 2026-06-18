@@ -2,10 +2,18 @@ import { FC, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { RefreshCw, Upload, Trash2, Store } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown } from 'lucide-react'
+import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
+import CidadeSeletor from '@/components/CidadeSeletor'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
+import { UFS } from '@/data/ufs'
+
+// Mesmo visual do <Input> do core — usado nos campos com máscara (IMaskInput
+// renderiza o próprio <input>, então recebe as classes direto).
+const CLASSE_INPUT =
+  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +66,7 @@ const Configuracoes: FC = () => {
   const [loja, setLoja] = useState<DadosLoja | null>(null)
   const [salvandoLoja, setSalvandoLoja] = useState(false)
   const [feedbackLoja, setFeedbackLoja] = useState<Feedback | null>(null)
+  const [lojaAberta, setLojaAberta] = useState(false)
   const [erroLogo, setErroLogo] = useState('')
   const inputLogoRef = useRef<HTMLInputElement>(null)
 
@@ -253,17 +262,34 @@ const Configuracoes: FC = () => {
         <ConfigSeguranca />
       </div>
 
-      {/* ── Dados da loja (identidade no cupom) ── */}
+      {/* ── Dados da loja (identidade no cupom) — seção recolhível ── */}
       <div className="space-y-4 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
-          <Store className="w-4 h-4" /> Dados da loja
-        </h3>
-        <p className="text-sm text-muted-foreground -mt-1">
-          Nome, CNPJ e endereço que aparecem no cupom e no comprovante de devolução.
-          A logo é opcional e pode ser exibida no topo dos cupons.
-        </p>
+        <button
+          type="button"
+          onClick={() => setLojaAberta((v) => !v)}
+          className="w-full flex items-center justify-between border-b pb-2 text-left group"
+        >
+          <span className="text-lg font-semibold flex items-center gap-2">
+            <Store className="w-4 h-4" /> Dados da loja
+            {!lojaAberta && loja?.nome && (
+              <span className="text-sm font-normal text-muted-foreground">— {loja.nome}</span>
+            )}
+          </span>
+          <ChevronDown
+            className={`w-5 h-5 text-muted-foreground transition-transform group-hover:text-foreground ${
+              lojaAberta ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
 
-        {loja && (
+        {lojaAberta && (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Nome, CNPJ e endereço que aparecem no cupom e no comprovante de devolução.
+              A logo é opcional e pode ser exibida no topo dos cupons.
+            </p>
+
+            {loja && (
           <div className="space-y-4">
             {/* Logo */}
             <div className="border rounded-lg p-4 space-y-3">
@@ -350,18 +376,22 @@ const Configuracoes: FC = () => {
               </div>
               <div>
                 <Label className="text-sm mb-1.5 block">CNPJ</Label>
-                <Input
+                <IMaskInput
+                  mask="00.000.000/0000-00"
                   value={loja.cnpj}
-                  onChange={(e) => atualizarLoja('cnpj', e.target.value)}
+                  onAccept={(valor: string) => atualizarLoja('cnpj', valor)}
                   placeholder="00.000.000/0001-00"
+                  className={CLASSE_INPUT}
                 />
               </div>
               <div>
                 <Label className="text-sm mb-1.5 block">Telefone</Label>
-                <Input
+                <IMaskInput
+                  mask={[{ mask: '(00) 0000-0000' }, { mask: '(00) 00000-0000' }]}
                   value={loja.telefone}
-                  onChange={(e) => atualizarLoja('telefone', e.target.value)}
-                  placeholder="(00) 0000-0000"
+                  onAccept={(valor: string) => atualizarLoja('telefone', valor)}
+                  placeholder="(00) 00000-0000"
+                  className={CLASSE_INPUT}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -373,11 +403,39 @@ const Configuracoes: FC = () => {
                 />
               </div>
               <div className="sm:col-span-2">
-                <Label className="text-sm mb-1.5 block">Cidade / UF / CEP</Label>
-                <Input
-                  value={loja.cidade}
-                  onChange={(e) => atualizarLoja('cidade', e.target.value)}
-                  placeholder="Cidade-UF  00000-000"
+                <Label className="text-sm mb-1.5 block">Cidade</Label>
+                <CidadeSeletor
+                  cidade={loja.cidade}
+                  uf={loja.uf}
+                  onDigitar={(valor) => atualizarLoja('cidade', valor)}
+                  onSelecionar={(c, u) =>
+                    setLoja((prev) => (prev ? { ...prev, cidade: c, uf: u } : prev))
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-sm mb-1.5 block">UF</Label>
+                <select
+                  value={loja.uf}
+                  onChange={(e) => atualizarLoja('uf', e.target.value)}
+                  className={CLASSE_INPUT}
+                >
+                  <option value="">—</option>
+                  {UFS.map((u) => (
+                    <option key={u.sigla} value={u.sigla}>
+                      {u.sigla} — {u.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-sm mb-1.5 block">CEP</Label>
+                <IMaskInput
+                  mask="00000-000"
+                  value={loja.cep}
+                  onAccept={(valor: string) => atualizarLoja('cep', valor)}
+                  placeholder="00000-000"
+                  className={CLASSE_INPUT}
                 />
               </div>
             </div>
@@ -393,6 +451,8 @@ const Configuracoes: FC = () => {
               )}
             </div>
           </div>
+            )}
+          </>
         )}
       </div>
 

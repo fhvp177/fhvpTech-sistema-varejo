@@ -5,6 +5,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "jsx": "react-jsx",
+    "resolveJsonModule": true,
     "strict": true,
     "baseUrl": ".",
     "paths": {
