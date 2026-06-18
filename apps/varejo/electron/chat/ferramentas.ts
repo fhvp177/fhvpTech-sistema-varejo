@@ -6,7 +6,19 @@
 // (quem fala com a Anthropic é o backend). Aqui só montamos JSON e lemos a
 // resposta crua da Messages API.
 
-import { buscarProdutos, giroProduto, vendasRecentes, clientesDevedores } from '../db/queries/chat'
+import {
+  buscarProdutos,
+  giroProduto,
+  vendasRecentes,
+  clientesDevedores,
+  resolverPeriodo,
+  estatisticasVendas,
+  produtosMaisVendidos,
+  desempenhoVendedores,
+  melhoresClientes,
+  dividaCliente,
+  totalAReceber
+} from '../db/queries/chat'
 import { resumoDashboard } from '../db/queries/vendas'
 
 export type DefinicaoTool = {
@@ -17,6 +29,21 @@ export type DefinicaoTool = {
     properties: Record<string, unknown>
     required?: string[]
   }
+}
+
+// Parâmetros de período compartilhados pelas tools de análise. O modelo usa
+// `periodo` (relativo) na maioria dos casos; inicio/fim cobrem intervalos exatos.
+const PROPS_PERIODO: Record<string, unknown> = {
+  periodo: {
+    type: 'string',
+    enum: ['hoje', 'ontem', 'ultimos_7_dias', 'ultimos_30_dias', 'este_mes', 'mes_passado', 'este_ano'],
+    description: 'Período relativo (padrão "este_mes"). Ex.: "mês passado" → mes_passado.'
+  },
+  inicio: {
+    type: 'string',
+    description: 'Data inicial YYYY-MM-DD, para um intervalo específico (use junto com fim).'
+  },
+  fim: { type: 'string', description: 'Data final YYYY-MM-DD, inclusiva (use junto com inicio).' }
 }
 
 // Descrições prescritivas ("use quando…") — modelos recentes acionam tools com
@@ -96,6 +123,71 @@ export const TOOLS: DefinicaoTool[] = [
       'Resumo do dia: número de vendas e faturamento de hoje, total de clientes e de produtos ' +
       'cadastrados. Use para uma visão geral rápida da loja.',
     input_schema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'estatisticas_vendas',
+    description:
+      'Estatísticas de vendas de um PERÍODO: faturamento total, número de vendas, ticket médio, ' +
+      'a MAIOR e a MENOR venda (com data e cliente), o melhor dia, e o total devolvido no período. ' +
+      'Use para qualquer pergunta sobre desempenho ou resumo de um intervalo de tempo — ex.: ' +
+      '"quanto faturei mês passado", "qual foi minha maior venda em maio", "ticket médio da semana", ' +
+      '"qual meu melhor dia". O faturamento já é líquido de desconto.',
+    input_schema: { type: 'object', properties: { ...PROPS_PERIODO } }
+  },
+  {
+    name: 'produtos_mais_vendidos',
+    description:
+      'Ranking dos produtos mais vendidos num período (quantidade e receita de cada um). Use para ' +
+      '"produto mais vendido", "o que mais saiu", "top 5 produtos do mês".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ...PROPS_PERIODO,
+        limite: { type: 'integer', description: 'Quantos produtos no ranking (padrão 10, máx 50).' }
+      }
+    }
+  },
+  {
+    name: 'desempenho_vendedores',
+    description:
+      'Vendas por vendedor num período: número de vendas e faturamento de cada um, do que mais ' +
+      'vendeu ao que menos vendeu. Use para "qual vendedor vendeu mais", "quanto o João vendeu".',
+    input_schema: { type: 'object', properties: { ...PROPS_PERIODO } }
+  },
+  {
+    name: 'melhores_clientes',
+    description:
+      'Clientes que mais compraram num período (número de compras e total gasto). Use para ' +
+      '"melhores clientes", "quem comprou mais". Ignora vendas avulsas (sem cliente).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ...PROPS_PERIODO,
+        limite: { type: 'integer', description: 'Quantos clientes no ranking (padrão 10, máx 50).' }
+      }
+    }
+  },
+  {
+    name: 'divida_cliente',
+    description:
+      'Detalha quanto UM cliente específico deve: total em atraso, total a vencer e a LISTA de cada ' +
+      'venda/parcela em aberto (valor, vencimento e se está atrasada). Use quando perguntarem sobre a ' +
+      'dívida de um cliente pelo nome — ex.: "quanto a Maria me deve", "o que o João tem em aberto". ' +
+      'Casa por trecho do nome (pode retornar mais de um cliente). Lista vazia = nenhum cliente com ' +
+      'esse nome; cliente com totais 0 = encontrado, mas sem nada em aberto.',
+    input_schema: {
+      type: 'object',
+      properties: { nome: { type: 'string', description: 'Nome (ou parte) do cliente.' } },
+      required: ['nome']
+    }
+  },
+  {
+    name: 'total_a_receber',
+    description:
+      'Total que a loja tem a receber agora, somado no banco: quanto está EM ATRASO (inadimplência), ' +
+      'quanto está A VENCER, o total geral e quantos clientes devem algo. Use para "quanto tenho a ' +
+      'receber", "qual minha inadimplência total", "quanto o pessoal me deve no total".',
+    input_schema: { type: 'object', properties: {} }
   }
 ]
 
@@ -103,6 +195,23 @@ export type ResultadoTool = { conteudo: string; erro: boolean }
 
 function ok(dados: unknown): ResultadoTool {
   return { conteudo: JSON.stringify(dados), erro: false }
+}
+
+// Extrai os campos de período da entrada crua do modelo, ignorando tipos errados.
+function periodoDoInput(input: Record<string, unknown>): {
+  periodo?: string
+  inicio?: string
+  fim?: string
+} {
+  return {
+    periodo: typeof input.periodo === 'string' ? input.periodo : undefined,
+    inicio: typeof input.inicio === 'string' ? input.inicio : undefined,
+    fim: typeof input.fim === 'string' ? input.fim : undefined
+  }
+}
+
+function numero(v: unknown, padrao: number): number {
+  return typeof v === 'number' ? v : padrao
 }
 
 // Executa a tool pedida pelo modelo. Captura erro e devolve como is_error pro
@@ -129,6 +238,21 @@ export function executarTool(nome: string, input: Record<string, unknown>): Resu
         )
       case 'resumo_loja':
         return ok(resumoDashboard())
+      case 'estatisticas_vendas':
+        return ok(estatisticasVendas(resolverPeriodo(periodoDoInput(input))))
+      case 'produtos_mais_vendidos':
+        return ok(produtosMaisVendidos(resolverPeriodo(periodoDoInput(input)), numero(input.limite, 10)))
+      case 'desempenho_vendedores':
+        return ok(desempenhoVendedores(resolverPeriodo(periodoDoInput(input))))
+      case 'melhores_clientes':
+        return ok(melhoresClientes(resolverPeriodo(periodoDoInput(input)), numero(input.limite, 10)))
+      case 'divida_cliente': {
+        const nome = typeof input.nome === 'string' ? input.nome : ''
+        if (!nome.trim()) return { conteudo: 'Informe o nome do cliente.', erro: true }
+        return ok(dividaCliente(nome))
+      }
+      case 'total_a_receber':
+        return ok(totalAReceber())
       default:
         return { conteudo: `Tool desconhecida: ${nome}`, erro: true }
     }

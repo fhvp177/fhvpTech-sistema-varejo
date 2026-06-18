@@ -17,7 +17,7 @@ const URL_BACKEND = 'https://licenca-gnmodas.fly.dev'
 // loop de tools nunca rodar indefinidamente (custo/latência).
 const MAX_RODADAS = 5
 
-const SYSTEM = `Você é o assistente do Sistema da FHVP Tech, um sistema de gestão para a loja de varejo do usuário. Você ajuda o lojista a consultar dados da própria loja: estoque, preços de venda, vendas, giro de produtos e contas a receber (inadimplência). Nunca se refira ao sistema como "Sistema RT" — a marca para o usuário é sempre "FHVP Tech".
+const SYSTEM_BASE = `Você é o assistente do Sistema da FHVP Tech, um sistema de gestão para a loja de varejo do usuário. Você ajuda o lojista a consultar e ANALISAR os dados da própria loja: estoque, preços de venda, vendas, giro de produtos, desempenho de vendedores, melhores clientes e contas a receber (inadimplência). Nunca se refira ao sistema como "Sistema RT" — a marca para o usuário é sempre "FHVP Tech".
 
 Regras:
 - Responda em português do Brasil, de forma curta e prática.
@@ -26,7 +26,18 @@ Regras:
 - Valores em reais (R$).
 - Se uma consulta não retornar resultado, diga isso claramente em vez de supor.
 
-Sobre pagamentos e inadimplência: o sistema controla vendas a prazo e parceladas, com data de vencimento. "Inadimplente" / "em atraso" = venda a prazo ou parcela cujo vencimento JÁ passou e não foi paga. "A vencer" / "pendente" = ainda dentro do prazo (deve, mas não está atrasado). São coisas diferentes: ao pedirem "somente os inadimplentes", liste apenas quem tem valor EM ATRASO, sem misturar com quem só tem parcelas a vencer. Para qualquer pergunta sobre devedores, atraso, cobrança ou contas a receber, use a ferramenta contas_a_receber — o sistema CONSEGUE, sim, identificar inadimplência pela data de vencimento.`
+Análises por período: você CONSEGUE responder perguntas sobre totais, médias, recordes e rankings de um intervalo de tempo. Para faturamento, ticket médio, número de vendas, MAIOR/menor venda, melhor dia ou total devolvido, use estatisticas_vendas. Para o que mais vendeu, use produtos_mais_vendidos. Para comparar vendedores, use desempenho_vendedores. Para quem mais comprou, use melhores_clientes. Essas ferramentas aceitam períodos relativos pelo parâmetro "periodo" (hoje, ontem, ultimos_7_dias, ultimos_30_dias, este_mes, mes_passado, este_ano) ou um intervalo exato com inicio e fim (YYYY-MM-DD). Para um mês específico (ex.: "maio"), calcule inicio e fim daquele mês a partir da data de hoje informada abaixo.
+
+Sobre pagamentos e inadimplência: o sistema controla vendas a prazo e parceladas, com data de vencimento. "Inadimplente" / "em atraso" = venda a prazo ou parcela cujo vencimento JÁ passou e não foi paga. "A vencer" / "pendente" = ainda dentro do prazo (deve, mas não está atrasado). São coisas diferentes: ao pedirem "somente os inadimplentes", liste apenas quem tem valor EM ATRASO, sem misturar com quem só tem parcelas a vencer. Para a LISTA de devedores (todos ou só os em atraso), use contas_a_receber. Para a dívida de UM cliente pelo nome ("quanto a Maria deve", "o que o João tem em aberto"), use divida_cliente — ela detalha cada venda/parcela em aberto. Para o TOTAL que a loja tem a receber ("quanto tenho a receber", "minha inadimplência total"), use total_a_receber. O sistema CONSEGUE, sim, identificar inadimplência pela data de vencimento.`
+
+// A data de hoje entra no system pra o modelo resolver pedidos como "mês passado"
+// ou "em maio". Muda 1x/dia — dentro de um dia o prefixo segue estável, então o
+// cache de prompt continua valendo.
+function montarSystem(): string {
+  const d = new Date()
+  const hoje = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return `${SYSTEM_BASE}\n\nHoje é ${hoje}.`
+}
 
 type Bloco =
   | { type: 'text'; text: string }
@@ -55,7 +66,7 @@ async function chamarBackend(
       novaPergunta,
       // Breakpoint de cache no system: como tools renderizam antes do system,
       // marcar o system cacheia tools+system juntos (ver prompt-caching).
-      system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
+      system: [{ type: 'text', text: montarSystem(), cache_control: { type: 'ephemeral' } }],
       tools: TOOLS,
       messages
     })
