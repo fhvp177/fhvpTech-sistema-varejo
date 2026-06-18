@@ -27,11 +27,11 @@ db.exec(`
     txid TEXT PRIMARY KEY,
     data TEXT NOT NULL
   );
-  CREATE TABLE IF NOT EXISTS chat_uso (
+  CREATE TABLE IF NOT EXISTS chat_custo (
     cliente_id TEXT NOT NULL,
-    dia TEXT NOT NULL,
-    total INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (cliente_id, dia)
+    mes TEXT NOT NULL,
+    custo_micro INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (cliente_id, mes)
   );
   CREATE TABLE IF NOT EXISTS recuperacao_uso (
     email TEXT NOT NULL,
@@ -50,10 +50,10 @@ const stmts = {
   setCobranca: db.prepare(
     'INSERT INTO cobrancas (txid, data) VALUES (?, ?) ON CONFLICT(txid) DO UPDATE SET data = excluded.data'
   ),
-  getUsoChat: db.prepare('SELECT total FROM chat_uso WHERE cliente_id = ? AND dia = ?'),
-  incUsoChat: db.prepare(
-    `INSERT INTO chat_uso (cliente_id, dia, total) VALUES (?, ?, 1)
-     ON CONFLICT(cliente_id, dia) DO UPDATE SET total = total + 1`
+  getCustoChat: db.prepare('SELECT custo_micro FROM chat_custo WHERE cliente_id = ? AND mes = ?'),
+  addCustoChat: db.prepare(
+    `INSERT INTO chat_custo (cliente_id, mes, custo_micro) VALUES (?, ?, ?)
+     ON CONFLICT(cliente_id, mes) DO UPDATE SET custo_micro = custo_micro + excluded.custo_micro`
   ),
   getUsoRecuperacao: db.prepare('SELECT total FROM recuperacao_uso WHERE email = ? AND hora = ?'),
   incUsoRecuperacao: db.prepare(
@@ -80,19 +80,23 @@ export function gravarCobranca(cobranca: Cobranca): void {
   stmts.setCobranca.run(cobranca.txid, JSON.stringify(cobranca))
 }
 
-// Contador diário de perguntas ao chatbot por cliente. Conta PERGUNTAS, não
-// rodadas de tool — o app só marca a 1ª chamada de cada pergunta. Se já atingiu
-// o limite do dia, não incrementa e devolve permitido=false. Dia em UTC.
-export function registrarPerguntaChat(
-  clienteId: string,
-  limiteDiario: number
-): { permitido: boolean; usadas: number } {
-  const dia = new Date().toISOString().slice(0, 10) // AAAA-MM-DD
-  const row = stmts.getUsoChat.get(clienteId, dia) as { total: number } | undefined
-  const usadas = row?.total ?? 0
-  if (usadas >= limiteDiario) return { permitido: false, usadas }
-  stmts.incUsoChat.run(clienteId, dia)
-  return { permitido: true, usadas: usadas + 1 }
+// Orçamento mensal de CUSTO do chatbot por cliente (loja), em microdólares
+// (1 µ$ = US$0,000001). Conta o gasto real de cada chamada — input, output e
+// cache, cada um pesado pelo seu preço (ver index.ts). Diferente de contar
+// "perguntas", não é burlável pelo cliente: toda chamada que gasta entra na
+// conta, e o limite vira teto de GASTO mensal, não de quantidade. Mês em UTC.
+export function custoMicroChatMes(clienteId: string): number {
+  const mes = new Date().toISOString().slice(0, 7) // AAAA-MM (UTC)
+  const row = stmts.getCustoChat.get(clienteId, mes) as { custo_micro: number } | undefined
+  return row?.custo_micro ?? 0
+}
+
+// Soma o custo (microdólares) de uma chamada ao total do mês. Ignora valores
+// não positivos.
+export function registrarCustoChat(clienteId: string, custoMicro: number): void {
+  if (!Number.isFinite(custoMicro) || custoMicro <= 0) return
+  const mes = new Date().toISOString().slice(0, 7) // AAAA-MM (UTC)
+  stmts.addCustoChat.run(clienteId, mes, Math.round(custoMicro))
 }
 
 // Rate-limit de envio de código de recuperação por email, por janela de hora

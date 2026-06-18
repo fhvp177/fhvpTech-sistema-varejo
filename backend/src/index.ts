@@ -22,7 +22,8 @@ import {
   gravarCliente,
   obterCobranca,
   gravarCobranca,
-  registrarPerguntaChat,
+  custoMicroChatMes,
+  registrarCustoChat,
   registrarEnvioRecuperacao
 } from './db.ts'
 import { enviarCodigoRecuperacao } from './email.ts'
@@ -137,41 +138,68 @@ function licencaAtiva(cliente: Cliente): boolean {
   return !isNaN(exp.getTime()) && exp.getTime() >= Date.now()
 }
 
-// Limite diário de PERGUNTAS ao assistente por cliente. Guarda contra abuso /
-// custo descontrolado na API. Conta perguntas, não rodadas de tool — o app
-// envia novaPergunta:true só na 1ª chamada de cada pergunta.
-const LIMITE_PERGUNTAS_DIA = 150
+// Proteção de custo do assistente: ORÇAMENTO MENSAL DE GASTO por loja, medido em
+// microdólares (1 µ$ = US$0,000001) a partir do gasto real de cada chamada que a
+// própria API reporta. Conta TODA chamada — inclusive as rodadas de ferramenta —,
+// então, diferente de contar "perguntas", não dá pra burlar dizendo que uma
+// chamada não conta. O limite é teto de GASTO, não de quantidade.
+//
+// ≈ R$30/mês por loja, supondo ~R$5,50/US$ → ~US$5,45 → 5.450.000 µ$.
+// Ajuste este número se o câmbio mudar ou se quiser outro teto.
+const LIMITE_CUSTO_MICRO_MES = 5_450_000
+
+// Trava de tamanho do prompt: corta de cara um payload absurdo (ex.: colar
+// centenas de KB) ANTES de gastar qualquer token. ~200 KB ≈ 50k tokens — folgado
+// pro uso normal, já que as ferramentas devolvem resumos pequenos.
+const MAX_CHARS_MENSAGENS = 200_000
+
+// Custo em microdólares de uma chamada, pelos preços do Haiku 4.5 (o modelo
+// fixado em chat.ts): input US$1/M, output US$5/M, escrita de cache US$1,25/M,
+// leitura de cache US$0,10/M. Como US$1/M = 1 µ$ por token, o preço por milhão
+// vira o peso por token. A saída (5×) é a parte cara; cache lido (0,1×) é barato.
+function custoMicrodolaresChat(u: {
+  input_tokens?: number | null
+  output_tokens?: number | null
+  cache_creation_input_tokens?: number | null
+  cache_read_input_tokens?: number | null
+}): number {
+  return Math.round(
+    (u.input_tokens ?? 0) * 1 +
+      (u.output_tokens ?? 0) * 5 +
+      (u.cache_creation_input_tokens ?? 0) * 1.25 +
+      (u.cache_read_input_tokens ?? 0) * 0.1
+  )
+}
 
 // O app monta system+tools+messages (executa as tools no SQLite local) e manda
 // pra cá só pra adicionar a API key e chamar a Anthropic. Ver chat.ts.
 app.post('/chat', async (c) => {
-  const body = await c.req.json<
-    {
-      clienteId: string
-      novaPergunta?: boolean
-    } & ChatRequest
-  >()
+  const body = await c.req.json<{ clienteId: string } & ChatRequest>()
   if (!body.clienteId) return c.json({ erro: 'clienteId obrigatório' }, 400)
 
   const cliente = obterCliente(body.clienteId)
   if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
   if (!licencaAtiva(cliente)) return c.json({ erro: 'licença inativa' }, 403)
 
-  // Só conta no limite as chamadas de pergunta nova (não as rodadas de tool).
-  // Default = conta, a menos que o app diga explicitamente que é continuação.
-  if (body.novaPergunta !== false) {
-    const uso = registrarPerguntaChat(body.clienteId, LIMITE_PERGUNTAS_DIA)
-    if (!uso.permitido) {
-      return c.json(
-        {
-          erro:
-            `Você já usou suas ${LIMITE_PERGUNTAS_DIA} perguntas de hoje ao assistente. ` +
-            `O limite reseta amanhã. Quer aproveitar mais? Fale com o suporte sobre um upgrade do plano — ` +
-            `pelo botão "Suporte" na barra lateral ou no WhatsApp (85) 9.2187-1975.`
-        },
-        429
-      )
-    }
+  // 1) Trava de tamanho — barra prompts gigantes antes de chamar a API.
+  if (JSON.stringify(body.messages ?? '').length > MAX_CHARS_MENSAGENS) {
+    return c.json(
+      { erro: 'Sua mensagem ficou grande demais para o assistente. Resuma e tente de novo.' },
+      413
+    )
+  }
+
+  // 2) Orçamento de gasto do mês já estourado? Barra antes de gastar mais.
+  if (custoMicroChatMes(body.clienteId) >= LIMITE_CUSTO_MICRO_MES) {
+    return c.json(
+      {
+        erro:
+          'O assistente atingiu o limite de uso deste mês desta loja. O limite reseta no início do mês. ' +
+          'Para um teto maior, fale com o suporte sobre um upgrade do plano — ' +
+          'botão "Suporte" na barra lateral ou no WhatsApp (85) 9.2187-1975.'
+      },
+      429
+    )
   }
 
   const r = await proxyChat({
@@ -181,6 +209,10 @@ app.post('/chat', async (c) => {
     max_tokens: body.max_tokens
   })
   if (!r.ok) return c.json({ erro: r.erro }, r.status as 400)
+
+  // 3) Contabiliza o gasto REAL desta chamada (a API reporta no usage).
+  registrarCustoChat(body.clienteId, custoMicrodolaresChat(r.message.usage))
+
   return c.json(r.message)
 })
 
