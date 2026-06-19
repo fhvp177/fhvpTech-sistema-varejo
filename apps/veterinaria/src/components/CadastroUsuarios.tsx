@@ -227,7 +227,7 @@ const CadastroUsuarios: FC = () => {
 
               if (emEdicao) {
                 return (
-                  <li key={u.id} className="px-3 py-3 space-y-2 bg-blue-50/30">
+                  <li key={u.id} className="px-3 py-3 space-y-2 bg-green-50/40">
                     <div className="flex gap-2">
                       <Input
                         value={edicao.nome}
@@ -277,7 +277,7 @@ const CadastroUsuarios: FC = () => {
                 >
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0 ${
-                      ehDono ? 'bg-amber-500' : 'bg-slate-500'
+                      ehDono ? 'bg-amber-500' : 'bg-green-700'
                     }`}
                   >
                     {u.nome.trim().slice(0, 1).toUpperCase() || '?'}
@@ -295,7 +295,7 @@ const CadastroUsuarios: FC = () => {
                         <span className="text-[10px] text-muted-foreground italic">(inativo)</span>
                       )}
                       {ehSessaoAtual && (
-                        <span className="text-[10px] text-blue-600 font-medium">· você</span>
+                        <span className="text-[10px] text-green-700 font-medium">· você</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -311,7 +311,7 @@ const CadastroUsuarios: FC = () => {
                   <div className="flex items-center gap-0.5">
                     <button
                       onClick={() => abrirRedefinirPin(u)}
-                      className="text-muted-foreground hover:text-blue-600 p-1.5"
+                      className="text-muted-foreground hover:text-green-700 p-1.5"
                       title="Redefinir PIN"
                     >
                       <KeyRound className="w-3.5 h-3.5" />
@@ -320,7 +320,7 @@ const CadastroUsuarios: FC = () => {
                       onClick={() => alterarPapel(u)}
                       className={`p-1.5 ${
                         ehDono
-                          ? 'text-muted-foreground hover:text-slate-700'
+                          ? 'text-muted-foreground hover:text-green-700'
                           : 'text-muted-foreground hover:text-amber-600'
                       }`}
                       title={ehDono ? 'Rebaixar a Funcionário' : 'Promover a Dono'}
@@ -370,7 +370,7 @@ const CadastroUsuarios: FC = () => {
           configurações, gestão de usuários e áreas restritas.
         </p>
         <p>
-          <span className="inline-block w-3 h-3 rounded-full bg-slate-500 mr-0.5 align-middle" />{' '}
+          <span className="inline-block w-3 h-3 rounded-full bg-green-700 mr-0.5 align-middle" />{' '}
           <b>Funcionário:</b> opera o dia a dia. Áreas restritas pedem o PIN de um dono.
         </p>
       </div>

@@ -132,7 +132,7 @@ const Tutores: FC = () => {
               const expandido = expandidoId === t.id
               if (editandoId === t.id) {
                 return (
-                  <li key={t.id} className="flex gap-2 px-3 py-2.5 bg-blue-50/30">
+                  <li key={t.id} className="flex gap-2 px-3 py-2.5 bg-green-50/40">
                     <Input
                       value={edicao.nome}
                       onChange={(e) => setEdicao({ ...edicao, nome: e.target.value })}
@@ -302,7 +302,7 @@ const PainelPets: FC<{ tutorId: number; onMudou: () => void }> = ({ tutorId, onM
   }
 
   return (
-    <div className="bg-slate-50 border-t px-3 py-3 pl-9 space-y-2">
+    <div className="bg-green-50/60 border-t px-3 py-3 pl-9 space-y-2">
       <div className="flex flex-wrap gap-2">
         <Input
           value={novo.nome}
@@ -390,7 +390,7 @@ const PainelPets: FC<{ tutorId: number; onMudou: () => void }> = ({ tutorId, onM
                 key={p.id}
                 className="flex items-center gap-2 text-sm bg-white rounded px-2.5 py-1.5"
               >
-                <PawPrint className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <PawPrint className="w-3.5 h-3.5 text-green-600/60 shrink-0" />
                 <span className="font-medium">{p.nome}</span>
                 <span className="text-xs text-muted-foreground flex-1 truncate">
                   {[p.especie, p.raca].filter(Boolean).join(' · ') || 'sem detalhes'}

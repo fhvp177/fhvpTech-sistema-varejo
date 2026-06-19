@@ -142,7 +142,7 @@ const Produtos: FC = () => {
           <ul className="divide-y">
             {produtos.map((p) =>
               editandoId === p.id ? (
-                <li key={p.id} className="flex gap-2 px-3 py-2.5 bg-blue-50/30">
+                <li key={p.id} className="flex gap-2 px-3 py-2.5 bg-green-50/40">
                   <Input
                     value={edNome}
                     onChange={(e) => setEdNome(e.target.value)}

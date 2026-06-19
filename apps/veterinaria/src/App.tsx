@@ -150,8 +150,8 @@ export default function App() {
 
   if (estadoLicenca === 'verificando') {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <p className="text-slate-400 text-sm">Verificando licença...</p>
+      <div className="min-h-screen bg-green-950 flex items-center justify-center">
+        <p className="text-green-300 text-sm">Verificando licença...</p>
       </div>
     )
   }
@@ -176,8 +176,8 @@ export default function App() {
 
   if (estadoAuth === 'verificando') {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <p className="text-slate-400 text-sm">Verificando acesso...</p>
+      <div className="min-h-screen bg-green-950 flex items-center justify-center">
+        <p className="text-green-300 text-sm">Verificando acesso...</p>
       </div>
     )
   }
@@ -254,10 +254,10 @@ const SECOES_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
 ]
 
 const Sidebar: FC<{ sessao: Sessao | null; onBloquear: () => void }> = ({ sessao, onBloquear }) => (
-  <nav className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
+  <nav className="w-56 bg-green-950 text-white flex flex-col p-4 shrink-0">
     <div className="mb-4">
       <h1 className="text-lg font-bold text-white">FHVP Tech</h1>
-      <p className="text-xs text-slate-400">Sistema de Gestão Veterinária</p>
+      <p className="text-xs text-green-300">Sistema de Gestão Veterinária</p>
     </div>
 
     {sessao && <UserMenu sessao={sessao} onSair={onBloquear} />}
@@ -265,7 +265,7 @@ const Sidebar: FC<{ sessao: Sessao | null; onBloquear: () => void }> = ({ sessao
     <div className="flex-1 overflow-y-auto -mr-2 pr-2 space-y-4">
       {SECOES_SIDEBAR.map((sec) => (
         <div key={sec.titulo}>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-3 mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-green-300/50 px-3 mb-1">
             {sec.titulo}
           </p>
           <div className="flex flex-col gap-1">
@@ -279,10 +279,10 @@ const Sidebar: FC<{ sessao: Sessao | null; onBloquear: () => void }> = ({ sessao
                   className={({ isActive }) =>
                     `flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
                       isActive
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-green-600 text-white'
                         : bloqueado
-                          ? 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-400'
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                          ? 'text-green-300/50 hover:bg-green-900/60 hover:text-green-300'
+                          : 'text-green-200 hover:bg-green-900 hover:text-white'
                     }`
                   }
                 >
@@ -297,7 +297,7 @@ const Sidebar: FC<{ sessao: Sessao | null; onBloquear: () => void }> = ({ sessao
       ))}
     </div>
 
-    <div className="mt-4 pt-3 border-t border-slate-800 space-y-2">
+    <div className="mt-4 pt-3 border-t border-green-900 space-y-2">
       <a
         href={URL_SUPORTE_WHATSAPP}
         target="_blank"
@@ -311,7 +311,7 @@ const Sidebar: FC<{ sessao: Sessao | null; onBloquear: () => void }> = ({ sessao
       <button
         onClick={onBloquear}
         title="Bloquear sistema (Ctrl+L)"
-        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium text-slate-300 bg-slate-800/60 hover:bg-slate-700 hover:text-white transition-colors"
+        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium text-green-200 bg-green-900/60 hover:bg-green-800 hover:text-white transition-colors"
       >
         <Lock className="w-4 h-4" />
         Bloquear
@@ -325,7 +325,7 @@ const UserMenu: FC<{ sessao: Sessao; onSair: () => void }> = ({ sessao, onSair }
   const inicial = sessao.nome.trim().slice(0, 1).toUpperCase() || '?'
   const ehDono = sessao.papel === 'dono'
   return (
-    <div className="bg-slate-800/60 rounded-lg p-3 mb-4">
+    <div className="bg-green-900/60 rounded-lg p-3 mb-4">
       <button
         type="button"
         onClick={() => setAberto((v) => !v)}
@@ -334,7 +334,7 @@ const UserMenu: FC<{ sessao: Sessao; onSair: () => void }> = ({ sessao, onSair }
       >
         <div
           className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0 ${
-            ehDono ? 'bg-amber-500' : 'bg-slate-500'
+            ehDono ? 'bg-amber-500' : 'bg-green-700'
           }`}
         >
           {inicial}
@@ -343,7 +343,7 @@ const UserMenu: FC<{ sessao: Sessao; onSair: () => void }> = ({ sessao, onSair }
           <p className="text-sm font-semibold text-white truncate" title={sessao.nome}>
             {sessao.nome}
           </p>
-          <p className="text-[11px] text-slate-400 flex items-center gap-1">
+          <p className="text-[11px] text-green-300 flex items-center gap-1">
             {ehDono ? (
               <>
                 <Crown className="w-3 h-3 text-amber-400" /> Dono
@@ -354,18 +354,18 @@ const UserMenu: FC<{ sessao: Sessao; onSair: () => void }> = ({ sessao, onSair }
           </p>
         </div>
         <ChevronDown
-          className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${aberto ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 shrink-0 text-green-300 transition-transform ${aberto ? 'rotate-180' : ''}`}
         />
       </button>
       {sessao.email && (
-        <p className="text-[11px] text-slate-400 mt-1.5 truncate" title={sessao.email}>
+        <p className="text-[11px] text-green-300 mt-1.5 truncate" title={sessao.email}>
           {sessao.email}
         </p>
       )}
       {aberto && (
         <button
           onClick={onSair}
-          className="mt-2 w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-300 hover:text-white bg-slate-900/60 hover:bg-slate-900 rounded px-2 py-1.5 transition-colors"
+          className="mt-2 w-full flex items-center justify-center gap-1.5 text-[11px] text-green-200 hover:text-white bg-green-950/60 hover:bg-green-950 rounded px-2 py-1.5 transition-colors"
         >
           <LogOut className="w-3 h-3" />
           Sair

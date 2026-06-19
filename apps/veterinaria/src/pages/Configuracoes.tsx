@@ -35,7 +35,7 @@ const TabBtn: FC<{ ativo: boolean; onClick: () => void; icon: LucideIcon; label:
     onClick={onClick}
     className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
       ativo
-        ? 'border-blue-600 text-blue-600'
+        ? 'border-green-600 text-green-700'
         : 'border-transparent text-muted-foreground hover:text-foreground'
     }`}
   >

@@ -124,7 +124,7 @@ const Servicos: FC = () => {
           <ul className="divide-y">
             {servicos.map((s) =>
               editandoId === s.id ? (
-                <li key={s.id} className="flex gap-2 px-3 py-2.5 bg-blue-50/30">
+                <li key={s.id} className="flex gap-2 px-3 py-2.5 bg-green-50/40">
                   <Input
                     value={edNome}
                     onChange={(e) => setEdNome(e.target.value)}
