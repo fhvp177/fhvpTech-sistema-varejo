@@ -1045,8 +1045,10 @@ const CardEstoqueBaixo: FC<{ metricas: MetricasDashboard | null }> = ({ metricas
         </p>
       ) : (
         <ul className="space-y-2">
-          {produtos.map((p) => (
-            <li key={p.produto_id} className="flex items-center gap-2 text-sm">
+          {produtos.map((p) => {
+            const nome = p.tamanho ? `${p.nome} (${p.tamanho})` : p.nome
+            return (
+            <li key={`${p.produto_id}-${p.tamanho ?? ''}`} className="flex items-center gap-2 text-sm">
               <span className={`text-xs font-bold rounded px-1.5 py-0.5 shrink-0 ${
                 p.estoque <= 2
                   ? 'bg-red-100 text-red-700'
@@ -1054,9 +1056,10 @@ const CardEstoqueBaixo: FC<{ metricas: MetricasDashboard | null }> = ({ metricas
               }`}>
                 {p.estoque} un
               </span>
-              <span className="truncate" title={p.nome}>{p.nome}</span>
+              <span className="truncate" title={nome}>{nome}</span>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
     </div>

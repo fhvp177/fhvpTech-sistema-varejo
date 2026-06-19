@@ -39,10 +39,12 @@ export type ItemVenda = {
   id: number
   venda_id: number
   produto_id: number
+  variacao_id: number | null
   quantidade: number
   preco_unitario: number
   produto_nome?: string
   codigo_barras?: string
+  tamanho?: string | null
 }
 
 export type VendaDetalhada = Venda & { itens: ItemVenda[]; parcelas: Parcela[] }
@@ -81,6 +83,9 @@ export type DadosNovaVenda = {
   valor_credito_usado?: number
   itens: Array<{
     produto_id: number
+    // Tamanho vendido, quando o produto é de grade. null/ausente = produto simples
+    // (baixa do estoque do próprio produto).
+    variacao_id?: number | null
     quantidade: number
     preco_unitario: number
   }>
@@ -189,9 +194,13 @@ export function buscarVendaPorId(id: number): VendaDetalhada | undefined {
 
   const itens = db
     .prepare(
-      `SELECT iv.*, p.nome AS produto_nome, p.codigo_barras
+      `SELECT iv.*,
+              p.nome || CASE WHEN pv.tamanho IS NOT NULL THEN ' (' || pv.tamanho || ')' ELSE '' END AS produto_nome,
+              COALESCE(pv.codigo_barras, p.codigo_barras) AS codigo_barras,
+              pv.tamanho AS tamanho
        FROM itens_venda iv
        JOIN produtos p ON p.id = iv.produto_id
+       LEFT JOIN produto_variacoes pv ON pv.id = iv.variacao_id
        WHERE iv.venda_id = ?`
     )
     .all(id) as ItemVenda[]
@@ -218,16 +227,33 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   }
 
   for (const item of dados.itens) {
-    const produto = db
-      .prepare('SELECT nome, estoque FROM produtos WHERE id = ?')
-      .get(item.produto_id) as { nome: string; estoque: number } | undefined
+    if (item.variacao_id != null) {
+      const v = db
+        .prepare(
+          `SELECT pv.estoque AS estoque, pv.tamanho AS tamanho, p.nome AS nome
+           FROM produto_variacoes pv JOIN produtos p ON p.id = pv.produto_id
+           WHERE pv.id = ?`
+        )
+        .get(item.variacao_id) as { estoque: number; tamanho: string; nome: string } | undefined
+      if (!v) throw new Error(`Tamanho #${item.variacao_id} não encontrado.`)
+      if (item.quantidade > v.estoque) {
+        throw new Error(
+          `Estoque insuficiente para "${v.nome} (${v.tamanho})": ` +
+          `solicitado ${item.quantidade}, disponível ${v.estoque}.`
+        )
+      }
+    } else {
+      const produto = db
+        .prepare('SELECT nome, estoque FROM produtos WHERE id = ?')
+        .get(item.produto_id) as { nome: string; estoque: number } | undefined
 
-    if (!produto) throw new Error(`Produto #${item.produto_id} não encontrado.`)
-    if (item.quantidade > produto.estoque) {
-      throw new Error(
-        `Estoque insuficiente para "${produto.nome}": ` +
-        `solicitado ${item.quantidade}, disponível ${produto.estoque}.`
-      )
+      if (!produto) throw new Error(`Produto #${item.produto_id} não encontrado.`)
+      if (item.quantidade > produto.estoque) {
+        throw new Error(
+          `Estoque insuficiente para "${produto.nome}": ` +
+          `solicitado ${item.quantidade}, disponível ${produto.estoque}.`
+        )
+      }
     }
   }
 
@@ -278,11 +304,14 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
      VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas)`
   )
   const inserirItem = db.prepare(
-    `INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario)
-     VALUES (@venda_id, @produto_id, @quantidade, @preco_unitario)`
+    `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario)
+     VALUES (@venda_id, @produto_id, @variacao_id, @quantidade, @preco_unitario)`
   )
-  const decrementarEstoque = db.prepare(
+  const decrementarEstoqueProduto = db.prepare(
     'UPDATE produtos SET estoque = estoque - ? WHERE id = ?'
+  )
+  const decrementarEstoqueVariacao = db.prepare(
+    'UPDATE produto_variacoes SET estoque = estoque - ? WHERE id = ?'
   )
   const inserirParcela = db.prepare(
     `INSERT INTO parcelas (venda_id, numero, valor, data_vencimento)
@@ -305,8 +334,18 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
     vendaId = result.lastInsertRowid as number
 
     for (const item of dados.itens) {
-      inserirItem.run({ venda_id: vendaId, ...item })
-      decrementarEstoque.run(item.quantidade, item.produto_id)
+      inserirItem.run({
+        venda_id: vendaId,
+        produto_id: item.produto_id,
+        variacao_id: item.variacao_id ?? null,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario
+      })
+      if (item.variacao_id != null) {
+        decrementarEstoqueVariacao.run(item.quantidade, item.variacao_id)
+      } else {
+        decrementarEstoqueProduto.run(item.quantidade, item.produto_id)
+      }
     }
 
     if (ehParcelado && dados.data_vencimento && dados.num_parcelas) {

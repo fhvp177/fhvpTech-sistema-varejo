@@ -21,15 +21,30 @@ export function criarTabelas(db: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS produtos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      codigo_barras TEXT UNIQUE NOT NULL,
+      codigo_barras TEXT UNIQUE,
       nome TEXT NOT NULL,
       categoria TEXT,
       preco REAL NOT NULL,
+      custo REAL NOT NULL DEFAULT 0,
       estoque INTEGER DEFAULT 0,
       fornecedor_id INTEGER,
       data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id)
     );
+
+    -- Tamanhos (grade) de um produto de vestuário. Um produto SEM linhas aqui é
+    -- "simples" (código/estoque vivem no próprio produto, como acessórios). Um
+    -- produto COM linhas aqui é "de grade": código e estoque vivem por tamanho, e
+    -- o codigo_barras do produto fica NULL. Preço/custo são sempre do produto.
+    CREATE TABLE IF NOT EXISTS produto_variacoes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      produto_id INTEGER NOT NULL,
+      tamanho TEXT NOT NULL,
+      codigo_barras TEXT UNIQUE NOT NULL,
+      estoque INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (produto_id) REFERENCES produtos(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_variacoes_produto ON produto_variacoes(produto_id);
 
     CREATE TABLE IF NOT EXISTS clientes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,6 +71,7 @@ export function criarTabelas(db: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       venda_id INTEGER NOT NULL,
       produto_id INTEGER NOT NULL,
+      variacao_id INTEGER,
       quantidade INTEGER NOT NULL,
       preco_unitario REAL NOT NULL,
       FOREIGN KEY (venda_id) REFERENCES vendas(id),

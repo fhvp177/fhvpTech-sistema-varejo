@@ -1,5 +1,5 @@
-import { FC, useEffect, useRef, useState } from 'react'
-import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown } from 'lucide-react'
+import { FC, Fragment, useEffect, useRef, useState } from 'react'
+import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, ChevronRight, ChevronDown, Layers } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
@@ -18,19 +18,33 @@ import { useSessao } from '@/App'
 
 const ITENS_POR_PAGINA = 20
 
+type Variacao = {
+  id: number
+  produto_id: number
+  tamanho: string
+  codigo_barras: string
+  estoque: number
+}
+
 type Produto = {
   id: number
-  codigo_barras: string
+  codigo_barras: string | null
   nome: string
   categoria: string | null
   preco: number
   custo: number
-  estoque: number
+  estoque: number // simples: o próprio; grade: soma dos tamanhos
   fornecedor_id: number | null
   fornecedor_nome?: string | null
+  variacoes: Variacao[]
 }
 
 type Fornecedor = { id: number; nome: string }
+
+// Tamanhos oferecidos na grade (P ao GG por enquanto).
+const TAMANHOS_GRADE = ['P', 'M', 'G', 'GG'] as const
+
+type FormVariacao = { tamanho: string; codigo_barras: string; estoque: string }
 
 type FormProduto = {
   codigo_barras: string
@@ -40,6 +54,25 @@ type FormProduto = {
   custo: string
   estoque: string
   fornecedor_id: string
+  temGrade: boolean
+  variacoes: FormVariacao[]
+}
+
+const gradeVazia = (): FormVariacao[] =>
+  TAMANHOS_GRADE.map((t) => ({ tamanho: t, codigo_barras: '', estoque: '0' }))
+
+// Monta as linhas da grade a partir das variações salvas: começa com P/M/G/GG
+// vazios e sobrepõe os tamanhos já cadastrados (preserva tamanhos fora do padrão).
+const construirGrade = (vs: Variacao[]): FormVariacao[] => {
+  const base = gradeVazia()
+  const extras: FormVariacao[] = []
+  for (const v of vs) {
+    const fv = { tamanho: v.tamanho, codigo_barras: v.codigo_barras, estoque: String(v.estoque) }
+    const idx = base.findIndex((b) => b.tamanho === v.tamanho)
+    if (idx >= 0) base[idx] = fv
+    else extras.push(fv)
+  }
+  return [...base, ...extras]
 }
 
 const FORM_VAZIO: FormProduto = {
@@ -49,7 +82,9 @@ const FORM_VAZIO: FormProduto = {
   preco: '',
   custo: '',
   estoque: '0',
-  fornecedor_id: ''
+  fornecedor_id: '',
+  temGrade: false,
+  variacoes: gradeVazia()
 }
 
 type Categoria = { id: number; nome: string; produtos_count: number }
@@ -78,17 +113,26 @@ function gerarHtmlRelatorio(produtos: Produto[]): string {
 
   const tabelasHtml = categoriasOrdenadas.map((cat) => {
     const prods = grupos.get(cat)!.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    const linha = (nome: string, codigo: string, estoque: number, comFornecedor: string) => {
+      const cls = estoque === 0 ? 'estoque-zero' : estoque <= 5 ? 'estoque-baixo' : ''
+      return `<tr>
+        <td>${nome}${comFornecedor}</td>
+        <td class="col-codigo">${codigo}</td>
+        <td class="col-estoque ${cls}">${estoque}</td>
+        <td class="col-contagem"></td>
+      </tr>`
+    }
     const linhas = prods.map((p) => {
-      const cls = p.estoque === 0 ? 'estoque-zero' : p.estoque <= 5 ? 'estoque-baixo' : ''
       const fornecedor = p.fornecedor_nome
         ? `<div class="fornecedor-nome">${p.fornecedor_nome}</div>`
         : ''
-      return `<tr>
-        <td>${p.nome}${fornecedor}</td>
-        <td class="col-codigo">${p.codigo_barras}</td>
-        <td class="col-estoque ${cls}">${p.estoque}</td>
-        <td class="col-contagem"></td>
-      </tr>`
+      // Produto de grade: uma linha por tamanho (cada um com seu código/estoque).
+      if (p.variacoes.length > 0) {
+        return p.variacoes
+          .map((v) => linha(`${p.nome} — ${v.tamanho}`, v.codigo_barras, v.estoque, ''))
+          .join('')
+      }
+      return linha(p.nome, p.codigo_barras ?? '—', p.estoque, fornecedor)
     }).join('')
     return `<div class="grupo-categoria">
       <div class="grupo-titulo">${cat} (${prods.length} produto${prods.length !== 1 ? 's' : ''})</div>
@@ -161,6 +205,7 @@ const Produtos: FC = () => {
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [paginaAtual, setPaginaAtual] = useState(1)
+  const [expandido, setExpandido] = useState<number | null>(null) // id do produto com grade aberta na lista
 
   // Cadastro rápido de fornecedor
   const [modalFornecedorAberto, setModalFornecedorAberto] = useState(false)
@@ -216,7 +261,8 @@ const Produtos: FC = () => {
     const t = busca.toLowerCase()
     return (
       p.nome.toLowerCase().includes(t) ||
-      p.codigo_barras.includes(t) ||
+      (p.codigo_barras ?? '').includes(busca) ||
+      p.variacoes.some((v) => v.codigo_barras.includes(busca)) ||
       (p.categoria ?? '').toLowerCase().includes(t) ||
       (p.fornecedor_nome ?? '').toLowerCase().includes(t)
     )
@@ -237,15 +283,18 @@ const Produtos: FC = () => {
   }
 
   const abrirEdicao = (p: Produto) => {
+    const temGrade = p.variacoes.length > 0
     setEditando(p)
     setForm({
-      codigo_barras: p.codigo_barras,
+      codigo_barras: p.codigo_barras ?? '',
       nome: p.nome,
       categoria: p.categoria ?? '',
       preco: p.preco.toFixed(2),
       custo: (p.custo ?? 0) > 0 ? (p.custo ?? 0).toFixed(2) : '',
-      estoque: String(p.estoque),
-      fornecedor_id: p.fornecedor_id ? String(p.fornecedor_id) : ''
+      estoque: temGrade ? '0' : String(p.estoque),
+      fornecedor_id: p.fornecedor_id ? String(p.fornecedor_id) : '',
+      temGrade,
+      variacoes: temGrade ? construirGrade(p.variacoes) : gradeVazia()
     })
     setErro('')
     setDialogAberto(true)
@@ -256,25 +305,63 @@ const Produtos: FC = () => {
 
   const gerarCodigo = () => setForm((f) => ({ ...f, codigo_barras: gerarEAN13() }))
 
+  // ── Grade de tamanhos ──
+  const setVariacao = (i: number, campo: 'codigo_barras' | 'estoque') => (valor: string) =>
+    setForm((f) => ({
+      ...f,
+      variacoes: f.variacoes.map((v, idx) => (idx === i ? { ...v, [campo]: valor } : v))
+    }))
+
+  const gerarCodigoVariacao = (i: number) =>
+    setForm((f) => ({
+      ...f,
+      variacoes: f.variacoes.map((v, idx) => (idx === i ? { ...v, codigo_barras: gerarEAN13() } : v))
+    }))
+
   const salvar = async () => {
     if (!form.nome.trim()) { setErro('O nome do produto é obrigatório.'); return }
-    if (!form.codigo_barras.trim()) { setErro('O código de barras é obrigatório.'); return }
     const preco = parseFloat(form.preco.replace(',', '.'))
     if (isNaN(preco) || preco < 0) { setErro('Preço inválido.'); return }
     const custo = form.custo.trim() ? parseFloat(form.custo.replace(',', '.')) : 0
     if (isNaN(custo) || custo < 0) { setErro('Preço de custo inválido.'); return }
 
+    // Tamanhos efetivamente cadastrados = os que têm código de barras preenchido.
+    const ativos = form.variacoes.filter((v) => v.codigo_barras.trim())
+
+    if (form.temGrade) {
+      if (ativos.length === 0) {
+        setErro('Adicione ao menos um tamanho com código de barras (ou desligue a grade).'); return
+      }
+      for (const v of ativos) {
+        const est = parseInt(v.estoque)
+        if (isNaN(est) || est < 0) { setErro(`Estoque inválido no tamanho ${v.tamanho}.`); return }
+      }
+      const codigos = ativos.map((v) => v.codigo_barras.trim())
+      if (new Set(codigos).size !== codigos.length) {
+        setErro('Há códigos de barras repetidos entre os tamanhos.'); return
+      }
+    } else if (!form.codigo_barras.trim()) {
+      setErro('O código de barras é obrigatório.'); return
+    }
+
     setCarregando(true)
     setErro('')
 
     const dados = {
-      codigo_barras: form.codigo_barras.trim(),
+      codigo_barras: form.temGrade ? null : form.codigo_barras.trim(),
       nome: form.nome.trim(),
       categoria: form.categoria.trim() || null,
       preco,
       custo,
-      estoque: parseInt(form.estoque) || 0,
-      fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null
+      estoque: form.temGrade ? 0 : parseInt(form.estoque) || 0,
+      fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
+      variacoes: form.temGrade
+        ? ativos.map((v) => ({
+            tamanho: v.tamanho,
+            codigo_barras: v.codigo_barras.trim(),
+            estoque: parseInt(v.estoque) || 0
+          }))
+        : undefined
     }
 
     const resp = editando
@@ -423,9 +510,28 @@ const Produtos: FC = () => {
                 </td>
               </tr>
             )}
-            {listaPaginada.map((p, i) => (
-              <tr key={p.id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.codigo_barras}</td>
+            {listaPaginada.map((p, i) => {
+              const temGrade = p.variacoes.length > 0
+              const aberto = expandido === p.id
+              return (
+              <Fragment key={p.id}>
+              <tr className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                  {temGrade ? (
+                    <button
+                      type="button"
+                      onClick={() => setExpandido(aberto ? null : p.id)}
+                      className="flex items-center gap-1 text-primary hover:underline"
+                      title="Ver tamanhos"
+                    >
+                      {aberto ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      <Layers className="w-3.5 h-3.5" />
+                      {p.variacoes.length} tam.
+                    </button>
+                  ) : (
+                    p.codigo_barras
+                  )}
+                </td>
                 <td className="px-4 py-3 font-medium">{p.nome}</td>
                 <td className="px-4 py-3 text-muted-foreground">{p.categoria || '—'}</td>
                 <td className="px-4 py-3 text-right">
@@ -453,7 +559,29 @@ const Produtos: FC = () => {
                   )}
                 </td>
               </tr>
-            ))}
+              {temGrade && aberto && (
+                <tr className="bg-muted/40">
+                  <td colSpan={7} className="px-4 py-2">
+                    <div className="flex flex-wrap gap-2">
+                      {p.variacoes.map((v) => (
+                        <div
+                          key={v.id}
+                          className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-1.5 text-xs"
+                        >
+                          <span className="font-semibold w-7 text-center">{v.tamanho}</span>
+                          <span className="font-mono text-muted-foreground">{v.codigo_barras}</span>
+                          <span className={`font-medium ${v.estoque === 0 ? 'text-destructive' : v.estoque <= 5 ? 'text-amber-600' : ''}`}>
+                            {v.estoque} un.
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -473,7 +601,8 @@ const Produtos: FC = () => {
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
-            {/* Código de barras + gerador */}
+            {/* Código de barras + gerador (só quando o produto NÃO é de grade) */}
+            {!form.temGrade && (
             <div className="grid gap-1.5">
               <Label htmlFor="codigo_barras">
                 Código de barras <span className="text-destructive">*</span>
@@ -509,6 +638,19 @@ const Produtos: FC = () => {
                 />
               )}
             </div>
+            )}
+
+            {/* Esse produto tem tamanhos? */}
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none rounded-md border bg-muted/30 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={form.temGrade}
+                onChange={(e) => setForm((f) => ({ ...f, temGrade: e.target.checked }))}
+                className="h-4 w-4 rounded border-input accent-primary"
+              />
+              <Layers className="w-4 h-4 text-muted-foreground" />
+              Esse produto tem tamanhos (grade P/M/G/GG)
+            </label>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 grid gap-1.5">
@@ -610,6 +752,7 @@ const Produtos: FC = () => {
                 </p>
               </div>
 
+              {!form.temGrade && (
               <div className="grid gap-1.5">
                 <Label htmlFor="estoque">Estoque inicial</Label>
                 <Input
@@ -621,7 +764,51 @@ const Produtos: FC = () => {
                   onChange={setF('estoque')}
                 />
               </div>
+              )}
             </div>
+
+            {/* Grade de tamanhos */}
+            {form.temGrade && (
+              <div className="grid gap-2">
+                <Label>Tamanhos, códigos e estoque</Label>
+                <p className="text-xs text-muted-foreground -mt-1">
+                  Preencha só os tamanhos que você vende. Cada um tem seu próprio código de barras
+                  (pra bipar no caixa) e seu próprio estoque.
+                </p>
+                <div className="rounded-md border divide-y">
+                  {form.variacoes.map((v, i) => (
+                    <div key={v.tamanho} className="flex items-center gap-2 px-3 py-2">
+                      <span className="w-9 shrink-0 text-center font-semibold text-sm">{v.tamanho}</span>
+                      <Input
+                        value={v.codigo_barras}
+                        onChange={(e) => setVariacao(i, 'codigo_barras')(e.target.value)}
+                        placeholder="Código de barras"
+                        className="font-mono flex-1"
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => gerarCodigoVariacao(i)}
+                        title="Gerar código EAN-13 para este tamanho"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </Button>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={v.estoque}
+                        onChange={(e) => setVariacao(i, 'estoque')(e.target.value)}
+                        className="w-20"
+                        title="Estoque deste tamanho"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {erro && (
               <p className="text-destructive text-sm bg-destructive/10 rounded px-3 py-2">{erro}</p>

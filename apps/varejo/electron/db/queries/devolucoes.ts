@@ -169,7 +169,8 @@ export function registrarDevolucao(dados: DadosNovaDevolucao): Devolucao {
     `INSERT INTO itens_devolucao (devolucao_id, item_venda_id, produto_id, quantidade, valor_unitario_devolvido, restocado)
      VALUES (@devolucao_id, @item_venda_id, @produto_id, @quantidade, @valor_unitario_devolvido, @restocado)`
   )
-  const incrementarEstoque = db.prepare('UPDATE produtos SET estoque = estoque + ? WHERE id = ?')
+  const incrementarEstoqueProduto = db.prepare('UPDATE produtos SET estoque = estoque + ? WHERE id = ?')
+  const incrementarEstoqueVariacao = db.prepare('UPDATE produto_variacoes SET estoque = estoque + ? WHERE id = ?')
   const inserirCredito = db.prepare(
     `INSERT INTO creditos_cliente (cliente_id, tipo, valor, devolucao_id)
      VALUES (@cliente_id, 'entrada', @valor, @devolucao_id)`
@@ -189,7 +190,12 @@ export function registrarDevolucao(dados: DadosNovaDevolucao): Devolucao {
 
     for (const l of linhas) {
       inserirItem.run({ devolucao_id: devolucaoId, ...l })
-      if (l.restocado) incrementarEstoque.run(l.quantidade, l.produto_id)
+      // Repõe no tamanho certo quando o item vendido era de grade; senão, no produto.
+      if (l.restocado) {
+        const variacaoId = porItem.get(l.item_venda_id)?.variacao_id ?? null
+        if (variacaoId != null) incrementarEstoqueVariacao.run(l.quantidade, variacaoId)
+        else incrementarEstoqueProduto.run(l.quantidade, l.produto_id)
+      }
     }
 
     if (dados.tipo === 'credito') {
@@ -224,9 +230,12 @@ export function listarDevolucoesPorVenda(vendaId: number): DevolucaoComItens[] {
     )
     .all(vendaId) as Array<Devolucao & { cliente_nome: string | null }>
   const itensStmt = db.prepare(
-    `SELECT p.nome AS produto_nome, idv.quantidade, idv.valor_unitario_devolvido
+    `SELECT p.nome || CASE WHEN pv.tamanho IS NOT NULL THEN ' (' || pv.tamanho || ')' ELSE '' END AS produto_nome,
+            idv.quantidade, idv.valor_unitario_devolvido
      FROM itens_devolucao idv
      JOIN produtos p ON p.id = idv.produto_id
+     LEFT JOIN itens_venda iv ON iv.id = idv.item_venda_id
+     LEFT JOIN produto_variacoes pv ON pv.id = iv.variacao_id
      WHERE idv.devolucao_id = ?`
   )
   return devs.map((d) => ({

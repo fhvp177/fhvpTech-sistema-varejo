@@ -53,6 +53,7 @@ export type ProdutoEstoqueBaixo = {
   produto_id: number
   nome: string
   estoque: number
+  tamanho: string | null // preenchido quando o alerta é de um tamanho da grade
 }
 
 export type IntervaloDashboard = {
@@ -360,11 +361,21 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     .all() as ProdutoParado[]
 
   // Estoque baixo — entre 1 e 5 unidades. Zero é descontinuado/sem estoque, não alerta.
+  // Produto simples: olha o estoque do produto. Produto de grade: olha CADA tamanho
+  // (o alerta é por tamanho, ex.: "Camiseta (M)" com 2 unidades).
   const estoqueBaixo = db
     .prepare(
-      `SELECT id AS produto_id, nome, estoque
-       FROM produtos
-       WHERE estoque > 0 AND estoque <= 5
+      `SELECT produto_id, nome, estoque, tamanho FROM (
+         SELECT p.id AS produto_id, p.nome AS nome, p.estoque AS estoque, NULL AS tamanho
+         FROM produtos p
+         WHERE p.estoque > 0 AND p.estoque <= 5
+           AND NOT EXISTS (SELECT 1 FROM produto_variacoes v WHERE v.produto_id = p.id)
+         UNION ALL
+         SELECT p.id AS produto_id, p.nome AS nome, pv.estoque AS estoque, pv.tamanho AS tamanho
+         FROM produto_variacoes pv
+         JOIN produtos p ON p.id = pv.produto_id
+         WHERE pv.estoque > 0 AND pv.estoque <= 5
+       )
        ORDER BY estoque ASC, nome COLLATE NOCASE
        LIMIT 10`
     )

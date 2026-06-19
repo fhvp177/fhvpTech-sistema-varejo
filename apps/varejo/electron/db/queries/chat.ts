@@ -20,7 +20,11 @@ export function buscarProdutos(termo: string | undefined, limite = 40): ProdutoC
   const like = `%${(termo ?? '').trim()}%`
   return db
     .prepare(
-      `SELECT p.nome, p.categoria, p.preco, p.estoque, f.nome AS fornecedor
+      `SELECT p.nome, p.categoria, p.preco,
+              CASE WHEN EXISTS (SELECT 1 FROM produto_variacoes v WHERE v.produto_id = p.id)
+                   THEN (SELECT COALESCE(SUM(v.estoque), 0) FROM produto_variacoes v WHERE v.produto_id = p.id)
+                   ELSE p.estoque END AS estoque,
+              f.nome AS fornecedor
        FROM produtos p
        LEFT JOIN fornecedores f ON f.id = p.fornecedor_id
        WHERE p.nome LIKE @like COLLATE NOCASE
@@ -40,7 +44,11 @@ export function giroProduto(termo: string, dias = 30, limite = 20): GiroChat[] {
   const janela = `-${Math.max(1, Math.floor(dias))} days`
   return db
     .prepare(
-      `SELECT p.nome, p.estoque, COALESCE(SUM(iv.quantidade), 0) AS vendidos
+      `SELECT p.nome,
+              CASE WHEN EXISTS (SELECT 1 FROM produto_variacoes v WHERE v.produto_id = p.id)
+                   THEN (SELECT COALESCE(SUM(v.estoque), 0) FROM produto_variacoes v WHERE v.produto_id = p.id)
+                   ELSE p.estoque END AS estoque,
+              COALESCE(SUM(iv.quantidade), 0) AS vendidos
        FROM produtos p
        LEFT JOIN itens_venda iv ON iv.produto_id = p.id
        LEFT JOIN vendas v ON v.id = iv.venda_id AND date(v.data) >= date('now', @janela)

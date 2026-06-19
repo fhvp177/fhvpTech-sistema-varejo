@@ -10,10 +10,11 @@ import {
 
 export type ProdutoConsulta = {
   id: number
-  codigo_barras: string
+  codigo_barras: string | null
   nome: string
   preco: number
-  estoque: number
+  estoque: number // simples: o próprio; grade: soma dos tamanhos
+  variacoes?: Array<{ id: number; tamanho: string; codigo_barras: string; estoque: number }>
 }
 
 type Props = {
@@ -47,7 +48,8 @@ const ConsultaPreco: FC<Props> = ({ aberto, onFechar, produtos }) => {
         .filter(
           (p) =>
             p.nome.toLowerCase().includes(termoLimpo) ||
-            p.codigo_barras.includes(termoLimpo)
+            (p.codigo_barras ?? '').includes(termoLimpo) ||
+            (p.variacoes ?? []).some((v) => v.codigo_barras.includes(termoLimpo))
         )
         .slice(0, 30)
 
@@ -90,7 +92,13 @@ const ConsultaPreco: FC<Props> = ({ aberto, onFechar, produtos }) => {
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{p.nome}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{p.codigo_barras}</p>
+                    {p.variacoes && p.variacoes.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {p.variacoes.map((v) => `${v.tamanho}: ${v.estoque}`).join(' · ')}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground font-mono">{p.codigo_barras ?? '—'}</p>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-xl font-bold text-primary leading-tight">{fmt(p.preco)}</p>

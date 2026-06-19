@@ -84,6 +84,8 @@ type DevolucaoComItens = {
 
 type ItemCarrinho = {
   produto_id: number
+  variacao_id: number | null
+  tamanho: string | null
   codigo_barras: string
   nome: string
   preco_unitario: number
@@ -91,13 +93,26 @@ type ItemCarrinho = {
   estoque_disponivel: number
 }
 
-type Produto = {
+type Variacao = {
   id: number
+  produto_id: number
+  tamanho: string
   codigo_barras: string
-  nome: string
-  preco: number
   estoque: number
 }
+
+type Produto = {
+  id: number
+  codigo_barras: string | null
+  nome: string
+  preco: number
+  estoque: number // simples: o próprio; grade: soma dos tamanhos
+  variacoes: Variacao[]
+}
+
+// Identidade de uma linha do carrinho: por tamanho (grade) ou pelo produto (simples).
+const chaveItem = (produtoId: number, variacaoId: number | null): string =>
+  variacaoId != null ? `v${variacaoId}` : `p${produtoId}`
 
 type Cliente = {
   id: number
@@ -1115,23 +1130,31 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     statusPagamento !== 'pago' ? +Math.min(total, Math.max(0, entradaNum)).toFixed(2) : 0
   const valorFinanciado = +(total - entradaValor).toFixed(2)
 
-  const adicionarProduto = (produto: Produto) => {
-    if (produto.estoque <= 0) {
-      setFeedbackScan({ tipo: 'erro', msg: `"${produto.nome}" está sem estoque.` })
+  // Adiciona ao carrinho. `variacao` definida = vende aquele tamanho (baixa o
+  // estoque dele); null = produto simples. A linha do carrinho é única por tamanho.
+  const adicionarItem = (produto: Produto, variacao: Variacao | null) => {
+    const estoque = variacao ? variacao.estoque : produto.estoque
+    const nomeExib = variacao ? `${produto.nome} (${variacao.tamanho})` : produto.nome
+    const codigo = variacao ? variacao.codigo_barras : (produto.codigo_barras ?? '')
+    const variacaoId = variacao ? variacao.id : null
+    const k = chaveItem(produto.id, variacaoId)
+
+    if (estoque <= 0) {
+      setFeedbackScan({ tipo: 'erro', msg: `"${nomeExib}" está sem estoque.` })
       setTimeout(() => setFeedbackScan(null), 3000)
       return
     }
-    const existente = carrinho.find((item) => item.produto_id === produto.id)
-    if (existente && existente.quantidade >= produto.estoque) {
-      setFeedbackScan({ tipo: 'erro', msg: `Limite de estoque atingido para "${produto.nome}" (máx ${produto.estoque}).` })
+    const existente = carrinho.find((item) => chaveItem(item.produto_id, item.variacao_id) === k)
+    if (existente && existente.quantidade >= estoque) {
+      setFeedbackScan({ tipo: 'erro', msg: `Limite de estoque atingido para "${nomeExib}" (máx ${estoque}).` })
       setTimeout(() => setFeedbackScan(null), 3000)
       return
     }
     setCarrinho((prev) => {
-      const ex = prev.find((item) => item.produto_id === produto.id)
+      const ex = prev.find((item) => chaveItem(item.produto_id, item.variacao_id) === k)
       if (ex) {
         return prev.map((item) =>
-          item.produto_id === produto.id
+          chaveItem(item.produto_id, item.variacao_id) === k
             ? { ...item, quantidade: item.quantidade + 1 }
             : item
         )
@@ -1140,15 +1163,17 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         ...prev,
         {
           produto_id: produto.id,
-          codigo_barras: produto.codigo_barras,
-          nome: produto.nome,
+          variacao_id: variacaoId,
+          tamanho: variacao ? variacao.tamanho : null,
+          codigo_barras: codigo,
+          nome: nomeExib,
           preco_unitario: produto.preco,
           quantidade: 1,
-          estoque_disponivel: produto.estoque
+          estoque_disponivel: estoque
         }
       ]
     })
-    setFeedbackScan({ tipo: 'ok', msg: `✓ ${produto.nome}` })
+    setFeedbackScan({ tipo: 'ok', msg: `✓ ${nomeExib}` })
     setTimeout(() => setFeedbackScan(null), 2000)
   }
 
@@ -1161,7 +1186,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     const resp = await window.api.produtos.buscarPorCodigoBarras(codigo)
 
     if (resp.success && resp.data) {
-      adicionarProduto(resp.data as Produto)
+      const r = resp.data as Produto & { variacao_encontrada: Variacao | null }
+      adicionarItem(r, r.variacao_encontrada)
     } else {
       setFeedbackScan({ tipo: 'erro', msg: `Código "${codigo}" não encontrado.` })
       setTimeout(() => setFeedbackScan(null), 3000)
@@ -1169,24 +1195,24 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     scanRef.current?.focus()
   }
 
-  const atualizarQtd = (produtoId: number, qtd: number) => {
+  const atualizarQtd = (k: string, qtd: number) => {
     if (qtd <= 0) {
-      setCarrinho((prev) => prev.filter((item) => item.produto_id !== produtoId))
+      setCarrinho((prev) => prev.filter((item) => chaveItem(item.produto_id, item.variacao_id) !== k))
     } else {
       setCarrinho((prev) =>
         prev.map((item) => {
-          if (item.produto_id !== produtoId) return item
+          if (chaveItem(item.produto_id, item.variacao_id) !== k) return item
           return { ...item, quantidade: Math.min(qtd, item.estoque_disponivel) }
         })
       )
     }
   }
 
-  const atualizarPreco = (produtoId: number, preco: number) => {
+  const atualizarPreco = (k: string, preco: number) => {
     if (isNaN(preco) || preco < 0) return
     setCarrinho((prev) =>
       prev.map((item) =>
-        item.produto_id === produtoId ? { ...item, preco_unitario: preco } : item
+        chaveItem(item.produto_id, item.variacao_id) === k ? { ...item, preco_unitario: preco } : item
       )
     )
   }
@@ -1240,6 +1266,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       valor_credito_usado: creditoAplicado,
       itens: carrinho.map((item) => ({
         produto_id: item.produto_id,
+        variacao_id: item.variacao_id,
         quantidade: item.quantidade,
         preco_unitario: item.preco_unitario
       }))
@@ -1416,7 +1443,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const produtosFiltrados = produtos.filter(
     (p) =>
       p.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
-      p.codigo_barras.includes(termoBusca)
+      (p.codigo_barras ?? '').includes(termoBusca) ||
+      p.variacoes.some((v) => v.codigo_barras.includes(termoBusca))
   )
 
   return (
@@ -1480,8 +1508,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   </td>
                 </tr>
               )}
-              {carrinho.map((item, i) => (
-                <tr key={item.produto_id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+              {carrinho.map((item, i) => {
+                const k = chaveItem(item.produto_id, item.variacao_id)
+                return (
+                <tr key={k} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
                   <td className="px-3 py-2 font-medium">
                     <div>{item.nome}</div>
                     <div className="text-xs text-muted-foreground font-mono">{item.codigo_barras}</div>
@@ -1492,7 +1522,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                       min="1"
                       max={item.estoque_disponivel}
                       value={item.quantidade}
-                      onChange={(e) => atualizarQtd(item.produto_id, parseInt(e.target.value) || 0)}
+                      onChange={(e) => atualizarQtd(k, parseInt(e.target.value) || 0)}
                       className="w-16 text-center border rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                     />
                     <div className="text-xs text-muted-foreground mt-0.5">/ {item.estoque_disponivel}</div>
@@ -1503,7 +1533,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                       min="0"
                       step="0.01"
                       value={item.preco_unitario}
-                      onChange={(e) => atualizarPreco(item.produto_id, parseFloat(e.target.value))}
+                      onChange={(e) => atualizarPreco(k, parseFloat(e.target.value))}
                       className="w-24 text-right border rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                     />
                   </td>
@@ -1512,14 +1542,15 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   </td>
                   <td className="px-3 py-2 text-center">
                     <button
-                      onClick={() => atualizarQtd(item.produto_id, 0)}
+                      onClick={() => atualizarQtd(k, 0)}
                       className="text-muted-foreground hover:text-destructive transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -1925,31 +1956,64 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             />
           </div>
           <div className="border rounded-lg overflow-hidden max-h-72 overflow-y-auto">
-            {produtosFiltrados.slice(0, 50).map((p, i) => (
-              <button
-                key={p.id}
-                disabled={p.estoque === 0}
-                onClick={() => {
-                  adicionarProduto(p)
-                  setBuscaProdutos(false)
-                  scanRef.current?.focus()
-                }}
-                className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex justify-between items-center ${
-                  i > 0 ? 'border-t' : ''
-                } ${p.estoque === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-accent'}`}
-              >
-                <div>
-                  <div className="font-medium">{p.nome}</div>
-                  <div className="text-xs text-muted-foreground font-mono">{p.codigo_barras}</div>
-                </div>
-                <div className="text-right shrink-0 ml-3">
-                  <div className="font-semibold">{fmt(p.preco)}</div>
-                  <div className={`text-xs ${p.estoque === 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                    {p.estoque} em estoque
+            {produtosFiltrados.slice(0, 50).map((p, i) => {
+              // Produto de grade: o clique não adiciona direto — o lojista escolhe o
+              // tamanho nos chips (cada um mostra o estoque e baixa do tamanho certo).
+              if (p.variacoes.length > 0) {
+                return (
+                  <div key={p.id} className={`px-3 py-2.5 text-sm ${i > 0 ? 'border-t' : ''}`}>
+                    <div className="flex justify-between items-center gap-3">
+                      <div className="font-medium">{p.nome}</div>
+                      <div className="font-semibold shrink-0">{fmt(p.preco)}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {p.variacoes.map((v) => (
+                        <button
+                          key={v.id}
+                          disabled={v.estoque === 0}
+                          onClick={() => {
+                            adicionarItem(p, v)
+                            setBuscaProdutos(false)
+                            scanRef.current?.focus()
+                          }}
+                          className={`px-2 py-1 rounded border text-xs font-medium transition-colors ${
+                            v.estoque === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-accent'
+                          }`}
+                          title={v.estoque === 0 ? `${v.tamanho} sem estoque` : `Adicionar ${v.tamanho} (${v.estoque} em estoque)`}
+                        >
+                          {v.tamanho} · {v.estoque}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </button>
-            ))}
+                )
+              }
+              return (
+                <button
+                  key={p.id}
+                  disabled={p.estoque === 0}
+                  onClick={() => {
+                    adicionarItem(p, null)
+                    setBuscaProdutos(false)
+                    scanRef.current?.focus()
+                  }}
+                  className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex justify-between items-center ${
+                    i > 0 ? 'border-t' : ''
+                  } ${p.estoque === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-accent'}`}
+                >
+                  <div>
+                    <div className="font-medium">{p.nome}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{p.codigo_barras}</div>
+                  </div>
+                  <div className="text-right shrink-0 ml-3">
+                    <div className="font-semibold">{fmt(p.preco)}</div>
+                    <div className={`text-xs ${p.estoque === 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                      {p.estoque} em estoque
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
             {produtosFiltrados.length === 0 && (
               <p className="text-center py-8 text-muted-foreground text-sm">
                 Nenhum produto encontrado.

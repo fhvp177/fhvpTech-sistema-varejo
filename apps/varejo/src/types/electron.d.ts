@@ -115,6 +115,7 @@ type MetricasDashboard = {
     produto_id: number
     nome: string
     estoque: number
+    tamanho: string | null
   }>
 }
 

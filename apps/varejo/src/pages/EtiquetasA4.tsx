@@ -5,12 +5,30 @@ import { PRESETS, PRESET_PADRAO, LayoutEtiqueta } from '../utils/presetsLayoutA4
 import FolhaA4Preview, { SlotDado } from '../components/FolhaA4Preview'
 import { nomeImpressao } from '../utils/nomeImpressao'
 
+type Variacao = {
+  id: number
+  produto_id: number
+  tamanho: string
+  codigo_barras: string
+  estoque: number
+}
+
 type Produto = {
   id: number
-  codigo_barras: string
+  codigo_barras: string | null
   nome: string
   preco: number
   estoque: number
+  variacoes: Variacao[]
+}
+
+// Cada coisa que rende uma etiqueta: produto simples OU um tamanho de uma grade.
+// `chave` identifica unicamente a seleção (`p<id>` ou `v<variacaoId>`).
+type Etiquetavel = {
+  chave: string
+  nome: string
+  codigo_barras: string
+  preco: number
 }
 
 const SCALE = 0.40
@@ -18,7 +36,7 @@ const SCALE = 0.40
 const EtiquetasA4: FC = () => {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [filtro, setFiltro] = useState('')
-  const [selecoes, setSelecoes] = useState<Map<number, number>>(new Map())
+  const [selecoes, setSelecoes] = useState<Map<string, number>>(new Map())
   const [layout, setLayout] = useState<LayoutEtiqueta>(PRESET_PADRAO)
   const [posicaoInicial, setPosicaoInicial] = useState(0)
   const [mostrarNome, setMostrarNome] = useState(true)
@@ -32,25 +50,42 @@ const EtiquetasA4: FC = () => {
     })
   }, [])
 
-  const produtosFiltrados = useMemo(() => {
+  // Achata os produtos em etiquetáveis: simples vira um item; grade vira um item
+  // por tamanho (cada um com seu código). Produto simples sem código é ignorado.
+  const etiquetaveis = useMemo<Etiquetavel[]>(() => {
+    const out: Etiquetavel[] = []
+    for (const p of produtos) {
+      if (p.variacoes.length > 0) {
+        for (const v of p.variacoes) {
+          out.push({ chave: `v${v.id}`, nome: `${p.nome} (${v.tamanho})`, codigo_barras: v.codigo_barras, preco: p.preco })
+        }
+      } else if (p.codigo_barras) {
+        out.push({ chave: `p${p.id}`, nome: p.nome, codigo_barras: p.codigo_barras, preco: p.preco })
+      }
+    }
+    return out
+  }, [produtos])
+
+  const etiquetaveisFiltrados = useMemo(() => {
     const q = filtro.trim().toLowerCase()
-    if (!q) return produtos
-    return produtos.filter(
-      (p) => p.nome.toLowerCase().includes(q) || p.codigo_barras.includes(q)
+    if (!q) return etiquetaveis
+    return etiquetaveis.filter(
+      (e) => e.nome.toLowerCase().includes(q) || e.codigo_barras.includes(q)
     )
-  }, [produtos, filtro])
+  }, [etiquetaveis, filtro])
 
   const todosSlots = useMemo(() => {
+    const porChave = new Map(etiquetaveis.map((e) => [e.chave, e]))
     const slots: Array<{ codigo_barras: string; nome: string; preco: number }> = []
-    selecoes.forEach((qty, id) => {
-      const p = produtos.find((x) => x.id === id)
-      if (!p || qty <= 0) return
+    selecoes.forEach((qty, chave) => {
+      const e = porChave.get(chave)
+      if (!e || qty <= 0) return
       for (let i = 0; i < qty; i++) {
-        slots.push({ codigo_barras: p.codigo_barras, nome: p.nome, preco: p.preco })
+        slots.push({ codigo_barras: e.codigo_barras, nome: e.nome, preco: e.preco })
       }
     })
     return slots
-  }, [selecoes, produtos])
+  }, [selecoes, etiquetaveis])
 
   const capacidade = layout.colunas * layout.linhas
   const maxPosicao = capacidade - 1
@@ -68,24 +103,24 @@ const EtiquetasA4: FC = () => {
     )
   }, [todosSlots, capacidade, posicaoInicial])
 
-  const toggleProduto = (id: number) => {
+  const toggleProduto = (chave: string) => {
     setSelecoes((prev) => {
       const next = new Map(prev)
-      if (next.has(id)) next.delete(id)
-      else next.set(id, 1)
+      if (next.has(chave)) next.delete(chave)
+      else next.set(chave, 1)
       return next
     })
   }
 
-  const setQty = (id: number, qty: number) => {
+  const setQty = (chave: string, qty: number) => {
     if (qty <= 0) {
       setSelecoes((prev) => {
         const n = new Map(prev)
-        n.delete(id)
+        n.delete(chave)
         return n
       })
     } else {
-      setSelecoes((prev) => new Map(prev).set(id, qty))
+      setSelecoes((prev) => new Map(prev).set(chave, qty))
     }
   }
 
@@ -140,17 +175,17 @@ const EtiquetasA4: FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {produtosFiltrados.length === 0 && (
+          {etiquetaveisFiltrados.length === 0 && (
             <p className="text-xs text-muted-foreground p-2 text-center">
               Nenhum produto encontrado.
             </p>
           )}
-          {produtosFiltrados.map((p) => {
-            const selecionado = selecoes.has(p.id)
-            const qty = selecoes.get(p.id) ?? 1
+          {etiquetaveisFiltrados.map((e) => {
+            const selecionado = selecoes.has(e.chave)
+            const qty = selecoes.get(e.chave) ?? 1
             return (
               <div
-                key={p.id}
+                key={e.chave}
                 className={`rounded-lg border px-2.5 py-2 text-sm transition-colors ${
                   selecionado
                     ? 'bg-blue-50 border-blue-200'
@@ -161,13 +196,14 @@ const EtiquetasA4: FC = () => {
                   <input
                     type="checkbox"
                     checked={selecionado}
-                    onChange={() => toggleProduto(p.id)}
+                    onChange={() => toggleProduto(e.chave)}
                     className="accent-blue-600 w-3.5 h-3.5 cursor-pointer mt-0.5 shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate leading-tight">{p.nome}</p>
+                    <p className="font-medium truncate leading-tight">{e.nome}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{e.codigo_barras}</p>
                     <p className="text-xs text-muted-foreground">
-                      {p.preco.toLocaleString('pt-BR', {
+                      {e.preco.toLocaleString('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
                       })}
@@ -182,8 +218,8 @@ const EtiquetasA4: FC = () => {
                       min={1}
                       max={999}
                       value={qty}
-                      onChange={(e) =>
-                        setQty(p.id, parseInt(e.target.value) || 0)
+                      onChange={(e2) =>
+                        setQty(e.chave, parseInt(e2.target.value) || 0)
                       }
                       className="w-16 text-center text-xs border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
