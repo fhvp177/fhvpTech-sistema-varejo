@@ -179,7 +179,9 @@ const api = {
       inicio_anterior: string
       fim_anterior: string
     }): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('dashboard:metricas', intervalo)
+      ipcRenderer.invoke('dashboard:metricas', intervalo),
+    salvarMeta: (valor: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('dashboard:salvarMeta', valor)
   },
 
   // Atualização (electron-updater)

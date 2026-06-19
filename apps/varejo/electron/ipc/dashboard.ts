@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
-import { obterMetricasDashboard, type IntervaloDashboard } from '../db/queries/dashboard'
+import { obterMetricasDashboard, type IntervaloDashboard, CHAVE_META_MENSAL } from '../db/queries/dashboard'
+import { gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -33,6 +34,17 @@ export function registrarHandlersDashboard(): void {
     try {
       const intervalo = validar(payload)
       return { success: true, data: obterMetricasDashboard(intervalo) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('dashboard:salvarMeta', (_event, valor: unknown) => {
+    try {
+      const meta = Number(valor)
+      if (!Number.isFinite(meta) || meta < 0) throw new Error('Meta inválida.')
+      gravarConfig(CHAVE_META_MENSAL, String(Math.round(meta * 100) / 100))
+      return { success: true, data: null }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

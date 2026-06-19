@@ -47,16 +47,23 @@ type MetricasDashboard = {
   granularidade: 'dia' | 'semana' | 'mes'
   faturamento_atual: number
   faturamento_anterior: number
+  custo_vendas_atual: number
+  custo_vendas_anterior: number
   devolucoes_atual: number
   devolucoes_anterior: number
   num_vendas_atual: number
   num_vendas_anterior: number
   ticket_medio_atual: number
   ticket_medio_anterior: number
+  clientes_novos_atual: number
+  clientes_novos_anterior: number
+  meta_mensal: number
+  faturamento_mes_corrente: number
   serie_temporal: Array<{
     rotulo: string
     data_inicio: string
     total: number
+    total_anterior: number
     num_vendas: number
   }>
   top_produtos: Array<{
@@ -69,6 +76,22 @@ type MetricasDashboard = {
     categoria: string
     quantidade: number
     receita: number
+  }>
+  ranking_vendedores: Array<{
+    vendedor_id: number
+    nome: string
+    num_vendas: number
+    receita: number
+  }>
+  vendas_por_dia_semana: Array<{
+    dow: number
+    total: number
+  }>
+  aniversariantes_mes: Array<{
+    id: number
+    nome: string
+    telefone: string
+    dia: string
   }>
   distribuicao_pagamento: {
     pago: { num: number; valor: number }
@@ -306,6 +329,7 @@ interface Window {
         inicio_anterior: string
         fim_anterior: string
       }) => Promise<RespostaIPC<MetricasDashboard>>
+      salvarMeta: (valor: number) => Promise<RespostaIPC>
     }
     atualizacao: {
       obterInfo: () => Promise<RespostaIPC<{

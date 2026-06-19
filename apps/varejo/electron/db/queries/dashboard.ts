@@ -1,11 +1,17 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
+
+// Chave na tabela `config` onde fica a meta de faturamento mensal (editável pelo
+// próprio card da dashboard). Ausente/0 = meta não definida.
+export const CHAVE_META_MENSAL = 'meta_faturamento_mensal'
 
 export type GranularidadeSerie = 'dia' | 'semana' | 'mes'
 
 export type PontoSerie = {
-  rotulo: string       // ex: '15/05', 'Sem 12', 'Mai/26'
-  data_inicio: string  // ISO 'YYYY-MM-DD'
+  rotulo: string         // ex: '15/05', 'Sem 12', 'Mai/26'
+  data_inicio: string    // ISO 'YYYY-MM-DD'
   total: number
+  total_anterior: number // mesmo bucket no período de comparação (alinhado por posição)
   num_vendas: number
 }
 
@@ -56,20 +62,48 @@ export type IntervaloDashboard = {
   fim_anterior: string      // ISO 'YYYY-MM-DD' inclusivo
 }
 
+export type VendedorRanking = {
+  vendedor_id: number
+  nome: string
+  num_vendas: number
+  receita: number
+}
+
+export type PontoDiaSemana = {
+  dow: number   // 0=Dom … 6=Sáb (strftime '%w')
+  total: number
+}
+
+export type Aniversariante = {
+  id: number
+  nome: string
+  telefone: string
+  dia: string   // 'DD/MM'
+}
+
 export type MetricasDashboard = {
   periodo_dias: number
   granularidade: GranularidadeSerie
   faturamento_atual: number
   faturamento_anterior: number
+  custo_vendas_atual: number
+  custo_vendas_anterior: number
   devolucoes_atual: number
   devolucoes_anterior: number
   num_vendas_atual: number
   num_vendas_anterior: number
   ticket_medio_atual: number
   ticket_medio_anterior: number
+  clientes_novos_atual: number
+  clientes_novos_anterior: number
+  meta_mensal: number
+  faturamento_mes_corrente: number
   serie_temporal: PontoSerie[]
   top_produtos: TopProduto[]
   top_categorias: TopCategoria[]
+  ranking_vendedores: VendedorRanking[]
+  vendas_por_dia_semana: PontoDiaSemana[]
+  aniversariantes_mes: Aniversariante[]
   distribuicao_pagamento: DistribuicaoPagamento
   recebivel_futuro: RecebivelFuturo
   produtos_parados: ProdutoParado[]
@@ -170,12 +204,26 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     )
     .all(inicio_atual, fim_atual) as Array<{ bucket: string; total: number; num_vendas: number }>
 
-  const serieTemporal: PontoSerie[] = linhasSerie.map((r) => {
+  // Mesma agregação no período de comparação, alinhada por POSIÇÃO (1º bucket do
+  // atual ↔ 1º bucket do anterior, etc.) — é o que o botão "Comparar" do gráfico usa.
+  const linhasSerieAnterior = db
+    .prepare(
+      `SELECT ${bucketExpr} AS bucket,
+              COALESCE(SUM(total), 0) AS total
+       FROM vendas
+       WHERE date(data) >= ? AND date(data) <= ?
+       GROUP BY bucket
+       ORDER BY bucket ASC`
+    )
+    .all(inicio_anterior, fim_anterior) as Array<{ bucket: string; total: number }>
+
+  const serieTemporal: PontoSerie[] = linhasSerie.map((r, i) => {
     const dataInicio = bucketParaData(r.bucket)
     return {
       rotulo: formatarRotulo(dataInicio, gran),
       data_inicio: dataInicio,
       total: r.total,
+      total_anterior: linhasSerieAnterior[i]?.total ?? 0,
       num_vendas: r.num_vendas
     }
   })
@@ -322,6 +370,91 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     )
     .all() as ProdutoEstoqueBaixo[]
 
+  // ── Custo das vendas (base do lucro/margem). Usa o custo ATUAL do produto como
+  // estimativa — itens_venda não guarda o custo do momento da venda. Produtos sem
+  // custo cadastrado entram como 0 (a UI avisa quando o custo total é 0).
+  const custoVendas = (ini: string, fim: string): number => {
+    const r = db
+      .prepare(
+        `SELECT COALESCE(SUM(iv.quantidade * p.custo), 0) AS custo
+         FROM itens_venda iv
+         JOIN vendas v ON v.id = iv.venda_id
+         JOIN produtos p ON p.id = iv.produto_id
+         WHERE date(v.data) >= ? AND date(v.data) <= ?`
+      )
+      .get(ini, fim) as { custo: number }
+    return r.custo
+  }
+  const custoVendasAtual = custoVendas(inicio_atual, fim_atual)
+  const custoVendasAnterior = custoVendas(inicio_anterior, fim_anterior)
+
+  // ── Clientes novos no período (pela data_cadastro).
+  const clientesNovos = (ini: string, fim: string): number => {
+    const r = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM clientes
+         WHERE date(data_cadastro) >= ? AND date(data_cadastro) <= ?`
+      )
+      .get(ini, fim) as { n: number }
+    return r.n
+  }
+  const clientesNovosAtual = clientesNovos(inicio_atual, fim_atual)
+  const clientesNovosAnterior = clientesNovos(inicio_anterior, fim_anterior)
+
+  // ── Ranking de vendedores por faturamento no período (top 5).
+  const rankingVendedores = db
+    .prepare(
+      `SELECT v.vendedor_id AS vendedor_id,
+              vd.nome AS nome,
+              COUNT(*) AS num_vendas,
+              COALESCE(SUM(v.total), 0) AS receita
+       FROM vendas v
+       JOIN vendedores vd ON vd.id = v.vendedor_id
+       WHERE date(v.data) >= ? AND date(v.data) <= ?
+       GROUP BY v.vendedor_id
+       ORDER BY receita DESC
+       LIMIT 5`
+    )
+    .all(inicio_atual, fim_atual) as VendedorRanking[]
+
+  // ── Vendas por dia da semana no período (0=Dom … 6=Sáb). Preenche os 7 dias.
+  const linhasDow = db
+    .prepare(
+      `SELECT CAST(strftime('%w', data) AS INTEGER) AS dow,
+              COALESCE(SUM(total), 0) AS total
+       FROM vendas
+       WHERE date(data) >= ? AND date(data) <= ?
+       GROUP BY dow`
+    )
+    .all(inicio_atual, fim_atual) as Array<{ dow: number; total: number }>
+  const mapaDow = new Map(linhasDow.map((l) => [l.dow, l.total]))
+  const vendasPorDiaSemana: PontoDiaSemana[] = Array.from({ length: 7 }, (_, dow) => ({
+    dow,
+    total: mapaDow.get(dow) ?? 0
+  }))
+
+  // ── Aniversariantes do mês corrente (data_nascimento 'YYYY-MM-DD'). Independe do filtro.
+  const aniversariantesMes = db
+    .prepare(
+      `SELECT id, nome, telefone,
+              substr(data_nascimento, 9, 2) || '/' || substr(data_nascimento, 6, 2) AS dia
+       FROM clientes
+       WHERE data_nascimento IS NOT NULL AND data_nascimento <> ''
+         AND substr(data_nascimento, 6, 2) = strftime('%m', 'now')
+       ORDER BY substr(data_nascimento, 9, 2) ASC
+       LIMIT 12`
+    )
+    .all() as Aniversariante[]
+
+  // ── Meta de faturamento do mês corrente vs realizado (independe do filtro do topo).
+  const metaMensal = Number(lerConfig(CHAVE_META_MENSAL)) || 0
+  const { faturamento_mes } = db
+    .prepare(
+      `SELECT COALESCE(SUM(total), 0) AS faturamento_mes FROM vendas
+       WHERE substr(data, 1, 7) = strftime('%Y-%m', 'now')`
+    )
+    .get() as { faturamento_mes: number }
+
   const ticketAtual =
     totaisAtual.num_vendas > 0 ? totaisAtual.faturamento / totaisAtual.num_vendas : 0
   const ticketAnterior =
@@ -332,15 +465,24 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     granularidade: gran,
     faturamento_atual: totaisAtual.faturamento,
     faturamento_anterior: totaisAnterior.faturamento,
+    custo_vendas_atual: custoVendasAtual,
+    custo_vendas_anterior: custoVendasAnterior,
     devolucoes_atual: devAtual.total,
     devolucoes_anterior: devAnterior.total,
     num_vendas_atual: totaisAtual.num_vendas,
     num_vendas_anterior: totaisAnterior.num_vendas,
     ticket_medio_atual: ticketAtual,
     ticket_medio_anterior: ticketAnterior,
+    clientes_novos_atual: clientesNovosAtual,
+    clientes_novos_anterior: clientesNovosAnterior,
+    meta_mensal: metaMensal,
+    faturamento_mes_corrente: faturamento_mes,
     serie_temporal: serieTemporal,
     top_produtos: topProdutos,
     top_categorias: topCategorias,
+    ranking_vendedores: rankingVendedores,
+    vendas_por_dia_semana: vendasPorDiaSemana,
+    aniversariantes_mes: aniversariantesMes,
     distribuicao_pagamento: distribuicaoPagamento,
     recebivel_futuro: recebivelFuturo,
     produtos_parados: produtosParados,

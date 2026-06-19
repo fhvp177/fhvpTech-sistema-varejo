@@ -24,6 +24,7 @@ type Produto = {
   nome: string
   categoria: string | null
   preco: number
+  custo: number
   estoque: number
   fornecedor_id: number | null
   fornecedor_nome?: string | null
@@ -36,6 +37,7 @@ type FormProduto = {
   nome: string
   categoria: string
   preco: string
+  custo: string
   estoque: string
   fornecedor_id: string
 }
@@ -45,6 +47,7 @@ const FORM_VAZIO: FormProduto = {
   nome: '',
   categoria: '',
   preco: '',
+  custo: '',
   estoque: '0',
   fornecedor_id: ''
 }
@@ -240,6 +243,7 @@ const Produtos: FC = () => {
       nome: p.nome,
       categoria: p.categoria ?? '',
       preco: p.preco.toFixed(2),
+      custo: (p.custo ?? 0) > 0 ? (p.custo ?? 0).toFixed(2) : '',
       estoque: String(p.estoque),
       fornecedor_id: p.fornecedor_id ? String(p.fornecedor_id) : ''
     })
@@ -257,6 +261,8 @@ const Produtos: FC = () => {
     if (!form.codigo_barras.trim()) { setErro('O código de barras é obrigatório.'); return }
     const preco = parseFloat(form.preco.replace(',', '.'))
     if (isNaN(preco) || preco < 0) { setErro('Preço inválido.'); return }
+    const custo = form.custo.trim() ? parseFloat(form.custo.replace(',', '.')) : 0
+    if (isNaN(custo) || custo < 0) { setErro('Preço de custo inválido.'); return }
 
     setCarregando(true)
     setErro('')
@@ -266,6 +272,7 @@ const Produtos: FC = () => {
       nome: form.nome.trim(),
       categoria: form.categoria.trim() || null,
       preco,
+      custo,
       estoque: parseInt(form.estoque) || 0,
       fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null
     }
@@ -574,7 +581,7 @@ const Produtos: FC = () => {
 
               <div className="grid gap-1.5">
                 <Label htmlFor="preco">
-                  Preço (R$) <span className="text-destructive">*</span>
+                  Preço de venda (R$) <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="preco"
@@ -585,6 +592,22 @@ const Produtos: FC = () => {
                   onChange={setF('preco')}
                   placeholder="0,00"
                 />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="custo">Preço de custo (R$)</Label>
+                <Input
+                  id="custo"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.custo}
+                  onChange={setF('custo')}
+                  placeholder="0,00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Quanto você paga no produto. Usado pro lucro/margem na dashboard.
+                </p>
               </div>
 
               <div className="grid gap-1.5">

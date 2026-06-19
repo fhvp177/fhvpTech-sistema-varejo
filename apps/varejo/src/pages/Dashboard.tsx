@@ -1,12 +1,13 @@
 import { FC, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package,
-  ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle
+  ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
+  ArrowLeftRight, Target, Trophy, CalendarDays, PiggyBank, Gift, Pencil, Check, X
 } from 'lucide-react'
 import FiltroMesPopover from '@/components/FiltroMesPopover'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, Legend
 } from 'recharts'
 import DividasClienteDialog, {
   calcularDividasPorCliente,
@@ -144,6 +145,8 @@ const Dashboard: FC = () => {
   const [mesAtual, setMesAtual] = useState<string>(mesAtualPadrao)
   const [mesComparativo, setMesComparativo] = useState<string>(() => mesAnoAnteriorDe(mesAtualPadrao()))
   const [compararMes, setCompararMes] = useState(false)
+  const [compararSerie, setCompararSerie] = useState(false) // botão "Comparar" do gráfico de vendas no tempo
+  const [metaVersao, setMetaVersao] = useState(0) // bump força recarregar métricas após editar a meta
   const [metricas, setMetricas] = useState<MetricasDashboard | null>(null)
   const [resumo, setResumo] = useState<ResumoBasico | null>(null)
   const [inadimplentes, setInadimplentes] = useState<ClienteInadimplente[]>([])
@@ -182,7 +185,7 @@ const Dashboard: FC = () => {
       if (resp.success) setMetricas(resp.data)
       setCarregandoMetricas(false)
     })
-  }, [intervalo])
+  }, [intervalo, metaVersao])
 
   const dividasPorCliente = useMemo(() => calcularDividasPorCliente(vendas), [vendas])
 
@@ -194,6 +197,9 @@ const Dashboard: FC = () => {
     : { pct: 0, valido: false }
   const deltaTicket = metricas
     ? calcularDelta(metricas.ticket_medio_atual, metricas.ticket_medio_anterior)
+    : { pct: 0, valido: false }
+  const deltaClientesNovos = metricas
+    ? calcularDelta(metricas.clientes_novos_atual, metricas.clientes_novos_anterior)
     : { pct: 0, valido: false }
 
   const rotuloPeriodo = modo === 'janela'
@@ -212,6 +218,12 @@ const Dashboard: FC = () => {
     setMesAtual(mes)
     setCompararMes(comparar)
     setMesComparativo(mesComp)
+  }
+
+  const salvarMeta = async (valor: number): Promise<boolean> => {
+    const resp = await window.api.dashboard.salvarMeta(valor)
+    if (resp.success) setMetaVersao((v) => v + 1)
+    return resp.success
   }
 
   return (
@@ -366,13 +378,23 @@ const Dashboard: FC = () => {
           rotuloComparativo={rotuloComparativo}
           mostrarComparativo={mostrarComparativo}
         />
-        <CardEstatico
-          icone={<Users className="w-5 h-5 text-purple-600" />}
-          corIcone="bg-purple-100"
-          titulo="Cadastros"
-          valorPrincipal={resumo ? `${resumo.total_clientes} clientes` : '...'}
-          valorSecundario={resumo ? `${resumo.total_produtos} produtos` : ''}
+        <CardClientes
+          totalClientes={resumo ? resumo.total_clientes : null}
+          novosAtual={metricas ? metricas.clientes_novos_atual : null}
+          deltaNovos={deltaClientesNovos}
+          mostrarComparativo={mostrarComparativo}
+          rotuloComparativo={rotuloComparativo}
         />
+      </div>
+
+      {/* ── Lucro & margem + Meta do mês ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <CardLucro
+          metricas={metricas}
+          mostrarComparativo={mostrarComparativo}
+          rotuloComparativo={rotuloComparativo}
+        />
+        <CardMeta metricas={metricas} onSalvar={salvarMeta} />
       </div>
 
       {/* ── Gráfico de vendas + Top produtos ── */}
@@ -382,9 +404,22 @@ const Dashboard: FC = () => {
           <div className="flex items-center gap-2 mb-3">
             <BarChart3 className="w-5 h-5 text-muted-foreground" />
             <h3 className="font-semibold">Vendas no tempo</h3>
-            <span className="text-xs text-muted-foreground ml-auto">
-              {rotuloPeriodo}
-            </span>
+            <div className="ml-auto flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCompararSerie((v) => !v)}
+                className={`flex items-center gap-1.5 text-xs font-medium rounded-md px-2 py-1 transition-colors ${
+                  compararSerie
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+                title="Mostrar o período anterior lado a lado"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" />
+                Comparar
+              </button>
+              <span className="text-xs text-muted-foreground">{rotuloPeriodo}</span>
+            </div>
           </div>
           {carregandoMetricas ? (
             <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
@@ -393,7 +428,7 @@ const Dashboard: FC = () => {
           ) : metricas && metricas.serie_temporal.length > 0 ? (
             <div className="h-64 -ml-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={metricas.serie_temporal} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={metricas.serie_temporal} margin={{ top: 5, right: 10, left: 0, bottom: 0 }} barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis
                     dataKey="rotulo"
@@ -410,7 +445,12 @@ const Dashboard: FC = () => {
                     tickFormatter={fmtCompacto}
                   />
                   <Tooltip
-                    formatter={(valor) => [fmt(Number(valor)), 'Faturamento']}
+                    formatter={(valor, nome) => [
+                      fmt(Number(valor)),
+                      nome === 'total_anterior'
+                        ? 'Período anterior'
+                        : compararSerie ? 'Período atual' : 'Faturamento'
+                    ]}
                     labelFormatter={(rotulo) => rotulo}
                     contentStyle={{
                       backgroundColor: 'hsl(var(--background))',
@@ -419,6 +459,16 @@ const Dashboard: FC = () => {
                       fontSize: 12
                     }}
                   />
+                  {compararSerie && (
+                    <Legend
+                      formatter={(v) => (v === 'total_anterior' ? 'Período anterior' : 'Período atual')}
+                      wrapperStyle={{ fontSize: 12 }}
+                    />
+                  )}
+                  {/* Anterior (cinza) à esquerda, atual (cor) à direita de cada par */}
+                  {compararSerie && (
+                    <Bar dataKey="total_anterior" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                  )}
                   <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -474,11 +524,22 @@ const Dashboard: FC = () => {
         <CardTopCategorias metricas={metricas} carregando={carregandoMetricas} />
       </div>
 
+      {/* ── Ranking de vendedores + Vendas por dia da semana ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+        <CardRankingVendedores metricas={metricas} carregando={carregandoMetricas} />
+        <CardDiaSemana metricas={metricas} carregando={carregandoMetricas} />
+      </div>
+
       {/* ── Recebível futuro + Produtos parados + Estoque baixo ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
         <CardRecebivel metricas={metricas} />
         <CardProdutosParados metricas={metricas} carregando={carregandoMetricas} />
         <CardEstoqueBaixo metricas={metricas} />
+      </div>
+
+      {/* ── Aniversariantes do mês ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+        <CardAniversariantes metricas={metricas} />
       </div>
 
       <DividasClienteDialog
@@ -544,24 +605,236 @@ const CardKPI: FC<CardKPIProps> = ({
   )
 }
 
-type CardEstaticoProps = {
-  icone: React.ReactNode
-  corIcone: string
-  titulo: string
-  valorPrincipal: string
-  valorSecundario: string
+// Card de clientes (substitui o antigo "Cadastros"): total + novos no período.
+type CardClientesProps = {
+  totalClientes: number | null
+  novosAtual: number | null
+  deltaNovos: Delta
+  mostrarComparativo: boolean
+  rotuloComparativo: string
 }
 
-const CardEstatico: FC<CardEstaticoProps> = ({ icone, corIcone, titulo, valorPrincipal, valorSecundario }) => (
-  <div className="border rounded-xl p-4 bg-card">
-    <div className={`w-10 h-10 rounded-lg ${corIcone} flex items-center justify-center mb-3`}>
-      {icone}
+const CardClientes: FC<CardClientesProps> = ({
+  totalClientes, novosAtual, deltaNovos, mostrarComparativo, rotuloComparativo
+}) => {
+  const corDelta =
+    !deltaNovos.valido ? 'text-muted-foreground'
+    : deltaNovos.pct > 0 ? 'text-green-600'
+    : deltaNovos.pct < 0 ? 'text-red-600'
+    : 'text-muted-foreground'
+  const sinal = deltaNovos.pct > 0 ? '+' : ''
+  return (
+    <div className="border rounded-xl p-4 bg-card">
+      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center mb-3">
+        <Users className="w-5 h-5 text-purple-600" />
+      </div>
+      <p className="text-sm text-muted-foreground">Clientes</p>
+      <p className="text-2xl font-bold mt-0.5">{totalClientes != null ? totalClientes : '...'}</p>
+      <p className="text-xs mt-1">
+        <span className="font-medium text-purple-600">{novosAtual != null ? `+${novosAtual}` : '—'}</span>{' '}
+        <span className="text-muted-foreground">novos no período</span>
+      </p>
+      {mostrarComparativo && (
+        <div className={`flex items-center gap-1 mt-1 text-xs ${corDelta}`}>
+          {deltaNovos.valido && deltaNovos.pct !== 0 && (
+            deltaNovos.pct > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />
+          )}
+          <span>{deltaNovos.valido ? `${sinal}${deltaNovos.pct.toFixed(1)}%` : '—'}</span>
+          <span className="opacity-70">({rotuloComparativo})</span>
+        </div>
+      )}
     </div>
-    <p className="text-sm text-muted-foreground">{titulo}</p>
-    <p className="text-2xl font-bold mt-0.5">{valorPrincipal}</p>
-    <p className="text-xs text-muted-foreground mt-1">{valorSecundario}</p>
-  </div>
-)
+  )
+}
+
+// Lucro & margem. Sem custo cadastrado, mostra um convite em vez de margem falsa.
+type CardLucroProps = {
+  metricas: MetricasDashboard | null
+  mostrarComparativo: boolean
+  rotuloComparativo: string
+}
+
+const CardLucro: FC<CardLucroProps> = ({ metricas, mostrarComparativo, rotuloComparativo }) => {
+  const semCusto = !metricas || metricas.custo_vendas_atual <= 0
+  const lucro = metricas ? metricas.faturamento_atual - metricas.custo_vendas_atual : 0
+  const lucroAnterior = metricas ? metricas.faturamento_anterior - metricas.custo_vendas_anterior : 0
+  const margem = metricas && metricas.faturamento_atual > 0 ? (lucro / metricas.faturamento_atual) * 100 : 0
+  const delta = calcularDelta(lucro, lucroAnterior)
+  const corDelta =
+    !delta.valido ? 'text-muted-foreground'
+    : delta.pct > 0 ? 'text-green-600'
+    : delta.pct < 0 ? 'text-red-600'
+    : 'text-muted-foreground'
+  const sinal = delta.pct > 0 ? '+' : ''
+
+  return (
+    <div className="border rounded-xl p-4 bg-card">
+      <div className="flex items-center gap-2 mb-3">
+        <PiggyBank className="w-5 h-5 text-muted-foreground" />
+        <h3 className="font-semibold">Lucro &amp; margem</h3>
+      </div>
+      {!metricas ? (
+        <p className="text-sm text-muted-foreground py-6 text-center">Carregando...</p>
+      ) : semCusto ? (
+        <div className="py-4">
+          <p className="text-sm text-muted-foreground">
+            Cadastre o <span className="font-medium text-foreground">preço de custo</span> dos produtos
+            (na tela <span className="font-medium text-foreground">Produtos</span>) para acompanhar lucro e margem aqui.
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            Por enquanto, faturamento do período: <span className="font-medium">{fmt(metricas.faturamento_atual)}</span>.
+          </p>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">Lucro bruto estimado</p>
+          <div className="flex items-end justify-between gap-2">
+            <p className="text-2xl font-bold mt-0.5 text-emerald-600">{fmt(lucro)}</p>
+            <span className="text-sm font-semibold bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 whitespace-nowrap">
+              margem {margem.toFixed(1).replace('.', ',')}%
+            </span>
+          </div>
+          {mostrarComparativo && (
+            <div className={`flex items-center gap-1 mt-1 text-xs ${corDelta}`}>
+              {delta.valido && delta.pct !== 0 && (
+                delta.pct > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />
+              )}
+              <span>{delta.valido ? `${sinal}${delta.pct.toFixed(1)}%` : '—'}</span>
+              <span className="opacity-70">({rotuloComparativo})</span>
+            </div>
+          )}
+          <div className="mt-3 pt-3 border-t space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Faturamento</span>
+              <span>{fmt(metricas.faturamento_atual)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Custo das vendas</span>
+              <span className="text-red-500">− {fmt(metricas.custo_vendas_atual)}</span>
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Estimativa pelo custo atual cadastrado nos produtos.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Meta do mês — editável inline. Sempre reflete o mês corrente, independe do filtro.
+const CardMeta: FC<{ metricas: MetricasDashboard | null; onSalvar: (valor: number) => Promise<boolean> }> = ({
+  metricas, onSalvar
+}) => {
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const meta = metricas?.meta_mensal ?? 0
+  const realizado = metricas?.faturamento_mes_corrente ?? 0
+  const pct = meta > 0 ? Math.min(100, Math.round((realizado / meta) * 100)) : 0
+  const falta = Math.max(0, meta - realizado)
+
+  const abrirEdicao = () => {
+    setValor(meta > 0 ? String(meta) : '')
+    setEditando(true)
+  }
+  const confirmar = async () => {
+    const n = parseFloat(valor.replace(',', '.'))
+    if (isNaN(n) || n < 0) return
+    setSalvando(true)
+    const ok = await onSalvar(n)
+    setSalvando(false)
+    if (ok) setEditando(false)
+  }
+
+  return (
+    <div className="border rounded-xl p-4 bg-card">
+      <div className="flex items-center gap-2 mb-3">
+        <Target className="w-5 h-5 text-muted-foreground" />
+        <h3 className="font-semibold">Meta do mês</h3>
+        {!editando && (
+          <button
+            type="button"
+            onClick={abrirEdicao}
+            className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+            title="Definir/editar a meta de faturamento do mês"
+          >
+            <Pencil className="w-3.5 h-3.5" /> {meta > 0 ? 'Editar' : 'Definir'}
+          </button>
+        )}
+      </div>
+
+      {editando ? (
+        <div className="py-2">
+          <label className="text-sm text-muted-foreground">Meta de faturamento mensal (R$)</label>
+          <div className="flex items-center gap-2 mt-1.5">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              autoFocus
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') confirmar()
+                if (e.key === 'Escape') setEditando(false)
+              }}
+              placeholder="0,00"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <button
+              type="button"
+              onClick={confirmar}
+              disabled={salvando}
+              className="h-10 w-10 shrink-0 rounded-md bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-50"
+              title="Salvar meta"
+            >
+              <Check className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditando(false)}
+              className="h-10 w-10 shrink-0 rounded-md border flex items-center justify-center text-muted-foreground hover:text-foreground"
+              title="Cancelar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      ) : meta <= 0 ? (
+        <div className="py-4">
+          <p className="text-sm text-muted-foreground">
+            Você ainda não definiu uma meta. Clique em <span className="font-medium text-foreground">Definir</span> para
+            acompanhar quanto já faturou do seu objetivo do mês.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-2xl font-bold">{fmt(realizado)}</span>
+            <span className="text-sm text-muted-foreground">de {fmt(meta)}</span>
+          </div>
+          <div className="h-3 bg-muted rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-[width] ${pct >= 100 ? 'bg-green-600' : 'bg-primary'}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="flex justify-between mt-1.5 text-xs">
+            <span className={`font-semibold ${pct >= 100 ? 'text-green-600' : 'text-primary'}`}>{pct}% da meta</span>
+            <span className="text-muted-foreground">
+              {falta > 0 ? `faltam ${fmt(falta)}` : 'meta batida! 🎉'}
+            </span>
+          </div>
+          <p className="mt-3 pt-3 border-t text-xs text-muted-foreground">
+            Faturamento do mês atual vs. sua meta. Independe do filtro de período lá em cima.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
 
 // ─── Widgets do pacote 2 ──────────────────────────────────────────────────────
 
@@ -785,6 +1058,135 @@ const CardEstoqueBaixo: FC<{ metricas: MetricasDashboard | null }> = ({ metricas
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  )
+}
+
+// Ranking de vendedores por faturamento no período.
+const CardRankingVendedores: FC<WidgetProps> = ({ metricas, carregando }) => {
+  const dados = metricas?.ranking_vendedores ?? []
+  const max = Math.max(1, ...dados.map((v) => v.receita))
+  return (
+    <div className="border rounded-xl p-4 bg-card">
+      <div className="flex items-center gap-2 mb-3">
+        <Trophy className="w-5 h-5 text-muted-foreground" />
+        <h3 className="font-semibold">Ranking de vendedores</h3>
+      </div>
+      {carregando ? (
+        <p className="text-sm text-muted-foreground text-center py-8">Carregando...</p>
+      ) : dados.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">Sem vendas no período.</p>
+      ) : (
+        <ul className="space-y-3">
+          {dados.map((v, i) => (
+            <li key={v.vendedor_id}>
+              <div className="flex items-center gap-2 mb-1">
+                <div className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0 ${
+                  i === 0 ? 'bg-amber-100 text-amber-700'
+                  : i === 1 ? 'bg-slate-200 text-slate-700'
+                  : i === 2 ? 'bg-orange-100 text-orange-700'
+                  : 'bg-muted text-muted-foreground'
+                }`}>
+                  {i + 1}
+                </div>
+                <span className="text-sm font-medium flex-1 truncate" title={v.nome}>{v.nome}</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {fmt(v.receita)} · {v.num_vendas} vendas
+                </span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden ml-8">
+                <div className="h-full bg-primary rounded-full" style={{ width: `${(v.receita / max) * 100}%` }} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// Vendas por dia da semana. dow: 0=Dom … 6=Sáb; exibimos Seg→Dom e destacamos o pico.
+const DIAS_SEMANA_LABEL = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const ORDEM_DIAS = [1, 2, 3, 4, 5, 6, 0]
+
+const CardDiaSemana: FC<WidgetProps> = ({ metricas, carregando }) => {
+  const fonte = metricas?.vendas_por_dia_semana ?? []
+  const mapa = new Map(fonte.map((d) => [d.dow, d.total]))
+  const dados = ORDEM_DIAS.map((dow) => ({ dia: DIAS_SEMANA_LABEL[dow], total: mapa.get(dow) ?? 0 }))
+  const max = Math.max(...dados.map((d) => d.total))
+  const temVendas = max > 0
+  const melhor = temVendas ? dados.find((d) => d.total === max)?.dia : null
+  return (
+    <div className="border rounded-xl p-4 bg-card">
+      <div className="flex items-center gap-2 mb-3">
+        <CalendarDays className="w-5 h-5 text-muted-foreground" />
+        <h3 className="font-semibold">Vendas por dia da semana</h3>
+      </div>
+      {carregando ? (
+        <p className="text-sm text-muted-foreground text-center py-12">Carregando...</p>
+      ) : !temVendas ? (
+        <p className="text-sm text-muted-foreground text-center py-12">Sem vendas no período.</p>
+      ) : (
+        <>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dados} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="dia" fontSize={11} tick={{ fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                <YAxis fontSize={11} tick={{ fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={fmtCompacto} />
+                <Tooltip
+                  formatter={(valor) => [fmt(Number(valor)), 'Faturamento']}
+                  contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+                />
+                <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                  {dados.map((d) => (
+                    <Cell key={d.dia} fill={d.total === max ? 'hsl(var(--primary))' : '#94a3b8'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="text-xs text-muted-foreground text-center mt-1">
+            <span className="font-semibold text-foreground">{melhor}</span> é o seu melhor dia
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Aniversariantes do mês corrente — gancho de marketing.
+const CardAniversariantes: FC<{ metricas: MetricasDashboard | null }> = ({ metricas }) => {
+  const dados = metricas?.aniversariantes_mes ?? []
+  return (
+    <div className="border rounded-xl p-4 bg-card">
+      <div className="flex items-center gap-2 mb-3">
+        <Gift className="w-5 h-5 text-muted-foreground" />
+        <h3 className="font-semibold">Aniversariantes do mês</h3>
+      </div>
+      {dados.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-6">
+          Nenhum aniversariante este mês (ou sem data de nascimento cadastrada).
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {dados.map((a) => (
+              <li key={a.id} className="flex items-center gap-3 bg-muted/40 rounded-lg px-3 py-2">
+                <div className="w-9 h-9 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center shrink-0">
+                  <Gift className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" title={a.nome}>{a.nome}</p>
+                  <p className="text-xs text-muted-foreground">{a.telefone}</p>
+                </div>
+                <span className="text-sm font-semibold text-pink-600">{a.dia}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">Oportunidade de mandar um parabéns com uma promoção 🎁</p>
+        </>
       )}
     </div>
   )

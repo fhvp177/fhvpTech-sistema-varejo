@@ -6,6 +6,7 @@ export type Produto = {
   nome: string
   categoria: string | null
   preco: number
+  custo: number
   estoque: number
   fornecedor_id: number | null
   data_cadastro: string
@@ -17,6 +18,7 @@ export type DadosProduto = {
   nome: string
   categoria: string | null
   preco: number
+  custo: number
   estoque: number
   fornecedor_id: number | null
 }
@@ -49,8 +51,8 @@ export function criarProduto(dados: DadosProduto): Produto {
   const db = obterBancoDeDados()
   const result = db
     .prepare(
-      `INSERT INTO produtos (codigo_barras, nome, categoria, preco, estoque, fornecedor_id)
-       VALUES (@codigo_barras, @nome, @categoria, @preco, @estoque, @fornecedor_id)`
+      `INSERT INTO produtos (codigo_barras, nome, categoria, preco, custo, estoque, fornecedor_id)
+       VALUES (@codigo_barras, @nome, @categoria, @preco, @custo, @estoque, @fornecedor_id)`
     )
     .run(dados)
   return {
@@ -68,6 +70,7 @@ export function atualizarProduto(id: number, dados: DadosProduto): void {
          nome = @nome,
          categoria = @categoria,
          preco = @preco,
+         custo = @custo,
          estoque = @estoque,
          fornecedor_id = @fornecedor_id
      WHERE id = @id`
