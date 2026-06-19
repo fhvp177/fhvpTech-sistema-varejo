@@ -27,14 +27,15 @@ import { registrarHandlersChat } from './ipc/chat'
 import { registrarHandlersDevolucoes } from './ipc/devolucoes'
 import { registrarHandlersLoja } from './ipc/loja'
 import { inicializarAtualizador } from './atualizador'
+import { resolverPastaDados } from './pastaDados'
 
 // A pasta de dados (banco + licença + heartbeat) segue, por padrão, o
-// productName do Electron. Como renomeamos o productName de "Sistema RT" para
-// "FHVP Tech Varejo" SEM migrar a pasta das instalações que já existem, fixamos
-// o userData no nome legado. Assim os clientes atuais continuam achando o banco
-// e a licença depois da atualização, e instalações novas usam a mesma pasta.
-// NÃO ALTERAR: mudar este caminho órfã o banco e a licença de TODAS as máquinas.
-app.setPath('userData', join(app.getPath('appData'), 'Sistema RT'))
+// productName do Electron — que mudou ao longo das versões e por isso JÁ órfãou
+// o banco de máquinas que atualizaram de versões antigas. `resolverPastaDados`
+// olha as pastas que o app já usou, acha a que tem dados de verdade e aponta o
+// userData pra ela (sem mover/apagar nada). Tem que rodar antes de qualquer uso
+// de userData (banco, licença, backup). Ver electron/pastaDados.ts.
+app.setPath('userData', resolverPastaDados())
 
 let janelaAtual: BrowserWindow | null = null
 
