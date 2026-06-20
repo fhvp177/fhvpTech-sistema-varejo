@@ -20,6 +20,7 @@ import { proxyChat, type ChatRequest } from './chat.ts'
 import {
   obterCliente,
   gravarCliente,
+  listarClientes,
   obterCobranca,
   gravarCobranca,
   custoMicroChatMes,
@@ -66,6 +67,18 @@ app.use('/admin/*', async (c, next) => {
     return c.json({ erro: 'não autorizado' }, 401)
   }
   await next()
+})
+
+// Lista todos os clientes cadastrados (resumo: id, nome, validade, preço fixo).
+app.get('/admin/clientes', (c) => {
+  const clientes = listarClientes().map((cl) => ({
+    clienteId: cl.clienteId,
+    nome: cl.nome,
+    contato: cl.contato,
+    validadeAtual: cl.validadeAtual,
+    valorCentavosRenovacao: cl.valorCentavosRenovacao ?? null
+  }))
+  return c.json({ total: clientes.length, clientes })
 })
 
 // Cria um cliente novo e devolve a 1ª chave (válida por `diasIniciais`).
@@ -283,7 +296,7 @@ app.post('/cobranca', async (c) => {
   // Preço fixo do cliente (cadastrado por admin) sobrescreve o que o app
   // manda. Permite cobrar valores diferentes por cliente sem release do app.
   const valorCentavos =
-    cliente.valorCentavosRenovacao ?? body.valorCentavos ?? 8000
+    cliente.valorCentavosRenovacao ?? body.valorCentavos ?? 10000
 
   const pix = await criarCobrancaPIX(valorCentavos)
   const cobranca: Cobranca = {

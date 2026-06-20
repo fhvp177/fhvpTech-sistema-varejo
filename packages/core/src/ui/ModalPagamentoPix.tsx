@@ -24,7 +24,7 @@ type PlanoLicenca = {
 // preço é de cada app; o código de pagamento é que é compartilhado.
 const PLANO_PADRAO: PlanoLicenca = {
   diasContratados: 30,
-  valorCentavos: 8000,
+  valorCentavos: 10000,
   rotulo: '30 dias'
 }
 

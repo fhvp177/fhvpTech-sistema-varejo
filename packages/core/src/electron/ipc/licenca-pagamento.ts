@@ -56,7 +56,7 @@ export function registrarHandlersLicencaPagamento(): void {
           body: JSON.stringify({
             clienteId,
             diasContratados: dados.diasContratados ?? 30,
-            valorCentavos: dados.valorCentavos ?? 8000
+            valorCentavos: dados.valorCentavos ?? 10000
           })
         })
         if (!r.ok) {

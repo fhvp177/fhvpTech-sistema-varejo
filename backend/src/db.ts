@@ -43,6 +43,7 @@ db.exec(`
 
 const stmts = {
   getCliente: db.prepare('SELECT data FROM clientes WHERE clienteId = ?'),
+  listClientes: db.prepare('SELECT data FROM clientes'),
   setCliente: db.prepare(
     'INSERT INTO clientes (clienteId, data) VALUES (?, ?) ON CONFLICT(clienteId) DO UPDATE SET data = excluded.data'
   ),
@@ -69,6 +70,12 @@ export function obterCliente(clienteId: string): Cliente | null {
 
 export function gravarCliente(cliente: Cliente): void {
   stmts.setCliente.run(cliente.clienteId, JSON.stringify(cliente))
+}
+
+// Lista todos os clientes (uso admin: conferir cadastro e preço de cada loja).
+export function listarClientes(): Cliente[] {
+  const rows = stmts.listClientes.all() as Array<{ data: string }>
+  return rows.map((r) => JSON.parse(r.data) as Cliente)
 }
 
 export function obterCobranca(txid: string): Cobranca | null {
