@@ -1,4 +1,5 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { promoverVendasVencidas } from './vendas'
 
 export type TipoPessoa = 'fisica' | 'juridica'
 
@@ -78,18 +79,22 @@ export function deletarCliente(id: number): void {
   db.prepare('DELETE FROM clientes WHERE id = ?').run(id)
 }
 
-// Retorna clientes inadimplentes.
+// Retorna clientes inadimplentes (com valores VENCIDOS, anteriores a hoje).
 // Para vendas parceladas: soma apenas as parcelas em atraso (não o total da venda).
-// Para vendas simples: usa o total da venda.
+// Para vendas simples: usa o saldo em aberto (total - valor_pago), descontando
+// entrada e pagamentos parciais já recebidos.
+// Promove vencidos antes de consultar para não depender da ordem de carregamento
+// da tela (igual listarVendas/resumoDashboard fazem).
 export function listarInadimplentes(): ClienteInadimplente[] {
   const db = obterBancoDeDados()
+  promoverVendasVencidas()
   return db
     .prepare(
       `SELECT
          c.id, c.nome, c.telefone,
          SUM(
            CASE WHEN v.num_parcelas IS NULL
-           THEN v.total
+           THEN (v.total - v.valor_pago)
            ELSE COALESCE(p_late.valor_overdue, 0)
            END
          ) AS total_devido,
@@ -117,16 +122,39 @@ export function listarInadimplentes(): ClienteInadimplente[] {
     .all() as ClienteInadimplente[]
 }
 
-// Retorna clientes com vendas pendentes que vencem hoje
+// Retorna clientes com valores que vencem HOJE e ainda têm saldo em aberto.
+// - Venda simples (a prazo): saldo = total - valor_pago, com vencimento hoje.
+// - Venda parcelada: soma das parcelas pendentes que vencem hoje (mesmo que a
+//   venda já esteja inadimplente por uma parcela mais antiga em atraso).
+// Agrega por cliente: um cartão por cliente, somando tudo que vence hoje.
 export function listarVencendoHoje(): ClienteVencendoHoje[] {
   const db = obterBancoDeDados()
+  promoverVendasVencidas()
   return db
     .prepare(
-      `SELECT DISTINCT c.id, c.nome, c.telefone, v.total, v.data_vencimento
+      `SELECT c.id, c.nome, c.telefone,
+              SUM(d.devido) AS total,
+              MIN(d.venc)   AS data_vencimento
        FROM clientes c
-       JOIN vendas v ON v.cliente_id = c.id
-       WHERE v.status_pagamento = 'pendente'
-         AND date(v.data_vencimento) = date('now')
+       JOIN (
+         SELECT v.cliente_id AS cliente_id,
+                (v.total - v.valor_pago) AS devido,
+                v.data_vencimento AS venc
+         FROM vendas v
+         WHERE v.num_parcelas IS NULL
+           AND v.status_pagamento = 'pendente'
+           AND date(v.data_vencimento) = date('now')
+         UNION ALL
+         SELECT v.cliente_id AS cliente_id,
+                p.valor AS devido,
+                p.data_vencimento AS venc
+         FROM parcelas p
+         JOIN vendas v ON v.id = p.venda_id
+         WHERE p.status = 'pendente'
+           AND date(p.data_vencimento) = date('now')
+       ) d ON d.cliente_id = c.id
+       GROUP BY c.id
+       HAVING total > 0
        ORDER BY c.nome COLLATE NOCASE`
     )
     .all() as ClienteVencendoHoje[]

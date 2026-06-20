@@ -108,7 +108,7 @@ function adicionarMeses(dataIso: string, meses: number): string {
   return `${anoAlvo}-${String(mesAlvo + 1).padStart(2, '0')}-${String(diaAlvo).padStart(2, '0')}`
 }
 
-function promoverVendasVencidas(): void {
+export function promoverVendasVencidas(): void {
   const db = obterBancoDeDados()
   // Promove parcelas vencidas
   db.prepare(
@@ -422,14 +422,23 @@ export function registrarPagamentoParcial(id: number, valor: number): SnapshotVe
 export function pagarParcela(parcelaId: number): { vendaId: number; snapshot: SnapshotVenda } | undefined {
   const db = obterBancoDeDados()
   const parcela = db
-    .prepare('SELECT venda_id FROM parcelas WHERE id = ?')
-    .get(parcelaId) as { venda_id: number } | undefined
+    .prepare('SELECT venda_id, valor, status FROM parcelas WHERE id = ?')
+    .get(parcelaId) as { venda_id: number; valor: number; status: string } | undefined
   if (!parcela) return undefined
   const snapshot = obterSnapshotVenda(parcela.venda_id)
   if (!snapshot) return undefined
 
   db.transaction(() => {
+    // Credita o valor da parcela no valor_pago da venda — só se ela ainda não
+    // estava paga (evita somar duas vezes em clique duplo). Assim o valor_pago
+    // reflete o total recebido (entrada + parcelas pagas) e o "restante"
+    // (total - valor_pago) fica correto nas telas de dívida.
+    const jaPaga = parcela.status === 'pago'
     db.prepare("UPDATE parcelas SET status = 'pago' WHERE id = ?").run(parcelaId)
+    if (!jaPaga) {
+      db.prepare('UPDATE vendas SET valor_pago = ROUND(valor_pago + ?, 2) WHERE id = ?')
+        .run(parcela.valor, parcela.venda_id)
+    }
 
     const { total, pagas } = db
       .prepare(
@@ -440,7 +449,13 @@ export function pagarParcela(parcelaId: number): { vendaId: number; snapshot: Sn
       .get(parcela.venda_id) as { total: number; pagas: number }
 
     if (total === pagas) {
-      db.prepare("UPDATE vendas SET status_pagamento = 'pago' WHERE id = ?").run(parcela.venda_id)
+      // Quitada: fixa valor_pago = total para não acumular resíduo de centavos
+      // do rateio das parcelas.
+      const venda = db
+        .prepare('SELECT total FROM vendas WHERE id = ?')
+        .get(parcela.venda_id) as { total: number }
+      db.prepare("UPDATE vendas SET status_pagamento = 'pago', valor_pago = ? WHERE id = ?")
+        .run(venda.total, parcela.venda_id)
     } else {
       const temAtrasada = db
         .prepare("SELECT 1 FROM parcelas WHERE venda_id = ? AND status = 'inadimplente'")
