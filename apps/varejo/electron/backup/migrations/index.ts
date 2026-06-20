@@ -22,6 +22,7 @@ import { aplicar020ProdutoCusto } from './020_produto_custo'
 import { aplicar021ProdutoVariacoes } from './021_produto_variacoes'
 import { aplicar022CategoriaUsaTamanhos } from './022_categoria_usa_tamanhos'
 import { aplicar023RecalcularValorPagoParcelado } from './023_recalcular_valor_pago_parcelado'
+import { aplicar024Notificacoes } from './024_notificacoes'
 
 // Lista de migrations do varejo, na ordem de aplicação. O runner genérico
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
@@ -50,4 +51,5 @@ export const MIGRATIONS: Migration[] = [
   { nome: '021_produto_variacoes', aplicar: aplicar021ProdutoVariacoes },
   { nome: '022_categoria_usa_tamanhos', aplicar: aplicar022CategoriaUsaTamanhos },
   { nome: '023_recalcular_valor_pago_parcelado', aplicar: aplicar023RecalcularValorPagoParcelado },
+  { nome: '024_notificacoes', aplicar: aplicar024Notificacoes },
 ]

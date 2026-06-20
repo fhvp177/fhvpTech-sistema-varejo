@@ -8,7 +8,7 @@ type RespostaIPC<T = unknown> =
 
 // Mantém uma referência ao último resultado pra a tela de Configurações
 // poder mostrar feedback mesmo sem rodar uma verificação manual.
-type EstadoAtualizacao = {
+export type EstadoAtualizacao = {
   versaoAtual: string
   ultimaVerificacao: string | null
   ultimaMensagem: string | null
@@ -20,6 +20,12 @@ const estado: EstadoAtualizacao = {
   ultimaVerificacao: null,
   ultimaMensagem: null,
   versaoBaixada: null
+}
+
+// Permite que outros módulos (ex.: notificações) leiam o estado de atualização
+// sem passar pelo IPC. Devolve uma cópia para ninguém mutar o estado interno.
+export function obterEstadoAtualizacao(): EstadoAtualizacao {
+  return { ...estado }
 }
 
 /**

@@ -155,6 +155,22 @@ const api = {
     salvar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('loja:salvar', dados)
   },
 
+  // Onboarding (tutorial de primeira abertura: guia + checklist)
+  onboarding: {
+    estado: (): Promise<RespostaIPC> => ipcRenderer.invoke('onboarding:estado'),
+    marcarGuiaVisto: (): Promise<RespostaIPC> => ipcRenderer.invoke('onboarding:marcarGuiaVisto'),
+    dispensarChecklist: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('onboarding:dispensarChecklist')
+  },
+
+  // Notificações (sino: avisos calculados ao vivo + caixa de entrada que lembra)
+  notificacoes: {
+    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('notificacoes:listar'),
+    marcarLidas: (): Promise<RespostaIPC> => ipcRenderer.invoke('notificacoes:marcarLidas'),
+    dispensar: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notificacoes:dispensar', id)
+  },
+
   // Devolução / troca
   devolucoes: {
     itensDevolviveis: (vendaId: number): Promise<RespostaIPC> =>

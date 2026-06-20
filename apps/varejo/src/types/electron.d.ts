@@ -186,6 +186,39 @@ interface Window {
       obter: () => Promise<RespostaIPC>
       salvar: (dados: unknown) => Promise<RespostaIPC>
     }
+    onboarding: {
+      estado: () => Promise<RespostaIPC<{
+        guiaVisto: boolean
+        checklistDispensada: boolean
+        progresso: {
+          temProduto: boolean
+          temCliente: boolean
+          temVenda: boolean
+          lojaConfigurada: boolean
+        }
+      }>>
+      marcarGuiaVisto: () => Promise<RespostaIPC>
+      dispensarChecklist: () => Promise<RespostaIPC>
+    }
+    notificacoes: {
+      listar: () => Promise<RespostaIPC<{
+        itens: Array<{
+          id: number
+          chave: string
+          tipo: 'dinheiro' | 'estoque' | 'sistema' | 'relacionamento'
+          severidade: 'critico' | 'alerta' | 'info'
+          titulo: string
+          descricao: string | null
+          rota: string | null
+          acao: 'suporte' | 'pix' | 'instalar-update' | null
+          criada_em: string
+          lida: number
+        }>
+        naoLidas: number
+      }>>
+      marcarLidas: () => Promise<RespostaIPC>
+      dispensar: (id: number) => Promise<RespostaIPC>
+    }
     licenca: {
       validar: () => Promise<RespostaIPC<StatusLicenca>>
       ativar: (chave: string) => Promise<RespostaIPC<StatusLicenca>>

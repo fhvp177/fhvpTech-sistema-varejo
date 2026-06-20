@@ -26,6 +26,8 @@ import { registrarHandlersAuth } from './ipc/auth'
 import { registrarHandlersChat } from './ipc/chat'
 import { registrarHandlersDevolucoes } from './ipc/devolucoes'
 import { registrarHandlersLoja } from './ipc/loja'
+import { registrarHandlersOnboarding } from './ipc/onboarding'
+import { registrarHandlersNotificacoes } from './ipc/notificacoes'
 import { inicializarAtualizador } from './atualizador'
 import { resolverPastaDados } from './pastaDados'
 
@@ -101,6 +103,8 @@ app.whenReady().then(() => {
   registrarHandlersChat()
   registrarHandlersDevolucoes()
   registrarHandlersLoja()
+  registrarHandlersOnboarding()
+  registrarHandlersNotificacoes()
 
   criarJanelaPrincipal()
 

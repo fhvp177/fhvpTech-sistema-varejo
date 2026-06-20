@@ -2,11 +2,12 @@ import { FC, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
 import CidadeSeletor from '@/components/CidadeSeletor'
+import { useOnboarding } from '@/App'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
 import { UFS } from '@/data/ufs'
 
@@ -49,6 +50,7 @@ const fmtData = (iso: string | null) => {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 const Configuracoes: FC = () => {
+  const { abrirGuia } = useOnboarding()
   const [infoAtualizacao, setInfoAtualizacao] = useState<InfoAtualizacao | null>(null)
   const [verificandoUpdate, setVerificandoUpdate] = useState(false)
   const [status, setStatus] = useState<StatusBackup | null>(null)
@@ -254,6 +256,20 @@ const Configuracoes: FC = () => {
               </Button>
             </div>
           )}
+        </div>
+
+        <div className="border rounded-lg p-4 bg-muted/30 flex items-start justify-between gap-4">
+          <div>
+            <p className="font-medium text-sm flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-blue-600" /> Tutorial de boas-vindas
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Reveja a apresentação do sistema e a lista de primeiros passos.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={abrirGuia} className="shrink-0">
+            Ver novamente
+          </Button>
         </div>
       </div>
 

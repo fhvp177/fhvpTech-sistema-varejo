@@ -261,38 +261,40 @@ const Dashboard: FC = () => {
 
       {/* ── Alertas de inadimplência (destaque no topo) ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="border border-red-200 bg-red-50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            <h3 className="font-semibold text-red-700">
-              Inadimplentes{' '}
+        <div className="border rounded-xl p-4 bg-card">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+            </div>
+            <h3 className="font-semibold flex items-center gap-2">
+              Inadimplentes
               {inadimplentes.length > 0 && (
-                <span className="bg-red-600 text-white text-xs rounded-full px-1.5 py-0.5 ml-1">
+                <span className="bg-red-600 text-white text-xs rounded-full px-1.5 py-0.5">
                   {inadimplentes.length}
                 </span>
               )}
             </h3>
           </div>
           {inadimplentes.length === 0 ? (
-            <p className="text-sm text-red-400">Nenhum cliente inadimplente.</p>
+            <p className="text-sm text-muted-foreground">Nenhum cliente inadimplente.</p>
           ) : (
-            <div className="space-y-2 max-h-40 overflow-y-auto">
+            <div className="bg-red-50/60 rounded-lg p-2 space-y-2 max-h-44 overflow-y-auto">
               {inadimplentes.map((c) => (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => setClienteDividas({ id: c.id, nome: c.nome })}
-                  className="w-full text-left bg-white rounded-lg px-3 py-2 border border-red-100 text-sm hover:bg-red-100/50 hover:border-red-200 transition-colors cursor-pointer"
+                  className="w-full text-left bg-white rounded-lg px-3 py-2 text-sm border border-red-100 border-l-[3px] border-l-red-400 hover:bg-red-50 transition-colors cursor-pointer"
                   title="Ver dívidas e parcelas em atraso"
                 >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium text-red-800">{c.nome}</p>
-                      <p className="text-xs text-red-500">{c.telefone}</p>
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground truncate" title={c.nome}>{c.nome}</p>
+                      <p className="text-xs text-muted-foreground">{c.telefone}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-red-700">{fmt(c.total_devido)}</p>
-                      <p className="text-xs text-red-400">desde {fmtData(c.vencimento_mais_antigo)}</p>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-red-600">{fmt(c.total_devido)}</p>
+                      <p className="text-xs text-muted-foreground">desde {fmtData(c.vencimento_mais_antigo)}</p>
                     </div>
                   </div>
                 </button>
@@ -301,35 +303,40 @@ const Dashboard: FC = () => {
           )}
         </div>
 
-        <div className="border border-amber-200 bg-amber-50 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Clock className="w-5 h-5 text-amber-600" />
-            <h3 className="font-semibold text-amber-700">
-              Vencem Hoje{' '}
+        <div className="border rounded-xl p-4 bg-card">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5 text-amber-600" />
+            </div>
+            <h3 className="font-semibold flex items-center gap-2">
+              Vencem Hoje
               {vencendoHoje.length > 0 && (
-                <span className="bg-amber-500 text-white text-xs rounded-full px-1.5 py-0.5 ml-1">
+                <span className="bg-amber-500 text-white text-xs rounded-full px-1.5 py-0.5">
                   {vencendoHoje.length}
                 </span>
               )}
             </h3>
           </div>
           {vencendoHoje.length === 0 ? (
-            <p className="text-sm text-amber-400">Nenhum vencimento para hoje.</p>
+            <p className="text-sm text-muted-foreground">Nenhum vencimento para hoje.</p>
           ) : (
-            <div className="space-y-2 max-h-40 overflow-y-auto">
+            <div className="bg-amber-50/60 rounded-lg p-2 space-y-2 max-h-44 overflow-y-auto">
               {vencendoHoje.map((c) => (
-                <div
+                <button
                   key={c.id}
-                  className="bg-white rounded-lg px-3 py-2 border border-amber-100 text-sm"
+                  type="button"
+                  onClick={() => setClienteDividas({ id: c.id, nome: c.nome })}
+                  className="w-full text-left bg-white rounded-lg px-3 py-2 text-sm border border-amber-100 border-l-[3px] border-l-amber-400 hover:bg-amber-50 transition-colors cursor-pointer"
+                  title="Ver dívidas e parcelas do cliente"
                 >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium text-amber-800">{c.nome}</p>
-                      <p className="text-xs text-amber-500">{c.telefone}</p>
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground truncate" title={c.nome}>{c.nome}</p>
+                      <p className="text-xs text-muted-foreground">{c.telefone}</p>
                     </div>
-                    <p className="font-bold text-amber-700">{fmt(c.total)}</p>
+                    <p className="font-bold text-amber-600 shrink-0">{fmt(c.total)}</p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

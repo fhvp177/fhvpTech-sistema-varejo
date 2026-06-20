@@ -1,4 +1,4 @@
-import { createContext, FC, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, FC, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { MemoryRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import {
   Lock,
@@ -33,6 +33,10 @@ import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
 import ModalPagamentoPix from '@fhvptech/core/ui/ModalPagamentoPix'
 import ErrorBoundary from './components/ErrorBoundary'
 import RotaSomenteDono from './components/RotaSomenteDono'
+import GuiaBoasVindas from '@fhvptech/core/ui/GuiaBoasVindas'
+import ChecklistPrimeirosPassos, { type EstadoOnboarding } from './components/ChecklistPrimeirosPassos'
+import { construirSlidesGuia } from './data/slidesGuia'
+import SinoNotificacoesHost from './components/SinoNotificacoesHost'
 import { ToastProvider, useToast } from '@fhvptech/core/ui/toast'
 import { useAutoLock } from './hooks/useAutoLock'
 
@@ -88,6 +92,11 @@ const SessaoContext = createContext<SessaoCtx>({
 })
 export const useSessao = () => useContext(SessaoContext)
 
+// Permite que Configurações reabra o guia de boas-vindas ("Ver tutorial novamente").
+type OnboardingCtx = { abrirGuia: () => void }
+const OnboardingContext = createContext<OnboardingCtx>({ abrirGuia: () => {} })
+export const useOnboarding = () => useContext(OnboardingContext)
+
 // MemoryRouter é necessário no Electron: não existe servidor HTTP nem hash routing
 const App: FC = () => {
   const [estadoLicenca, setEstadoLicenca] = useState<EstadoLicenca>('verificando')
@@ -101,6 +110,10 @@ const App: FC = () => {
   const [vendedor, setVendedor] = useState<SessaoVendedor | null>(null)
   // Dono adiou o cadastro de email de recuperação — esconde só nesta sessão.
   const [pulouEmailDono, setPulouEmailDono] = useState(false)
+  // Onboarding (tutorial de primeira abertura): estado do banco + guia aberto.
+  const [onboarding, setOnboarding] = useState<EstadoOnboarding | null>(null)
+  const [guiaAberto, setGuiaAberto] = useState(false)
+  const slidesGuia = useMemo(() => construirSlidesGuia(), [])
 
   const validarLicenca = useCallback(async (): Promise<void> => {
     const resp = await window.api.licenca.validar()
@@ -147,6 +160,51 @@ const App: FC = () => {
       setEstadoAuth(sessao ? 'desbloqueado' : 'bloqueado')
     })()
   }, [estadoLicenca, recarregarSessao])
+
+  // ── Onboarding ──────────────────────────────────────────────────────────────
+  // Relê o estado do tutorial. Em caso de falha, assume "tudo visto" (fail-safe:
+  // não bloqueia o modal de email nem mostra guia/checklist por engano).
+  const recarregarOnboarding = useCallback(async () => {
+    const resp = await window.api.onboarding.estado()
+    setOnboarding(
+      resp.success
+        ? resp.data
+        : {
+            guiaVisto: true,
+            checklistDispensada: true,
+            progresso: { temProduto: false, temCliente: false, temVenda: false, lojaConfigurada: false }
+          }
+    )
+  }, [])
+
+  // Carrega o estado do onboarding quando o DONO desbloqueia (só ele vê o tutorial).
+  useEffect(() => {
+    if (estadoAuth !== 'desbloqueado' || vendedor?.papel !== 'dono') {
+      setOnboarding(null)
+      return
+    }
+    recarregarOnboarding()
+  }, [estadoAuth, vendedor, recarregarOnboarding])
+
+  // Primeira abertura do dono → abre o guia antes de tudo.
+  useEffect(() => {
+    if (onboarding && vendedor?.papel === 'dono' && !onboarding.guiaVisto) {
+      setGuiaAberto(true)
+    }
+  }, [onboarding, vendedor?.papel])
+
+  const fecharGuia = useCallback(async () => {
+    setGuiaAberto(false)
+    await window.api.onboarding.marcarGuiaVisto()
+    recarregarOnboarding()
+  }, [recarregarOnboarding])
+
+  const abrirGuia = useCallback(() => setGuiaAberto(true), [])
+
+  const dispensarChecklist = useCallback(async () => {
+    await window.api.onboarding.dispensarChecklist()
+    recarregarOnboarding()
+  }, [recarregarOnboarding])
 
   const bloquear = useCallback(() => {
     // logout é fire-and-forget — a UI já some, e o resultado não bloqueia
@@ -216,6 +274,7 @@ const App: FC = () => {
       <SessaoContext.Provider
         value={{ vendedor, ehDono: vendedor?.papel === 'dono', recarregar: recarregarSessao }}
       >
+       <OnboardingContext.Provider value={{ abrirGuia }}>
         <LockContext.Provider value={{ bloquear, autoLockMinutos, setAutoLockMinutos }}>
           <PdvModeContext.Provider value={{ ativo: pdvAtivo, setAtivo: setPdvAtivo }}>
             <MemoryRouter>
@@ -230,7 +289,19 @@ const App: FC = () => {
                 )}
                 <div className="flex-1 flex flex-col overflow-hidden">
                   {!pdvAtivo && <AlertaBackupFalhando />}
+                  {!pdvAtivo && vendedor?.papel === 'dono' && (
+                    <div className="h-12 shrink-0 border-b bg-background flex items-center justify-end px-6">
+                      <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
+                    </div>
+                  )}
                   <main className={`flex-1 overflow-auto ${pdvAtivo ? '' : 'pb-24'}`}>
+                    <ChecklistPrimeirosPassos
+                      estado={onboarding}
+                      ehDono={vendedor?.papel === 'dono'}
+                      pdvAtivo={pdvAtivo}
+                      onRecarregar={recarregarOnboarding}
+                      onDispensar={dispensarChecklist}
+                    />
                     <Routes>
                       {Dashboard ? (
                         <Route
@@ -298,12 +369,18 @@ const App: FC = () => {
             </MemoryRouter>
           </PdvModeContext.Provider>
         </LockContext.Provider>
+       </OnboardingContext.Provider>
       </SessaoContext.Provider>
       {estadoAuth === 'bloqueado' && <LoginSistema onDesbloquear={aoLogar} />}
+      {guiaAberto && estadoAuth === 'desbloqueado' && (
+        <GuiaBoasVindas slides={slidesGuia} onConcluir={fecharGuia} />
+      )}
       {estadoAuth === 'desbloqueado' &&
         vendedor?.papel === 'dono' &&
         !vendedor.email &&
-        !pulouEmailDono && (
+        !pulouEmailDono &&
+        !guiaAberto &&
+        (onboarding?.guiaVisto ?? false) && (
           <ModalCadastrarEmailDono
             vendedorId={vendedor.id}
             onSalvo={() => {
