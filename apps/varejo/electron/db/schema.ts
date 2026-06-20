@@ -7,7 +7,8 @@ export function criarTabelas(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS categorias (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome TEXT NOT NULL UNIQUE COLLATE NOCASE
+      nome TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      usa_tamanhos INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS fornecedores (
@@ -124,6 +125,10 @@ function semearCategorias(db: Database.Database): void {
 
     const total = db.prepare('SELECT COUNT(*) AS n FROM categorias').get() as { n: number }
     if (total.n === 0) {
+      // A coluna usa_tamanhos pode ainda não existir aqui (criarTabelas roda
+      // antes das migrations); por isso o seed insere só o nome — o default da
+      // grade ("Roupas" ligada) é aplicado pela migration 022, que roda depois
+      // tanto em banco novo quanto antigo.
       for (const nome of CATEGORIAS_PADRAO) inserir.run(nome)
     }
   })

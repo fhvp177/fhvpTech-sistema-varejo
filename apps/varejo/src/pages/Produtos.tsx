@@ -1,5 +1,5 @@
 import { FC, Fragment, useEffect, useRef, useState } from 'react'
-import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, ChevronRight, ChevronDown, Layers } from 'lucide-react'
+import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, ChevronRight, ChevronDown, Layers, Info } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
@@ -13,6 +13,7 @@ import {
 import BarcodeGenerator, { gerarEAN13 } from '@/components/BarcodeGenerator'
 import { nomeImpressao } from '@/utils/nomeImpressao'
 import Paginacao from '@fhvptech/core/ui/paginacao'
+import { Tooltip } from '@fhvptech/core/ui/tooltip'
 import ModalCategorias from '@/components/ModalCategorias'
 import { useSessao } from '@/App'
 
@@ -87,7 +88,7 @@ const FORM_VAZIO: FormProduto = {
   variacoes: gradeVazia()
 }
 
-type Categoria = { id: number; nome: string; produtos_count: number }
+type Categoria = { id: number; nome: string; produtos_count: number; usa_tamanhos: number }
 
 function gerarHtmlRelatorio(produtos: Produto[]): string {
   const data = new Date().toLocaleString('pt-BR', {
@@ -220,6 +221,15 @@ const Produtos: FC = () => {
   const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputScanRef = useRef<HTMLInputElement>(null)
 
+  // Grade de tamanhos só faz sentido em categorias marcadas como "tem tamanhos"
+  // (ex.: Roupas) — a flag é gerenciável por categoria. Mantemos o checkbox
+  // visível também quando o produto JÁ é de grade, pra nunca "prender" a opção ao
+  // editar um produto cuja categoria não usa tamanhos.
+  const categoriaUsaTamanhos = categorias.some(
+    (c) => c.nome === form.categoria && !!c.usa_tamanhos
+  )
+  const mostrarOpcaoGrade = categoriaUsaTamanhos || form.temGrade
+
   const carregar = async () => {
     const [rProdutos, rFornecedores, rCategorias] = await Promise.all([
       window.api.produtos.listar(),
@@ -323,7 +333,7 @@ const Produtos: FC = () => {
     const preco = parseFloat(form.preco.replace(',', '.'))
     if (isNaN(preco) || preco < 0) { setErro('Preço inválido.'); return }
     const custo = form.custo.trim() ? parseFloat(form.custo.replace(',', '.')) : 0
-    if (isNaN(custo) || custo < 0) { setErro('Preço de custo inválido.'); return }
+    if (isNaN(custo) || custo < 0) { setErro('Preço de compra inválido.'); return }
 
     // Tamanhos efetivamente cadastrados = os que têm código de barras preenchido.
     const ativos = form.variacoes.filter((v) => v.codigo_barras.trim())
@@ -640,19 +650,7 @@ const Produtos: FC = () => {
             </div>
             )}
 
-            {/* Esse produto tem tamanhos? */}
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer select-none rounded-md border bg-muted/30 px-3 py-2">
-              <input
-                type="checkbox"
-                checked={form.temGrade}
-                onChange={(e) => setForm((f) => ({ ...f, temGrade: e.target.checked }))}
-                className="h-4 w-4 rounded border-input accent-primary"
-              />
-              <Layers className="w-4 h-4 text-muted-foreground" />
-              Esse produto tem tamanhos (grade P/M/G/GG)
-            </label>
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 items-start">
               <div className="col-span-2 grid gap-1.5">
                 <Label htmlFor="nome">
                   Nome <span className="text-destructive">*</span>
@@ -721,6 +719,21 @@ const Produtos: FC = () => {
                 </div>
               </div>
 
+              {/* Esse produto tem tamanhos? Só aparece para categorias que usam
+                  grade (ou se o produto já é de grade, ao editar). */}
+              {mostrarOpcaoGrade && (
+                <label className="col-span-2 flex items-center gap-2 text-sm font-medium cursor-pointer select-none rounded-md border bg-muted/30 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={form.temGrade}
+                    onChange={(e) => setForm((f) => ({ ...f, temGrade: e.target.checked }))}
+                    className="h-4 w-4 rounded border-input accent-primary"
+                  />
+                  <Layers className="w-4 h-4 text-muted-foreground" />
+                  Esse produto tem tamanhos (grade P/M/G/GG)
+                </label>
+              )}
+
               <div className="grid gap-1.5">
                 <Label htmlFor="preco">
                   Preço de venda (R$) <span className="text-destructive">*</span>
@@ -737,7 +750,12 @@ const Produtos: FC = () => {
               </div>
 
               <div className="grid gap-1.5">
-                <Label htmlFor="custo">Preço de custo (R$)</Label>
+                <Label htmlFor="custo" className="flex items-center gap-1.5">
+                  Preço de compra (R$)
+                  <Tooltip content="Quanto você paga no produto. Usado pro lucro/margem na dashboard.">
+                    <Info className="w-3.5 h-3.5 cursor-help text-muted-foreground" />
+                  </Tooltip>
+                </Label>
                 <Input
                   id="custo"
                   type="number"
@@ -747,9 +765,6 @@ const Produtos: FC = () => {
                   onChange={setF('custo')}
                   placeholder="0,00"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Quanto você paga no produto. Usado pro lucro/margem na dashboard.
-                </p>
               </div>
 
               {!form.temGrade && (

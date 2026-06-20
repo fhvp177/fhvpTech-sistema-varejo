@@ -678,7 +678,7 @@ const CardLucro: FC<CardLucroProps> = ({ metricas, mostrarComparativo, rotuloCom
       ) : semCusto ? (
         <div className="py-4">
           <p className="text-sm text-muted-foreground">
-            Cadastre o <span className="font-medium text-foreground">preço de custo</span> dos produtos
+            Cadastre o <span className="font-medium text-foreground">preço de compra</span> dos produtos
             (na tela <span className="font-medium text-foreground">Produtos</span>) para acompanhar lucro e margem aqui.
           </p>
           <p className="text-xs text-muted-foreground mt-2">
@@ -714,7 +714,7 @@ const CardLucro: FC<CardLucroProps> = ({ metricas, mostrarComparativo, rotuloCom
             </div>
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
-            Estimativa pelo custo atual cadastrado nos produtos.
+            Estimativa pelo preço de compra cadastrado nos produtos.
           </p>
         </>
       )}

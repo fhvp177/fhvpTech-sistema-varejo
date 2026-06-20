@@ -3,7 +3,8 @@ import {
   listarCategorias,
   criarCategoria,
   atualizarCategoria,
-  deletarCategoria
+  deletarCategoria,
+  definirUsaTamanhos
 } from '../db/queries/categorias'
 import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { requerDono } from '../sessao'
@@ -51,6 +52,17 @@ export function registrarHandlersCategorias(): void {
     try {
       requerDono()
       deletarCategoria(id)
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('categorias:definir-tamanhos', (_event, id: number, usa: boolean) => {
+    try {
+      requerDono()
+      definirUsaTamanhos(id, usa)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }
     } catch (error) {

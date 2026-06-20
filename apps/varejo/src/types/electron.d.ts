@@ -143,10 +143,11 @@ interface Window {
       deletar: (id: number) => Promise<RespostaIPC>
     }
     categorias: {
-      listar: () => Promise<RespostaIPC<Array<{ id: number; nome: string; produtos_count: number }>>>
+      listar: () => Promise<RespostaIPC<Array<{ id: number; nome: string; produtos_count: number; usa_tamanhos: number }>>>
       criar: (nome: string) => Promise<RespostaIPC<{ id: number; nome: string }>>
       atualizar: (id: number, nome: string) => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>
+      definirTamanhos: (id: number, usa: boolean) => Promise<RespostaIPC>
     }
     vendedores: {
       listar: () => Promise<RespostaIPC<Array<{

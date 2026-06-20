@@ -1,10 +1,10 @@
 import { FC, useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, X, Shirt } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@fhvptech/core/ui/dialog'
 
-type Categoria = { id: number; nome: string; produtos_count: number }
+type Categoria = { id: number; nome: string; produtos_count: number; usa_tamanhos: number }
 
 type Props = {
   aberto: boolean
@@ -61,6 +61,14 @@ const ModalCategorias: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
     const resp = await window.api.categorias.atualizar(id, editandoNome)
     if (!resp.success) { setErro(resp.error); return }
     cancelarEdicao()
+    await carregar()
+    onMudancas()
+  }
+
+  const alternarTamanhos = async (c: Categoria) => {
+    setErro('')
+    const resp = await window.api.categorias.definirTamanhos(c.id, !c.usa_tamanhos)
+    if (!resp.success) { setErro(resp.error); return }
     await carregar()
     onMudancas()
   }
@@ -146,6 +154,22 @@ const ModalCategorias: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
                     ) : (
                       <>
                         <span className="flex-1 text-sm">{c.nome}</span>
+                        <button
+                          onClick={() => alternarTamanhos(c)}
+                          aria-pressed={!!c.usa_tamanhos}
+                          className={`p-1 ${
+                            c.usa_tamanhos
+                              ? 'text-primary'
+                              : 'text-muted-foreground/40 hover:text-muted-foreground'
+                          }`}
+                          title={
+                            c.usa_tamanhos
+                              ? 'Tem grade de tamanhos (P/M/G/GG) — clique para desligar'
+                              : 'Sem tamanhos — clique para ativar a grade (P/M/G/GG)'
+                          }
+                        >
+                          <Shirt className="w-4 h-4" />
+                        </button>
                         <span className="text-xs text-muted-foreground">
                           {c.produtos_count} produto{c.produtos_count !== 1 ? 's' : ''}
                         </span>
@@ -173,6 +197,8 @@ const ModalCategorias: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
 
           <p className="text-xs text-muted-foreground">
             Renomear uma categoria atualiza automaticamente todos os produtos vinculados.
+            O ícone <Shirt className="inline w-3.5 h-3.5 -mt-0.5" /> liga a grade de tamanhos
+            (P/M/G/GG) no cadastro dos produtos desta categoria.
           </p>
         </div>
       </DialogContent>

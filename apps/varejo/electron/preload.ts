@@ -47,7 +47,9 @@ const api = {
     criar: (nome: string): Promise<RespostaIPC> => ipcRenderer.invoke('categorias:criar', nome),
     atualizar: (id: number, nome: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('categorias:atualizar', id, nome),
-    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('categorias:deletar', id)
+    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('categorias:deletar', id),
+    definirTamanhos: (id: number, usa: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('categorias:definir-tamanhos', id, usa)
   },
 
   // Vendedores

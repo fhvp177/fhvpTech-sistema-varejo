@@ -4,18 +4,26 @@ export type Categoria = {
   id: number
   nome: string
   produtos_count: number
+  usa_tamanhos: number
 }
 
 export function listarCategorias(): Categoria[] {
   const db = obterBancoDeDados()
   return db
     .prepare(
-      `SELECT c.id, c.nome,
+      `SELECT c.id, c.nome, c.usa_tamanhos,
               (SELECT COUNT(*) FROM produtos p WHERE p.categoria = c.nome COLLATE NOCASE) AS produtos_count
        FROM categorias c
        ORDER BY c.nome COLLATE NOCASE`
     )
     .all() as Categoria[]
+}
+
+// Liga/desliga a grade de tamanhos (P/M/G/GG) para os produtos desta categoria.
+export function definirUsaTamanhos(id: number, usa: boolean): void {
+  const db = obterBancoDeDados()
+  const r = db.prepare('UPDATE categorias SET usa_tamanhos = ? WHERE id = ?').run(usa ? 1 : 0, id)
+  if (r.changes === 0) throw new Error('Categoria não encontrada.')
 }
 
 export function criarCategoria(nome: string): { id: number; nome: string } {
