@@ -13,8 +13,10 @@ import { Label } from '@fhvptech/core/ui/label'
 type Props = {
   aberto: boolean
   onClose: () => void
-  // Quando o PIN do dono é aceito, recebe o donoId pra registro/log futuro.
-  onAutorizar: (donoId: number) => void
+  // Quando o PIN do dono é aceito, recebe o donoId (pra log futuro) e o próprio
+  // PIN digitado — ações que revalidam no backend (ex.: cadastro de produto por
+  // vendedor) precisam reenviá-lo; quem não precisa simplesmente ignora.
+  onAutorizar: (donoId: number, pin: string) => void
   motivo: string
 }
 
@@ -55,7 +57,7 @@ const ModalElevarPrivilegio: FC<Props> = ({ aberto, onClose, onAutorizar, motivo
       inputRef.current?.focus()
       return
     }
-    onAutorizar(resp.data.donoId)
+    onAutorizar(resp.data.donoId, pin)
   }
 
   return (

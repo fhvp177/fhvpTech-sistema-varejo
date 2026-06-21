@@ -10,7 +10,8 @@ const api = {
   // Produtos — será preenchido no módulo de produtos
   produtos: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('produtos:listar'),
-    criar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('produtos:criar', dados),
+    criar: (dados: unknown, pinDono?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('produtos:criar', dados, pinDono),
     atualizar: (id: number, dados: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('produtos:atualizar', id, dados),
     deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('produtos:deletar', id),

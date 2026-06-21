@@ -1,5 +1,5 @@
 import { FC, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Wallet, FileDown, FileText } from 'lucide-react'
+import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Wallet, FileDown, FileText } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
@@ -16,6 +16,7 @@ import Paginacao from '@fhvptech/core/ui/paginacao'
 import { useToast } from '@fhvptech/core/ui/toast'
 import ClienteSeletor, { type ClienteSeletorHandle } from '@/components/ClienteSeletor'
 import ConsultaPreco from '@/components/ConsultaPreco'
+import { gerarEAN13 } from '@/components/BarcodeGenerator'
 import { gerarHtmlCupomVenda } from '@/utils/cupomVenda'
 import { obterDadosLoja } from '@/utils/dadosLoja'
 import { nomeImpressao } from '@/utils/nomeImpressao'
@@ -1037,6 +1038,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { showToast } = useToast()
   const [tetoDesconto, setTetoDesconto] = useState(10)
   const [modalElevarAberto, setModalElevarAberto] = useState(false)
+  const [motivoElevar, setMotivoElevar] = useState('')
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
@@ -1074,6 +1076,18 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const [erroCliente, setErroCliente] = useState('')
   const [salvandoCliente, setSalvandoCliente] = useState(false)
 
+  // Cadastro rápido de produto — pro caixa não travar quando bipa um item que
+  // ainda não está cadastrado. Pede só o mínimo; o resto se completa em Produtos.
+  const [modalProdutoAberto, setModalProdutoAberto] = useState(false)
+  const [codigoProdutoRapido, setCodigoProdutoRapido] = useState('')
+  const [nomeProdutoRapido, setNomeProdutoRapido] = useState('')
+  const [precoProdutoRapido, setPrecoProdutoRapido] = useState('')
+  const [estoqueProdutoRapido, setEstoqueProdutoRapido] = useState('1')
+  const [erroProduto, setErroProduto] = useState('')
+  const [salvandoProduto, setSalvandoProduto] = useState(false)
+  // Código bipado que não existe ainda — exibe o atalho "cadastrar este produto".
+  const [codigoNaoEncontrado, setCodigoNaoEncontrado] = useState<string | null>(null)
+
   useEffect(() => {
     Promise.all([
       window.api.clientes.listar(),
@@ -1105,6 +1119,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   // a cada render através de um useEffect mais abaixo.
   const finalizarVendaRef = useRef<() => void>(() => {})
   const abrirClienteRapidoRef = useRef<() => void>(() => {})
+  const abrirProdutoRapidoRef = useRef<() => void>(() => {})
+  // O que rodar quando um dono autoriza no modal de elevação — recebe o PIN
+  // digitado pra revalidação no backend (ex.: cadastro de produto por vendedor).
+  const aoElevarRef = useRef<(pin: string) => void>(() => {})
   const onSairRef = useRef(onSair)
   useEffect(() => { onSairRef.current = onSair }, [onSair])
 
@@ -1183,14 +1201,16 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     if (!codigo) return
 
     setCodigoScan('')
+    setCodigoNaoEncontrado(null)
     const resp = await window.api.produtos.buscarPorCodigoBarras(codigo)
 
     if (resp.success && resp.data) {
       const r = resp.data as Produto & { variacao_encontrada: Variacao | null }
       adicionarItem(r, r.variacao_encontrada)
     } else {
-      setFeedbackScan({ tipo: 'erro', msg: `Código "${codigo}" não encontrado.` })
-      setTimeout(() => setFeedbackScan(null), 3000)
+      // Em vez de só avisar, oferece o cadastro na hora (painel logo abaixo)
+      // já com o código bipado — o caixa não precisa abandonar o carrinho.
+      setCodigoNaoEncontrado(codigo)
     }
     scanRef.current?.focus()
   }
@@ -1328,6 +1348,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     // Vendedor (não-dono) só finaliza desconto acima do teto se um dono autorizar
     if (descontoAcimaDoTeto) {
       setErro('')
+      setMotivoElevar(
+        `O desconto aplicado (${descontoPctReal.toFixed(1)}%) ultrapassa o teto de ${tetoDesconto}% sem PIN do dono. Peça pra um dono digitar o PIN dele pra autorizar esta venda.`
+      )
+      aoElevarRef.current = () => persistirVenda()
       setModalElevarAberto(true)
       return
     }
@@ -1340,6 +1364,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   useEffect(() => {
     finalizarVendaRef.current = finalizarVenda
     abrirClienteRapidoRef.current = abrirClienteRapido
+    abrirProdutoRapidoRef.current = () => abrirProdutoRapido()
   })
 
   // Atalhos de teclado do PDV — registrados uma vez no mount.
@@ -1367,6 +1392,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           e.preventDefault()
           abrirClienteRapidoRef.current()
           break
+        case 'F6':
+          e.preventDefault()
+          abrirProdutoRapidoRef.current()
+          break
         case 'F9':
           e.preventDefault()
           finalizarVendaRef.current()
@@ -1374,7 +1403,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         case 'Escape':
           // Se algum modal estiver aberto, deixa o Radix fechá-lo (não previne).
           // Só sai do PDV se nada estiver aberto.
-          if (consultaPrecoAberta || buscaProdutos || modalClienteAberto) return
+          if (consultaPrecoAberta || buscaProdutos || modalClienteAberto || modalProdutoAberto || modalElevarAberto) return
           e.preventDefault()
           onSairRef.current()
           break
@@ -1382,7 +1411,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [consultaPrecoAberta, buscaProdutos, modalClienteAberto])
+  }, [consultaPrecoAberta, buscaProdutos, modalClienteAberto, modalProdutoAberto, modalElevarAberto])
 
   const abrirClienteRapido = () => {
     setTipoPessoaRapido('fisica')
@@ -1440,6 +1469,65 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     setSalvandoCliente(false)
   }
 
+  const abrirProdutoRapido = (codigoInicial = '') => {
+    setCodigoProdutoRapido(codigoInicial)
+    setNomeProdutoRapido('')
+    setPrecoProdutoRapido('')
+    setEstoqueProdutoRapido('1')
+    setErroProduto('')
+    setCodigoNaoEncontrado(null)
+    setModalProdutoAberto(true)
+  }
+
+  // Cria o produto e já joga no carrinho. `pinDono` vai quando quem opera não é
+  // dono (revalidado no backend). Reaproveita o produto devolvido — sem reler o banco.
+  const persistirProduto = async (pinDono?: string) => {
+    setSalvandoProduto(true)
+    setErroProduto('')
+    const preco = parseFloat(precoProdutoRapido.replace(',', '.'))
+    const estoque = Math.max(0, parseInt(estoqueProdutoRapido) || 0)
+    const dados = {
+      codigo_barras: codigoProdutoRapido.trim() || null,
+      nome: nomeProdutoRapido.trim(),
+      categoria: null,
+      preco,
+      custo: 0,
+      estoque,
+      fornecedor_id: null
+    }
+    const resp = await window.api.produtos.criar(dados, pinDono)
+    if (resp.success) {
+      const novo = resp.data as Produto
+      setProdutos((prev) => [...prev, novo]) // já fica disponível pra buscar/bipar de novo
+      setModalProdutoAberto(false)
+      setSalvandoProduto(false)
+      // Com estoque, entra no carrinho na hora (mostra o ✓ do feedbackScan);
+      // sem estoque, fica só cadastrado pra completar depois.
+      if (novo.estoque > 0) adicionarItem(novo, null)
+      else showToast({ message: `Produto "${novo.nome}" cadastrado.`, variant: 'success' })
+      scanRef.current?.focus()
+    } else {
+      setErroProduto(resp.error)
+      setSalvandoProduto(false)
+    }
+  }
+
+  const salvarProdutoRapido = () => {
+    setErroProduto('')
+    if (!nomeProdutoRapido.trim()) { setErroProduto('Informe o nome do produto.'); return }
+    const preco = parseFloat(precoProdutoRapido.replace(',', '.'))
+    if (isNaN(preco) || preco <= 0) { setErroProduto('Informe um preço de venda válido.'); return }
+
+    // Dono cadastra direto; vendedor precisa do PIN de um dono (validado no backend).
+    if (ehDono) {
+      persistirProduto()
+    } else {
+      setMotivoElevar('Cadastrar um produto novo precisa da autorização de um dono. Peça pra um dono digitar o PIN dele.')
+      aoElevarRef.current = (pin) => persistirProduto(pin)
+      setModalElevarAberto(true)
+    }
+  }
+
   const produtosFiltrados = produtos.filter(
     (p) =>
       p.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
@@ -1479,11 +1567,31 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
               <ShoppingCart className="w-4 h-4 mr-2" />
               Buscar produto
             </Button>
+            <Button variant="outline" onClick={() => abrirProdutoRapido()} title="Cadastrar um produto novo sem sair do caixa (F6)">
+              <PackagePlus className="w-4 h-4 mr-2" />
+              Produto
+            </Button>
           </div>
           {feedbackScan && (
             <p className={`text-sm mt-1 font-medium ${feedbackScan.tipo === 'ok' ? 'text-green-600' : 'text-destructive'}`}>
               {feedbackScan.msg}
             </p>
+          )}
+          {/* Código bipado que não existe: oferece cadastrar na hora, sem perder o carrinho */}
+          {codigoNaoEncontrado && (
+            <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+              <p className="text-sm text-amber-800">
+                O código <span className="font-mono font-medium">{codigoNaoEncontrado}</span> ainda não está cadastrado.
+              </p>
+              <Button
+                size="sm"
+                onClick={() => abrirProdutoRapido(codigoNaoEncontrado)}
+                className="shrink-0"
+              >
+                <PackagePlus className="w-4 h-4 mr-1.5" />
+                Cadastrar este produto
+              </Button>
+            </div>
           )}
         </div>
 
@@ -1939,6 +2047,105 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         </DialogContent>
       </Dialog>
 
+      {/* ── Dialog: cadastro rápido de produto ── */}
+      <Dialog open={modalProdutoAberto} onOpenChange={setModalProdutoAberto}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Cadastro Rápido de Produto</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground -mt-2">
+            O produto será cadastrado e já entra no carrinho. Custo, categoria e
+            tamanhos podem ser completados depois em <strong>Produtos</strong>.
+          </p>
+          <div className="grid gap-3 py-1">
+            <div className="grid gap-1.5">
+              <Label htmlFor="codigo-produto-rapido">Código de barras</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="codigo-produto-rapido"
+                  value={codigoProdutoRapido}
+                  onChange={(e) => setCodigoProdutoRapido(e.target.value)}
+                  placeholder="Bipe ou digite o código"
+                  className="font-mono"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCodigoProdutoRapido(gerarEAN13())}
+                  title="Gerar um código novo (pra imprimir etiqueta depois)"
+                  className="shrink-0"
+                >
+                  Gerar
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="nome-produto-rapido">
+                Nome <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="nome-produto-rapido"
+                value={nomeProdutoRapido}
+                onChange={(e) => setNomeProdutoRapido(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') salvarProdutoRapido() }}
+                placeholder="Nome do produto"
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="preco-produto-rapido">
+                  Preço de venda <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                    R$
+                  </span>
+                  <Input
+                    id="preco-produto-rapido"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={precoProdutoRapido}
+                    onChange={(e) => setPrecoProdutoRapido(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') salvarProdutoRapido() }}
+                    placeholder="0,00"
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="estoque-produto-rapido">Estoque inicial</Label>
+                <Input
+                  id="estoque-produto-rapido"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={estoqueProdutoRapido}
+                  onChange={(e) => setEstoqueProdutoRapido(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') salvarProdutoRapido() }}
+                />
+              </div>
+            </div>
+            {erroProduto && (
+              <p className="text-destructive text-sm bg-destructive/10 rounded px-3 py-2">
+                {erroProduto}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalProdutoAberto(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={salvarProdutoRapido} disabled={salvandoProduto}>
+              {salvandoProduto ? 'Salvando...' : 'Cadastrar e adicionar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Dialog: busca manual de produto ── */}
       <Dialog open={buscaProdutos} onOpenChange={setBuscaProdutos}>
         <DialogContent className="max-w-md">
@@ -2034,11 +2241,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       <ModalElevarPrivilegio
         aberto={modalElevarAberto}
         onClose={() => setModalElevarAberto(false)}
-        onAutorizar={() => {
+        onAutorizar={(_donoId, pin) => {
           setModalElevarAberto(false)
-          persistirVenda()
+          aoElevarRef.current(pin)
         }}
-        motivo={`O desconto aplicado (${descontoPctReal.toFixed(1)}%) ultrapassa o teto de ${tetoDesconto}% sem PIN do dono. Peça pra um dono digitar o PIN dele pra autorizar esta venda.`}
+        motivo={motivoElevar}
       />
     </div>
 
@@ -2048,6 +2255,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         <DicaTecla tecla="F3" acao="Buscar produto" />
         <DicaTecla tecla="F4" acao="Cliente" />
         <DicaTecla tecla="F5" acao="+ Cliente" />
+        <DicaTecla tecla="F6" acao="+ Produto" />
         <DicaTecla tecla="F9" acao="Finalizar" />
         <DicaTecla tecla="ESC" acao="Sair" />
       </div>

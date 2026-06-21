@@ -8,7 +8,8 @@ import {
   type DadosProduto
 } from '../db/queries/produtos'
 import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
-import { requerDono } from '../sessao'
+import { requerDono, ehDono } from '../sessao'
+import { verificarPinDono } from '../auth'
 
 export function registrarHandlersProdutos(): void {
   ipcMain.handle('produtos:listar', () => {
@@ -28,9 +29,18 @@ export function registrarHandlersProdutos(): void {
     }
   })
 
-  ipcMain.handle('produtos:criar', (_event, dados: DadosProduto) => {
+  // Cadastrar produto é ação de dono. Pra não travar o caixa quando um vendedor
+  // bipa um item ainda não cadastrado, aceitamos a autorização por PIN de um dono
+  // (mesmo padrão do desconto acima do teto) — validada aqui no backend, não na
+  // confiança do renderer.
+  ipcMain.handle('produtos:criar', async (_event, dados: DadosProduto, pinDono?: string) => {
     try {
-      requerDono()
+      if (!ehDono()) {
+        const donoId = pinDono ? await verificarPinDono(pinDono) : null
+        if (donoId === null) {
+          throw new Error('Cadastrar um produto requer a autorização de um dono.')
+        }
+      }
       const resultado = criarProduto(dados)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: resultado }

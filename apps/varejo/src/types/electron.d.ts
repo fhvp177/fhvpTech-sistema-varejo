@@ -123,7 +123,7 @@ interface Window {
   api: {
     produtos: {
       listar: () => Promise<RespostaIPC>
-      criar: (dados: unknown) => Promise<RespostaIPC>
+      criar: (dados: unknown, pinDono?: string) => Promise<RespostaIPC>
       atualizar: (id: number, dados: unknown) => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>
       buscarPorCodigoBarras: (codigo: string) => Promise<RespostaIPC>
