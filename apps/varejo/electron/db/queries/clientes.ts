@@ -1,5 +1,6 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { promoverVendasVencidas } from './vendas'
+import { comErroAmigavelDeVinculo } from '../erros'
 
 export type TipoPessoa = 'fisica' | 'juridica'
 
@@ -76,7 +77,11 @@ export function atualizarCliente(id: number, dados: DadosCliente): void {
 
 export function deletarCliente(id: number): void {
   const db = obterBancoDeDados()
-  db.prepare('DELETE FROM clientes WHERE id = ?').run(id)
+  comErroAmigavelDeVinculo(
+    () => db.prepare('DELETE FROM clientes WHERE id = ?').run(id),
+    'Não dá pra excluir este cliente porque ele tem vendas no histórico. ' +
+      'Mantenha o cadastro para preservar o histórico de compras e dívidas.'
+  )
 }
 
 // Retorna clientes inadimplentes (com valores VENCIDOS, anteriores a hoje).

@@ -1,4 +1,5 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { comErroAmigavelDeVinculo } from '../erros'
 
 export type Fornecedor = {
   id: number
@@ -43,5 +44,9 @@ export function atualizarFornecedor(id: number, dados: DadosFornecedor): void {
 
 export function deletarFornecedor(id: number): void {
   const db = obterBancoDeDados()
-  db.prepare('DELETE FROM fornecedores WHERE id = ?').run(id)
+  comErroAmigavelDeVinculo(
+    () => db.prepare('DELETE FROM fornecedores WHERE id = ?').run(id),
+    'Não dá pra excluir este fornecedor porque há produtos vinculados a ele. ' +
+      'Troque o fornecedor desses produtos antes de excluir.'
+  )
 }

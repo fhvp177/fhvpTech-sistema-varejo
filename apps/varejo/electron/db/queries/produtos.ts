@@ -1,4 +1,5 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { comErroAmigavelDeVinculo } from '../erros'
 
 // Ordem canônica dos tamanhos (a grade vai do P ao GG por enquanto). Usada só
 // para devolver as variações já ordenadas; o cadastro de fato vem da tela.
@@ -241,7 +242,11 @@ export function deletarProduto(id: number): void {
     db.prepare('DELETE FROM produto_variacoes WHERE produto_id = ?').run(id)
     db.prepare('DELETE FROM produtos WHERE id = ?').run(id)
   })
-  apagar()
+  comErroAmigavelDeVinculo(
+    apagar,
+    'Não dá pra excluir este produto porque ele já aparece em vendas registradas. ' +
+      'Para tirá-lo do dia a dia, zere o estoque dele.'
+  )
 }
 
 export function atualizarEstoque(id: number, quantidade: number): void {
