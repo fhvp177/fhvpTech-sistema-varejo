@@ -73,7 +73,7 @@ const api = {
 
   // Vendas
   vendas: {
-    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:listar'),
+    listar: (mes?: string): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:listar', mes),
     criar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:criar', dados),
     atualizarStatus: (id: number, status: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:atualizarStatus', id, status),
@@ -167,6 +167,8 @@ const api = {
   // Notificações (sino: avisos calculados ao vivo + caixa de entrada que lembra)
   notificacoes: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('notificacoes:listar'),
+    detalhe: (chave: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notificacoes:detalhe', chave),
     marcarLidas: (): Promise<RespostaIPC> => ipcRenderer.invoke('notificacoes:marcarLidas'),
     dispensar: (id: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('notificacoes:dispensar', id)

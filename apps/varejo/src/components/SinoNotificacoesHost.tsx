@@ -1,6 +1,8 @@
 import { FC, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SinoNotificacoes, { type NotificacaoItem } from '@fhvptech/core/ui/SinoNotificacoes'
+import ModalDetalheNotificacao, { type DetalheNotificacao } from './ModalDetalheNotificacao'
+import { obterDadosLoja } from '@/utils/dadosLoja'
 
 // WhatsApp do suporte já com a deixa do plano de backup em nuvem (o gancho que
 // aparece quando o backup falha / a pasta enche). O plano em nuvem em si ainda
@@ -16,11 +18,19 @@ type Props = {
 // Atualiza o sino a cada 3 min e ao focar a janela — o "ao vivo" sem pesar.
 const INTERVALO_MS = 3 * 60 * 1000
 
+// Avisos cujo clique abre um popup com os itens exatos por trás dele, em vez de
+// só navegar pra uma tela genérica.
+const CHAVES_DETALHE = new Set([
+  'venc-hoje', 'vence-amanha', 'inadimplentes', 'estoque-baixo', 'produtos-parados'
+])
+
 const SinoNotificacoesHost: FC<Props> = ({ onRenovarComPix }) => {
   const navigate = useNavigate()
   const [itens, setItens] = useState<NotificacaoItem[]>([])
   const [naoLidas, setNaoLidas] = useState(0)
   const [aberto, setAberto] = useState(false)
+  const [detalhe, setDetalhe] = useState<DetalheNotificacao | null>(null)
+  const [nomeLoja, setNomeLoja] = useState('')
 
   const carregar = useCallback(async () => {
     const resp = await window.api.notificacoes.listar()
@@ -41,6 +51,13 @@ const SinoNotificacoesHost: FC<Props> = ({ onRenovarComPix }) => {
     }
   }, [carregar])
 
+  // Nome da loja (white-label) pra compor a mensagem de cobrança no WhatsApp.
+  useEffect(() => {
+    obterDadosLoja()
+      .then((l) => setNomeLoja(l.nome))
+      .catch(() => {})
+  }, [])
+
   // Abrir o sino marca tudo como lido (zera a bolinha); os avisos continuam na lista.
   const onToggle = useCallback(async () => {
     if (aberto) {
@@ -53,7 +70,7 @@ const SinoNotificacoesHost: FC<Props> = ({ onRenovarComPix }) => {
   }, [aberto])
 
   const onClicar = useCallback(
-    (n: NotificacaoItem) => {
+    async (n: NotificacaoItem) => {
       setAberto(false)
       if (n.acao === 'pix') {
         onRenovarComPix()
@@ -61,6 +78,9 @@ const SinoNotificacoesHost: FC<Props> = ({ onRenovarComPix }) => {
         window.api.atualizacao.instalar()
       } else if (n.acao === 'suporte') {
         window.open(URL_SUPORTE_NUVEM, '_blank', 'noopener,noreferrer')
+      } else if (CHAVES_DETALHE.has(n.chave)) {
+        const resp = await window.api.notificacoes.detalhe(n.chave)
+        if (resp.success && resp.data) setDetalhe(resp.data)
       } else if (n.rota) {
         navigate(n.rota)
       }
@@ -77,15 +97,26 @@ const SinoNotificacoesHost: FC<Props> = ({ onRenovarComPix }) => {
   )
 
   return (
-    <SinoNotificacoes
-      itens={itens}
-      naoLidas={naoLidas}
-      aberto={aberto}
-      onToggle={onToggle}
-      onFechar={() => setAberto(false)}
-      onClicar={onClicar}
-      onDispensar={onDispensar}
-    />
+    <>
+      <SinoNotificacoes
+        itens={itens}
+        naoLidas={naoLidas}
+        aberto={aberto}
+        onToggle={onToggle}
+        onFechar={() => setAberto(false)}
+        onClicar={onClicar}
+        onDispensar={onDispensar}
+      />
+      <ModalDetalheNotificacao
+        detalhe={detalhe}
+        nomeLoja={nomeLoja}
+        onFechar={() => setDetalhe(null)}
+        onVerProdutos={() => {
+          setDetalhe(null)
+          navigate('/produtos')
+        }}
+      />
+    </>
   )
 }
 

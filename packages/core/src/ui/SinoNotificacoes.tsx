@@ -3,6 +3,9 @@ import { Bell, Wallet, Package, Settings, Gift, X, ChevronRight } from 'lucide-r
 
 export type NotificacaoItem = {
   id: number
+  // Identifica o TIPO de alerta (ex.: 'vence-amanha', 'estoque-baixo'). O app usa
+  // pra decidir se, ao clicar, abre um popup de detalhe em vez de só navegar.
+  chave: string
   tipo: 'dinheiro' | 'estoque' | 'sistema' | 'relacionamento'
   severidade: 'critico' | 'alerta' | 'info'
   titulo: string

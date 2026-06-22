@@ -30,9 +30,9 @@ function dispararBackupPorVendaSeAtivo(): void {
 }
 
 export function registrarHandlersVendas(): void {
-  ipcMain.handle('vendas:listar', () => {
+  ipcMain.handle('vendas:listar', (_event, mes?: string) => {
     try {
-      return { success: true, data: listarVendas() }
+      return { success: true, data: listarVendas(mes) }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

@@ -172,7 +172,7 @@ interface Window {
       redefinirPin: (id: number, novoPin: string) => Promise<RespostaIPC>
     }
     vendas: {
-      listar: () => Promise<RespostaIPC>
+      listar: (mes?: string) => Promise<RespostaIPC>
       criar: (dados: unknown) => Promise<RespostaIPC>
       atualizarStatus: (id: number, status: string) => Promise<RespostaIPC<{ snapshot?: SnapshotVenda }>>
       buscarPorId: (id: number) => Promise<RespostaIPC>
@@ -216,6 +216,22 @@ interface Window {
         }>
         naoLidas: number
       }>>
+      detalhe: (chave: string) => Promise<RespostaIPC<
+        | {
+            kind: 'recebiveis'
+            titulo: string
+            criterio: string
+            cobranca: 'vence' | 'atraso'
+            itens: Array<{ cliente: string; telefone: string; valor: number; vencimento: string; origem: string }>
+          }
+        | {
+            kind: 'produtos'
+            titulo: string
+            criterio: string
+            itens: Array<{ nome: string; estoque: number; dias_parado?: number }>
+          }
+        | null
+      >>
       marcarLidas: () => Promise<RespostaIPC>
       dispensar: (id: number) => Promise<RespostaIPC>
     }

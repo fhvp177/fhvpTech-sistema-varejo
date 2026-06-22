@@ -235,11 +235,12 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [relMes, setRelMes] = useState('') // mês escolhido dentro do diálogo de relatório
   const [relIncluiProdutos, setRelIncluiProdutos] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  const [vendasDoMesRelatorio, setVendasDoMesRelatorio] = useState<Venda[]>([])
   const { showToast } = useToast()
   const { ehDono } = useSessao()
 
-  const carregar = async () => {
-    const resp = await window.api.vendas.listar()
+  const carregar = async (mes: string = filtroMes) => {
+    const resp = await window.api.vendas.listar(mes || undefined)
     if (resp.success) setLista(resp.data as Venda[])
   }
 
@@ -257,21 +258,20 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     showToast({ message: 'Pagamento revertido.', variant: 'success' })
   }
 
-  useEffect(() => { carregar() }, [])
+  // Recarrega ao montar e sempre que o mês muda: o mês é filtrado NO BANCO
+  // (ver listarVendas), então a lista nunca fica incompleta em meses antigos.
+  useEffect(() => { carregar() }, [filtroMes])
 
-  // Aplica mês + busca primeiro (a base usada também nos contadores de cada aba).
-  const listaPorMes = filtroMes
-    ? lista.filter((v) => v.data.slice(0, 7) === filtroMes)
-    : lista
-
+  // O mês já vem filtrado do banco; aqui só aplicamos a busca textual por cima
+  // da lista carregada — base também dos contadores de cada aba.
   const termo = busca.trim().toLowerCase()
   const listaBase = termo
-    ? listaPorMes.filter(
+    ? lista.filter(
         (v) =>
           (v.cliente_nome || 'venda avulsa').toLowerCase().includes(termo) ||
           String(v.id).includes(termo)
       )
-    : listaPorMes
+    : lista
 
   const listaFiltrada = filtroStatus === 'todos'
     ? listaBase
@@ -290,8 +290,21 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const inicioPagina = (paginaAtual - 1) * ITENS_POR_PAGINA
   const listaPaginada = listaFiltrada.slice(inicioPagina, inicioPagina + ITENS_POR_PAGINA)
 
-  // Vendas do mês escolhido no diálogo de relatório — independente do filtro da lista.
-  const vendasDoMesRelatorio = relMes ? lista.filter((v) => v.data.slice(0, 7) === relMes) : []
+  // Vendas do mês do relatório — buscadas direto no banco (não da lista capada em
+  // 300), independente do filtro da lista, pra o relatório nunca subcontar.
+  useEffect(() => {
+    if (!relMes) {
+      setVendasDoMesRelatorio([])
+      return
+    }
+    let ativo = true
+    window.api.vendas.listar(relMes).then((r) => {
+      if (ativo && r.success) setVendasDoMesRelatorio(r.data as Venda[])
+    })
+    return () => {
+      ativo = false
+    }
+  }, [relMes])
 
   const verDetalhes = async (id: number) => {
     const resp = await window.api.vendas.buscarPorId(id)
@@ -414,8 +427,9 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
   }
 
-  // Relatório de vendas do mês selecionado. O resumo gerencial sai de listaPorMes
-  // (já em memória); "mais vendidos" exige a query agregada no backend.
+  // Relatório de vendas do mês selecionado. O resumo gerencial sai de
+  // vendasDoMesRelatorio (buscado no banco pelo efeito acima); "mais vendidos"
+  // exige a query agregada no backend.
   const gerarRelatorio = async (acao: 'pdf' | 'imprimir') => {
     if (!relMes || vendasDoMesRelatorio.length === 0) return
     setGerandoRelatorio(true)
@@ -1024,7 +1038,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         vendaId={devolverVendaId}
         ehDono={ehDono}
         onClose={() => setDevolverVendaId(null)}
-        onConcluido={carregar}
+        onConcluido={() => carregar()}
       />
     </div>
   )

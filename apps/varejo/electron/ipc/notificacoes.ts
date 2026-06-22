@@ -11,6 +11,62 @@ import {
   dispensar,
   type AlertaVivo
 } from '../db/queries/notificacoes'
+import {
+  listarRecebiveis,
+  listarProdutosAlerta,
+  type RecebivelDetalhe,
+  type ProdutoAlertaDetalhe
+} from '../db/queries/alertasDetalhe'
+
+// Detalhe que abre no popup ao clicar numa notificação (estado de AGORA).
+export type DetalheNotificacao =
+  | {
+      kind: 'recebiveis'
+      titulo: string
+      criterio: string
+      cobranca: 'vence' | 'atraso'
+      itens: RecebivelDetalhe[]
+    }
+  | { kind: 'produtos'; titulo: string; criterio: string; itens: ProdutoAlertaDetalhe[] }
+
+// Mapeia a `chave` do aviso pro detalhe correspondente. Chaves sem detalhe
+// (sistema, meta, etc.) devolvem null → o app mantém o comportamento antigo.
+function detalheDaNotificacao(chave: string): DetalheNotificacao | null {
+  switch (chave) {
+    case 'venc-hoje':
+      return {
+        kind: 'recebiveis', titulo: 'Vencem hoje',
+        criterio: 'Recebimentos com vencimento hoje', cobranca: 'vence',
+        itens: listarRecebiveis('hoje')
+      }
+    case 'vence-amanha':
+      return {
+        kind: 'recebiveis', titulo: 'Vencem amanhã',
+        criterio: 'Recebimentos com vencimento amanhã', cobranca: 'vence',
+        itens: listarRecebiveis('amanha')
+      }
+    case 'inadimplentes':
+      return {
+        kind: 'recebiveis', titulo: 'Clientes em atraso',
+        criterio: 'Recebimentos vencidos e ainda em aberto', cobranca: 'atraso',
+        itens: listarRecebiveis('atraso')
+      }
+    case 'estoque-baixo':
+      return {
+        kind: 'produtos', titulo: 'Estoque baixo',
+        criterio: 'Itens com 5 unidades ou menos',
+        itens: listarProdutosAlerta('estoque-baixo')
+      }
+    case 'produtos-parados':
+      return {
+        kind: 'produtos', titulo: 'Produtos parados',
+        criterio: 'Com estoque, sem venda há 30+ dias',
+        itens: listarProdutosAlerta('produtos-parados')
+      }
+    default:
+      return null
+  }
+}
 
 // Alertas que NÃO vêm do banco: backup (config), licença e atualização. Backup
 // falhando / pasta cheia trazem o gancho do plano com backup em nuvem (suporte).
@@ -114,6 +170,14 @@ export function registrarHandlersNotificacoes(): void {
     try {
       computarESincronizar()
       return { success: true, data: { itens: listar(), naoLidas: contarNaoLidas() } }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('notificacoes:detalhe', (_event, chave: string) => {
+    try {
+      return { success: true, data: detalheDaNotificacao(String(chave)) }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

@@ -131,9 +131,15 @@ export function promoverVendasVencidas(): void {
   ).run()
 }
 
-export function listarVendas(): Venda[] {
+// Sem `mes`: as 300 vendas mais recentes (visão padrão do histórico). Com `mes`
+// ('YYYY-MM'): TODAS as vendas daquele mês, sem teto (um mês é naturalmente
+// limitado). Filtrar o mês AQUI, no banco, evita o bug de esconder vendas antigas
+// quando a loja passa de 300 vendas no total e o filtro era feito só em memória.
+export function listarVendas(mes?: string): Venda[] {
   const db = obterBancoDeDados()
   promoverVendasVencidas()
+  const filtroMes = mes ? 'WHERE substr(v.data, 1, 7) = @mes' : ''
+  const limite = mes ? '' : 'LIMIT 300'
   return db
     .prepare(
       `SELECT v.*, c.nome AS cliente_nome,
@@ -153,10 +159,11 @@ export function listarVendas(): Venda[] {
          FROM devolucoes
          GROUP BY venda_id
        ) dev ON dev.venda_id = v.id
+       ${filtroMes}
        ORDER BY v.data DESC
-       LIMIT 300`
+       ${limite}`
     )
-    .all() as Venda[]
+    .all(mes ? { mes } : {}) as Venda[]
 }
 
 export function buscarVendaPorId(id: number): VendaDetalhada | undefined {
