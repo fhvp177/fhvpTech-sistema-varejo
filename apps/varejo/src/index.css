@@ -83,6 +83,23 @@
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
   }
+
+  /* Variante fininha (6px) para listas dentro de cards (ex.: alertas da dashboard) */
+  .scrollbar-suave::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-suave::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 8px;
+  }
+  .scrollbar-suave::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border: none;
+    border-radius: 8px;
+  }
+  .scrollbar-suave::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
 }
 
 @media print {
