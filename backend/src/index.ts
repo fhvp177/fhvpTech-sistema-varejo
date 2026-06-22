@@ -5,8 +5,9 @@
 //   1. (admin) POST /admin/cliente cria um cliente novo e gera a 1ª chave.
 //   2. App pede POST /cobranca → backend cria PIX (mock) e devolve QR + txid.
 //   3. App polla GET /cobranca/:txid até o pagamento cair.
-//   4. EfiPay chama POST /webhook/efi quando confirma — backend gera nova
-//      chave assinada e marca cobrança como paga.
+//   4. (defesa extra) EfiPay pode chamar POST /webhook/efi; mesmo assim o backend
+//      só gera a chave após CONFIRMAR o pagamento direto na EfiPay — nunca confia
+//      no corpo da requisição. A confirmação principal é o polling do passo 3.
 //   5. App pega a chave do GET /cobranca/:txid e ativa localmente.
 //
 // Enquanto não temos EfiPay real, POST /admin/marcar-pago simula o webhook
@@ -340,17 +341,42 @@ app.get('/cobranca/:txid', async (c) => {
   return c.json(cobranca)
 })
 
-// Webhook que o EfiPay vai chamar quando o pagamento cair.
-// Payload real do EfiPay: { pix: [ { txid, endToEndId, valor, ... } ] }
+// Webhook que o EfiPay chama quando o pagamento cair.
+// SEGURANÇA: NUNCA geramos licença confiando no corpo da requisição. Como este
+// endpoint é público, confiar no payload deixaria qualquer um ativar licença de
+// graça mandando um txid pendente. A confirmação principal é o polling do passo
+// 3 (GET /cobranca/:txid). Aqui, se vier algum txid no corpo, só confirmamos
+// DEPOIS de checar o status direto na EfiPay (a verdade vem dela). Na prática a
+// EfiPay é configurada com ignorar-payload=true (ver configurarWebhook), então o
+// corpo chega vazio e só devolvemos 200 pra completar o handshake da notificação.
 app.post('/webhook/efi', async (c) => {
-  const body = await c.req.json<{ pix?: Array<{ txid: string }> }>()
-  const eventos = body.pix ?? []
+  // Em modo mock (dev) não há EfiPay pra consultar: testes usam /admin/marcar-pago.
+  if (usaMock) return c.json({ ok: true })
+
+  let eventos: Array<{ txid: string }> = []
+  try {
+    const body = await c.req.json<{ pix?: Array<{ txid: string }> }>()
+    eventos = body.pix ?? []
+  } catch {
+    eventos = [] // corpo vazio/inválido (esperado com ignorar-payload=true)
+  }
+
+  const efi = await import('./efipay.ts')
   const resultados: Array<{ txid: string; ok: boolean; erro?: string }> = []
   for (const evt of eventos) {
-    const r = await confirmarPagamento(evt.txid)
-    resultados.push({ txid: evt.txid, ok: r.ok, erro: r.ok ? undefined : r.mensagem })
+    try {
+      const status = await efi.consultarCobrancaPIX(evt.txid)
+      if (!status.paga) {
+        resultados.push({ txid: evt.txid, ok: false, erro: 'pagamento não confirmado na EfiPay' })
+        continue
+      }
+      const r = await confirmarPagamento(evt.txid)
+      resultados.push({ txid: evt.txid, ok: r.ok, erro: r.ok ? undefined : r.mensagem })
+    } catch (e) {
+      resultados.push({ txid: evt.txid, ok: false, erro: (e as Error).message })
+    }
   }
-  return c.json({ recebidos: resultados.length, resultados })
+  return c.json({ ok: true, recebidos: resultados.length, resultados })
 })
 
 // ───── Lógica compartilhada ─────────────────────────────────────────
