@@ -215,11 +215,22 @@ const Fornecedores: FC = () => {
               </tr>
             )}
             {listaPaginada.map((f, i) => (
-              <tr key={f.id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                <td className="px-4 py-3 font-medium">{f.nome}</td>
+              <tr
+                key={f.id}
+                className={`border-b border-border last:border-b-0 ${
+                  i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
+                }`}
+              >
+                <td className="px-4 py-3 font-medium">
+                  <div className="truncate max-w-[240px]" title={f.nome}>{f.nome}</div>
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{f.cnpj || '—'}</td>
                 <td className="px-4 py-3 text-muted-foreground">{f.telefone || '—'}</td>
-                <td className="px-4 py-3 text-muted-foreground">{f.email || '—'}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {f.email
+                    ? <div className="truncate max-w-[220px]" title={f.email}>{f.email}</div>
+                    : '—'}
+                </td>
                 <td className="px-4 py-3">
                   {ehDono && (
                     <div className="flex gap-1 justify-end">

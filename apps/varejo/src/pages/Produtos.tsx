@@ -525,7 +525,11 @@ const Produtos: FC = () => {
               const aberto = expandido === p.id
               return (
               <Fragment key={p.id}>
-              <tr className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+              <tr
+                className={`border-b border-border last:border-b-0 ${
+                  i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
+                }`}
+              >
                 <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                   {temGrade ? (
                     <button
@@ -539,18 +543,28 @@ const Produtos: FC = () => {
                       {p.variacoes.length} tam.
                     </button>
                   ) : (
-                    p.codigo_barras
+                    <div className="truncate max-w-[150px]" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
                   )}
                 </td>
-                <td className="px-4 py-3 font-medium">{p.nome}</td>
-                <td className="px-4 py-3 text-muted-foreground">{p.categoria || '—'}</td>
+                <td className="px-4 py-3 font-medium">
+                  <div className="truncate max-w-[280px]" title={p.nome}>{p.nome}</div>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {p.categoria
+                    ? <div className="truncate max-w-[160px]" title={p.categoria}>{p.categoria}</div>
+                    : '—'}
+                </td>
                 <td className="px-4 py-3 text-right">
                   {p.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </td>
                 <td className={`px-4 py-3 text-right font-medium ${p.estoque === 0 ? 'text-destructive' : p.estoque <= 5 ? 'text-amber-600' : ''}`}>
                   {p.estoque}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{p.fornecedor_nome || '—'}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {p.fornecedor_nome
+                    ? <div className="truncate max-w-[180px]" title={p.fornecedor_nome}>{p.fornecedor_nome}</div>
+                    : '—'}
+                </td>
                 <td className="px-4 py-3">
                   {ehDono && (
                     <div className="flex gap-1 justify-end">
@@ -570,7 +584,7 @@ const Produtos: FC = () => {
                 </td>
               </tr>
               {temGrade && aberto && (
-                <tr className="bg-muted/40">
+                <tr className="bg-muted/40 border-b border-border last:border-b-0">
                   <td colSpan={7} className="px-4 py-2">
                     <div className="flex flex-wrap gap-2">
                       {p.variacoes.map((v) => (

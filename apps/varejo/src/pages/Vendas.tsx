@@ -566,10 +566,19 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
               </tr>
             )}
             {listaPaginada.map((v, i) => (
-              <tr key={v.id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+              <tr
+                key={v.id}
+                className={`border-b border-border last:border-b-0 ${
+                  i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
+                }`}
+              >
                 <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{v.id}</td>
                 <td className="px-4 py-3 text-muted-foreground">{fmtData(v.data)}</td>
-                <td className="px-4 py-3 font-medium">{v.cliente_nome || 'Venda avulsa'}</td>
+                <td className="px-4 py-3 font-medium">
+                  <div className="truncate max-w-[240px]" title={v.cliente_nome || 'Venda avulsa'}>
+                    {v.cliente_nome || 'Venda avulsa'}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-right font-semibold">
                   {v.num_parcelas && v.status_pagamento === 'inadimplente' && v.valor_inadimplente > 0
                     ? (
@@ -666,11 +675,11 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
             </DialogHeader>
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                <div>
+                <div className="min-w-0 truncate" title={vendaDetalhada.cliente_nome || 'Avulso'}>
                   <span className="font-medium text-foreground">Cliente: </span>
                   {vendaDetalhada.cliente_nome || 'Avulso'}
                 </div>
-                <div>
+                <div className="min-w-0 truncate" title={vendaDetalhada.vendedor_nome || '—'}>
                   <span className="font-medium text-foreground">Vendedor: </span>
                   {vendaDetalhada.vendedor_nome || '—'}
                 </div>
@@ -726,7 +735,9 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   <tbody>
                     {vendaDetalhada.itens.map((item, i) => (
                       <tr key={i} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
-                        <td className="px-3 py-2">{item.produto_nome}</td>
+                        <td className="px-3 py-2">
+                          <div className="truncate max-w-[260px]" title={item.produto_nome}>{item.produto_nome}</div>
+                        </td>
                         <td className="px-3 py-2 text-right">{item.quantidade}</td>
                         <td className="px-3 py-2 text-right">{fmt(item.preco_unitario)}</td>
                         <td className="px-3 py-2 text-right font-medium">
@@ -1635,8 +1646,13 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 return (
                 <tr key={k} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
                   <td className="px-3 py-2 font-medium">
-                    <div>{item.nome}</div>
-                    <div className="text-xs text-muted-foreground font-mono">{item.codigo_barras}</div>
+                    <div className="truncate max-w-[220px]" title={item.nome}>{item.nome}</div>
+                    <div
+                      className="text-xs text-muted-foreground font-mono truncate max-w-[220px]"
+                      title={item.codigo_barras}
+                    >
+                      {item.codigo_barras}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-center">
                     <input
@@ -2184,7 +2200,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 return (
                   <div key={p.id} className={`px-3 py-2.5 text-sm ${i > 0 ? 'border-t' : ''}`}>
                     <div className="flex justify-between items-center gap-3">
-                      <div className="font-medium">{p.nome}</div>
+                      <div className="font-medium truncate min-w-0" title={p.nome}>{p.nome}</div>
                       <div className="font-semibold shrink-0">{fmt(p.preco)}</div>
                     </div>
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -2222,9 +2238,9 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                     i > 0 ? 'border-t' : ''
                   } ${p.estoque === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-accent'}`}
                 >
-                  <div>
-                    <div className="font-medium">{p.nome}</div>
-                    <div className="text-xs text-muted-foreground font-mono">{p.codigo_barras}</div>
+                  <div className="min-w-0">
+                    <div className="font-medium truncate" title={p.nome}>{p.nome}</div>
+                    <div className="text-xs text-muted-foreground font-mono truncate" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
                   </div>
                   <div className="text-right shrink-0 ml-3">
                     <div className="font-semibold">{fmt(p.preco)}</div>

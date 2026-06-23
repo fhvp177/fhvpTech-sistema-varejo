@@ -39,6 +39,26 @@ type Cliente = {
 const fmtMoeda = (valor: number) =>
   valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+// Iniciais para a "fotinha" do cliente: 1ª letra do primeiro nome + 1ª do
+// último (ou as 2 primeiras letras, se for um nome só).
+const iniciaisDoNome = (nome: string): string => {
+  const partes = nome.trim().split(/\s+/).filter(Boolean)
+  if (partes.length === 0) return '?'
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase()
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+}
+
+// Cor estável por nome — o mesmo cliente cai sempre na mesma cor.
+const CORES_AVATAR = [
+  'bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-violet-500',
+  'bg-pink-500', 'bg-cyan-500', 'bg-orange-500', 'bg-teal-500', 'bg-indigo-500'
+]
+const corDoNome = (nome: string): string => {
+  let h = 0
+  for (let i = 0; i < nome.length; i++) h = (Math.imul(h, 31) + nome.charCodeAt(i)) | 0
+  return CORES_AVATAR[Math.abs(h) % CORES_AVATAR.length]
+}
+
 type FormCliente = {
   nome: string
   telefone: string
@@ -320,31 +340,55 @@ const Clientes: FC = () => {
               </tr>
             )}
             {listaPaginada.map((c, i) => (
-              <tr key={c.id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+              <tr
+                key={c.id}
+                className={`border-b border-border last:border-b-0 ${
+                  i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
+                }`}
+              >
                 <td className="px-4 py-3 text-muted-foreground">
                   {c.tipo_pessoa === 'juridica'
                     ? <Building2 className="w-4 h-4" aria-label="Empresa" />
                     : <User className="w-4 h-4" aria-label="Pessoa física" />}
                 </td>
                 <td className="px-4 py-3 font-medium">
-                  {c.nome}
-                  {c.tipo_pessoa === 'juridica' && c.razao_social && (
-                    <div className="text-xs text-muted-foreground font-normal">{c.razao_social}</div>
-                  )}
-                  {c.observacao && (
-                    <div
-                      className="text-xs text-muted-foreground font-normal italic truncate max-w-[260px]"
-                      title={c.observacao}
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${corDoNome(c.nome)}`}
+                      aria-hidden
                     >
-                      {c.observacao}
+                      {iniciaisDoNome(c.nome)}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate max-w-[260px]" title={c.nome}>{c.nome}</div>
+                      {c.tipo_pessoa === 'juridica' && c.razao_social && (
+                        <div
+                          className="text-xs text-muted-foreground font-normal truncate max-w-[260px]"
+                          title={c.razao_social}
+                        >
+                          {c.razao_social}
+                        </div>
+                      )}
+                      {c.observacao && (
+                        <div
+                          className="text-xs text-muted-foreground font-normal italic truncate max-w-[260px]"
+                          title={c.observacao}
+                        >
+                          {c.observacao}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {c.tipo_pessoa === 'juridica' ? (c.cnpj || '—') : (c.cpf || '—')}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{c.telefone}</td>
-                <td className="px-4 py-3 text-muted-foreground">{c.endereco || '—'}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {c.endereco
+                    ? <div className="truncate max-w-[220px]" title={c.endereco}>{c.endereco}</div>
+                    : '—'}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{formatarData(c.data_cadastro)}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1 justify-end">
