@@ -224,6 +224,13 @@ export function alertasDoBanco(): AlertaVivo[] {
 
 // ── Persistência (a "caixa de entrada" que lembra) ──
 
+// Janela do sino: só mostra avisos que nasceram de ontem pra cá (até 1 dia
+// atrás). `criada_em` é o instante em que o aviso surgiu pela primeira vez
+// (datetime local); date('now','localtime','-1 day') é a meia-noite de ontem.
+// Corte seco por data: um aviso que continua valendo, mas é antigo, some do
+// sino mesmo assim. Usado em listar() e contarNaoLidas() pra não divergirem.
+const JANELA_RECENTE = `criada_em >= date('now', 'localtime', '-1 day')`
+
 // Grava os alertas novos (dedup pelo índice único chave+assinatura) e mantém só
 // as 100 linhas mais recentes, pra tabela não crescer sem limite.
 export function sincronizar(alertas: AlertaVivo[]): void {
@@ -249,7 +256,7 @@ export function listar(): NotificacaoSalva[] {
     .prepare(
       `SELECT id, chave, tipo, severidade, titulo, descricao, rota, acao, criada_em, lida
        FROM notificacoes
-       WHERE dispensada = 0
+       WHERE dispensada = 0 AND ${JANELA_RECENTE}
        ORDER BY id DESC
        LIMIT 50`
     )
@@ -259,7 +266,10 @@ export function listar(): NotificacaoSalva[] {
 export function contarNaoLidas(): number {
   const db = obterBancoDeDados()
   const { n } = db
-    .prepare('SELECT COUNT(*) AS n FROM notificacoes WHERE lida = 0 AND dispensada = 0')
+    .prepare(
+      `SELECT COUNT(*) AS n FROM notificacoes
+       WHERE lida = 0 AND dispensada = 0 AND ${JANELA_RECENTE}`
+    )
     .get() as { n: number }
   return n
 }
