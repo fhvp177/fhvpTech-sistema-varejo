@@ -21,7 +21,7 @@ function lerPrefImpressora(cat: CategoriaImpressao): { printer: string; direto: 
 
 // Tira do nome o que o Windows não aceita em nome de arquivo.
 function nomeSeguro(nome: string): string {
-  return nome.replace(/[<>:"/\\|?* -]/g, '_').trim() || 'documento'
+  return nome.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim() || 'documento'
 }
 
 // Carrega o HTML num BrowserWindow oculto e devolve a janela pronta pra imprimir.
