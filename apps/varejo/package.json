@@ -1,6 +1,6 @@
 {
   "name": "sistema-rt",
-  "version": "1.20.0",
+  "version": "1.21.0",
   "description": "Sistema de gestão para pequenas lojas de varejo",
   "main": "out/main/index.js",
   "author": "",
@@ -89,8 +89,9 @@
       "icon": "resources/icon.png"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true
     },
     "publish": {
       "provider": "github",

@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from 'react'
-import { Download } from 'lucide-react'
+import { Download, Loader2 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import {
   Dialog,
@@ -46,32 +46,42 @@ const ModalAtualizacaoDisponivel: FC = () => {
   if (!versao) return null
 
   return (
-    <Dialog open={aberto} onOpenChange={setAberto}>
+    <Dialog open={aberto} onOpenChange={(o) => { if (!instalando) setAberto(o) }}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download className="w-5 h-5 text-blue-600" />
-            Atualização disponível
+            {instalando ? 'Atualizando o sistema' : 'Atualização disponível'}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-2 text-sm">
-          <p>
-            Uma nova versão do sistema (<span className="font-semibold">{versao}</span>) foi
-            baixada e está pronta para ser instalada.
-          </p>
-          <p className="text-muted-foreground">
-            A instalação leva poucos segundos e o sistema reabre automaticamente. Seus dados
-            são preservados.
-          </p>
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => setAberto(false)} disabled={instalando}>
-            Mais tarde
-          </Button>
-          <Button onClick={reiniciarAgora} disabled={instalando}>
-            {instalando ? 'Reiniciando...' : 'Reiniciar e instalar'}
-          </Button>
-        </DialogFooter>
+
+        {instalando ? (
+          <div className="flex items-center gap-3 py-3">
+            <Loader2 className="w-5 h-5 text-blue-600 animate-spin shrink-0" />
+            <p className="text-sm text-muted-foreground">
+              Instalando a nova versão… o sistema reabre sozinho em instantes.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2 text-sm">
+              <p>
+                Uma nova versão do sistema (<span className="font-semibold">{versao}</span>) foi
+                baixada e está pronta para ser instalada.
+              </p>
+              <p className="text-muted-foreground">
+                A instalação leva poucos segundos e o sistema reabre automaticamente. Seus dados
+                são preservados.
+              </p>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setAberto(false)}>
+                Mais tarde
+              </Button>
+              <Button onClick={reiniciarAgora}>Reiniciar e instalar</Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -116,7 +116,10 @@ export function inicializarAtualizador(obterJanela: () => BrowserWindow | null):
     // é emitido no autoUpdater nativo do Electron logo antes de app.quit(),
     // sem tempo de aguardar uma operação assíncrona.
     await executarBackupPreUpdate()
-    setImmediate(() => autoUpdater.quitAndInstall())
+    // (true, true) = instala em SILÊNCIO (sem o assistente do Windows, casado com
+    // nsis.oneClick) e reabre o app sozinho. Sem janela nativa: o usuário só vê o
+    // nosso aviso "Atualizando…" e o sistema reabre já atualizado.
+    setImmediate(() => autoUpdater.quitAndInstall(true, true))
     return { success: true, data: null }
   })
 
