@@ -26,6 +26,11 @@ export function executarMigrations(db: Database.Database, migrations: Migration[
     if (!jaAplicada) {
       console.log(`[migrations] Aplicando: ${migration.nome}`)
       migration.aplicar(db)
+      // O runner carimba a migration como aplicada. As migrations atuais também
+      // se carimbam por dentro (INSERT OR IGNORE), o que é redundante mas inócuo;
+      // garantir o registro AQUI é a rede de segurança contra uma migration nova
+      // que esqueça essa linha e, sem isso, re-rodaria em todo boot pra sempre.
+      db.prepare('INSERT OR IGNORE INTO _migrations (nome) VALUES (?)').run(migration.nome)
       console.log(`[migrations] Concluído: ${migration.nome}`)
     }
   }
