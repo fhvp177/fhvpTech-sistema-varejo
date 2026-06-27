@@ -186,6 +186,10 @@ interface Window {
       obter: () => Promise<RespostaIPC>
       salvar: (dados: unknown) => Promise<RespostaIPC>
     }
+    novidades: {
+      estado: () => Promise<RespostaIPC<{ ultimaVersaoVista: string; guiaVisto: boolean }>>
+      marcar: (versao: string) => Promise<RespostaIPC>
+    }
     onboarding: {
       estado: () => Promise<RespostaIPC<{
         guiaVisto: boolean
@@ -309,7 +313,21 @@ interface Window {
       setarTetoDesconto: (pct: number) => Promise<RespostaIPC>
     }
     impressao: {
-      imprimir: (html: string, nomeArquivo?: string) => Promise<RespostaIPC>
+      imprimir: (html: string, nomeArquivo?: string, deviceName?: string) => Promise<RespostaIPC>
+      listarImpressoras: () => Promise<
+        RespostaIPC<Array<{ name: string; displayName: string; isDefault: boolean }>>
+      >
+      imprimirJanela: (deviceName: string) => Promise<RespostaIPC>
+      obterPreferencias: () => Promise<
+        RespostaIPC<{
+          cupom: { printer: string; direto: boolean }
+          documento: { printer: string; direto: boolean }
+        }>
+      >
+      salvarPreferencias: (prefs: {
+        cupom?: { printer?: string; direto?: boolean }
+        documento?: { printer?: string; direto?: boolean }
+      }) => Promise<RespostaIPC>
       salvarPdf: (html: string, nomeArquivo?: string) => Promise<RespostaIPC>
     }
     chat: {

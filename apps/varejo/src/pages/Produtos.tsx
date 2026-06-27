@@ -1,6 +1,8 @@
 import { FC, Fragment, useEffect, useRef, useState } from 'react'
 import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, ChevronRight, ChevronDown, Layers, Info } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
+import { useConfirm } from '@fhvptech/core/ui/confirm'
+import { useImprimir } from '@/components/ImpressaoProvider'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
 import {
@@ -419,8 +421,18 @@ const Produtos: FC = () => {
     setSalvandoFornecedor(false)
   }
 
+  const confirmar = useConfirm()
+  const imprimir = useImprimir()
+
   const excluir = async (id: number, nome: string) => {
-    if (!confirm(`Excluir produto "${nome}"?`)) return
+    if (
+      !(await confirmar({
+        titulo: 'Excluir produto',
+        mensagem: `Tem certeza que deseja excluir o produto "${nome}"?`,
+        variante: 'destructive'
+      }))
+    )
+      return
     const resp = await window.api.produtos.deletar(id)
     if (resp.success) await carregar()
     else alert(`Erro: ${resp.error}`)
@@ -432,10 +444,12 @@ const Produtos: FC = () => {
     try {
       const html = gerarHtmlRelatorio(lista)
       const nome = nomeImpressao.relatorioEstoque()
-      const resp =
-        acao === 'pdf'
-          ? await window.api.impressao.salvarPdf(html, nome)
-          : await window.api.impressao.imprimir(html, nome)
+      if (acao === 'imprimir') {
+        const ok = await imprimir(html, nome, 'documento')
+        if (ok) setRelatorioAberto(false)
+        return
+      }
+      const resp = await window.api.impressao.salvarPdf(html, nome)
       if (!resp.success) {
         alert(`Erro ao gerar relatório: ${resp.error}`)
         return

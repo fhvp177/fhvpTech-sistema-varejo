@@ -125,8 +125,8 @@ const SinoNotificacoes: FC<Props> = ({
                   return (
                     <li
                       key={n.id}
-                      className={`group relative flex items-start gap-3 px-4 py-3 transition-colors ${
-                        n.lida ? '' : 'bg-blue-50/40'
+                      className={`group relative flex items-start gap-3 px-4 py-3 border-l-2 transition-colors ${
+                        n.lida ? 'border-transparent' : 'border-blue-500 bg-blue-100/70'
                       } ${clicavel ? 'hover:bg-muted/60 cursor-pointer' : ''}`}
                       onClick={() => clicavel && onClicar(n)}
                     >

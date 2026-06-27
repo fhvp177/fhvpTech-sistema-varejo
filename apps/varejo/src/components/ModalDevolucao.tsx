@@ -13,6 +13,7 @@ import { Input } from '@fhvptech/core/ui/input'
 import { IMaskInput } from 'react-imask'
 import ClienteSeletor from '@/components/ClienteSeletor'
 import { useToast } from '@fhvptech/core/ui/toast'
+import { useImprimir } from '@/components/ImpressaoProvider'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 import { obterDadosLoja } from '@/utils/dadosLoja'
 
@@ -46,6 +47,7 @@ type Props = {
 // opera não é dono). O valor de cada item já vem proporcional ao desconto.
 const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) => {
   const { showToast } = useToast()
+  const imprimir = useImprimir()
   const aberto = vendaId !== null
 
   const [carregando, setCarregando] = useState(false)
@@ -216,7 +218,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
         }))
       // Imprime o comprovante; não bloqueia nem reverte o sucesso se falhar.
       const loja = await obterDadosLoja()
-      window.api.impressao.imprimir(
+      imprimir(
         gerarHtmlComprovanteDevolucao({
           id: dev.id,
           venda_id: dev.venda_id,
@@ -230,7 +232,9 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
               ? +(saldoAtual + totalDevolver).toFixed(2)
               : null,
           itens: itensComprovante
-        }, loja)
+        }, loja),
+        `comprovante-devolucao-${dev.id}`,
+        'cupom'
       )
       showToast({
         message:

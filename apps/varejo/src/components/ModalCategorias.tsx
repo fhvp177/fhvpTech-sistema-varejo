@@ -1,6 +1,7 @@
 import { FC, useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X, Shirt } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
+import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { Input } from '@fhvptech/core/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@fhvptech/core/ui/dialog'
 
@@ -73,6 +74,8 @@ const ModalCategorias: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
     onMudancas()
   }
 
+  const confirmar = useConfirm()
+
   const excluir = async (c: Categoria) => {
     let mensagem = `Excluir a categoria "${c.nome}"?`
     if (c.produtos_count > 0) {
@@ -82,7 +85,14 @@ const ModalCategorias: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
         `Esses produtos vão ficar SEM categoria após a exclusão.\n\n` +
         `Deseja continuar?`
     }
-    if (!confirm(mensagem)) return
+    if (
+      !(await confirmar({
+        titulo: 'Excluir categoria',
+        mensagem,
+        variante: 'destructive'
+      }))
+    )
+      return
     const resp = await window.api.categorias.deletar(c.id)
     if (!resp.success) { setErro(resp.error); return }
     await carregar()

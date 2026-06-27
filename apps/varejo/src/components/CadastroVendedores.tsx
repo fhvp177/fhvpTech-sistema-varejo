@@ -1,4 +1,5 @@
 import { FC, useEffect, useState } from 'react'
+import { useConfirm } from '@fhvptech/core/ui/confirm'
 import {
   Plus,
   Pencil,
@@ -120,6 +121,8 @@ const CadastroVendedores: FC = () => {
     await carregar()
   }
 
+  const confirmar = useConfirm()
+
   const alterarPapel = async (v: Vendedor) => {
     setErro('')
     const novoPapel: 'dono' | 'vendedor' = v.papel === 'dono' ? 'vendedor' : 'dono'
@@ -127,7 +130,14 @@ const CadastroVendedores: FC = () => {
       novoPapel === 'dono'
         ? `Promover "${v.nome}" a Dono? Ele terá acesso total ao sistema.`
         : `Rebaixar "${v.nome}" a Vendedor? Ele perderá acesso a relatórios e cadastros sensíveis.`
-    if (!confirm(confirmacao)) return
+    if (
+      !(await confirmar({
+        titulo: 'Alterar função',
+        mensagem: confirmacao,
+        rotuloConfirmar: novoPapel === 'dono' ? 'Promover' : 'Rebaixar'
+      }))
+    )
+      return
     const resp = await window.api.vendedores.alterarPapel(v.id, novoPapel)
     if (!resp.success) {
       setErro(resp.error)
@@ -145,7 +155,14 @@ const CadastroVendedores: FC = () => {
       )
       return
     }
-    if (!confirm(`Excluir o vendedor "${v.nome}"?`)) return
+    if (
+      !(await confirmar({
+        titulo: 'Excluir vendedor',
+        mensagem: `Tem certeza que deseja excluir o vendedor "${v.nome}"?`,
+        variante: 'destructive'
+      }))
+    )
+      return
     const resp = await window.api.vendedores.deletar(v.id)
     if (!resp.success) {
       setErro(resp.error)

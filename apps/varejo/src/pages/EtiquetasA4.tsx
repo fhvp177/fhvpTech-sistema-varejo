@@ -4,6 +4,7 @@ import { Printer, Tag, Search } from 'lucide-react'
 import { PRESETS, PRESET_PADRAO, LayoutEtiqueta } from '../utils/presetsLayoutA4'
 import FolhaA4Preview, { SlotDado } from '../components/FolhaA4Preview'
 import { nomeImpressao } from '../utils/nomeImpressao'
+import { useImprimirJanela } from '@/components/ImpressaoProvider'
 
 type Variacao = {
   id: number
@@ -43,6 +44,7 @@ const EtiquetasA4: FC = () => {
   const [mostrarCodigo, setMostrarCodigo] = useState(true)
   const [mostrarPreco, setMostrarPreco] = useState(true)
   const [mostrarLinhasGuia, setMostrarLinhasGuia] = useState(false)
+  const imprimirJanela = useImprimirJanela()
 
   useEffect(() => {
     window.api.produtos.listar().then((r) => {
@@ -294,14 +296,16 @@ const EtiquetasA4: FC = () => {
               </span>
             )}
             <button
-              onClick={() => {
-                // Nomeia o PDF/job de impressão (o nome herda document.title).
+              onClick={async () => {
+                // Nomeia o job de impressão (herda document.title) e imprime a
+                // folha calibrada na impressora escolhida no diálogo do sistema.
                 const anterior = document.title
-                window.addEventListener('afterprint', () => { document.title = anterior }, {
-                  once: true
-                })
                 document.title = nomeImpressao.etiquetas()
-                window.print()
+                try {
+                  await imprimirJanela(nomeImpressao.etiquetas(), 'documento')
+                } finally {
+                  document.title = anterior
+                }
               }}
               disabled={totalEtiquetas === 0}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"

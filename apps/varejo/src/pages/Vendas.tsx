@@ -14,6 +14,7 @@ import {
 } from '@fhvptech/core/ui/dialog'
 import Paginacao from '@fhvptech/core/ui/paginacao'
 import { useToast } from '@fhvptech/core/ui/toast'
+import { useImprimir } from '@/components/ImpressaoProvider'
 import ClienteSeletor, { type ClienteSeletorHandle } from '@/components/ClienteSeletor'
 import ConsultaPreco from '@/components/ConsultaPreco'
 import { gerarEAN13 } from '@/components/BarcodeGenerator'
@@ -237,6 +238,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [vendasDoMesRelatorio, setVendasDoMesRelatorio] = useState<Venda[]>([])
   const { showToast } = useToast()
+  const imprimir = useImprimir()
   const { ehDono } = useSessao()
 
   const carregar = async (mes: string = filtroMes) => {
@@ -371,8 +373,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const imprimirCupom = async (id: number) => {
     const doc = await gerarCupom(id)
     if (!doc) return
-    const r = await window.api.impressao.imprimir(doc.html, doc.nome)
-    if (!r.success) alert(`Erro ao imprimir: ${r.error}`)
+    await imprimir(doc.html, doc.nome, 'cupom')
   }
 
   const salvarPdfCupom = async (id: number) => {
@@ -417,8 +418,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
   const imprimirComprovanteDevolucao = async (dev: DevolucaoComItens) => {
     const doc = await gerarComprovanteDevolucao(dev)
-    const r = await window.api.impressao.imprimir(doc.html, doc.nome)
-    if (!r.success) alert(`Erro ao imprimir: ${r.error}`)
+    await imprimir(doc.html, doc.nome, 'cupom')
   }
 
   const salvarPdfComprovanteDevolucao = async (dev: DevolucaoComItens) => {
@@ -441,10 +441,12 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
       }
       const html = gerarHtmlRelatorioVendas(vendasDoMesRelatorio, relMes, maisVendidos)
       const nome = nomeImpressao.relatorioVendas(relMes)
-      const r =
-        acao === 'pdf'
-          ? await window.api.impressao.salvarPdf(html, nome)
-          : await window.api.impressao.imprimir(html, nome)
+      if (acao === 'imprimir') {
+        const ok = await imprimir(html, nome, 'documento')
+        if (ok) setRelatorioAberto(false)
+        return
+      }
+      const r = await window.api.impressao.salvarPdf(html, nome)
       if (!r.success) {
         showToast({ message: `Erro ao gerar relatório: ${r.error}`, variant: 'destructive' })
         return
@@ -1061,6 +1063,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { setAtivo: setPdvAtivo } = usePdvMode()
   const { ehDono } = useSessao()
   const { showToast } = useToast()
+  const imprimir = useImprimir()
   const [tetoDesconto, setTetoDesconto] = useState(10)
   const [modalElevarAberto, setModalElevarAberto] = useState(false)
   const [motivoElevar, setMotivoElevar] = useState('')
@@ -1288,10 +1291,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const imprimirCupomVenda = async (venda: VendaDetalhada) => {
     const loja = await obterDadosLoja()
     const html = gerarHtmlCupomVenda(venda, loja)
-    const r = await window.api.impressao.imprimir(html, nomeImpressao.cupomVenda(venda.id))
-    if (!r.success) {
-      showToast({ message: `Erro ao imprimir: ${r.error}`, variant: 'destructive' })
-    }
+    await imprimir(html, nomeImpressao.cupomVenda(venda.id), 'cupom')
   }
 
   const persistirVenda = async () => {

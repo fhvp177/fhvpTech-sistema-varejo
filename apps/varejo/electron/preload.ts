@@ -137,8 +137,16 @@ const api = {
 
   // Impressão
   impressao: {
-    imprimir: (html: string, nomeArquivo?: string): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('impressao:imprimir', html, nomeArquivo),
+    imprimir: (html: string, nomeArquivo?: string, deviceName?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:imprimir', html, nomeArquivo, deviceName),
+    listarImpressoras: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:listarImpressoras'),
+    imprimirJanela: (deviceName: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:imprimirJanela', deviceName),
+    obterPreferencias: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:obterPreferencias'),
+    salvarPreferencias: (prefs: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:salvarPreferencias', prefs),
     salvarPdf: (html: string, nomeArquivo?: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('impressao:salvarPdf', html, nomeArquivo)
   },
@@ -162,6 +170,13 @@ const api = {
     marcarGuiaVisto: (): Promise<RespostaIPC> => ipcRenderer.invoke('onboarding:marcarGuiaVisto'),
     dispensarChecklist: (): Promise<RespostaIPC> =>
       ipcRenderer.invoke('onboarding:dispensarChecklist')
+  },
+
+  // "O que há de novo" — novidades exibidas após uma atualização
+  novidades: {
+    estado: (): Promise<RespostaIPC> => ipcRenderer.invoke('novidades:estado'),
+    marcar: (versao: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('novidades:marcar', versao)
   },
 
   // Notificações (sino: avisos calculados ao vivo + caixa de entrada que lembra)

@@ -36,8 +36,12 @@ import RotaSomenteDono from './components/RotaSomenteDono'
 import GuiaBoasVindas from '@fhvptech/core/ui/GuiaBoasVindas'
 import ChecklistPrimeirosPassos, { type EstadoOnboarding } from './components/ChecklistPrimeirosPassos'
 import { construirSlidesGuia } from './data/slidesGuia'
+import NovidadesModal, { type ItemNovidade } from '@fhvptech/core/ui/NovidadesModal'
+import { NOVIDADES, novidadesParaMostrar } from './data/novidades'
 import SinoNotificacoesHost from './components/SinoNotificacoesHost'
 import { ToastProvider, useToast } from '@fhvptech/core/ui/toast'
+import { ConfirmProvider } from '@fhvptech/core/ui/confirm'
+import { ImpressaoProvider } from './components/ImpressaoProvider'
 import { useAutoLock } from './hooks/useAutoLock'
 
 // Features opcionais carregadas sob demanda e gateadas por edição (build-time).
@@ -97,6 +101,11 @@ type OnboardingCtx = { abrirGuia: () => void }
 const OnboardingContext = createContext<OnboardingCtx>({ abrirGuia: () => {} })
 export const useOnboarding = () => useContext(OnboardingContext)
 
+// Permite que Configurações reabra as novidades da versão atual ("Ver novidades").
+type NovidadesCtx = { abrirNovidades: () => void }
+const NovidadesContext = createContext<NovidadesCtx>({ abrirNovidades: () => {} })
+export const useNovidades = () => useContext(NovidadesContext)
+
 // MemoryRouter é necessário no Electron: não existe servidor HTTP nem hash routing
 const App: FC = () => {
   const [estadoLicenca, setEstadoLicenca] = useState<EstadoLicenca>('verificando')
@@ -114,6 +123,9 @@ const App: FC = () => {
   const [onboarding, setOnboarding] = useState<EstadoOnboarding | null>(null)
   const [guiaAberto, setGuiaAberto] = useState(false)
   const slidesGuia = useMemo(() => construirSlidesGuia(), [])
+  // "O que há de novo" — destaques exibidos uma vez após uma atualização.
+  const [novidades, setNovidades] = useState<{ versao: string; itens: ItemNovidade[] } | null>(null)
+  const novidadesChecadas = useRef(false)
 
   const validarLicenca = useCallback(async (): Promise<void> => {
     const resp = await window.api.licenca.validar()
@@ -206,6 +218,41 @@ const App: FC = () => {
     recarregarOnboarding()
   }, [recarregarOnboarding])
 
+  // Mostra as novidades uma vez após uma atualização (qualquer usuário, ao
+  // desbloquear). Instalação nova NÃO vê — só quem atualizou.
+  useEffect(() => {
+    if (estadoAuth !== 'desbloqueado' || novidadesChecadas.current) return
+    novidadesChecadas.current = true
+    ;(async () => {
+      const resp = await window.api.novidades.estado()
+      if (!resp.success) return
+      const atual = __APP_VERSION__
+      const { ultimaVersaoVista, guiaVisto } = resp.data
+      const releases = ultimaVersaoVista
+        ? novidadesParaMostrar(ultimaVersaoVista, atual)
+        : // Estreia do recurso: cliente antigo (já viu o tutorial) vê a versão
+          // atual; instalação nova não mostra nada.
+          guiaVisto
+          ? NOVIDADES.filter((n) => n.versao === atual)
+          : []
+      const itens = releases.flatMap((r) => r.itens)
+      if (itens.length > 0) setNovidades({ versao: atual, itens })
+      else window.api.novidades.marcar(atual) // nada a mostrar → fixa o baseline
+    })()
+  }, [estadoAuth])
+
+  const fecharNovidades = useCallback(() => {
+    setNovidades(null)
+    window.api.novidades.marcar(__APP_VERSION__)
+  }, [])
+
+  // "Ver novidades" em Configurações: reabre os destaques da versão atual.
+  const abrirNovidades = useCallback(() => {
+    const atual = __APP_VERSION__
+    const release = NOVIDADES.find((n) => n.versao === atual) ?? NOVIDADES[0]
+    if (release) setNovidades({ versao: release.versao, itens: release.itens })
+  }, [])
+
   const bloquear = useCallback(() => {
     // logout é fire-and-forget — a UI já some, e o resultado não bloqueia
     window.api.auth.logout().catch(() => {})
@@ -270,11 +317,14 @@ const App: FC = () => {
 
   return (
     <ToastProvider>
+      <ConfirmProvider>
+      <ImpressaoProvider>
       <ToastInicial aviso={avisoLicenca} onMostrado={() => setAvisoLicenca(null)} />
       <SessaoContext.Provider
         value={{ vendedor, ehDono: vendedor?.papel === 'dono', recarregar: recarregarSessao }}
       >
        <OnboardingContext.Provider value={{ abrirGuia }}>
+        <NovidadesContext.Provider value={{ abrirNovidades }}>
         <LockContext.Provider value={{ bloquear, autoLockMinutos, setAutoLockMinutos }}>
           <PdvModeContext.Provider value={{ ativo: pdvAtivo, setAtivo: setPdvAtivo }}>
             <MemoryRouter>
@@ -369,11 +419,19 @@ const App: FC = () => {
             </MemoryRouter>
           </PdvModeContext.Provider>
         </LockContext.Provider>
+        </NovidadesContext.Provider>
        </OnboardingContext.Provider>
       </SessaoContext.Provider>
       {estadoAuth === 'bloqueado' && <LoginSistema onDesbloquear={aoLogar} />}
       {guiaAberto && estadoAuth === 'desbloqueado' && (
         <GuiaBoasVindas slides={slidesGuia} onConcluir={fecharGuia} />
+      )}
+      {novidades && !guiaAberto && estadoAuth === 'desbloqueado' && (
+        <NovidadesModal
+          versao={novidades.versao}
+          itens={novidades.itens}
+          onFechar={fecharNovidades}
+        />
       )}
       {estadoAuth === 'desbloqueado' &&
         vendedor?.papel === 'dono' &&
@@ -389,6 +447,8 @@ const App: FC = () => {
             onPular={() => setPulouEmailDono(true)}
           />
         )}
+      </ImpressaoProvider>
+      </ConfirmProvider>
     </ToastProvider>
   )
 }

@@ -6,8 +6,9 @@ import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles } from 'lucide-
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
+import ConfigImpressao from '@/components/ConfigImpressao'
 import CidadeSeletor from '@/components/CidadeSeletor'
-import { useOnboarding } from '@/App'
+import { useOnboarding, useNovidades } from '@/App'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
 import { UFS } from '@/data/ufs'
 
@@ -51,6 +52,7 @@ const fmtData = (iso: string | null) => {
 
 const Configuracoes: FC = () => {
   const { abrirGuia } = useOnboarding()
+  const { abrirNovidades } = useNovidades()
   const [infoAtualizacao, setInfoAtualizacao] = useState<InfoAtualizacao | null>(null)
   const [verificandoUpdate, setVerificandoUpdate] = useState(false)
   const [status, setStatus] = useState<StatusBackup | null>(null)
@@ -256,6 +258,20 @@ const Configuracoes: FC = () => {
               </Button>
             </div>
           )}
+        </div>
+
+        <div className="border rounded-lg p-4 bg-muted/30 flex items-start justify-between gap-4">
+          <div>
+            <p className="font-medium text-sm flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-blue-600" /> Novidades desta versão
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Reveja o que melhorou na versão instalada do sistema.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={abrirNovidades} className="shrink-0">
+            Ver novidades
+          </Button>
         </div>
 
         <div className="border rounded-lg p-4 bg-muted/30 flex items-start justify-between gap-4">
@@ -479,6 +495,15 @@ const Configuracoes: FC = () => {
           permitindo acompanhar produção individual no histórico.
         </p>
         <CadastroVendedores />
+      </div>
+
+      <div className="space-y-4 mb-10">
+        <h3 className="text-lg font-semibold border-b pb-2">Impressão</h3>
+        <p className="text-sm text-muted-foreground -mt-1">
+          Escolha a impressora de cada tipo de documento. Marque "imprimir direto" para o
+          cupom sair na hora, sem abrir a janela de impressão.
+        </p>
+        <ConfigImpressao />
       </div>
 
       <div className="space-y-6">

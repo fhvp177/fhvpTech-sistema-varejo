@@ -2,6 +2,7 @@ import { FC, useEffect, useMemo, useState } from 'react'
 import { IMaskInput } from 'react-imask'
 import { Pencil, Trash2, Plus, Search, Wallet, User, Building2 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
+import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
 import {
@@ -288,8 +289,17 @@ const Clientes: FC = () => {
     setCarregando(false)
   }
 
+  const confirmar = useConfirm()
+
   const excluir = async (id: number, nome: string) => {
-    if (!confirm(`Excluir cliente "${nome}"? As vendas associadas serão mantidas.`)) return
+    if (
+      !(await confirmar({
+        titulo: 'Excluir cliente',
+        mensagem: `Excluir o cliente "${nome}"?\nAs vendas associadas serão mantidas.`,
+        variante: 'destructive'
+      }))
+    )
+      return
     const resp = await window.api.clientes.deletar(id)
     if (resp.success) await carregarClientes()
     else alert(`Erro: ${resp.error}`)

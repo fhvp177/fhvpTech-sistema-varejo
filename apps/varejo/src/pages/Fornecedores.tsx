@@ -2,6 +2,7 @@ import { FC, useEffect, useState } from 'react'
 import { IMaskInput } from 'react-imask'
 import { Pencil, Trash2, Plus, Search } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
+import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
 import {
@@ -158,8 +159,17 @@ const Fornecedores: FC = () => {
     setCarregando(false)
   }
 
+  const confirmar = useConfirm()
+
   const excluir = async (id: number, nome: string) => {
-    if (!confirm(`Excluir fornecedor "${nome}"?`)) return
+    if (
+      !(await confirmar({
+        titulo: 'Excluir fornecedor',
+        mensagem: `Tem certeza que deseja excluir o fornecedor "${nome}"?`,
+        variante: 'destructive'
+      }))
+    )
+      return
     const resp = await window.api.fornecedores.deletar(id)
     if (resp.success) {
       await carregarFornecedores()
