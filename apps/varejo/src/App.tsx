@@ -32,6 +32,7 @@ import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
 import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
 import ModalPagamentoPix from '@fhvptech/core/ui/ModalPagamentoPix'
 import ErrorBoundary from './components/ErrorBoundary'
+import DashboardSkeleton from './components/DashboardSkeleton'
 import RotaSomenteDono from './components/RotaSomenteDono'
 import GuiaBoasVindas from '@fhvptech/core/ui/GuiaBoasVindas'
 import ChecklistPrimeirosPassos, { type EstadoOnboarding } from './components/ChecklistPrimeirosPassos'
@@ -358,7 +359,7 @@ const App: FC = () => {
                           path="/"
                           element={
                             <RotaSomenteDono titulo="Dashboard">
-                              <Suspense fallback={<FallbackCarregando />}>
+                              <Suspense fallback={<DashboardSkeleton />}>
                                 <Dashboard />
                               </Suspense>
                             </RotaSomenteDono>

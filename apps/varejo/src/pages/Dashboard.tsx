@@ -13,6 +13,8 @@ import DividasClienteDialog, {
   calcularDividasPorCliente,
   type VendaDivida
 } from '@/components/DividasClienteDialog'
+import DashboardSkeleton from '@/components/DashboardSkeleton'
+import { Skeleton } from '@fhvptech/core/ui/skeleton'
 
 type ClienteInadimplente = {
   id: number
@@ -154,6 +156,10 @@ const Dashboard: FC = () => {
   const [vendas, setVendas] = useState<VendaDivida[]>([])
   const [clienteDividas, setClienteDividas] = useState<{ id: number; nome: string } | null>(null)
   const [carregandoMetricas, setCarregandoMetricas] = useState(false)
+  // Vira true assim que a 1ª busca de métricas responde (sucesso ou falha).
+  // Enquanto false, mostramos a silhueta da tela inteira; depois disso as
+  // trocas de período usam só os skeletons por card.
+  const [carregouMetricas, setCarregouMetricas] = useState(false)
 
   // Mês máximo permitido no <input type="month"> (não faz sentido escolher futuro).
   const mesMaximo = mesAtualPadrao()
@@ -184,6 +190,7 @@ const Dashboard: FC = () => {
     window.api.dashboard.metricas(intervalo).then((resp) => {
       if (resp.success) setMetricas(resp.data)
       setCarregandoMetricas(false)
+      setCarregouMetricas(true)
     })
   }, [intervalo, metaVersao])
 
@@ -225,6 +232,10 @@ const Dashboard: FC = () => {
     if (resp.success) setMetaVersao((v) => v + 1)
     return resp.success
   }
+
+  // Primeira abertura: enquanto os números não chegam, a tela inteira é uma
+  // silhueta (mesma do fallback lazy lá no App, então não há "pisca" duplo).
+  if (!carregouMetricas) return <DashboardSkeleton />
 
   return (
     <div className="p-8">
@@ -417,9 +428,7 @@ const Dashboard: FC = () => {
             </div>
           </div>
           {carregandoMetricas ? (
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
-              Carregando...
-            </div>
+            <Skeleton className="h-64 w-full" />
           ) : metricas && metricas.serie_temporal.length > 0 ? (
             <div className="h-64 -ml-2">
               <ResponsiveContainer width="100%" height="100%">
@@ -482,7 +491,7 @@ const Dashboard: FC = () => {
             <h3 className="font-semibold">Top 5 produtos</h3>
           </div>
           {carregandoMetricas ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Carregando...</p>
+            <SkeletonLista linhas={5} comRank />
           ) : metricas && metricas.top_produtos.length > 0 ? (
             <ul className="space-y-2.5">
               {metricas.top_produtos.map((p, i) => (
@@ -546,6 +555,22 @@ const Dashboard: FC = () => {
     </div>
   )
 }
+
+// Skeleton de lista usado nos cards durante a troca de período (a 1ª abertura
+// usa a silhueta da tela inteira, o DashboardSkeleton).
+const SkeletonLista: FC<{ linhas?: number; comRank?: boolean }> = ({ linhas = 5, comRank = false }) => (
+  <ul className="space-y-3">
+    {Array.from({ length: linhas }).map((_, i) => (
+      <li key={i} className="flex items-center gap-3">
+        {comRank && <Skeleton className="w-6 h-6 rounded-md shrink-0" />}
+        <div className="flex-1 space-y-1.5">
+          <Skeleton className="h-3.5 w-full" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      </li>
+    ))}
+  </ul>
+)
 
 type Delta = { pct: number; valido: boolean }
 
@@ -669,7 +694,12 @@ const CardLucro: FC<CardLucroProps> = ({ metricas, mostrarComparativo, rotuloCom
         <h3 className="font-semibold">Lucro &amp; margem</h3>
       </div>
       {!metricas ? (
-        <p className="text-sm text-muted-foreground py-6 text-center">Carregando...</p>
+        <div className="py-2 space-y-3">
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-5/6" />
+        </div>
       ) : semCusto ? (
         <div className="py-4">
           <p className="text-sm text-muted-foreground">
@@ -869,7 +899,14 @@ const CardFormaPagamento: FC<WidgetProps> = ({ metricas, carregando }) => {
         <h3 className="font-semibold">Forma de pagamento</h3>
       </div>
       {carregando ? (
-        <p className="text-sm text-muted-foreground text-center py-12">Carregando...</p>
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-44 w-44 rounded-full shrink-0" />
+          <div className="flex-1 space-y-2.5">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-4 w-full" />
+            ))}
+          </div>
+        </div>
       ) : dados.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-12">Sem vendas no período.</p>
       ) : (
@@ -928,7 +965,17 @@ const CardTopCategorias: FC<WidgetProps> = ({ metricas, carregando }) => {
         <h3 className="font-semibold">Top 5 categorias</h3>
       </div>
       {carregando ? (
-        <p className="text-sm text-muted-foreground text-center py-12">Carregando...</p>
+        <ul className="space-y-3">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <li key={i}>
+              <div className="flex justify-between mb-1.5">
+                <Skeleton className="h-3.5 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+              <Skeleton className="h-2 w-full rounded-full" />
+            </li>
+          ))}
+        </ul>
       ) : dados.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-12">Sem vendas no período.</p>
       ) : (
@@ -997,7 +1044,7 @@ const CardProdutosParados: FC<WidgetProps> = ({ metricas, carregando }) => {
         Em estoque, parados há mais de 30 dias
       </p>
       {carregando ? (
-        <p className="text-sm text-muted-foreground text-center py-6">Carregando...</p>
+        <SkeletonLista linhas={3} />
       ) : produtos.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-6">
           Nenhum produto parado — boa rotatividade!
@@ -1072,7 +1119,7 @@ const CardRankingVendedores: FC<WidgetProps> = ({ metricas, carregando }) => {
         <h3 className="font-semibold">Ranking de vendedores</h3>
       </div>
       {carregando ? (
-        <p className="text-sm text-muted-foreground text-center py-8">Carregando...</p>
+        <SkeletonLista linhas={5} comRank />
       ) : dados.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-8">Sem vendas no período.</p>
       ) : (
@@ -1122,7 +1169,7 @@ const CardDiaSemana: FC<WidgetProps> = ({ metricas, carregando }) => {
         <h3 className="font-semibold">Vendas por dia da semana</h3>
       </div>
       {carregando ? (
-        <p className="text-sm text-muted-foreground text-center py-12">Carregando...</p>
+        <Skeleton className="h-48 w-full" />
       ) : !temVendas ? (
         <p className="text-sm text-muted-foreground text-center py-12">Sem vendas no período.</p>
       ) : (
