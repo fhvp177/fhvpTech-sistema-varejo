@@ -58,12 +58,12 @@ type Props = {
 const DividasClienteDialog: FC<Props> = ({ clienteNome, vendas, totalEmAberto, onFechar, onReceber }) => (
   <Dialog open={!!clienteNome} onOpenChange={(open) => !open && onFechar()}>
     {clienteNome && (
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl flex flex-col max-h-[85vh]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Dívidas de {clienteNome}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-2">
           {vendas.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
               Tudo quitado! Não há mais dívidas em aberto para {clienteNome}. 🎉
@@ -95,7 +95,7 @@ const DividasClienteDialog: FC<Props> = ({ clienteNome, vendas, totalEmAberto, o
                         <td className="px-3 py-2 font-mono text-xs text-muted-foreground">#{v.id}</td>
                         <td className="px-3 py-2 text-muted-foreground">{fmtDataHora(v.data)}</td>
                         <td className="px-3 py-2">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
+                          <span className={`inline-block whitespace-nowrap text-xs px-2 py-0.5 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
                             {v.num_parcelas
                               ? `${LABEL_STATUS[v.status_pagamento]} (${v.num_parcelas}x)`
                               : LABEL_STATUS[v.status_pagamento]}
@@ -136,7 +136,7 @@ const DividasClienteDialog: FC<Props> = ({ clienteNome, vendas, totalEmAberto, o
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onFechar}>
             Fechar
           </Button>

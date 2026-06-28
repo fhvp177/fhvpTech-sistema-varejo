@@ -132,12 +132,12 @@ const ReceberPagamentoDialog: FC<Props> = ({ vendaId, clienteNome, onFechar, onM
   return (
     <Dialog open={vendaId != null} onOpenChange={(open) => !open && onFechar()}>
       {vendaId != null && venda && (
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg flex flex-col max-h-[85vh]">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Receber — Venda #{venda.id}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="space-y-3 flex-1 min-h-0 overflow-y-auto">
             <p className="text-sm text-muted-foreground -mt-1">{clienteNome}</p>
 
             {/* Resumo do que falta */}
@@ -244,7 +244,7 @@ const ReceberPagamentoDialog: FC<Props> = ({ vendaId, clienteNome, onFechar, onM
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={onFechar}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
