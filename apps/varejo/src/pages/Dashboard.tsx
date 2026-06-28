@@ -1,4 +1,4 @@
-import { FC, useEffect, useMemo, useState } from 'react'
+import { FC, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package,
   ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
@@ -14,6 +14,7 @@ import DividasClienteDialog, {
   type VendaDivida
 } from '@/components/DividasClienteDialog'
 import DashboardSkeleton from '@/components/DashboardSkeleton'
+import ReceberPagamentoDialog from '@/components/ReceberPagamentoDialog'
 import { Skeleton } from '@fhvptech/core/ui/skeleton'
 
 type ClienteInadimplente = {
@@ -155,6 +156,7 @@ const Dashboard: FC = () => {
   const [vencendoHoje, setVencendoHoje] = useState<ClienteVencendoHoje[]>([])
   const [vendas, setVendas] = useState<VendaDivida[]>([])
   const [clienteDividas, setClienteDividas] = useState<{ id: number; nome: string } | null>(null)
+  const [receberVenda, setReceberVenda] = useState<{ id: number; nome: string } | null>(null)
   const [carregandoMetricas, setCarregandoMetricas] = useState(false)
   // Vira true assim que a 1ª busca de métricas responde (sucesso ou falha).
   // Enquanto false, mostramos a silhueta da tela inteira; depois disso as
@@ -169,8 +171,9 @@ const Dashboard: FC = () => {
     [modo, periodoDias, mesAtual, mesComparativo]
   )
 
-  // Dados que não dependem do período (cadastros, alertas).
-  useEffect(() => {
+  // Dados que não dependem do período (cadastros, alertas). Extraído para
+  // recarregar também após um recebimento feito no diálogo de dívidas.
+  const carregarBasico = useCallback(() => {
     Promise.all([
       window.api.vendas.resumoDashboard(),
       window.api.clientes.listarInadimplentes(),
@@ -183,6 +186,8 @@ const Dashboard: FC = () => {
       if (rVendas.success) setVendas(rVendas.data as VendaDivida[])
     })
   }, [])
+
+  useEffect(() => { carregarBasico() }, [carregarBasico])
 
   // Métricas do período (recarrega quando o intervalo muda).
   useEffect(() => {
@@ -551,6 +556,14 @@ const Dashboard: FC = () => {
         vendas={clienteDividas ? dividasPorCliente.get(clienteDividas.id)?.vendas ?? [] : []}
         totalEmAberto={clienteDividas ? dividasPorCliente.get(clienteDividas.id)?.total ?? 0 : 0}
         onFechar={() => setClienteDividas(null)}
+        onReceber={(v) => setReceberVenda({ id: v.id, nome: clienteDividas?.nome ?? '' })}
+      />
+
+      <ReceberPagamentoDialog
+        vendaId={receberVenda?.id ?? null}
+        clienteNome={receberVenda?.nome ?? ''}
+        onFechar={() => setReceberVenda(null)}
+        onMudou={carregarBasico}
       />
     </div>
   )

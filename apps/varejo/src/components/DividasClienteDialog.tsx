@@ -50,9 +50,12 @@ type Props = {
   vendas: VendaDivida[]
   totalEmAberto: number
   onFechar: () => void
+  // Abre o diálogo de recebimento para uma venda específica. Opcional: quando
+  // ausente, o diálogo fica só de leitura (ex.: tela de Clientes).
+  onReceber?: (venda: VendaDivida) => void
 }
 
-const DividasClienteDialog: FC<Props> = ({ clienteNome, vendas, totalEmAberto, onFechar }) => (
+const DividasClienteDialog: FC<Props> = ({ clienteNome, vendas, totalEmAberto, onFechar, onReceber }) => (
   <Dialog open={!!clienteNome} onOpenChange={(open) => !open && onFechar()}>
     {clienteNome && (
       <DialogContent className="max-w-3xl">
@@ -61,53 +64,76 @@ const DividasClienteDialog: FC<Props> = ({ clienteNome, vendas, totalEmAberto, o
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-            <span className="text-amber-800 font-medium">Total em aberto</span>
-            <span className="text-amber-900 font-bold text-xl">{fmtMoeda(totalEmAberto)}</span>
-          </div>
+          {vendas.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Tudo quitado! Não há mais dívidas em aberto para {clienteNome}. 🎉
+            </p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                <span className="text-amber-800 font-medium">Total em aberto</span>
+                <span className="text-amber-900 font-bold text-xl">{fmtMoeda(totalEmAberto)}</span>
+              </div>
 
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-14">Venda</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Data</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
-                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total</th>
-                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Pago</th>
-                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Restante</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Vencimento</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendas.map((v, i) => (
-                  <tr key={v.id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">#{v.id}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{fmtDataHora(v.data)}</td>
-                    <td className="px-3 py-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
-                        {v.num_parcelas
-                          ? `${LABEL_STATUS[v.status_pagamento]} (${v.num_parcelas}x)`
-                          : LABEL_STATUS[v.status_pagamento]}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right">{fmtMoeda(v.total)}</td>
-                    <td className="px-3 py-2 text-right text-green-600">{fmtMoeda(v.valor_pago)}</td>
-                    <td className="px-3 py-2 text-right font-semibold text-destructive">
-                      {fmtMoeda(Math.max(0, v.total - v.valor_pago))}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground text-xs">
-                      {v.data_vencimento ? fmtDataIso(v.data_vencimento) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground w-14">Venda</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Data</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Pago</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Restante</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Vencimento</th>
+                      {onReceber && <th className="w-24 px-3 py-2" />}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vendas.map((v, i) => (
+                      <tr key={v.id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">#{v.id}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{fmtDataHora(v.data)}</td>
+                        <td className="px-3 py-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
+                            {v.num_parcelas
+                              ? `${LABEL_STATUS[v.status_pagamento]} (${v.num_parcelas}x)`
+                              : LABEL_STATUS[v.status_pagamento]}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">{fmtMoeda(v.total)}</td>
+                        <td className="px-3 py-2 text-right text-green-600">{fmtMoeda(v.valor_pago)}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-destructive">
+                          {fmtMoeda(Math.max(0, v.total - v.valor_pago))}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground text-xs">
+                          {v.data_vencimento ? fmtDataIso(v.data_vencimento) : '—'}
+                        </td>
+                        {onReceber && (
+                          <td className="px-3 py-2 text-right">
+                            <Button size="sm" variant="outline" onClick={() => onReceber(v)}>
+                              Receber
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-          <p className="text-xs text-muted-foreground">
-            Para registrar pagamentos ou ver mais detalhes (parcelas, itens), acesse a tela de <strong>Vendas</strong>.
-          </p>
+              {onReceber ? (
+                <p className="text-xs text-muted-foreground">
+                  Use o botão <strong>Receber</strong> em cada venda para registrar o pagamento — total ou parcial,
+                  e parcela por parcela nas vendas parceladas.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Para registrar pagamentos ou ver mais detalhes (parcelas, itens), acesse a tela de <strong>Vendas</strong>.
+                </p>
+              )}
+            </>
+          )}
         </div>
 
         <DialogFooter>

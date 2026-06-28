@@ -10,6 +10,12 @@ export const NOVIDADES: ReleaseNovidades[] = [
     versao: '1.21.1',
     itens: [
       {
+        emoji: '💰',
+        titulo: 'Receba direto do painel',
+        descricao:
+          'Nos quadros de "Inadimplentes" e "Vencem hoje", clique no cliente e use o botão Receber para registrar o pagamento ali mesmo — total ou parcial, e parcela por parcela. Sem precisar abrir a tela de Vendas.'
+      },
+      {
         emoji: '✨',
         titulo: 'Abertura mais suave do painel',
         descricao:
