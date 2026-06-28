@@ -33,6 +33,10 @@ export type Venda = {
   cliente_cnpj?: string | null
   cliente_razao_social?: string | null
   vendedor_nome?: string | null
+  cancelada?: number
+  cancelada_em?: string | null
+  cancelada_por_id?: number | null
+  cancelamento_motivo?: string | null
 }
 
 export type ItemVenda = {
@@ -110,15 +114,17 @@ function adicionarMeses(dataIso: string, meses: number): string {
 
 export function promoverVendasVencidas(): void {
   const db = obterBancoDeDados()
-  // Promove parcelas vencidas
+  // Promove parcelas vencidas (ignora parcelas de vendas canceladas)
   db.prepare(
     `UPDATE parcelas SET status = 'inadimplente'
-     WHERE status = 'pendente' AND date(data_vencimento) < date('now')`
+     WHERE status = 'pendente' AND date(data_vencimento) < date('now')
+       AND venda_id IN (SELECT id FROM vendas WHERE cancelada = 0)`
   ).run()
   // Promove vendas parceladas que têm parcelas em atraso
   db.prepare(
     `UPDATE vendas SET status_pagamento = 'inadimplente'
      WHERE status_pagamento = 'parcelado'
+       AND cancelada = 0
        AND id IN (SELECT DISTINCT venda_id FROM parcelas WHERE status = 'inadimplente')`
   ).run()
   // Promove vendas simples pendentes vencidas
@@ -126,6 +132,7 @@ export function promoverVendasVencidas(): void {
     `UPDATE vendas
      SET status_pagamento = 'inadimplente'
      WHERE status_pagamento = 'pendente'
+       AND cancelada = 0
        AND data_vencimento IS NOT NULL
        AND date(data_vencimento) < date('now')`
   ).run()
@@ -138,7 +145,7 @@ export function promoverVendasVencidas(): void {
 export function listarVendas(mes?: string): Venda[] {
   const db = obterBancoDeDados()
   promoverVendasVencidas()
-  const filtroMes = mes ? 'WHERE substr(v.data, 1, 7) = @mes' : ''
+  const filtroMes = mes ? 'AND substr(v.data, 1, 7) = @mes' : ''
   const limite = mes ? '' : 'LIMIT 300'
   return db
     .prepare(
@@ -159,6 +166,7 @@ export function listarVendas(mes?: string): Venda[] {
          FROM devolucoes
          GROUP BY venda_id
        ) dev ON dev.venda_id = v.id
+       WHERE v.cancelada = 0
        ${filtroMes}
        ORDER BY v.data DESC
        ${limite}`
@@ -488,6 +496,93 @@ export function restaurarVenda(id: number, snapshot: SnapshotVenda): void {
   })()
 }
 
+// Estados em que cancelar é seguro (a regra completa fica aqui).
+export type ElegibilidadeCancelamento =
+  | { permitido: true; cenario: 'virgem' | 'devolvida' }
+  | { permitido: false; motivo: string }
+
+type EstadoVendaCancelamento = {
+  total: number
+  valor_pago: number
+  cancelada: number
+  valor_devolvido: number
+}
+
+function lerEstadoCancelamento(id: number): EstadoVendaCancelamento | undefined {
+  const db = obterBancoDeDados()
+  return db
+    .prepare(
+      `SELECT v.total, v.valor_pago, v.cancelada,
+              COALESCE((SELECT SUM(valor_total) FROM devolucoes WHERE venda_id = v.id), 0) AS valor_devolvido
+       FROM vendas v WHERE v.id = ?`
+    )
+    .get(id) as EstadoVendaCancelamento | undefined
+}
+
+// Decide se a venda pode ser cancelada e em qual cenário:
+//  • 'virgem'    — nada recebido e nada devolvido → cancelar devolve o estoque;
+//  • 'devolvida' — já foi integralmente devolvida → cancelar só arquiva (a
+//                  devolução já repôs estoque e estornou o dinheiro).
+// Qualquer estado intermediário (recebido sem devolução, devolução parcial) é
+// barrado: ainda há valor a acertar, e isso é trabalho da devolução.
+export function avaliarCancelamento(estado: EstadoVendaCancelamento): ElegibilidadeCancelamento {
+  if (estado.cancelada) return { permitido: false, motivo: 'Esta venda já está cancelada.' }
+  const total = +estado.total.toFixed(2)
+  const devolvido = +estado.valor_devolvido.toFixed(2)
+  const pago = +estado.valor_pago.toFixed(2)
+  if (pago === 0 && devolvido === 0) return { permitido: true, cenario: 'virgem' }
+  if (devolvido >= total) return { permitido: true, cenario: 'devolvida' }
+  return {
+    permitido: false,
+    motivo:
+      'Só dá para cancelar uma venda sem nenhum recebimento, ou que já foi totalmente devolvida. ' +
+      'Esta tem valor em aberto — faça a devolução do restante antes de cancelar.'
+  }
+}
+
+// Eligibilidade para a UI decidir se mostra/habilita o botão "Cancelar".
+export function elegibilidadeCancelamento(id: number): ElegibilidadeCancelamento {
+  const estado = lerEstadoCancelamento(id)
+  if (!estado) return { permitido: false, motivo: 'Venda não encontrada.' }
+  return avaliarCancelamento(estado)
+}
+
+// Cancela (arquiva) a venda. No cenário 'virgem' devolve o estoque; no 'devolvida'
+// não mexe em estoque/dinheiro (a devolução já acertou). A venda some de todos os
+// relatórios pelo filtro `cancelada = 0`, mas fica no banco para auditoria.
+export function cancelarVenda(id: number, canceladaPorId: number, motivo: string): void {
+  const db = obterBancoDeDados()
+  const motivoLimpo = (motivo ?? '').trim()
+  if (!motivoLimpo) throw new Error('Informe o motivo do cancelamento.')
+
+  const estado = lerEstadoCancelamento(id)
+  if (!estado) throw new Error('Venda não encontrada.')
+  const elegivel = avaliarCancelamento(estado)
+  if (!elegivel.permitido) throw new Error(elegivel.motivo)
+
+  const itens = db
+    .prepare('SELECT produto_id, variacao_id, quantidade FROM itens_venda WHERE venda_id = ?')
+    .all(id) as Array<{ produto_id: number; variacao_id: number | null; quantidade: number }>
+
+  db.transaction(() => {
+    if (elegivel.cenario === 'virgem') {
+      // Venda nunca acertada por devolução: devolve o estoque ao cancelar.
+      const incProduto = db.prepare('UPDATE produtos SET estoque = estoque + ? WHERE id = ?')
+      const incVariacao = db.prepare('UPDATE produto_variacoes SET estoque = estoque + ? WHERE id = ?')
+      for (const it of itens) {
+        if (it.variacao_id != null) incVariacao.run(it.quantidade, it.variacao_id)
+        else incProduto.run(it.quantidade, it.produto_id)
+      }
+    }
+    db.prepare(
+      `UPDATE vendas
+       SET cancelada = 1, cancelada_em = datetime('now', 'localtime'),
+           cancelada_por_id = ?, cancelamento_motivo = ?
+       WHERE id = ?`
+    ).run(canceladaPorId, motivoLimpo, id)
+  })()
+}
+
 export type ProdutoMaisVendido = {
   produto_nome: string
   quantidade: number
@@ -508,6 +603,7 @@ export function produtosMaisVendidosNoMes(mes: string): ProdutoMaisVendido[] {
        JOIN vendas v ON v.id = iv.venda_id
        JOIN produtos p ON p.id = iv.produto_id
        WHERE substr(v.data, 1, 7) = ?
+         AND v.cancelada = 0
        GROUP BY iv.produto_id
        ORDER BY quantidade DESC, receita DESC
        LIMIT 50`
@@ -521,7 +617,7 @@ export function resumoDashboard(): ResumoDashboard {
   const { vendas_hoje, total_hoje } = db
     .prepare(
       `SELECT COUNT(*) AS vendas_hoje, COALESCE(SUM(total), 0) AS total_hoje
-       FROM vendas WHERE date(data) = date('now')`
+       FROM vendas WHERE date(data) = date('now') AND cancelada = 0`
     )
     .get() as { vendas_hoje: number; total_hoje: number }
 

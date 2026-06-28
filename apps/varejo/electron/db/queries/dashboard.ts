@@ -151,7 +151,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
       `SELECT COALESCE(SUM(total), 0) AS faturamento,
               COUNT(*) AS num_vendas
        FROM vendas
-       WHERE date(data) >= ? AND date(data) <= ?`
+       WHERE date(data) >= ? AND date(data) <= ? AND cancelada = 0`
     )
     .get(inicio_atual, fim_atual) as { faturamento: number; num_vendas: number }
 
@@ -160,21 +160,23 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
       `SELECT COALESCE(SUM(total), 0) AS faturamento,
               COUNT(*) AS num_vendas
        FROM vendas
-       WHERE date(data) >= ? AND date(data) <= ?`
+       WHERE date(data) >= ? AND date(data) <= ? AND cancelada = 0`
     )
     .get(inicio_anterior, fim_anterior) as { faturamento: number; num_vendas: number }
 
   // Devoluções de cada período (pra faturamento líquido = vendas − devoluções).
   const devAtual = db
     .prepare(
-      `SELECT COALESCE(SUM(valor_total), 0) AS total FROM devolucoes
-       WHERE date(data) >= ? AND date(data) <= ?`
+      `SELECT COALESCE(SUM(d.valor_total), 0) AS total FROM devolucoes d
+       JOIN vendas v ON v.id = d.venda_id
+       WHERE date(d.data) >= ? AND date(d.data) <= ? AND v.cancelada = 0`
     )
     .get(inicio_atual, fim_atual) as { total: number }
   const devAnterior = db
     .prepare(
-      `SELECT COALESCE(SUM(valor_total), 0) AS total FROM devolucoes
-       WHERE date(data) >= ? AND date(data) <= ?`
+      `SELECT COALESCE(SUM(d.valor_total), 0) AS total FROM devolucoes d
+       JOIN vendas v ON v.id = d.venda_id
+       WHERE date(d.data) >= ? AND date(d.data) <= ? AND v.cancelada = 0`
     )
     .get(inicio_anterior, fim_anterior) as { total: number }
 
@@ -199,7 +201,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
               COALESCE(SUM(total), 0) AS total,
               COUNT(*) AS num_vendas
        FROM vendas
-       WHERE date(data) >= ? AND date(data) <= ?
+       WHERE date(data) >= ? AND date(data) <= ? AND cancelada = 0
        GROUP BY bucket
        ORDER BY bucket ASC`
     )
@@ -212,7 +214,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
       `SELECT ${bucketExpr} AS bucket,
               COALESCE(SUM(total), 0) AS total
        FROM vendas
-       WHERE date(data) >= ? AND date(data) <= ?
+       WHERE date(data) >= ? AND date(data) <= ? AND cancelada = 0
        GROUP BY bucket
        ORDER BY bucket ASC`
     )
@@ -238,7 +240,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
        FROM itens_venda iv
        JOIN vendas v ON v.id = iv.venda_id
        JOIN produtos p ON p.id = iv.produto_id
-       WHERE date(v.data) >= ? AND date(v.data) <= ?
+       WHERE date(v.data) >= ? AND date(v.data) <= ? AND v.cancelada = 0
        GROUP BY p.id
        ORDER BY receita DESC
        LIMIT 5`
@@ -254,7 +256,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
        FROM itens_venda iv
        JOIN vendas v ON v.id = iv.venda_id
        JOIN produtos p ON p.id = iv.produto_id
-       WHERE date(v.data) >= ? AND date(v.data) <= ?
+       WHERE date(v.data) >= ? AND date(v.data) <= ? AND v.cancelada = 0
        GROUP BY categoria
        ORDER BY receita DESC
        LIMIT 5`
@@ -268,7 +270,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
               COUNT(*) AS num,
               COALESCE(SUM(total), 0) AS valor
        FROM vendas
-       WHERE date(data) >= ? AND date(data) <= ?
+       WHERE date(data) >= ? AND date(data) <= ? AND cancelada = 0
        GROUP BY status_pagamento`
     )
     .all(inicio_atual, fim_atual) as Array<{ status: string; num: number; valor: number }>
@@ -291,11 +293,13 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
   // Promovemos vencidas antes para evitar contar atrasadas como futuras.
   db.prepare(
     `UPDATE parcelas SET status = 'inadimplente'
-     WHERE status = 'pendente' AND date(data_vencimento) < date('now')`
+     WHERE status = 'pendente' AND date(data_vencimento) < date('now')
+       AND venda_id IN (SELECT id FROM vendas WHERE cancelada = 0)`
   ).run()
   db.prepare(
     `UPDATE vendas SET status_pagamento = 'inadimplente'
      WHERE status_pagamento = 'pendente'
+       AND cancelada = 0
        AND data_vencimento IS NOT NULL
        AND date(data_vencimento) < date('now')`
   ).run()
@@ -305,6 +309,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
       .prepare(
         `SELECT COALESCE(SUM(valor), 0) AS total FROM parcelas
          WHERE status = 'pendente'
+           AND venda_id IN (SELECT id FROM vendas WHERE cancelada = 0)
            AND date(data_vencimento) >= date('now')
            AND date(data_vencimento) <= date('now', '+' || ? || ' days')`
       )
@@ -313,6 +318,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
       .prepare(
         `SELECT COALESCE(SUM(total - valor_pago), 0) AS total FROM vendas
          WHERE status_pagamento = 'pendente'
+           AND cancelada = 0
            AND num_parcelas IS NULL
            AND data_vencimento IS NOT NULL
            AND date(data_vencimento) >= date('now')
@@ -345,7 +351,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
                  (SELECT MAX(date(v.data))
                   FROM itens_venda iv
                   JOIN vendas v ON v.id = iv.venda_id
-                  WHERE iv.produto_id = p.id),
+                  WHERE iv.produto_id = p.id AND v.cancelada = 0),
                  date(p.data_cadastro),
                  '2000-01-01'
                )
@@ -391,7 +397,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
          FROM itens_venda iv
          JOIN vendas v ON v.id = iv.venda_id
          JOIN produtos p ON p.id = iv.produto_id
-         WHERE date(v.data) >= ? AND date(v.data) <= ?`
+         WHERE date(v.data) >= ? AND date(v.data) <= ? AND v.cancelada = 0`
       )
       .get(ini, fim) as { custo: number }
     return r.custo
@@ -421,7 +427,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
               COALESCE(SUM(v.total), 0) AS receita
        FROM vendas v
        JOIN vendedores vd ON vd.id = v.vendedor_id
-       WHERE date(v.data) >= ? AND date(v.data) <= ?
+       WHERE date(v.data) >= ? AND date(v.data) <= ? AND v.cancelada = 0
        GROUP BY v.vendedor_id
        ORDER BY receita DESC
        LIMIT 5`
@@ -434,7 +440,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
       `SELECT CAST(strftime('%w', data) AS INTEGER) AS dow,
               COALESCE(SUM(total), 0) AS total
        FROM vendas
-       WHERE date(data) >= ? AND date(data) <= ?
+       WHERE date(data) >= ? AND date(data) <= ? AND cancelada = 0
        GROUP BY dow`
     )
     .all(inicio_atual, fim_atual) as Array<{ dow: number; total: number }>
@@ -462,7 +468,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
   const { faturamento_mes } = db
     .prepare(
       `SELECT COALESCE(SUM(total), 0) AS faturamento_mes FROM vendas
-       WHERE substr(data, 1, 7) = strftime('%Y-%m', 'now')`
+       WHERE substr(data, 1, 7) = strftime('%Y-%m', 'now') AND cancelada = 0`
     )
     .get() as { faturamento_mes: number }
 

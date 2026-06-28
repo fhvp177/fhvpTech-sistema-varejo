@@ -7,6 +7,7 @@ import {
   pagarParcela,
   registrarPagamentoParcial,
   restaurarVenda,
+  cancelarVenda,
   resumoDashboard,
   produtosMaisVendidosNoMes,
   type DadosNovaVenda,
@@ -15,7 +16,8 @@ import {
 } from '../db/queries/vendas'
 import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
-import { requerSessao } from '../sessao'
+import { requerSessao, ehDono } from '../sessao'
+import { verificarPinDono } from '../auth'
 
 // Dispara um backup ZIP em background após uma venda, se a opção estiver ativa.
 // Não bloqueia o handler IPC e nunca propaga erros — o usuário não pode esperar
@@ -111,6 +113,28 @@ export function registrarHandlersVendas(): void {
   ipcMain.handle('vendas:produtosMaisVendidos', (_event, mes: string) => {
     try {
       return { success: true, data: produtosMaisVendidosNoMes(mes) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Cancelar (arquivar) uma venda. Só o dono — ou um vendedor com o PIN do dono,
+  // mesmo fluxo do cadastro/desconto. A regra de quais vendas podem ser canceladas
+  // (virgem ou totalmente devolvida) fica na query `cancelarVenda`.
+  ipcMain.handle('vendas:cancelar', async (_event, id: number, motivo: string, pinDono?: string) => {
+    try {
+      const sessao = requerSessao()
+      let autorId = sessao.id
+      if (!ehDono()) {
+        const donoId = pinDono ? await verificarPinDono(pinDono) : null
+        if (donoId === null) {
+          throw new Error('Cancelar uma venda requer a autorização de um dono.')
+        }
+        autorId = donoId
+      }
+      cancelarVenda(id, autorId, motivo)
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: null }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

@@ -86,7 +86,9 @@ const api = {
       ipcRenderer.invoke('vendas:restaurar', id, snapshot),
     resumoDashboard: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:resumoDashboard'),
     produtosMaisVendidos: (mes: string): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('vendas:produtosMaisVendidos', mes)
+      ipcRenderer.invoke('vendas:produtosMaisVendidos', mes),
+    cancelar: (id: number, motivo: string, pinDono?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendas:cancelar', id, motivo, pinDono)
   },
 
   // Auth (PIN do sistema + sessão por vendedor)

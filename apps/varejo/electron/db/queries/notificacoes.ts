@@ -82,11 +82,13 @@ export function alertasDoBanco(): AlertaVivo[] {
          SELECT (v.total - v.valor_pago) AS devido
          FROM vendas v
          WHERE v.num_parcelas IS NULL AND v.status_pagamento = 'pendente'
+           AND v.cancelada = 0
            AND date(v.data_vencimento) = date('now', '+1 day')
          UNION ALL
          SELECT p.valor AS devido
          FROM parcelas p
          WHERE p.status = 'pendente' AND date(p.data_vencimento) = date('now', '+1 day')
+           AND p.venda_id IN (SELECT id FROM vendas WHERE cancelada = 0)
        ) d`
     )
     .get() as { soma: number; n: number }
@@ -109,7 +111,7 @@ export function alertasDoBanco(): AlertaVivo[] {
     const { fat } = db
       .prepare(
         `SELECT COALESCE(SUM(total), 0) AS fat FROM vendas
-         WHERE substr(data, 1, 7) = strftime('%Y-%m', 'now')`
+         WHERE substr(data, 1, 7) = strftime('%Y-%m', 'now') AND cancelada = 0`
       )
       .get() as { fat: number }
     const yyyymm = hoje.slice(0, 7)
@@ -176,7 +178,7 @@ export function alertasDoBanco(): AlertaVivo[] {
          SELECT CAST(julianday('now') - julianday(
            COALESCE(
              (SELECT MAX(date(v.data)) FROM itens_venda iv
-              JOIN vendas v ON v.id = iv.venda_id WHERE iv.produto_id = p.id),
+              JOIN vendas v ON v.id = iv.venda_id WHERE iv.produto_id = p.id AND v.cancelada = 0),
              date(p.data_cadastro), '2000-01-01'
            )
          ) AS INTEGER) AS dias

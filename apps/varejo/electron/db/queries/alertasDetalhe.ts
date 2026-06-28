@@ -47,6 +47,7 @@ export function listarRecebiveis(filtro: FiltroRecebivel): RecebivelDetalhe[] {
                 'Venda #' || v.id AS origem
          FROM vendas v
          WHERE v.num_parcelas IS NULL
+           AND v.cancelada = 0
            AND v.status_pagamento IN ('pendente','inadimplente')
            AND v.data_vencimento IS NOT NULL
            AND (v.total - v.valor_pago) > 0
@@ -58,6 +59,7 @@ export function listarRecebiveis(filtro: FiltroRecebivel): RecebivelDetalhe[] {
                 'Venda #' || p.venda_id || ' — parcela ' || p.numero AS origem
          FROM parcelas p JOIN vendas v ON v.id = p.venda_id
          WHERE p.status != 'pago'
+           AND v.cancelada = 0
            AND date(p.data_vencimento) ${cond}
        ) x
        JOIN clientes c ON c.id = x.cliente_id
@@ -99,7 +101,7 @@ export function listarProdutosAlerta(tipo: TipoProdutoAlerta): ProdutoAlertaDeta
                 CAST(julianday('now') - julianday(
                   COALESCE(
                     (SELECT MAX(date(v.data)) FROM itens_venda iv
-                     JOIN vendas v ON v.id = iv.venda_id WHERE iv.produto_id = p.id),
+                     JOIN vendas v ON v.id = iv.venda_id WHERE iv.produto_id = p.id AND v.cancelada = 0),
                     date(p.data_cadastro), '2000-01-01'
                   )
                 ) AS INTEGER) AS dias_parado

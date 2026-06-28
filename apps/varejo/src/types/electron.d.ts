@@ -181,6 +181,7 @@ interface Window {
       restaurar: (id: number, snapshot: SnapshotVenda) => Promise<RespostaIPC>
       resumoDashboard: () => Promise<RespostaIPC>
       produtosMaisVendidos: (mes: string) => Promise<RespostaIPC>
+      cancelar: (id: number, motivo: string, pinDono?: string) => Promise<RespostaIPC<null>>
     }
     loja: {
       obter: () => Promise<RespostaIPC>

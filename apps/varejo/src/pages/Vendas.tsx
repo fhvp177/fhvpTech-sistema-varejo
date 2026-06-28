@@ -1,5 +1,5 @@
 import { FC, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Wallet, FileDown, FileText } from 'lucide-react'
+import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
@@ -26,6 +26,7 @@ import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido } from '@/
 import { usePdvMode, useSessao } from '@/App'
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
+import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancelarVenda'
 
 const ITENS_POR_PAGINA = 20
 
@@ -231,6 +232,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [erroPagamento, setErroPagamento] = useState('')
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [devolverVendaId, setDevolverVendaId] = useState<number | null>(null)
+  const [vendaCancelar, setVendaCancelar] = useState<VendaCancelar | null>(null)
   const [menuImprimir, setMenuImprimir] = useState<{ vendaId: number; devolucoes: DevolucaoComItens[] } | null>(null)
   const [relatorioAberto, setRelatorioAberto] = useState(false)
   const [relMes, setRelMes] = useState('') // mês escolhido dentro do diálogo de relatório
@@ -884,6 +886,24 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   Devolução / troca
                 </Button>
               )}
+
+              <Button
+                variant="ghost"
+                className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  const v = vendaDetalhada
+                  setVendaDetalhada(null)
+                  setVendaCancelar({
+                    id: v.id,
+                    total: v.total,
+                    valor_pago: v.valor_pago,
+                    valor_devolvido: v.valor_devolvido
+                  })
+                }}
+              >
+                <Ban className="w-4 h-4 mr-2" />
+                Cancelar venda
+              </Button>
             </div>
           </DialogContent>
         )}
@@ -1052,6 +1072,13 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         ehDono={ehDono}
         onClose={() => setDevolverVendaId(null)}
         onConcluido={() => carregar()}
+      />
+
+      <ModalCancelarVenda
+        venda={vendaCancelar}
+        ehDono={ehDono}
+        onFechar={() => setVendaCancelar(null)}
+        onConfirmado={() => { setVendaCancelar(null); carregar() }}
       />
     </div>
   )

@@ -111,6 +111,7 @@ export function listarInadimplentes(): ClienteInadimplente[] {
          ) AS vencimento_mais_antigo
        FROM clientes c
        JOIN vendas v ON v.cliente_id = c.id
+         AND v.cancelada = 0
          AND (v.status_pagamento = 'inadimplente'
            OR (v.status_pagamento = 'pendente' AND date(v.data_vencimento) < date('now')))
        LEFT JOIN (
@@ -147,6 +148,7 @@ export function listarVencendoHoje(): ClienteVencendoHoje[] {
                 v.data_vencimento AS venc
          FROM vendas v
          WHERE v.num_parcelas IS NULL
+           AND v.cancelada = 0
            AND v.status_pagamento = 'pendente'
            AND date(v.data_vencimento) = date('now')
          UNION ALL
@@ -156,6 +158,7 @@ export function listarVencendoHoje(): ClienteVencendoHoje[] {
          FROM parcelas p
          JOIN vendas v ON v.id = p.venda_id
          WHERE p.status = 'pendente'
+           AND v.cancelada = 0
            AND date(p.data_vencimento) = date('now')
        ) d ON d.cliente_id = c.id
        GROUP BY c.id
