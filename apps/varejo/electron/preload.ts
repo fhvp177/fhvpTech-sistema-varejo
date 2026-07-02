@@ -74,6 +74,7 @@ const api = {
   // Vendas
   vendas: {
     listar: (mes?: string): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:listar', mes),
+    listarCanceladas: (mes?: string): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:listarCanceladas', mes),
     criar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:criar', dados),
     atualizarStatus: (id: number, status: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:atualizarStatus', id, status),
@@ -82,8 +83,10 @@ const api = {
       ipcRenderer.invoke('vendas:pagarParcela', parcelaId),
     registrarPagamentoParcial: (id: number, valor: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:registrarPagamentoParcial', id, valor),
-    restaurar: (id: number, snapshot: unknown): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('vendas:restaurar', id, snapshot),
+    estornarParcela: (parcelaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendas:estornarParcela', parcelaId),
+    estornarRecebimento: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendas:estornarRecebimento', id),
     resumoDashboard: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:resumoDashboard'),
     produtosMaisVendidos: (mes: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:produtosMaisVendidos', mes),

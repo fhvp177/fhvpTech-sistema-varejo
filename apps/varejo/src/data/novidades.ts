@@ -7,6 +7,29 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.22.0',
+    itens: [
+      {
+        emoji: '↩️',
+        titulo: 'Estornar um recebimento',
+        descricao:
+          'Recebeu por engano? Agora o dono pode reverter um pagamento já registrado — uma parcela específica ou a venda inteira — direto no detalhe da venda. O valor sai do total recebido e a venda volta a ficar em aberto.'
+      },
+      {
+        emoji: '🗂️',
+        titulo: 'Aba "Canceladas"',
+        descricao:
+          'As vendas canceladas agora ficam numa aba própria no histórico, mostrando quem cancelou, quando e por quê — sem se misturar com as vendas ativas.'
+      },
+      {
+        emoji: '📊',
+        titulo: 'Relatório do mês mais fiel ao caixa',
+        descricao:
+          'As vendas à vista agora entram certinho no "Recebido" do relatório (antes ficavam de fora e ainda apareciam como "a receber"). Os números do mês ficaram mais fiéis ao que realmente entrou.'
+      }
+    ]
+  },
+  {
     versao: '1.21.1',
     itens: [
       {

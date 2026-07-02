@@ -36,12 +36,6 @@ type CobrancaPix = {
   chaveLicencaGerada?: string
 }
 
-type SnapshotVenda = {
-  status: 'pago' | 'pendente' | 'inadimplente' | 'parcelado'
-  valor_pago: number
-  parcelas: Array<{ id: number; status: 'pendente' | 'pago' | 'inadimplente' }>
-}
-
 type MetricasDashboard = {
   periodo_dias: number
   granularidade: 'dia' | 'semana' | 'mes'
@@ -173,12 +167,14 @@ interface Window {
     }
     vendas: {
       listar: (mes?: string) => Promise<RespostaIPC>
+      listarCanceladas: (mes?: string) => Promise<RespostaIPC>
       criar: (dados: unknown) => Promise<RespostaIPC>
-      atualizarStatus: (id: number, status: string) => Promise<RespostaIPC<{ snapshot?: SnapshotVenda }>>
+      atualizarStatus: (id: number, status: string) => Promise<RespostaIPC>
       buscarPorId: (id: number) => Promise<RespostaIPC>
-      pagarParcela: (parcelaId: number) => Promise<RespostaIPC<{ vendaId: number; snapshot: SnapshotVenda } | null>>
-      registrarPagamentoParcial: (id: number, valor: number) => Promise<RespostaIPC<{ snapshot?: SnapshotVenda }>>
-      restaurar: (id: number, snapshot: SnapshotVenda) => Promise<RespostaIPC>
+      pagarParcela: (parcelaId: number) => Promise<RespostaIPC>
+      registrarPagamentoParcial: (id: number, valor: number) => Promise<RespostaIPC>
+      estornarParcela: (parcelaId: number) => Promise<RespostaIPC>
+      estornarRecebimento: (id: number) => Promise<RespostaIPC>
       resumoDashboard: () => Promise<RespostaIPC>
       produtosMaisVendidos: (mes: string) => Promise<RespostaIPC>
       cancelar: (id: number, motivo: string, pinDono?: string) => Promise<RespostaIPC<null>>

@@ -37,6 +37,10 @@ export type Venda = {
   cancelada_em?: string | null
   cancelada_por_id?: number | null
   cancelamento_motivo?: string | null
+  cancelada_por_nome?: string | null
+  // 1 quando a venda consumiu crédito da loja (bloqueia o estorno simples — usar
+  // devolução). Só é preenchido em buscarVendaPorId.
+  usou_credito?: number
 }
 
 export type ItemVenda = {
@@ -52,25 +56,6 @@ export type ItemVenda = {
 }
 
 export type VendaDetalhada = Venda & { itens: ItemVenda[]; parcelas: Parcela[] }
-
-// Estado mínimo da venda para permitir "desfazer" uma ação de pagamento.
-export type SnapshotVenda = {
-  status: StatusPagamento
-  valor_pago: number
-  parcelas: Array<{ id: number; status: 'pendente' | 'pago' | 'inadimplente' }>
-}
-
-function obterSnapshotVenda(id: number): SnapshotVenda | undefined {
-  const db = obterBancoDeDados()
-  const venda = db
-    .prepare('SELECT status_pagamento, valor_pago FROM vendas WHERE id = ?')
-    .get(id) as { status_pagamento: StatusPagamento; valor_pago: number } | undefined
-  if (!venda) return undefined
-  const parcelas = db
-    .prepare('SELECT id, status FROM parcelas WHERE venda_id = ?')
-    .all(id) as Array<{ id: number; status: 'pendente' | 'pago' | 'inadimplente' }>
-  return { status: venda.status_pagamento, valor_pago: venda.valor_pago, parcelas }
-}
 
 export type DadosNovaVenda = {
   cliente_id: number | null
@@ -174,6 +159,34 @@ export function listarVendas(mes?: string): Venda[] {
     .all(mes ? { mes } : {}) as Venda[]
 }
 
+// Vendas arquivadas (canceladas) — para a aba "Canceladas". Inclui quem cancelou,
+// quando e o motivo (já vêm em v.*). Respeita o filtro de mês pela data da venda.
+export function listarVendasCanceladas(mes?: string): Venda[] {
+  const db = obterBancoDeDados()
+  const filtroMes = mes ? 'AND substr(v.data, 1, 7) = @mes' : ''
+  return db
+    .prepare(
+      `SELECT v.*, c.nome AS cliente_nome,
+              vd.nome AS vendedor_nome,
+              vdc.nome AS cancelada_por_nome,
+              0 AS valor_inadimplente,
+              COALESCE(dev.valor_devolvido, 0) AS valor_devolvido
+       FROM vendas v
+       LEFT JOIN clientes c ON c.id = v.cliente_id
+       LEFT JOIN vendedores vd ON vd.id = v.vendedor_id
+       LEFT JOIN vendedores vdc ON vdc.id = v.cancelada_por_id
+       LEFT JOIN (
+         SELECT venda_id, SUM(valor_total) AS valor_devolvido
+         FROM devolucoes
+         GROUP BY venda_id
+       ) dev ON dev.venda_id = v.id
+       WHERE v.cancelada = 1
+       ${filtroMes}
+       ORDER BY v.cancelada_em DESC, v.id DESC`
+    )
+    .all(mes ? { mes } : {}) as Venda[]
+}
+
 export function buscarVendaPorId(id: number): VendaDetalhada | undefined {
   const db = obterBancoDeDados()
   const venda = db
@@ -186,6 +199,7 @@ export function buscarVendaPorId(id: number): VendaDetalhada | undefined {
               c.cnpj AS cliente_cnpj,
               c.razao_social AS cliente_razao_social,
               vd.nome AS vendedor_nome,
+              EXISTS(SELECT 1 FROM creditos_cliente cc WHERE cc.venda_id = v.id AND cc.tipo = 'uso') AS usou_credito,
               COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente,
               COALESCE(dev.valor_devolvido, 0) AS valor_devolvido
        FROM vendas v
@@ -341,7 +355,10 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       total,
       desconto,
       entrada,
-      valor_pago: entrada,
+      // valor_pago é a fonte da verdade do total recebido. À vista já entra
+      // integralmente paga (senão relatório/dívida/cancelamento a leem como não
+      // recebida). Parcelado/a prazo começam só com a entrada (0 se não houver).
+      valor_pago: dados.status_pagamento === 'pago' ? total : entrada,
       status_pagamento: dados.status_pagamento,
       data_vencimento: dados.data_vencimento,
       num_parcelas: dados.num_parcelas ?? null
@@ -390,9 +407,33 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   return buscarVendaPorId(vendaId)!
 }
 
-export function atualizarStatusVenda(id: number, status: StatusPagamento): SnapshotVenda | undefined {
+// Guarda comum de pagamento/estorno: uma venda cancelada (arquivada) não deve
+// receber pagamento nem estorno. Defesa no backend — a UI já esconde as ações.
+function garantirVendaAtiva(vendaId: number): void {
   const db = obterBancoDeDados()
-  const snapshot = obterSnapshotVenda(id)
+  const v = db.prepare('SELECT cancelada FROM vendas WHERE id = ?').get(vendaId) as
+    | { cancelada: number }
+    | undefined
+  if (!v) throw new Error('Venda não encontrada.')
+  if (v.cancelada) throw new Error('Esta venda está cancelada e não aceita novas operações.')
+}
+
+// Estorno e devolução são dois mecanismos de reversão diferentes; sobrepô-los na
+// mesma venda duplicaria o acerto (o cliente recebe de volta E a venda reabre
+// devendo). Se já há devolução, o caminho é a devolução, não o estorno.
+function garantirSemDevolucao(vendaId: number): void {
+  const db = obterBancoDeDados()
+  const tem = db.prepare('SELECT 1 FROM devolucoes WHERE venda_id = ? LIMIT 1').get(vendaId)
+  if (tem) {
+    throw new Error(
+      'Esta venda tem devolução registrada — reverter o recebimento por cima duplicaria o acerto. Ajuste pela devolução.'
+    )
+  }
+}
+
+export function atualizarStatusVenda(id: number, status: StatusPagamento): void {
+  garantirVendaAtiva(id)
+  const db = obterBancoDeDados()
   db.transaction(() => {
     if (status === 'pago') {
       const venda = db.prepare('SELECT total FROM vendas WHERE id = ?').get(id) as { total: number } | undefined
@@ -403,17 +444,19 @@ export function atualizarStatusVenda(id: number, status: StatusPagamento): Snaps
       db.prepare('UPDATE vendas SET status_pagamento = ? WHERE id = ?').run(status, id)
     }
   })()
-  return snapshot
 }
 
-export function registrarPagamentoParcial(id: number, valor: number): SnapshotVenda | undefined {
+export function registrarPagamentoParcial(id: number, valor: number): void {
   const db = obterBancoDeDados()
-  const snapshot = obterSnapshotVenda(id)
+  garantirVendaAtiva(id)
   db.transaction(() => {
     const venda = db
-      .prepare('SELECT total, valor_pago FROM vendas WHERE id = ?')
-      .get(id) as { total: number; valor_pago: number } | undefined
+      .prepare('SELECT total, valor_pago, num_parcelas FROM vendas WHERE id = ?')
+      .get(id) as { total: number; valor_pago: number; num_parcelas: number | null } | undefined
     if (!venda) throw new Error('Venda não encontrada.')
+    if (venda.num_parcelas && venda.num_parcelas > 1) {
+      throw new Error('Venda parcelada: registre o pagamento por parcela.')
+    }
     if (valor <= 0) throw new Error('O valor deve ser maior que zero.')
 
     const restante = +(venda.total - venda.valor_pago).toFixed(2)
@@ -431,17 +474,15 @@ export function registrarPagamentoParcial(id: number, valor: number): SnapshotVe
         .run(novoValorPago, id)
     }
   })()
-  return snapshot
 }
 
-export function pagarParcela(parcelaId: number): { vendaId: number; snapshot: SnapshotVenda } | undefined {
+export function pagarParcela(parcelaId: number): void {
   const db = obterBancoDeDados()
   const parcela = db
     .prepare('SELECT venda_id, valor, status FROM parcelas WHERE id = ?')
     .get(parcelaId) as { venda_id: number; valor: number; status: string } | undefined
-  if (!parcela) return undefined
-  const snapshot = obterSnapshotVenda(parcela.venda_id)
-  if (!snapshot) return undefined
+  if (!parcela) throw new Error('Parcela não encontrada.')
+  garantirVendaAtiva(parcela.venda_id)
 
   db.transaction(() => {
     // Credita o valor da parcela no valor_pago da venda — só se ela ainda não
@@ -479,21 +520,91 @@ export function pagarParcela(parcelaId: number): { vendaId: number; snapshot: Sn
       db.prepare('UPDATE vendas SET status_pagamento = ? WHERE id = ?').run(novoStatus, parcela.venda_id)
     }
   })()
-  return { vendaId: parcela.venda_id, snapshot }
 }
 
-// Restaura uma venda ao estado capturado antes de uma ação de pagamento.
-// Usado para "desfazer" cliques acidentais em botões de pagamento.
-export function restaurarVenda(id: number, snapshot: SnapshotVenda): void {
+// Estorna (reverte) o recebimento de UMA parcela paga: devolve a parcela para
+// pendente ou inadimplente conforme já venceu, tira o valor do total recebido da
+// venda (valor_pago) e recalcula o status. É o inverso exato do pagarParcela e
+// funciona em qualquer parcela paga, a qualquer momento. Ação do dono — a trava
+// de permissão fica no IPC.
+export function estornarParcela(parcelaId: number): void {
   const db = obterBancoDeDados()
+  const parcela = db
+    .prepare('SELECT venda_id, valor, status FROM parcelas WHERE id = ?')
+    .get(parcelaId) as { venda_id: number; valor: number; status: string } | undefined
+  if (!parcela) throw new Error('Parcela não encontrada.')
+  if (parcela.status !== 'pago') throw new Error('Esta parcela não está paga.')
+  garantirVendaAtiva(parcela.venda_id)
+  garantirSemDevolucao(parcela.venda_id)
+
   db.transaction(() => {
-    db.prepare('UPDATE vendas SET status_pagamento = ?, valor_pago = ? WHERE id = ?')
-      .run(snapshot.status, snapshot.valor_pago, id)
-    const atualizarParcela = db.prepare('UPDATE parcelas SET status = ? WHERE id = ?')
-    for (const p of snapshot.parcelas) {
-      atualizarParcela.run(p.status, p.id)
-    }
+    // Volta a parcela para pendente/inadimplente conforme o vencimento.
+    db.prepare(
+      `UPDATE parcelas
+       SET status = CASE WHEN data_vencimento < date('now', 'localtime') THEN 'inadimplente' ELSE 'pendente' END
+       WHERE id = ?`
+    ).run(parcelaId)
+    // Tira o valor da parcela do total recebido (nunca abaixo de zero).
+    db.prepare('UPDATE vendas SET valor_pago = MAX(0, ROUND(valor_pago - ?, 2)) WHERE id = ?')
+      .run(parcela.valor, parcela.venda_id)
+    // Recalcula o status da venda: se sobrou parcela atrasada, inadimplente;
+    // senão volta a ser uma venda parcelada em aberto.
+    const temAtrasada = db
+      .prepare("SELECT 1 FROM parcelas WHERE venda_id = ? AND status = 'inadimplente'")
+      .get(parcela.venda_id)
+    const novoStatus = temAtrasada ? 'inadimplente' : 'parcelado'
+    db.prepare('UPDATE vendas SET status_pagamento = ? WHERE id = ?').run(novoStatus, parcela.venda_id)
   })()
+}
+
+// Estorna o recebimento de uma venda SIMPLES (à vista ou a prazo sem parcelas):
+// reabre a venda zerando o total recebido e voltando o status para pendente ou
+// inadimplente conforme o vencimento. Vendas simples não guardam os pagamentos
+// parciais individualmente, então o estorno é do recebimento inteiro — as
+// parceladas usam estornarParcela. Ação do dono (trava no IPC).
+export function estornarRecebimento(vendaId: number): void {
+  const db = obterBancoDeDados()
+  const venda = db
+    .prepare('SELECT cliente_id, num_parcelas, valor_pago, status_pagamento FROM vendas WHERE id = ?')
+    .get(vendaId) as
+    | { cliente_id: number | null; num_parcelas: number | null; valor_pago: number; status_pagamento: StatusPagamento }
+    | undefined
+  if (!venda) throw new Error('Venda não encontrada.')
+  garantirVendaAtiva(vendaId)
+  garantirSemDevolucao(vendaId)
+  if (venda.num_parcelas && venda.num_parcelas > 1) {
+    throw new Error('Venda parcelada: estorne parcela por parcela.')
+  }
+  // Venda avulsa (sem cliente): estornar criaria uma dívida sem a quem atribuir —
+  // não há como cobrar. Aqui o caminho é a Devolução/troca, não o estorno.
+  if (venda.cliente_id == null) {
+    throw new Error(
+      'Venda avulsa (sem cliente) não pode ser estornada — não há a quem atribuir o valor em aberto. Use Devolução/troca.'
+    )
+  }
+  // Venda à vista grava valor_pago = 0 (é o status 'pago' que a marca como paga),
+  // então "tem recebimento" quando valor_pago > 0 OU o status é 'pago'.
+  const temRecebimento = venda.valor_pago > 0 || venda.status_pagamento === 'pago'
+  if (!temRecebimento) throw new Error('Esta venda não tem recebimento para estornar.')
+  // À vista que consumiu crédito da loja: reabrir sem devolver o crédito cobraria
+  // o cliente duas vezes. Bloqueia — esse caso se resolve pela devolução.
+  const usouCredito = db
+    .prepare("SELECT 1 FROM creditos_cliente WHERE venda_id = ? AND tipo = 'uso'")
+    .get(vendaId)
+  if (usouCredito) {
+    throw new Error(
+      'Esta venda usou crédito da loja. Para reverter, faça uma devolução (o estorno não devolve o crédito).'
+    )
+  }
+
+  db.prepare(
+    `UPDATE vendas
+     SET valor_pago = 0,
+         status_pagamento = CASE
+           WHEN data_vencimento IS NOT NULL AND data_vencimento < date('now', 'localtime') THEN 'inadimplente'
+           ELSE 'pendente' END
+     WHERE id = ?`
+  ).run(vendaId)
 }
 
 // Estados em que cancelar é seguro (a regra completa fica aqui).

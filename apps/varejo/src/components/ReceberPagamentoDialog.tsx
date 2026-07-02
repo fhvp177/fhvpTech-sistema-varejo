@@ -11,9 +11,10 @@ import {
 import { useToast } from '@fhvptech/core/ui/toast'
 
 // Recebimento de uma venda em aberto, com o MESMO comportamento da aba Vendas:
-// pagamento parcial (venda a prazo), quitação de parcela (venda parcelada) e
-// "Desfazer" no toast. Reusa os mesmos canais IPC — só a tela é própria, para
-// não mexer no modal crítico da Vendas.
+// pagamento parcial (venda a prazo) e quitação de parcela (venda parcelada).
+// Reusa os mesmos canais IPC — só a tela é própria, para não mexer no modal
+// crítico da Vendas. O "Desfazer" não vive mais no toast (era efêmero): virou o
+// botão fixo "Desfazer último recebimento" no detalhe da venda (só o dono).
 
 type ParcelaDetalhe = {
   id: number
@@ -76,17 +77,6 @@ const ReceberPagamentoDialog: FC<Props> = ({ vendaId, clienteNome, onFechar, onM
     carregar(vendaId)
   }, [vendaId])
 
-  const desfazer = async (id: number, snapshot: SnapshotVenda) => {
-    const resp = await window.api.vendas.restaurar(id, snapshot)
-    if (!resp.success) {
-      showToast({ message: `Não foi possível desfazer: ${resp.error}`, variant: 'destructive' })
-      return
-    }
-    await carregar(id)
-    onMudou()
-    showToast({ message: 'Pagamento revertido.', variant: 'success' })
-  }
-
   const registrar = async () => {
     if (!venda) return
     const valor = parseFloat(valorPagamento.replace(',', '.'))
@@ -100,12 +90,7 @@ const ReceberPagamentoDialog: FC<Props> = ({ vendaId, clienteNome, onFechar, onM
     if (resp.success) {
       await carregar(venda.id)
       onMudou()
-      const snapshot = resp.data?.snapshot
-      showToast({
-        message: `Pagamento de ${fmt(valor)} registrado.`,
-        variant: 'success',
-        action: snapshot ? { label: 'Desfazer', onClick: () => desfazer(venda.id, snapshot) } : undefined
-      })
+      showToast({ message: `Pagamento de ${fmt(valor)} registrado.`, variant: 'success' })
     } else {
       setErro(resp.error)
     }
@@ -117,13 +102,8 @@ const ReceberPagamentoDialog: FC<Props> = ({ vendaId, clienteNome, onFechar, onM
     const resp = await window.api.vendas.pagarParcela(parcelaId)
     await carregar(venda.id)
     onMudou()
-    if (resp.success && resp.data) {
-      const { vendaId: vid, snapshot } = resp.data
-      showToast({
-        message: 'Parcela marcada como paga.',
-        variant: 'success',
-        action: { label: 'Desfazer', onClick: () => desfazer(vid, snapshot) }
-      })
+    if (resp.success) {
+      showToast({ message: 'Parcela marcada como paga.', variant: 'success' })
     }
   }
 

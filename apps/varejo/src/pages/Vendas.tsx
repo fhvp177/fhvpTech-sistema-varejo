@@ -1,5 +1,5 @@
 import { FC, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText } from 'lucide-react'
+import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2 } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
@@ -14,6 +14,7 @@ import {
 } from '@fhvptech/core/ui/dialog'
 import Paginacao from '@fhvptech/core/ui/paginacao'
 import { useToast } from '@fhvptech/core/ui/toast'
+import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { useImprimir } from '@/components/ImpressaoProvider'
 import ClienteSeletor, { type ClienteSeletorHandle } from '@/components/ClienteSeletor'
 import ConsultaPreco from '@/components/ConsultaPreco'
@@ -62,6 +63,12 @@ type Venda = {
   cliente_endereco?: string | null
   cliente_cpf?: string | null
   vendedor_nome?: string | null
+  cancelada?: number
+  cancelada_em?: string | null
+  cancelada_por_id?: number | null
+  cancelamento_motivo?: string | null
+  cancelada_por_nome?: string | null
+  usou_credito?: number
 }
 
 type ItemVenda = {
@@ -223,7 +230,8 @@ const Vendas: FC = () => {
 
 const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [lista, setLista] = useState<Venda[]>([])
-  const [filtroStatus, setFiltroStatus] = useState<StatusPagamento | 'todos'>('todos')
+  const [listaCanceladas, setListaCanceladas] = useState<Venda[]>([])
+  const [filtroStatus, setFiltroStatus] = useState<StatusPagamento | 'todos' | 'cancelada'>('todos')
   const [filtroMes, setFiltroMes] = useState<string>('') // '' = todas as datas; 'YYYY-MM' = mês específico
   const [busca, setBusca] = useState('')
   const [vendaDetalhada, setVendaDetalhada] = useState<VendaDetalhada | null>(null)
@@ -242,24 +250,70 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const { showToast } = useToast()
   const imprimir = useImprimir()
   const { ehDono } = useSessao()
+  const confirmar = useConfirm()
 
   const carregar = async (mes: string = filtroMes) => {
-    const resp = await window.api.vendas.listar(mes || undefined)
+    const [resp, respCanc] = await Promise.all([
+      window.api.vendas.listar(mes || undefined),
+      window.api.vendas.listarCanceladas(mes || undefined)
+    ])
     if (resp.success) setLista(resp.data as Venda[])
+    if (respCanc.success) setListaCanceladas(respCanc.data as Venda[])
   }
 
-  const desfazerPagamento = async (vendaId: number, snapshot: SnapshotVenda) => {
-    const resp = await window.api.vendas.restaurar(vendaId, snapshot)
-    if (!resp.success) {
-      showToast({ message: `Não foi possível desfazer: ${resp.error}`, variant: 'destructive' })
-      return
-    }
+  // Recarrega a venda aberta no detalhe após um estorno (e a lista, para os totais
+  // e contadores das abas). Fator comum dos dois estornos abaixo.
+  const recarregarVendaAberta = async (vendaId: number) => {
     await carregar()
     if (vendaDetalhada && vendaDetalhada.id === vendaId) {
       const r = await window.api.vendas.buscarPorId(vendaId)
       if (r.success && r.data) setVendaDetalhada(r.data as VendaDetalhada)
     }
-    showToast({ message: 'Pagamento revertido.', variant: 'success' })
+  }
+
+  // Estorna UMA parcela paga: reverte o recebimento dela, em qualquer venda e a
+  // qualquer momento. Só o dono — a trava também é reforçada no processo main.
+  const estornarParcela = async (parcela: Parcela) => {
+    if (
+      !(await confirmar({
+        titulo: 'Estornar parcela',
+        mensagem: `Isto reverte o recebimento da parcela ${parcela.numero} (${fmt(parcela.valor)}): ela volta a ficar em aberto e o valor sai do total recebido. Continuar?`,
+        rotuloConfirmar: 'Estornar',
+        variante: 'destructive'
+      }))
+    )
+      return
+    const resp = await window.api.vendas.estornarParcela(parcela.id)
+    if (!resp.success) {
+      showToast({ message: `Não foi possível estornar: ${resp.error}`, variant: 'destructive' })
+      return
+    }
+    await recarregarVendaAberta(parcela.venda_id)
+    showToast({ message: 'Parcela estornada.', variant: 'success' })
+  }
+
+  // Estorna o recebimento inteiro de uma venda simples (à vista ou a prazo sem
+  // parcelas): reabre a venda. Só o dono.
+  const estornarRecebimento = async (venda: VendaDetalhada) => {
+    // À vista grava valor_pago = 0 (o status 'pago' é que a marca como paga), então
+    // o valor recebido de fato, para exibir, é o total nesse caso.
+    const recebido = venda.status_pagamento === 'pago' ? venda.total : venda.valor_pago
+    if (
+      !(await confirmar({
+        titulo: 'Estornar recebimento',
+        mensagem: `Isto reabre a venda de ${venda.cliente_nome || 'venda avulsa'}: o valor recebido (${fmt(recebido)}) é zerado e a venda volta a ficar em aberto. Continuar?`,
+        rotuloConfirmar: 'Estornar',
+        variante: 'destructive'
+      }))
+    )
+      return
+    const resp = await window.api.vendas.estornarRecebimento(venda.id)
+    if (!resp.success) {
+      showToast({ message: `Não foi possível estornar: ${resp.error}`, variant: 'destructive' })
+      return
+    }
+    await recarregarVendaAberta(venda.id)
+    showToast({ message: 'Recebimento estornado.', variant: 'success' })
   }
 
   // Recarrega ao montar e sempre que o mês muda: o mês é filtrado NO BANCO
@@ -269,17 +323,23 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   // O mês já vem filtrado do banco; aqui só aplicamos a busca textual por cima
   // da lista carregada — base também dos contadores de cada aba.
   const termo = busca.trim().toLowerCase()
-  const listaBase = termo
-    ? lista.filter(
-        (v) =>
-          (v.cliente_nome || 'venda avulsa').toLowerCase().includes(termo) ||
-          String(v.id).includes(termo)
-      )
-    : lista
+  const filtrarBusca = (arr: Venda[]) =>
+    termo
+      ? arr.filter(
+          (v) =>
+            (v.cliente_nome || 'venda avulsa').toLowerCase().includes(termo) ||
+            String(v.id).includes(termo)
+        )
+      : arr
+  const listaBase = filtrarBusca(lista)
+  const listaCanceladasBase = filtrarBusca(listaCanceladas)
 
-  const listaFiltrada = filtroStatus === 'todos'
-    ? listaBase
-    : listaBase.filter((v) => v.status_pagamento === filtroStatus)
+  const listaFiltrada =
+    filtroStatus === 'cancelada'
+      ? listaCanceladasBase
+      : filtroStatus === 'todos'
+        ? listaBase
+        : listaBase.filter((v) => v.status_pagamento === filtroStatus)
 
   useEffect(() => {
     setPaginaAtual(1)
@@ -333,30 +393,30 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     if (resp.success) {
       await verDetalhes(id)
       await carregar()
-      const snapshot = resp.data?.snapshot
-      if (snapshot) {
-        showToast({
-          message: `Pagamento de ${fmt(valor)} registrado.`,
-          action: { label: 'Desfazer', onClick: () => desfazerPagamento(id, snapshot) }
-        })
-      }
+      showToast({ message: `Pagamento de ${fmt(valor)} registrado.` })
     } else {
       setErroPagamento(resp.error)
     }
     setSalvandoPagamento(false)
   }
 
-  const marcarComoPago = async (id: number) => {
-    const resp = await window.api.vendas.atualizarStatus(id, 'pago')
+  const marcarComoPago = async (venda: Venda) => {
+    // Quitar uma parcelada de uma vez marca TODAS as parcelas como pagas — ação
+    // pesada e fácil de disparar sem querer. Confirma antes (o "Desfazer último
+    // recebimento" continua como rede de segurança, mas o ideal é não errar).
+    if (venda.num_parcelas && venda.num_parcelas > 1) {
+      const ok = await confirmar({
+        titulo: 'Quitar venda parcelada',
+        mensagem: `Isto marca TODAS as ${venda.num_parcelas} parcelas como pagas e quita a venda de ${venda.cliente_nome || 'venda avulsa'}. Continuar?`,
+        rotuloConfirmar: 'Marcar como pago',
+        variante: 'destructive'
+      })
+      if (!ok) return
+    }
+    const resp = await window.api.vendas.atualizarStatus(venda.id, 'pago')
     await carregar()
     if (resp.success) {
-      const snapshot = resp.data?.snapshot
-      if (snapshot) {
-        showToast({
-          message: 'Venda marcada como paga.',
-          action: { label: 'Desfazer', onClick: () => desfazerPagamento(id, snapshot) }
-        })
-      }
+      showToast({ message: 'Venda marcada como paga.' })
     }
   }
 
@@ -466,21 +526,18 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
       if (r.success && r.data) setVendaDetalhada(r.data as VendaDetalhada)
     }
     await carregar()
-    if (resp.success && resp.data) {
-      const { vendaId, snapshot } = resp.data
-      showToast({
-        message: 'Parcela marcada como paga.',
-        action: { label: 'Desfazer', onClick: () => desfazerPagamento(vendaId, snapshot) }
-      })
+    if (resp.success) {
+      showToast({ message: 'Parcela marcada como paga.' })
     }
   }
 
-  const tabs: Array<{ key: StatusPagamento | 'todos'; label: string }> = [
+  const tabs: Array<{ key: StatusPagamento | 'todos' | 'cancelada'; label: string }> = [
     { key: 'todos', label: 'Todos' },
     { key: 'pago', label: 'Pagos' },
     { key: 'pendente', label: 'Pendentes' },
     { key: 'parcelado', label: 'Parcelados' },
-    { key: 'inadimplente', label: 'Inadimplentes' }
+    { key: 'inadimplente', label: 'Inadimplentes' },
+    { key: 'cancelada', label: 'Canceladas' }
   ]
 
   return (
@@ -531,7 +588,9 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
               <span className="ml-1.5 text-xs bg-muted rounded-full px-1.5 py-0.5">
                 {key === 'todos'
                   ? listaBase.length
-                  : listaBase.filter((v) => v.status_pagamento === key).length}
+                  : key === 'cancelada'
+                    ? listaCanceladasBase.length
+                    : listaBase.filter((v) => v.status_pagamento === key).length}
               </span>
             </button>
           ))}
@@ -584,7 +643,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right font-semibold">
-                  {v.num_parcelas && v.status_pagamento === 'inadimplente' && v.valor_inadimplente > 0
+                  {v.cancelada ? fmt(v.total) : v.num_parcelas && v.status_pagamento === 'inadimplente' && v.valor_inadimplente > 0
                     ? (
                       <span title={`Total da venda: ${fmt(v.total)}`}>
                         {fmt(v.valor_inadimplente)}
@@ -601,24 +660,35 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                       : fmt(v.total)}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground text-xs">
-                  {v.num_parcelas
-                    ? `${v.num_parcelas}x — 1ª ${v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}`
-                    : v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}
+                  {v.cancelada
+                    ? `${v.cancelada_por_nome ? 'por ' + v.cancelada_por_nome + ' · ' : ''}${v.cancelada_em ? fmtDataCurta(v.cancelada_em.slice(0, 10)) : ''}`
+                    : v.num_parcelas
+                      ? `${v.num_parcelas}x — 1ª ${v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}`
+                      : v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}
                 </td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
-                      {badgeVenda(v)}
+                  {v.cancelada ? (
+                    <span
+                      className="text-xs px-2 py-1 rounded-full font-medium bg-muted text-muted-foreground"
+                      title={v.cancelamento_motivo ?? ''}
+                    >
+                      Cancelada
                     </span>
-                    {(() => {
-                      const selo = seloDevolucao(v)
-                      return selo ? (
-                        <span title={selo.label} className="inline-flex">
-                          <RotateCcw className={`w-3.5 h-3.5 ${selo.cor}`} />
-                        </span>
-                      ) : null
-                    })()}
-                  </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
+                        {badgeVenda(v)}
+                      </span>
+                      {(() => {
+                        const selo = seloDevolucao(v)
+                        return selo ? (
+                          <span title={selo.label} className="inline-flex">
+                            <RotateCcw className={`w-3.5 h-3.5 ${selo.cor}`} />
+                          </span>
+                        ) : null
+                      })()}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1 justify-end">
@@ -630,7 +700,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                         variant="ghost"
                         size="icon"
                         className="text-green-600 hover:text-green-700"
-                        onClick={() => marcarComoPago(v.id)}
+                        onClick={() => marcarComoPago(v)}
                         title="Marcar como pago"
                       >
                         <CheckCircle className="w-4 h-4" />
@@ -673,11 +743,11 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
       {/* Dialog detalhes da venda */}
       <Dialog open={!!vendaDetalhada} onOpenChange={(open) => !open && setVendaDetalhada(null)}>
         {vendaDetalhada && (
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-xl">
             <DialogHeader>
               <DialogTitle>Venda #{vendaDetalhada.id}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-3 text-sm">
+            <div className="space-y-3 text-sm min-w-0">
               <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                 <div className="min-w-0 truncate" title={vendaDetalhada.cliente_nome || 'Avulso'}>
                   <span className="font-medium text-foreground">Cliente: </span>
@@ -725,22 +795,39 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                 )}
               </div>
 
+              {vendaDetalhada.cancelada && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm">
+                  <p className="font-semibold text-red-700 flex items-center gap-1.5">
+                    <Ban className="w-4 h-4" /> Venda cancelada
+                  </p>
+                  {vendaDetalhada.cancelamento_motivo && (
+                    <p className="text-red-700/90 mt-0.5">Motivo: {vendaDetalhada.cancelamento_motivo}</p>
+                  )}
+                  {(vendaDetalhada.cancelada_em || vendaDetalhada.cancelada_por_nome) && (
+                    <p className="text-red-600/80 text-xs mt-0.5">
+                      {vendaDetalhada.cancelada_em ? `Em ${fmtData(vendaDetalhada.cancelada_em)}` : ''}
+                      {vendaDetalhada.cancelada_por_nome ? ` · por ${vendaDetalhada.cancelada_por_nome}` : ''}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Itens da venda */}
               <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
+                <table className="w-full table-fixed text-sm">
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produto</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Qtd</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Unitário</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Subtotal</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground w-14">Qtd</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Unitário</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
                     {vendaDetalhada.itens.map((item, i) => (
                       <tr key={i} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
                         <td className="px-3 py-2">
-                          <div className="truncate max-w-[260px]" title={item.produto_nome}>{item.produto_nome}</div>
+                          <div className="truncate" title={item.produto_nome}>{item.produto_nome}</div>
                         </td>
                         <td className="px-3 py-2 text-right">{item.quantidade}</td>
                         <td className="px-3 py-2 text-right">{fmt(item.preco_unitario)}</td>
@@ -774,7 +861,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
               </div>
 
               {/* Pagamento parcial — apenas para venda a prazo simples não quitada */}
-              {vendaDetalhada.status_pagamento !== 'pago' && !vendaDetalhada.num_parcelas && (
+              {vendaDetalhada.status_pagamento !== 'pago' && !vendaDetalhada.num_parcelas && !vendaDetalhada.cancelada && (
                 <div className="border rounded-lg p-3 space-y-2.5 bg-muted/20">
                   <p className="font-medium text-sm">Registrar Pagamento</p>
                   <div className="flex justify-between text-sm">
@@ -854,15 +941,24 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                               </span>
                             </td>
                             <td className="px-3 py-2 text-center">
-                              {p.status !== 'pago' && (
-                                <button
-                                  onClick={() => pagarParcela(p.id)}
-                                  title="Marcar parcela como paga"
-                                  className="text-green-600 hover:text-green-700 transition-colors"
-                                >
-                                  <CheckCircle className="w-4 h-4" />
-                                </button>
-                              )}
+                              {!vendaDetalhada.cancelada &&
+                                (p.status !== 'pago' ? (
+                                  <button
+                                    onClick={() => pagarParcela(p.id)}
+                                    title="Marcar parcela como paga"
+                                    className="text-green-600 hover:text-green-700 transition-colors"
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                ) : ehDono && vendaDetalhada.valor_devolvido <= 0 ? (
+                                  <button
+                                    onClick={() => estornarParcela(p)}
+                                    title="Estornar esta parcela (reverter o recebimento)"
+                                    className="text-amber-600 hover:text-amber-700 transition-colors"
+                                  >
+                                    <Undo2 className="w-4 h-4" />
+                                  </button>
+                                ) : null)}
                             </td>
                           </tr>
                         ))}
@@ -872,7 +968,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                 </div>
               )}
 
-              {vendaDetalhada.status_pagamento === 'pago' && (
+              {vendaDetalhada.status_pagamento === 'pago' && !vendaDetalhada.cancelada && (
                 <Button
                   variant="outline"
                   className="w-full"
@@ -887,23 +983,42 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                 </Button>
               )}
 
-              <Button
-                variant="ghost"
-                className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={() => {
-                  const v = vendaDetalhada
-                  setVendaDetalhada(null)
-                  setVendaCancelar({
-                    id: v.id,
-                    total: v.total,
-                    valor_pago: v.valor_pago,
-                    valor_devolvido: v.valor_devolvido
-                  })
-                }}
-              >
-                <Ban className="w-4 h-4 mr-2" />
-                Cancelar venda
-              </Button>
+              {ehDono &&
+                !vendaDetalhada.cancelada &&
+                vendaDetalhada.parcelas.length === 0 &&
+                vendaDetalhada.cliente_id != null &&
+                !vendaDetalhada.usou_credito &&
+                vendaDetalhada.valor_devolvido <= 0 &&
+                (vendaDetalhada.valor_pago > 0 || vendaDetalhada.status_pagamento === 'pago') && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                    onClick={() => estornarRecebimento(vendaDetalhada)}
+                  >
+                    <Undo2 className="w-4 h-4 mr-2" />
+                    Estornar recebimento
+                  </Button>
+                )}
+
+              {!vendaDetalhada.cancelada && (
+                <Button
+                  variant="ghost"
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    const v = vendaDetalhada
+                    setVendaDetalhada(null)
+                    setVendaCancelar({
+                      id: v.id,
+                      total: v.total,
+                      valor_pago: v.valor_pago,
+                      valor_devolvido: v.valor_devolvido
+                    })
+                  }}
+                >
+                  <Ban className="w-4 h-4 mr-2" />
+                  Cancelar venda
+                </Button>
+              )}
             </div>
           </DialogContent>
         )}

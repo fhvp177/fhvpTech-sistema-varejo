@@ -1,18 +1,19 @@
 import { ipcMain } from 'electron'
 import {
   listarVendas,
+  listarVendasCanceladas,
   buscarVendaPorId,
   criarVenda,
   atualizarStatusVenda,
   pagarParcela,
   registrarPagamentoParcial,
-  restaurarVenda,
+  estornarParcela,
+  estornarRecebimento,
   cancelarVenda,
   resumoDashboard,
   produtosMaisVendidosNoMes,
   type DadosNovaVenda,
-  type StatusPagamento,
-  type SnapshotVenda
+  type StatusPagamento
 } from '../db/queries/vendas'
 import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
@@ -35,6 +36,14 @@ export function registrarHandlersVendas(): void {
   ipcMain.handle('vendas:listar', (_event, mes?: string) => {
     try {
       return { success: true, data: listarVendas(mes) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('vendas:listarCanceladas', (_event, mes?: string) => {
+    try {
+      return { success: true, data: listarVendasCanceladas(mes) }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
@@ -64,9 +73,9 @@ export function registrarHandlersVendas(): void {
 
   ipcMain.handle('vendas:atualizarStatus', (_event, id: number, status: StatusPagamento) => {
     try {
-      const snapshot = atualizarStatusVenda(id, status)
+      atualizarStatusVenda(id, status)
       obterBackupManager().marcarAlteracao()
-      return { success: true, data: { snapshot } }
+      return { success: true, data: null }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
@@ -74,9 +83,9 @@ export function registrarHandlersVendas(): void {
 
   ipcMain.handle('vendas:pagarParcela', (_event, parcelaId: number) => {
     try {
-      const resultado = pagarParcela(parcelaId)
+      pagarParcela(parcelaId)
       obterBackupManager().marcarAlteracao()
-      return { success: true, data: resultado ?? null }
+      return { success: true, data: null }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
@@ -84,17 +93,39 @@ export function registrarHandlersVendas(): void {
 
   ipcMain.handle('vendas:registrarPagamentoParcial', (_event, id: number, valor: number) => {
     try {
-      const snapshot = registrarPagamentoParcial(id, valor)
+      registrarPagamentoParcial(id, valor)
       obterBackupManager().marcarAlteracao()
-      return { success: true, data: { snapshot } }
+      return { success: true, data: null }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
   })
 
-  ipcMain.handle('vendas:restaurar', (_event, id: number, snapshot: SnapshotVenda) => {
+  // Estornar (reverter) um recebimento. Ação corretiva do dono — coerente com a
+  // hierarquia: o vendedor registra o recebimento, mas só o dono reverte. A regra
+  // de "o que" reverter fica nas queries. Uma parcela (parcelada) ou o recebimento
+  // inteiro (venda simples).
+  ipcMain.handle('vendas:estornarParcela', (_event, parcelaId: number) => {
     try {
-      restaurarVenda(id, snapshot)
+      requerSessao()
+      if (!ehDono()) {
+        throw new Error('Estornar um recebimento requer a autorização do dono.')
+      }
+      estornarParcela(parcelaId)
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('vendas:estornarRecebimento', (_event, id: number) => {
+    try {
+      requerSessao()
+      if (!ehDono()) {
+        throw new Error('Estornar um recebimento requer a autorização do dono.')
+      }
+      estornarRecebimento(id)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }
     } catch (error) {
