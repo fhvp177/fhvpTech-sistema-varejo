@@ -90,6 +90,8 @@ const api = {
     resumoDashboard: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:resumoDashboard'),
     produtosMaisVendidos: (mes: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:produtosMaisVendidos', mes),
+    aReceberDoMes: (mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendas:aReceberDoMes', mes),
     cancelar: (id: number, motivo: string, pinDono?: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:cancelar', id, motivo, pinDono)
   },

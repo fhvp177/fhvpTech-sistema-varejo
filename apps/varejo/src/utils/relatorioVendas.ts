@@ -27,6 +27,14 @@ export type ProdutoMaisVendido = {
   receita: number
 }
 
+// A receber com VENCIMENTO dentro do mês (parcelas + vendas a prazo em aberto).
+// Vem de query própria no backend (vendas:aReceberDoMes) porque inclui parcelas
+// de vendas de meses anteriores — as vendas do mês não bastam pra calcular.
+export type VencimentosMes = {
+  a_vencer: number
+  vencido: number
+}
+
 const MESES_LONGO = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
@@ -62,7 +70,8 @@ const escapar = (s: string): string =>
 export function gerarHtmlRelatorioVendas(
   vendas: VendaRelatorio[],
   mes: string,
-  produtosMaisVendidos?: ProdutoMaisVendido[]
+  produtosMaisVendidos?: ProdutoMaisVendido[],
+  vencimentosMes?: VencimentosMes
 ): string {
   const geradoEm = new Date().toLocaleString('pt-BR', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -83,7 +92,7 @@ export function gerarHtmlRelatorioVendas(
     ['Nº de vendas', String(nVendas)],
     ['Ticket médio', fmtMoeda(ticketMedio)],
     ['Recebido', fmtMoeda(recebido)],
-    ['A receber', fmtMoeda(aReceber)],
+    ['A receber (vendas do mês)', fmtMoeda(aReceber)],
     ['Descontos concedidos', fmtMoeda(descontos)],
     ['Devoluções', fmtMoeda(devolvido)],
     ['Faturamento líquido', fmtMoeda(faturamentoLiquido)]
@@ -91,6 +100,22 @@ export function gerarHtmlRelatorioVendas(
   const cardsHtml = cardsResumo
     .map(([rotulo, valor]) => `<div class="card"><div class="card-rotulo">${rotulo}</div><div class="card-valor">${valor}</div></div>`)
     .join('')
+
+  // Faixa "a receber no mês" ancorada no vencimento — número que os cards acima
+  // não cobrem: parcelas de vendas de meses ANTERIORES que vencem neste mês.
+  const totalVencimentos = vencimentosMes ? vencimentosMes.a_vencer + vencimentosMes.vencido : 0
+  const faixaVencimentos = vencimentosMes
+    ? `<div class="faixa-venc">
+        <div class="faixa-venc-texto">
+          <div class="faixa-venc-titulo">A RECEBER NO MÊS (POR VENCIMENTO)</div>
+          <div class="faixa-venc-sub">Parcelas e vendas a prazo com vencimento em ${rotuloMes(mes)}, ainda em aberto — inclui vendas de meses anteriores.</div>
+        </div>
+        <div class="faixa-venc-valores">
+          <div class="faixa-venc-total">${fmtMoeda(totalVencimentos)}</div>
+          <div class="faixa-venc-sub">${fmtMoeda(vencimentosMes.a_vencer)} a vencer · ${fmtMoeda(vencimentosMes.vencido)} em atraso</div>
+        </div>
+      </div>`
+    : ''
 
   // ── Por status ──
   const porStatus = STATUS_ORDEM.map((s) => {
@@ -190,6 +215,11 @@ export function gerarHtmlRelatorioVendas(
     .card { border: 1px solid #ddd; background: #f5f5f5; padding: 6px 8px; }
     .card-rotulo { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.3px; }
     .card-valor { font-size: 13px; font-weight: bold; margin-top: 2px; }
+    .faixa-venc { display: flex; justify-content: space-between; align-items: center; gap: 16px; border: 1px solid #ccc; background: #eef2f7; padding: 8px 10px; margin: -10px 0 18px; }
+    .faixa-venc-titulo { font-size: 10px; font-weight: bold; letter-spacing: 0.3px; }
+    .faixa-venc-sub { font-size: 9px; color: #555; margin-top: 2px; }
+    .faixa-venc-valores { text-align: right; white-space: nowrap; }
+    .faixa-venc-total { font-size: 14px; font-weight: bold; }
     .grupo { margin-bottom: 16px; page-break-inside: avoid; }
     .grupo-titulo { background: #333; color: #fff; padding: 4px 8px; font-weight: bold; font-size: 11px; }
     table { width: 100%; border-collapse: collapse; }
@@ -211,6 +241,8 @@ export function gerarHtmlRelatorioVendas(
   <div class="cards">
     ${cardsHtml}
   </div>
+
+  ${faixaVencimentos}
 
   <div class="duas-colunas">
     <div class="grupo">

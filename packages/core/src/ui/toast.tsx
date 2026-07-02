@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FC, type ReactNode } from 'react'
 import { X, Undo2 } from 'lucide-react'
+import './animacoes.css'
 
 type ToastVariant = 'default' | 'success' | 'destructive'
 
@@ -58,6 +59,24 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
   )
 }
 
+// Check que se desenha (círculo primeiro, risco depois). Mesma geometria do
+// check-circle do lucide, mas com traços animáveis via pathLength normalizado.
+const CheckAnimado: FC = () => (
+  <svg
+    viewBox="0 0 24 24"
+    className="w-5 h-5 text-green-600 shrink-0 mt-0.5"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="10" pathLength="100" className="anim-check-circulo" />
+    <path d="M8 12.5l2.5 2.5L16 9.5" pathLength="100" className="anim-check-risco" />
+  </svg>
+)
+
 const ToastItem: FC<{ toast: ToastInterno; onClose: () => void }> = ({ toast, onClose }) => {
   const [progresso, setProgresso] = useState(100)
 
@@ -81,8 +100,15 @@ const ToastItem: FC<{ toast: ToastInterno; onClose: () => void }> = ({ toast, on
     : 'bg-blue-500'
 
   return (
-    <div className="pointer-events-auto bg-card border rounded-lg shadow-lg overflow-hidden animate-in slide-in-from-right-5 fade-in-0">
+    <div
+      className={`pointer-events-auto bg-card border rounded-lg shadow-lg overflow-hidden ${
+        // A tremida substitui a entrada deslizante (as duas disputariam a mesma
+        // shorthand `animation` — não podem coexistir no mesmo elemento).
+        toast.variant === 'destructive' ? 'anim-treme' : 'animate-in slide-in-from-right-5 fade-in-0'
+      }`}
+    >
       <div className="flex items-start gap-3 p-3 pr-2">
+        {toast.variant === 'success' && <CheckAnimado />}
         <p className="flex-1 text-sm pt-0.5">{toast.message}</p>
         {toast.action && (
           <button

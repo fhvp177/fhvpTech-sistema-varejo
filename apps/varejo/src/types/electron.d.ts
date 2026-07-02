@@ -98,6 +98,10 @@ type MetricasDashboard = {
     proximos_60d: number
     proximos_90d: number
   }
+  a_receber_periodo: {
+    a_vencer: number
+    vencido: number
+  }
   produtos_parados: Array<{
     produto_id: number
     nome: string
@@ -177,6 +181,7 @@ interface Window {
       estornarRecebimento: (id: number) => Promise<RespostaIPC>
       resumoDashboard: () => Promise<RespostaIPC>
       produtosMaisVendidos: (mes: string) => Promise<RespostaIPC>
+      aReceberDoMes: (mes: string) => Promise<RespostaIPC<{ a_vencer: number; vencido: number }>>
       cancelar: (id: number, motivo: string, pinDono?: string) => Promise<RespostaIPC<null>>
     }
     loja: {

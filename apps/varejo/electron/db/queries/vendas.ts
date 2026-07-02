@@ -722,6 +722,58 @@ export function produtosMaisVendidosNoMes(mes: string): ProdutoMaisVendido[] {
     .all(mes) as ProdutoMaisVendido[]
 }
 
+export type AReceberPorVencimento = {
+  a_vencer: number // vencimento de hoje em diante, ainda em aberto
+  vencido: number  // vencimento já passou e ninguém pagou (em atraso)
+}
+
+// Quanto a loja tem pra receber com VENCIMENTO dentro de [inicio, fim] (ISO
+// 'YYYY-MM-DD', inclusivo), somando parcelas em aberto e vendas simples a prazo.
+// A âncora é o vencimento, não a data da venda — parcelas de vendas feitas em
+// meses anteriores entram. É um número diferente (e complementar) do faturamento,
+// que soma pela data da venda; somar os dois dobraria a contagem.
+export function aReceberPorVencimento(inicio: string, fim: string): AReceberPorVencimento {
+  promoverVendasVencidas()
+  const db = obterBancoDeDados()
+  const parcelas = db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN date(p.data_vencimento) >= date('now') THEN p.valor ELSE 0 END), 0) AS a_vencer,
+         COALESCE(SUM(CASE WHEN date(p.data_vencimento) <  date('now') THEN p.valor ELSE 0 END), 0) AS vencido
+       FROM parcelas p
+       JOIN vendas v ON v.id = p.venda_id
+       WHERE p.status <> 'pago'
+         AND v.cancelada = 0
+         AND date(p.data_vencimento) >= ? AND date(p.data_vencimento) <= ?`
+    )
+    .get(inicio, fim) as AReceberPorVencimento
+  const vendasSimples = db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN date(data_vencimento) >= date('now') THEN total - valor_pago ELSE 0 END), 0) AS a_vencer,
+         COALESCE(SUM(CASE WHEN date(data_vencimento) <  date('now') THEN total - valor_pago ELSE 0 END), 0) AS vencido
+       FROM vendas
+       WHERE status_pagamento IN ('pendente', 'inadimplente')
+         AND cancelada = 0
+         AND num_parcelas IS NULL
+         AND data_vencimento IS NOT NULL
+         AND total - valor_pago > 0
+         AND date(data_vencimento) >= ? AND date(data_vencimento) <= ?`
+    )
+    .get(inicio, fim) as AReceberPorVencimento
+  return {
+    a_vencer: +(parcelas.a_vencer + vendasSimples.a_vencer).toFixed(2),
+    vencido: +(parcelas.vencido + vendasSimples.vencido).toFixed(2)
+  }
+}
+
+// Mesma conta, recortada para um mês ('YYYY-MM') — usada pelo relatório de vendas.
+export function aReceberPorVencimentoNoMes(mes: string): AReceberPorVencimento {
+  const [ano, m] = mes.split('-').map(Number)
+  const ultimoDia = new Date(ano, m, 0).getDate()
+  return aReceberPorVencimento(`${mes}-01`, `${mes}-${String(ultimoDia).padStart(2, '0')}`)
+}
+
 export function resumoDashboard(): ResumoDashboard {
   promoverVendasVencidas()
   const db = obterBancoDeDados()

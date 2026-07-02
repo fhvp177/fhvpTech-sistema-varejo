@@ -50,7 +50,7 @@ const ModalAtualizacaoDisponivel: FC = () => {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Download className="w-5 h-5 text-blue-600" />
+            <Download className="anim-pop w-5 h-5 text-blue-600" />
             {instalando ? 'Atualizando o sistema' : 'Atualização disponível'}
           </DialogTitle>
         </DialogHeader>

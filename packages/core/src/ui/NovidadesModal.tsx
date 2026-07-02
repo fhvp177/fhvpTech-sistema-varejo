@@ -1,5 +1,6 @@
 import { FC, ReactNode } from 'react'
 import { Sparkles, X } from 'lucide-react'
+import './animacoes.css'
 
 // Um destaque do "O que há de novo". Conteúdo vem do app (serve a qualquer nicho).
 export type ItemNovidade = { emoji?: string; titulo: string; descricao?: ReactNode }
@@ -26,7 +27,9 @@ const NovidadesModal: FC<Props> = ({ versao, itens, onFechar }) => {
             <X className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <Sparkles className="w-6 h-6" />
+            <span className="anim-pop">
+              <Sparkles className="anim-flutua w-6 h-6" />
+            </span>
             <h2 className="text-xl font-bold">Novidades</h2>
           </div>
           <p className="text-sm text-white/80 mt-1">O que melhorou na versão {versao}</p>

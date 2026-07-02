@@ -143,7 +143,9 @@ const calcularDelta = (atual: number, anterior: number): { pct: number; valido: 
 }
 
 const Dashboard: FC = () => {
-  const [modo, setModo] = useState<Modo>('janela')
+  // Abre no mês corrente (modo mês), não na janela móvel — o lojista pensa
+  // "como está o mês?" ao abrir o sistema. Os botões de janela continuam aí.
+  const [modo, setModo] = useState<Modo>('mes')
   const [periodoDias, setPeriodoDias] = useState(30)
   const [mesAtual, setMesAtual] = useState<string>(mesAtualPadrao)
   const [mesComparativo, setMesComparativo] = useState<string>(() => mesAnoAnteriorDe(mesAtualPadrao()))
@@ -520,7 +522,7 @@ const Dashboard: FC = () => {
             </ul>
           ) : (
             <div className="py-8 text-center">
-              <Package className="w-6 h-6 mx-auto mb-1.5 text-muted-foreground opacity-40" />
+              <Package className="anim-flutua w-6 h-6 mx-auto mb-1.5 text-muted-foreground opacity-40" />
               <p className="text-sm text-muted-foreground">Sem vendas no período.</p>
             </div>
           )}
@@ -541,7 +543,7 @@ const Dashboard: FC = () => {
 
       {/* ── Recebível futuro + Produtos parados + Estoque baixo ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-        <CardRecebivel metricas={metricas} />
+        <CardRecebivel metricas={metricas} rotuloPeriodo={rotuloPeriodo} />
         <CardProdutosParados metricas={metricas} carregando={carregandoMetricas} />
         <CardEstoqueBaixo metricas={metricas} />
       </div>
@@ -609,8 +611,8 @@ const CardKPI: FC<CardKPIProps> = ({
     : 'text-muted-foreground'
   const sinal = delta.pct > 0 ? '+' : ''
   return (
-    <div className="border rounded-xl p-4 bg-card">
-      <div className={`w-10 h-10 rounded-lg ${corIcone} flex items-center justify-center mb-3`}>
+    <div className="anim-gatilho border rounded-xl p-4 bg-card">
+      <div className={`anim-alvo-salta w-10 h-10 rounded-lg ${corIcone} flex items-center justify-center mb-3`}>
         {icone}
       </div>
       <p className="text-sm text-muted-foreground">{titulo}</p>
@@ -657,8 +659,8 @@ const CardClientes: FC<CardClientesProps> = ({
     : 'text-muted-foreground'
   const sinal = deltaNovos.pct > 0 ? '+' : ''
   return (
-    <div className="border rounded-xl p-4 bg-card">
-      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center mb-3">
+    <div className="anim-gatilho border rounded-xl p-4 bg-card">
+      <div className="anim-alvo-salta w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center mb-3">
         <Users className="w-5 h-5 text-purple-600" />
       </div>
       <p className="text-sm text-muted-foreground">Clientes</p>
@@ -1015,18 +1017,40 @@ const CardTopCategorias: FC<WidgetProps> = ({ metricas, carregando }) => {
   )
 }
 
-const CardRecebivel: FC<{ metricas: MetricasDashboard | null }> = ({ metricas }) => {
+const CardRecebivel: FC<{ metricas: MetricasDashboard | null; rotuloPeriodo: string }> = ({
+  metricas, rotuloPeriodo
+}) => {
   const recebivel = metricas?.recebivel_futuro
+  const periodo = metricas?.a_receber_periodo
+  const totalPeriodo = periodo ? periodo.a_vencer + periodo.vencido : 0
 
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="anim-gatilho border rounded-xl p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
-        <Wallet className="w-5 h-5 text-muted-foreground" />
-        <h3 className="font-semibold">Recebível futuro</h3>
+        <Wallet className="anim-alvo-acena w-5 h-5 text-muted-foreground" />
+        <h3 className="font-semibold">A receber</h3>
       </div>
       <p className="text-xs text-muted-foreground -mt-2 mb-3">
-        Parcelas e vendas a prazo a vencer
+        Parcelas e vendas a prazo, pelo vencimento
       </p>
+      {/* Vencimentos dentro do período filtrado — entra também o que veio de
+          vendas de meses anteriores (por isso não bate com o faturamento). */}
+      <div className="rounded-lg bg-muted/60 px-3 py-2.5 mb-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-sm text-muted-foreground truncate" title={rotuloPeriodo}>
+            {rotuloPeriodo}
+          </span>
+          <span className="font-bold shrink-0">{periodo ? fmt(totalPeriodo) : '...'}</span>
+        </div>
+        {periodo && totalPeriodo > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {fmt(periodo.a_vencer)} a vencer
+            {periodo.vencido > 0 && (
+              <> · <span className="font-medium text-red-600">{fmt(periodo.vencido)} em atraso</span></>
+            )}
+          </p>
+        )}
+      </div>
       <div className="space-y-2.5">
         <div className="flex items-baseline justify-between">
           <span className="text-sm text-muted-foreground">Próximos 30 dias</span>
@@ -1231,9 +1255,9 @@ const CardAniversariantes: FC<{ metricas: MetricasDashboard | null }> = ({ metri
         <>
           <ul className="space-y-2">
             {dados.map((a) => (
-              <li key={a.id} className="flex items-center gap-3 bg-muted/40 rounded-lg px-3 py-2">
+              <li key={a.id} className="anim-gatilho flex items-center gap-3 bg-muted/40 rounded-lg px-3 py-2">
                 <div className="w-9 h-9 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center shrink-0">
-                  <Gift className="w-4 h-4" />
+                  <Gift className="anim-alvo-acena w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" title={a.nome}>{a.nome}</p>

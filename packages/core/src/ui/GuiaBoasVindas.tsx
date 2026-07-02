@@ -1,5 +1,6 @@
 import { FC, ReactNode, useState } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import './animacoes.css'
 
 // Um slide do guia de boas-vindas. Conteúdo (ícone, cores, textos) vem do app —
 // este componente é só a casca visual, então serve a qualquer nicho.
@@ -44,19 +45,24 @@ const GuiaBoasVindas: FC<Props> = ({ slides, onConcluir, rotuloFinal = 'Começar
           </button>
         </div>
 
-        {/* Conteúdo do slide */}
+        {/* Conteúdo do slide. As keys por índice remontam os elementos a cada
+            troca de slide, re-disparando as animações de entrada. O pop fica no
+            chip e a flutuação num wrapper interno (não podem dividir elemento). */}
         <div className="px-8 pb-2 text-center min-h-[260px] flex flex-col items-center justify-center">
           <div
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-5 ${
+            key={indice}
+            className={`anim-pop w-16 h-16 rounded-2xl flex items-center justify-center mb-5 ${
               slide.corIcone ?? 'bg-blue-100 text-blue-600'
             }`}
           >
-            {slide.icone}
+            <div className="anim-flutua">{slide.icone}</div>
           </div>
-          <h2 className="text-xl font-bold text-slate-800">{slide.titulo}</h2>
-          <p className="text-sm text-slate-500 mt-2.5 leading-relaxed max-w-sm">
-            {slide.descricao}
-          </p>
+          <div key={`texto-${indice}`} className="animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+            <h2 className="text-xl font-bold text-slate-800">{slide.titulo}</h2>
+            <p className="text-sm text-slate-500 mt-2.5 leading-relaxed max-w-sm">
+              {slide.descricao}
+            </p>
+          </div>
         </div>
 
         {/* Indicador de progresso (bolinhas) */}

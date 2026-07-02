@@ -1,5 +1,6 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
+import { aReceberPorVencimento, type AReceberPorVencimento } from './vendas'
 
 // Chave na tabela `config` onde fica a meta de faturamento mensal (editável pelo
 // próprio card da dashboard). Ausente/0 = meta não definida.
@@ -107,6 +108,9 @@ export type MetricasDashboard = {
   aniversariantes_mes: Aniversariante[]
   distribuicao_pagamento: DistribuicaoPagamento
   recebivel_futuro: RecebivelFuturo
+  // A receber com VENCIMENTO dentro do período filtrado (inclui vendas de
+  // períodos anteriores). Não somar com faturamento — são âncoras diferentes.
+  a_receber_periodo: AReceberPorVencimento
   produtos_parados: ProdutoParado[]
   estoque_baixo: ProdutoEstoqueBaixo[]
 }
@@ -334,6 +338,9 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     proximos_90d: recebivelEm(90)
   }
 
+  // A receber ancorado no vencimento, recortado pelo período do filtro.
+  const aReceberPeriodo = aReceberPorVencimento(inicio_atual, fim_atual)
+
   // Produtos parados — janela fixa de 30 dias, independente do filtro da dashboard.
   // dias_parado = dias desde a última venda do produto, ou desde o cadastro se nunca vendeu.
   // Aparece se >= 30 dias parado. Top 5 ordenado pelos mais críticos.
@@ -502,6 +509,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     aniversariantes_mes: aniversariantesMes,
     distribuicao_pagamento: distribuicaoPagamento,
     recebivel_futuro: recebivelFuturo,
+    a_receber_periodo: aReceberPeriodo,
     produtos_parados: produtosParados,
     estoque_baixo: estoqueBaixo
   }

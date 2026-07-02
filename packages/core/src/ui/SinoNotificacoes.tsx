@@ -1,5 +1,6 @@
 import { FC, useEffect, useRef, useState } from 'react'
 import { Bell, Wallet, Package, Settings, Gift, X, ChevronRight } from 'lucide-react'
+import './animacoes.css'
 
 export type NotificacaoItem = {
   id: number
@@ -66,6 +67,19 @@ const SinoNotificacoes: FC<Props> = ({
   const botaoRef = useRef<HTMLButtonElement>(null)
   const [pos, setPos] = useState<{ top: number; right: number }>({ top: 56, right: 16 })
 
+  // O sino badala 1x quando o nº de não-lidas SOBE (aviso novo chegou — inclui a
+  // primeira carga da sessão). Não fica em loop: um convite, não um incômodo.
+  const [badalando, setBadalando] = useState(false)
+  const naoLidasAnterior = useRef(0)
+  useEffect(() => {
+    const subiu = naoLidas > naoLidasAnterior.current
+    naoLidasAnterior.current = naoLidas
+    if (!subiu) return
+    setBadalando(true)
+    const t = window.setTimeout(() => setBadalando(false), 1000)
+    return () => window.clearTimeout(t)
+  }, [naoLidas])
+
   // Ancora o painel logo abaixo do sino (posição fixa, pra não ser cortado por
   // containers com overflow-hidden no caminho).
   useEffect(() => {
@@ -84,9 +98,9 @@ const SinoNotificacoes: FC<Props> = ({
         className="relative w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         title="Notificações"
       >
-        <Bell className="w-5 h-5" />
+        <Bell className={`w-5 h-5 ${badalando ? 'anim-sino-toca' : ''}`} />
         {naoLidas > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
+          <span className="anim-pop absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
             {naoLidas > 99 ? '99+' : naoLidas}
           </span>
         )}
@@ -113,7 +127,7 @@ const SinoNotificacoes: FC<Props> = ({
 
             {itens.length === 0 ? (
               <div className="px-4 py-10 text-center">
-                <Bell className="w-7 h-7 mx-auto mb-2 text-slate-300" />
+                <Bell className="anim-flutua w-7 h-7 mx-auto mb-2 text-slate-300" />
                 <p className="text-sm text-slate-500">Tudo em dia ✨</p>
                 <p className="text-xs text-slate-400 mt-0.5">Nenhum aviso no momento.</p>
               </div>

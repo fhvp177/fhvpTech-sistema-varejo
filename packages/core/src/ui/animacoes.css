@@ -1,0 +1,115 @@
+/* Micro-animações de ícones do UI kit — CSS puro, sem dependência de player.
+ *
+ * Vocabulário:
+ *  - .anim-pop           entrada com "pop" (escala com overshoot), roda 1x ao montar
+ *  - .anim-flutua        flutuação suave contínua (estados vazios, ícones de destaque)
+ *  - .anim-sino-toca     sino badalando 1x (aplicar/remover via estado)
+ *  - .anim-treme         tremida horizontal 1x (feedback de erro)
+ *  - .anim-check-circulo / .anim-check-risco
+ *                        desenho progressivo do check de sucesso (SVG com pathLength="100")
+ *  - .anim-gatilho + .anim-alvo-acena / .anim-alvo-salta
+ *                        hover no elemento-gatilho anima o ícone-alvo (aceno / pulinho)
+ *
+ * Não combinar .anim-pop e .anim-flutua no MESMO elemento (a shorthand `animation`
+ * de uma sobrescreve a outra) — aninhar em elementos separados.
+ */
+
+@keyframes anim-kf-badalar {
+  0%   { transform: rotate(0); }
+  15%  { transform: rotate(14deg); }
+  30%  { transform: rotate(-11deg); }
+  45%  { transform: rotate(8deg); }
+  60%  { transform: rotate(-5deg); }
+  75%  { transform: rotate(2deg); }
+  100% { transform: rotate(0); }
+}
+.anim-sino-toca {
+  animation: anim-kf-badalar 0.9s ease-in-out;
+  transform-origin: top center;
+}
+
+@keyframes anim-kf-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  80%  { transform: scale(0.96); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.anim-pop {
+  animation: anim-kf-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes anim-kf-flutuar {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-5px); }
+}
+.anim-flutua {
+  animation: anim-kf-flutuar 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes anim-kf-tremer {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+.anim-treme {
+  animation: anim-kf-tremer 0.4s ease-in-out;
+}
+
+/* Desenho progressivo de traço SVG. Os elementos devem ter pathLength="100"
+ * para o dasharray bater independente do comprimento real do traço. */
+@keyframes anim-kf-tracar {
+  to { stroke-dashoffset: 0; }
+}
+.anim-check-circulo {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: anim-kf-tracar 0.35s ease-out 0.05s forwards;
+}
+.anim-check-risco {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: anim-kf-tracar 0.25s ease-out 0.4s forwards;
+}
+
+/* Hover no gatilho anima o alvo. A animação reinicia a cada nova entrada do
+ * mouse (o seletor deixa de casar ao sair, o que zera a animação). */
+@keyframes anim-kf-acenar {
+  0%   { transform: rotate(0); }
+  25%  { transform: rotate(-10deg); }
+  55%  { transform: rotate(8deg); }
+  80%  { transform: rotate(-4deg); }
+  100% { transform: rotate(0); }
+}
+.anim-gatilho:hover .anim-alvo-acena {
+  animation: anim-kf-acenar 0.5s ease-in-out;
+}
+
+@keyframes anim-kf-saltar {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-4px); }
+  70% { transform: translateY(1px); }
+}
+.anim-gatilho:hover .anim-alvo-salta {
+  animation: anim-kf-saltar 0.45s ease-out;
+}
+
+/* Acessibilidade: quem pediu menos movimento no SO não vê nada disso. */
+@media (prefers-reduced-motion: reduce) {
+  .anim-sino-toca,
+  .anim-pop,
+  .anim-flutua,
+  .anim-treme,
+  .anim-check-circulo,
+  .anim-check-risco,
+  .anim-gatilho:hover .anim-alvo-acena,
+  .anim-gatilho:hover .anim-alvo-salta {
+    animation: none;
+  }
+  /* Sem animação, o check precisa aparecer já desenhado. */
+  .anim-check-circulo,
+  .anim-check-risco {
+    stroke-dashoffset: 0;
+  }
+}

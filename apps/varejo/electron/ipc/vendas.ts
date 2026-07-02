@@ -12,6 +12,7 @@ import {
   cancelarVenda,
   resumoDashboard,
   produtosMaisVendidosNoMes,
+  aReceberPorVencimentoNoMes,
   type DadosNovaVenda,
   type StatusPagamento
 } from '../db/queries/vendas'
@@ -144,6 +145,17 @@ export function registrarHandlersVendas(): void {
   ipcMain.handle('vendas:produtosMaisVendidos', (_event, mes: string) => {
     try {
       return { success: true, data: produtosMaisVendidosNoMes(mes) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // A receber com vencimento dentro do mês ('YYYY-MM') — usado pelo relatório
+  // de vendas, que não consegue derivar isso das vendas do mês (parcelas de
+  // vendas antigas vencem no mês também).
+  ipcMain.handle('vendas:aReceberDoMes', (_event, mes: string) => {
+    try {
+      return { success: true, data: aReceberPorVencimentoNoMes(mes) }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

@@ -7,6 +7,29 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.23.0',
+    itens: [
+      {
+        emoji: '📅',
+        titulo: 'Quanto vence no período',
+        descricao:
+          'O quadro "A receber" do painel e o relatório do mês agora mostram tudo o que vence no período — incluindo parcelas de vendas de meses anteriores — separando o que está a vencer do que já está em atraso.'
+      },
+      {
+        emoji: '🗓️',
+        titulo: 'Painel abre no mês corrente',
+        descricao:
+          'Ao abrir o sistema, o painel já mostra o mês atual (em vez dos últimos 30 dias). Os botões de período continuam lá para trocar quando quiser.'
+      },
+      {
+        emoji: '✨',
+        titulo: 'Toques de vida na interface',
+        descricao:
+          'O sino badala quando chega aviso novo, as confirmações ganham um check que se desenha, erros dão uma tremidinha e os ícones respondem ao passar do mouse. Tudo sutil — e quem pediu menos movimento no Windows não vê nada disso.'
+      }
+    ]
+  },
+  {
     versao: '1.22.0',
     itens: [
       {

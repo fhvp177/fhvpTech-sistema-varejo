@@ -23,7 +23,7 @@ import { gerarHtmlCupomVenda } from '@/utils/cupomVenda'
 import { obterDadosLoja } from '@/utils/dadosLoja'
 import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
-import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido } from '@/utils/relatorioVendas'
+import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido, type VencimentosMes } from '@/utils/relatorioVendas'
 import { usePdvMode, useSessao } from '@/App'
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
@@ -393,7 +393,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     if (resp.success) {
       await verDetalhes(id)
       await carregar()
-      showToast({ message: `Pagamento de ${fmt(valor)} registrado.` })
+      showToast({ message: `Pagamento de ${fmt(valor)} registrado.`, variant: 'success' })
     } else {
       setErroPagamento(resp.error)
     }
@@ -416,7 +416,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     const resp = await window.api.vendas.atualizarStatus(venda.id, 'pago')
     await carregar()
     if (resp.success) {
-      showToast({ message: 'Venda marcada como paga.' })
+      showToast({ message: 'Venda marcada como paga.', variant: 'success' })
     }
   }
 
@@ -501,7 +501,11 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         const r = await window.api.vendas.produtosMaisVendidos(relMes)
         maisVendidos = r.success ? (r.data as ProdutoMaisVendido[]) : []
       }
-      const html = gerarHtmlRelatorioVendas(vendasDoMesRelatorio, relMes, maisVendidos)
+      // A receber por VENCIMENTO no mês — não dá pra derivar das vendas do mês
+      // (parcelas de vendas antigas vencem nele), então vem do backend.
+      const rVenc = await window.api.vendas.aReceberDoMes(relMes)
+      const vencimentos = rVenc.success ? (rVenc.data as VencimentosMes) : undefined
+      const html = gerarHtmlRelatorioVendas(vendasDoMesRelatorio, relMes, maisVendidos, vencimentos)
       const nome = nomeImpressao.relatorioVendas(relMes)
       if (acao === 'imprimir') {
         const ok = await imprimir(html, nome, 'documento')
@@ -527,7 +531,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     }
     await carregar()
     if (resp.success) {
-      showToast({ message: 'Parcela marcada como paga.' })
+      showToast({ message: 'Parcela marcada como paga.', variant: 'success' })
     }
   }
 

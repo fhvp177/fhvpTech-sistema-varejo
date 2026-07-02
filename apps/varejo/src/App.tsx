@@ -602,7 +602,7 @@ const Sidebar: FC<{
                   end={to === '/'}
                   title={bloqueado ? 'Restrito ao dono' : undefined}
                   className={({ isActive }) =>
-                    `flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+                    `anim-gatilho flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
                       isActive
                         ? 'bg-blue-600 text-white'
                         : bloqueado
@@ -611,7 +611,7 @@ const Sidebar: FC<{
                     }`
                   }
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
+                  <Icon className="anim-alvo-acena w-4 h-4 shrink-0" />
                   <span className="flex-1">{label}</span>
                   {bloqueado && <Lock className="w-3 h-3 shrink-0 text-amber-500/80" />}
                 </NavLink>
