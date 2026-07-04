@@ -65,7 +65,6 @@ type FormCliente = {
   telefone: string
   endereco: string
   cpf: string
-  data_nascimento: string // DD/MM/YYYY no form, YYYY-MM-DD no banco
   tipo_pessoa: TipoPessoa
   cnpj: string
   razao_social: string
@@ -73,22 +72,8 @@ type FormCliente = {
 }
 
 const FORM_VAZIO: FormCliente = {
-  nome: '', telefone: '', endereco: '', cpf: '', data_nascimento: '',
+  nome: '', telefone: '', endereco: '', cpf: '',
   tipo_pessoa: 'fisica', cnpj: '', razao_social: '', observacao: ''
-}
-
-// YYYY-MM-DD → DD/MM/YYYY
-const paraBr = (iso: string | null): string => {
-  if (!iso) return ''
-  const [y, m, d] = iso.split('-')
-  return `${d}/${m}/${y}`
-}
-
-// DD/MM/YYYY → YYYY-MM-DD (retorna null se incompleto)
-const paraIso = (br: string): string | null => {
-  if (br.length < 10) return null
-  const [d, m, y] = br.split('/')
-  return `${y}-${m}-${d}`
 }
 
 const validarCPF = (cpf: string): boolean => {
@@ -123,15 +108,6 @@ const validarCNPJ = (cnpj: string): boolean => {
   resto = soma % 11
   const dig2 = resto < 2 ? 0 : 11 - resto
   return dig2 === parseInt(n[13])
-}
-
-const validarDataBr = (ddmmyyyy: string): boolean => {
-  if (ddmmyyyy.length < 10) return false
-  const [dd, mm, yyyy] = ddmmyyyy.split('/')
-  const d = parseInt(dd), m = parseInt(mm) - 1, y = parseInt(yyyy)
-  if (y < 1900 || y > new Date().getFullYear()) return false
-  const dt = new Date(y, m, d)
-  return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d
 }
 
 const Clientes: FC = () => {
@@ -200,7 +176,6 @@ const Clientes: FC = () => {
       telefone: c.telefone,
       endereco: c.endereco ?? '',
       cpf: c.cpf ?? '',
-      data_nascimento: paraBr(c.data_nascimento),
       tipo_pessoa: c.tipo_pessoa,
       cnpj: c.cnpj ?? '',
       razao_social: c.razao_social ?? '',
@@ -234,16 +209,6 @@ const Clientes: FC = () => {
         }
       }
 
-      if (form.data_nascimento) {
-        if (form.data_nascimento.length < 10) {
-          setErro('Data de nascimento incompleta. Use o formato DD/MM/AAAA.')
-          return
-        }
-        if (!validarDataBr(form.data_nascimento)) {
-          setErro('Data de nascimento inválida. Verifique se o dia, mês e ano existem.')
-          return
-        }
-      }
     } else {
       // Pessoa Jurídica — CNPJ obrigatório
       if (!form.cnpj.trim()) {
@@ -269,7 +234,9 @@ const Clientes: FC = () => {
       telefone: form.telefone,
       endereco: form.endereco.trim() || null,
       cpf: ehPj ? null : (form.cpf || null),
-      data_nascimento: ehPj ? null : paraIso(form.data_nascimento),
+      // Campo removido da UI neste nicho; preserva o valor existente no update
+      // (ex.: cliente vindo de backup restaurado) em vez de apagar por fora.
+      data_nascimento: editando ? editando.data_nascimento : null,
       tipo_pessoa: form.tipo_pessoa,
       cnpj: ehPj ? form.cnpj : null,
       razao_social: ehPj ? (form.razao_social.trim() || null) : null,
@@ -517,29 +484,16 @@ const Clientes: FC = () => {
             </div>
 
             {form.tipo_pessoa === 'fisica' ? (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="cpf">CPF (opcional)</Label>
-                  <IMaskInput
-                    id="cpf"
-                    mask="000.000.000-00"
-                    value={form.cpf}
-                    onAccept={(valor: string) => setForm((f) => ({ ...f, cpf: valor }))}
-                    placeholder="000.000.000-00"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="data_nascimento">Data de Nascimento (opcional)</Label>
-                  <IMaskInput
-                    id="data_nascimento"
-                    mask="00/00/0000"
-                    value={form.data_nascimento}
-                    onAccept={(valor: string) => setForm((f) => ({ ...f, data_nascimento: valor }))}
-                    placeholder="DD/MM/AAAA"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  />
-                </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="cpf">CPF (opcional)</Label>
+                <IMaskInput
+                  id="cpf"
+                  mask="000.000.000-00"
+                  value={form.cpf}
+                  onAccept={(valor: string) => setForm((f) => ({ ...f, cpf: valor }))}
+                  placeholder="000.000.000-00"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
               </div>
             ) : (
               <div className="grid gap-1.5">

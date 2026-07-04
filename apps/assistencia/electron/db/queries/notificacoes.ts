@@ -200,26 +200,8 @@ export function alertasDoBanco(): AlertaVivo[] {
     })
   }
 
-  // Aniversariantes de hoje (gancho de marketing)
-  const { aniv } = db
-    .prepare(
-      `SELECT COUNT(*) AS aniv FROM clientes
-       WHERE data_nascimento IS NOT NULL AND data_nascimento <> ''
-         AND substr(data_nascimento, 6, 5) = strftime('%m-%d', 'now')`
-    )
-    .get() as { aniv: number }
-  if (aniv > 0) {
-    alertas.push({
-      chave: 'aniversariantes',
-      assinatura: `${hoje}:${aniv}`,
-      tipo: 'relacionamento',
-      severidade: 'info',
-      titulo: aniv === 1 ? 'Aniversariante hoje 🎂' : `${aniv} aniversariantes hoje 🎂`,
-      descricao: 'Que tal mandar um parabéns com uma promoção?',
-      rota: '/clientes',
-      acao: null
-    })
-  }
+  // (Sem alerta de aniversariantes neste nicho: o cadastro de cliente da
+  // assistência não coleta data de nascimento — decisão da poda da Fase 1.)
 
   return alertas
 }

@@ -2,7 +2,7 @@ import { FC, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package,
   ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
-  ArrowLeftRight, Target, Trophy, CalendarDays, PiggyBank, Gift, Pencil, Check, X
+  ArrowLeftRight, Target, Trophy, CalendarDays, PiggyBank, Pencil, Check, X
 } from 'lucide-react'
 import FiltroMesPopover from '@/components/FiltroMesPopover'
 import {
@@ -546,11 +546,6 @@ const Dashboard: FC = () => {
         <CardRecebivel metricas={metricas} rotuloPeriodo={rotuloPeriodo} />
         <CardProdutosParados metricas={metricas} carregando={carregandoMetricas} />
         <CardEstoqueBaixo metricas={metricas} />
-      </div>
-
-      {/* ── Aniversariantes do mês ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-        <CardAniversariantes metricas={metricas} />
       </div>
 
       <DividasClienteDialog
@@ -1232,42 +1227,6 @@ const CardDiaSemana: FC<WidgetProps> = ({ metricas, carregando }) => {
           <p className="text-xs text-muted-foreground text-center mt-1">
             <span className="font-semibold text-foreground">{melhor}</span> é o seu melhor dia
           </p>
-        </>
-      )}
-    </div>
-  )
-}
-
-// Aniversariantes do mês corrente — gancho de marketing.
-const CardAniversariantes: FC<{ metricas: MetricasDashboard | null }> = ({ metricas }) => {
-  const dados = metricas?.aniversariantes_mes ?? []
-  return (
-    <div className="border rounded-xl p-4 bg-card">
-      <div className="flex items-center gap-2 mb-3">
-        <Gift className="w-5 h-5 text-muted-foreground" />
-        <h3 className="font-semibold">Aniversariantes do mês</h3>
-      </div>
-      {dados.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">
-          Nenhum aniversariante este mês (ou sem data de nascimento cadastrada).
-        </p>
-      ) : (
-        <>
-          <ul className="space-y-2">
-            {dados.map((a) => (
-              <li key={a.id} className="anim-gatilho flex items-center gap-3 bg-muted/40 rounded-lg px-3 py-2">
-                <div className="w-9 h-9 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center shrink-0">
-                  <Gift className="anim-alvo-acena w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" title={a.nome}>{a.nome}</p>
-                  <p className="text-xs text-muted-foreground">{a.telefone}</p>
-                </div>
-                <span className="text-sm font-semibold text-pink-600">{a.dia}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-xs text-muted-foreground">Oportunidade de mandar um parabéns com uma promoção 🎁</p>
         </>
       )}
     </div>
