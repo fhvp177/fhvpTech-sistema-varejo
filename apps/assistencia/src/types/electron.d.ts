@@ -134,6 +134,16 @@ interface Window {
       listarInadimplentes: () => Promise<RespostaIPC>
       listarVencendoHoje: () => Promise<RespostaIPC>
     }
+    os: {
+      listar: () => Promise<RespostaIPC>
+      obter: (id: number) => Promise<RespostaIPC>
+      criar: (dados: unknown) => Promise<RespostaIPC>
+      atualizar: (id: number, dados: unknown) => Promise<RespostaIPC>
+      definirItens: (id: number, itens: unknown[]) => Promise<RespostaIPC>
+      mudarStatus: (id: number, novo: string, extras?: unknown) => Promise<RespostaIPC>
+      historicoAparelho: (numeroSerie: string, ignorarOsId?: number) => Promise<RespostaIPC>
+      criarGarantia: (osOrigemId: number, defeitoRelatado: string) => Promise<RespostaIPC>
+    }
     fornecedores: {
       listar: () => Promise<RespostaIPC>
       criar: (dados: unknown) => Promise<RespostaIPC>

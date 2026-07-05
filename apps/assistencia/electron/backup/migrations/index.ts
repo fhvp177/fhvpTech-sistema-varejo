@@ -26,6 +26,7 @@ import { aplicar024Notificacoes } from './024_notificacoes'
 import { aplicar025CancelarVenda } from './025_cancelar_venda'
 import { aplicar026ValorPagoAvista } from './026_valor_pago_avista'
 import { aplicar027ProdutoTipo } from './027_produto_tipo'
+import { aplicar028OrdensServico } from './028_ordens_servico'
 
 // Lista de migrations, na ordem de aplicação — herdadas do varejo e mantidas
 // IDÊNTICAS de propósito: o backup de um cliente do varejo restaura direto
@@ -62,4 +63,5 @@ export const MIGRATIONS: Migration[] = [
   { nome: '026_valor_pago_avista', aplicar: aplicar026ValorPagoAvista },
   // ── Daqui pra baixo: migrations PRÓPRIAS da assistência ──
   { nome: '027_produto_tipo', aplicar: aplicar027ProdutoTipo },
+  { nome: '028_ordens_servico', aplicar: aplicar028OrdensServico },
 ]

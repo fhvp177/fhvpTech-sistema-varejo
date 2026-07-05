@@ -96,6 +96,23 @@ const api = {
       ipcRenderer.invoke('vendas:cancelar', id, motivo, pinDono)
   },
 
+  // Ordens de Serviço
+  os: {
+    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('os:listar'),
+    obter: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('os:obter', id),
+    criar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('os:criar', dados),
+    atualizar: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('os:atualizar', id, dados),
+    definirItens: (id: number, itens: unknown[]): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('os:definirItens', id, itens),
+    mudarStatus: (id: number, novo: string, extras?: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('os:mudarStatus', id, novo, extras),
+    historicoAparelho: (numeroSerie: string, ignorarOsId?: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('os:historicoAparelho', numeroSerie, ignorarOsId),
+    criarGarantia: (osOrigemId: number, defeitoRelatado: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('os:criarGarantia', osOrigemId, defeitoRelatado)
+  },
+
   // Auth (PIN do sistema + sessão por vendedor)
   auth: {
     obterStatus: (): Promise<RespostaIPC> => ipcRenderer.invoke('auth:obterStatus'),

@@ -25,6 +25,7 @@ import { registrarHandlersDashboard } from './ipc/dashboard'
 import { registrarHandlersAuth } from './ipc/auth'
 import { registrarHandlersChat } from './ipc/chat'
 import { registrarHandlersDevolucoes } from './ipc/devolucoes'
+import { registrarHandlersOrdens } from './ipc/ordens'
 import { registrarHandlersLoja } from './ipc/loja'
 import { registrarHandlersOnboarding } from './ipc/onboarding'
 import { registrarHandlersNotificacoes } from './ipc/notificacoes'
@@ -103,6 +104,7 @@ app.whenReady().then(() => {
   registrarHandlersAuth()
   registrarHandlersChat()
   registrarHandlersDevolucoes()
+  registrarHandlersOrdens()
   registrarHandlersLoja()
   registrarHandlersOnboarding()
   registrarHandlersNotificacoes()
