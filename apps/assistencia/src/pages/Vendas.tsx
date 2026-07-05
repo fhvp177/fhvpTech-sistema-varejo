@@ -98,9 +98,10 @@ type ItemCarrinho = {
   tamanho: string | null
   codigo_barras: string
   nome: string
+  tipo: 'produto' | 'servico'
   preco_unitario: number
   quantidade: number
-  estoque_disponivel: number
+  estoque_disponivel: number // serviço: MAX_SAFE_INTEGER (quantidade livre)
 }
 
 type Variacao = {
@@ -115,6 +116,7 @@ type Produto = {
   id: number
   codigo_barras: string | null
   nome: string
+  tipo: 'produto' | 'servico'
   preco: number
   estoque: number // simples: o próprio; grade: soma dos tamanhos
   variacoes: Variacao[]
@@ -1325,19 +1327,21 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   // Adiciona ao carrinho. `variacao` definida = vende aquele tamanho (baixa o
   // estoque dele); null = produto simples. A linha do carrinho é única por tamanho.
   const adicionarItem = (produto: Produto, variacao: Variacao | null) => {
+    const ehServico = produto.tipo === 'servico'
     const estoque = variacao ? variacao.estoque : produto.estoque
     const nomeExib = variacao ? `${produto.nome} (${variacao.tamanho})` : produto.nome
     const codigo = variacao ? variacao.codigo_barras : (produto.codigo_barras ?? '')
     const variacaoId = variacao ? variacao.id : null
     const k = chaveItem(produto.id, variacaoId)
 
-    if (estoque <= 0) {
+    // Serviço não tem estoque — as travas de saldo só valem pra produto físico.
+    if (!ehServico && estoque <= 0) {
       setFeedbackScan({ tipo: 'erro', msg: `"${nomeExib}" está sem estoque.` })
       setTimeout(() => setFeedbackScan(null), 3000)
       return
     }
     const existente = carrinho.find((item) => chaveItem(item.produto_id, item.variacao_id) === k)
-    if (existente && existente.quantidade >= estoque) {
+    if (!ehServico && existente && existente.quantidade >= estoque) {
       setFeedbackScan({ tipo: 'erro', msg: `Limite de estoque atingido para "${nomeExib}" (máx ${estoque}).` })
       setTimeout(() => setFeedbackScan(null), 3000)
       return
@@ -1359,9 +1363,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           tamanho: variacao ? variacao.tamanho : null,
           codigo_barras: codigo,
           nome: nomeExib,
+          tipo: produto.tipo,
           preco_unitario: produto.preco,
           quantidade: 1,
-          estoque_disponivel: estoque
+          estoque_disponivel: ehServico ? Number.MAX_SAFE_INTEGER : estoque
         }
       ]
     })
@@ -1794,22 +1799,24 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   <td className="px-3 py-2 font-medium">
                     <div className="truncate max-w-[220px]" title={item.nome}>{item.nome}</div>
                     <div
-                      className="text-xs text-muted-foreground font-mono truncate max-w-[220px]"
-                      title={item.codigo_barras}
+                      className={`text-xs text-muted-foreground truncate max-w-[220px] ${item.tipo === 'servico' ? '' : 'font-mono'}`}
+                      title={item.tipo === 'servico' ? 'Serviço' : item.codigo_barras}
                     >
-                      {item.codigo_barras}
+                      {item.tipo === 'servico' ? 'Serviço' : item.codigo_barras}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-center">
                     <input
                       type="number"
                       min="1"
-                      max={item.estoque_disponivel}
+                      max={item.tipo === 'servico' ? undefined : item.estoque_disponivel}
                       value={item.quantidade}
                       onChange={(e) => atualizarQtd(k, parseInt(e.target.value) || 0)}
                       className="w-16 text-center border rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                     />
-                    <div className="text-xs text-muted-foreground mt-0.5">/ {item.estoque_disponivel}</div>
+                    {item.tipo !== 'servico' && (
+                      <div className="text-xs text-muted-foreground mt-0.5">/ {item.estoque_disponivel}</div>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <input
@@ -2371,10 +2378,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   </div>
                 )
               }
+              const ehServico = p.tipo === 'servico'
+              const esgotado = !ehServico && p.estoque === 0
               return (
                 <button
                   key={p.id}
-                  disabled={p.estoque === 0}
+                  disabled={esgotado}
                   onClick={() => {
                     adicionarItem(p, null)
                     setBuscaProdutos(false)
@@ -2382,16 +2391,18 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   }}
                   className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex justify-between items-center ${
                     i > 0 ? 'border-t' : ''
-                  } ${p.estoque === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-accent'}`}
+                  } ${esgotado ? 'opacity-50 cursor-not-allowed' : 'hover:bg-accent'}`}
                 >
                   <div className="min-w-0">
                     <div className="font-medium truncate" title={p.nome}>{p.nome}</div>
-                    <div className="text-xs text-muted-foreground font-mono truncate" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
+                    {!ehServico && (
+                      <div className="text-xs text-muted-foreground font-mono truncate" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
+                    )}
                   </div>
                   <div className="text-right shrink-0 ml-3">
                     <div className="font-semibold">{fmt(p.preco)}</div>
-                    <div className={`text-xs ${p.estoque === 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                      {p.estoque} em estoque
+                    <div className={`text-xs ${esgotado ? 'text-destructive' : 'text-muted-foreground'}`}>
+                      {ehServico ? 'Serviço' : `${p.estoque} em estoque`}
                     </div>
                   </div>
                 </button>

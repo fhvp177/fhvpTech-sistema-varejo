@@ -17,10 +17,16 @@ export type Variacao = {
   estoque: number
 }
 
+// Produto de prateleira ou serviço prestado: vivem na mesma tabela e no mesmo
+// carrinho — só muda o que faz sentido ter (serviço não tem estoque, código de
+// barras, grade nem fornecedor).
+export type TipoProduto = 'produto' | 'servico'
+
 export type Produto = {
   id: number
   codigo_barras: string | null // null em produto de grade (o código vive nos tamanhos)
   nome: string
+  tipo: TipoProduto
   categoria: string | null
   preco: number
   custo: number
@@ -40,6 +46,7 @@ export type DadosVariacao = {
 export type DadosProduto = {
   codigo_barras: string | null
   nome: string
+  tipo?: TipoProduto // ausente = 'produto' (compat com chamadores antigos, ex. cadastro rápido do PDV)
   categoria: string | null
   preco: number
   custo: number
@@ -176,22 +183,26 @@ function sincronizarVariacoes(produtoId: number, variacoes: DadosVariacao[]): vo
 
 export function criarProduto(dados: DadosProduto): Produto {
   const db = obterBancoDeDados()
-  const temGrade = !!dados.variacoes && dados.variacoes.length > 0
+  const tipo: TipoProduto = dados.tipo === 'servico' ? 'servico' : 'produto'
+  const ehServico = tipo === 'servico'
+  // Serviço nunca tem grade/estoque/código, não importa o que o chamador mandar.
+  const temGrade = !ehServico && !!dados.variacoes && dados.variacoes.length > 0
 
   const criar = db.transaction(() => {
     const result = db
       .prepare(
-        `INSERT INTO produtos (codigo_barras, nome, categoria, preco, custo, estoque, fornecedor_id)
-         VALUES (@codigo_barras, @nome, @categoria, @preco, @custo, @estoque, @fornecedor_id)`
+        `INSERT INTO produtos (codigo_barras, nome, tipo, categoria, preco, custo, estoque, fornecedor_id)
+         VALUES (@codigo_barras, @nome, @tipo, @categoria, @preco, @custo, @estoque, @fornecedor_id)`
       )
       .run({
-        codigo_barras: temGrade ? null : dados.codigo_barras,
+        codigo_barras: ehServico || temGrade ? null : dados.codigo_barras,
         nome: dados.nome,
+        tipo,
         categoria: dados.categoria,
         preco: dados.preco,
         custo: dados.custo,
-        estoque: temGrade ? 0 : dados.estoque,
-        fornecedor_id: dados.fornecedor_id
+        estoque: ehServico || temGrade ? 0 : dados.estoque,
+        fornecedor_id: ehServico ? null : dados.fornecedor_id
       })
     const id = result.lastInsertRowid as number
     if (temGrade) sincronizarVariacoes(id, dados.variacoes!)
@@ -204,13 +215,16 @@ export function criarProduto(dados: DadosProduto): Produto {
 
 export function atualizarProduto(id: number, dados: DadosProduto): void {
   const db = obterBancoDeDados()
-  const temGrade = !!dados.variacoes && dados.variacoes.length > 0
+  const tipo: TipoProduto = dados.tipo === 'servico' ? 'servico' : 'produto'
+  const ehServico = tipo === 'servico'
+  const temGrade = !ehServico && !!dados.variacoes && dados.variacoes.length > 0
 
   const atualizar = db.transaction(() => {
     db.prepare(
       `UPDATE produtos
        SET codigo_barras = @codigo_barras,
            nome = @nome,
+           tipo = @tipo,
            categoria = @categoria,
            preco = @preco,
            custo = @custo,
@@ -219,13 +233,14 @@ export function atualizarProduto(id: number, dados: DadosProduto): void {
        WHERE id = @id`
     ).run({
       id,
-      codigo_barras: temGrade ? null : dados.codigo_barras,
+      codigo_barras: ehServico || temGrade ? null : dados.codigo_barras,
       nome: dados.nome,
+      tipo,
       categoria: dados.categoria,
       preco: dados.preco,
       custo: dados.custo,
-      estoque: temGrade ? 0 : dados.estoque,
-      fornecedor_id: dados.fornecedor_id
+      estoque: ehServico || temGrade ? 0 : dados.estoque,
+      fornecedor_id: ehServico ? null : dados.fornecedor_id
     })
     // Grade: sincroniza os tamanhos. Simples: remove qualquer grade que existia
     // (caso o produto tenha deixado de ser de grade nesta edição).
@@ -238,18 +253,27 @@ export function atualizarProduto(id: number, dados: DadosProduto): void {
 
 export function deletarProduto(id: number): void {
   const db = obterBancoDeDados()
+  const alvo = db.prepare('SELECT tipo FROM produtos WHERE id = ?').get(id) as
+    | { tipo: TipoProduto }
+    | undefined
   const apagar = db.transaction(() => {
     db.prepare('DELETE FROM produto_variacoes WHERE produto_id = ?').run(id)
     db.prepare('DELETE FROM produtos WHERE id = ?').run(id)
   })
   comErroAmigavelDeVinculo(
     apagar,
-    'Não dá pra excluir este produto porque ele já aparece em vendas registradas. ' +
-      'Para tirá-lo do dia a dia, zere o estoque dele.'
+    alvo?.tipo === 'servico'
+      ? 'Não dá pra excluir este serviço porque ele já aparece em vendas registradas.'
+      : 'Não dá pra excluir este produto porque ele já aparece em vendas registradas. ' +
+          'Para tirá-lo do dia a dia, zere o estoque dele.'
   )
 }
 
 export function atualizarEstoque(id: number, quantidade: number): void {
   const db = obterBancoDeDados()
-  db.prepare('UPDATE produtos SET estoque = estoque + ? WHERE id = ?').run(quantidade, id)
+  // Guarda no SQL: serviço não tem estoque, não importa quem chame.
+  db.prepare("UPDATE produtos SET estoque = estoque + ? WHERE id = ? AND tipo != 'servico'").run(
+    quantidade,
+    id
+  )
 }

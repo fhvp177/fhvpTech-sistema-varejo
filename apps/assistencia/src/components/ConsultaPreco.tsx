@@ -12,6 +12,7 @@ export type ProdutoConsulta = {
   id: number
   codigo_barras: string | null
   nome: string
+  tipo: 'produto' | 'servico'
   preco: number
   estoque: number // simples: o próprio; grade: soma dos tamanhos
   variacoes?: Array<{ id: number; tamanho: string; codigo_barras: string; estoque: number }>
@@ -96,23 +97,27 @@ const ConsultaPreco: FC<Props> = ({ aberto, onFechar, produtos }) => {
                       <p className="text-xs text-muted-foreground">
                         {p.variacoes.map((v) => `${v.tamanho}: ${v.estoque}`).join(' · ')}
                       </p>
+                    ) : p.tipo === 'servico' ? (
+                      <p className="text-xs text-muted-foreground">Serviço</p>
                     ) : (
                       <p className="text-xs text-muted-foreground font-mono">{p.codigo_barras ?? '—'}</p>
                     )}
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-xl font-bold text-primary leading-tight">{fmt(p.preco)}</p>
-                    <p
-                      className={`text-xs mt-0.5 ${
-                        p.estoque === 0
-                          ? 'text-destructive'
-                          : p.estoque <= 5
-                            ? 'text-amber-600'
-                            : 'text-muted-foreground'
-                      }`}
-                    >
-                      {p.estoque === 0 ? 'Sem estoque' : `${p.estoque} em estoque`}
-                    </p>
+                    {p.tipo !== 'servico' && (
+                      <p
+                        className={`text-xs mt-0.5 ${
+                          p.estoque === 0
+                            ? 'text-destructive'
+                            : p.estoque <= 5
+                              ? 'text-amber-600'
+                              : 'text-muted-foreground'
+                        }`}
+                      >
+                        {p.estoque === 0 ? 'Sem estoque' : `${p.estoque} em estoque`}
+                      </p>
+                    )}
                   </div>
                 </li>
               ))}

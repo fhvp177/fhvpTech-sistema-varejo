@@ -1,5 +1,5 @@
 import { FC, Fragment, useEffect, useRef, useState } from 'react'
-import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, ChevronRight, ChevronDown, Layers, Info } from 'lucide-react'
+import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, ChevronRight, ChevronDown, Layers, Info, Package, Wrench } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { useImprimir } from '@/components/ImpressaoProvider'
@@ -29,10 +29,13 @@ type Variacao = {
   estoque: number
 }
 
+type TipoProduto = 'produto' | 'servico'
+
 type Produto = {
   id: number
   codigo_barras: string | null
   nome: string
+  tipo: TipoProduto
   categoria: string | null
   preco: number
   custo: number
@@ -50,6 +53,7 @@ const TAMANHOS_GRADE = ['P', 'M', 'G', 'GG'] as const
 type FormVariacao = { tamanho: string; codigo_barras: string; estoque: string }
 
 type FormProduto = {
+  tipo: TipoProduto
   codigo_barras: string
   nome: string
   categoria: string
@@ -79,6 +83,7 @@ const construirGrade = (vs: Variacao[]): FormVariacao[] => {
 }
 
 const FORM_VAZIO: FormProduto = {
+  tipo: 'produto',
   codigo_barras: '',
   nome: '',
   categoria: '',
@@ -287,9 +292,12 @@ const Produtos: FC = () => {
   const inicioPagina = (paginaAtual - 1) * ITENS_POR_PAGINA
   const listaPaginada = listaFiltrada.slice(inicioPagina, inicioPagina + ITENS_POR_PAGINA)
 
-  const abrirNovo = () => {
+  // Só mercadoria física entra no relatório de estoque — serviço não tem estoque.
+  const produtosFisicos = lista.filter((p) => p.tipo !== 'servico')
+
+  const abrirNovo = (tipo: TipoProduto = 'produto') => {
     setEditando(null)
-    setForm(FORM_VAZIO)
+    setForm({ ...FORM_VAZIO, tipo })
     setErro('')
     setDialogAberto(true)
   }
@@ -298,6 +306,7 @@ const Produtos: FC = () => {
     const temGrade = p.variacoes.length > 0
     setEditando(p)
     setForm({
+      tipo: p.tipo,
       codigo_barras: p.codigo_barras ?? '',
       nome: p.nome,
       categoria: p.categoria ?? '',
@@ -331,7 +340,11 @@ const Produtos: FC = () => {
     }))
 
   const salvar = async () => {
-    if (!form.nome.trim()) { setErro('O nome do produto é obrigatório.'); return }
+    const ehServico = form.tipo === 'servico'
+    if (!form.nome.trim()) {
+      setErro(ehServico ? 'O nome do serviço é obrigatório.' : 'O nome do produto é obrigatório.')
+      return
+    }
     const preco = parseFloat(form.preco.replace(',', '.'))
     if (isNaN(preco) || preco < 0) { setErro('Preço inválido.'); return }
     const custo = form.custo.trim() ? parseFloat(form.custo.replace(',', '.')) : 0
@@ -340,7 +353,7 @@ const Produtos: FC = () => {
     // Tamanhos efetivamente cadastrados = os que têm código de barras preenchido.
     const ativos = form.variacoes.filter((v) => v.codigo_barras.trim())
 
-    if (form.temGrade) {
+    if (form.temGrade && !ehServico) {
       if (ativos.length === 0) {
         setErro('Adicione ao menos um tamanho com código de barras (ou desligue a grade).'); return
       }
@@ -352,7 +365,7 @@ const Produtos: FC = () => {
       if (new Set(codigos).size !== codigos.length) {
         setErro('Há códigos de barras repetidos entre os tamanhos.'); return
       }
-    } else if (!form.codigo_barras.trim()) {
+    } else if (!ehServico && !form.codigo_barras.trim()) {
       setErro('O código de barras é obrigatório.'); return
     }
 
@@ -360,14 +373,15 @@ const Produtos: FC = () => {
     setErro('')
 
     const dados = {
-      codigo_barras: form.temGrade ? null : form.codigo_barras.trim(),
+      tipo: form.tipo,
+      codigo_barras: ehServico || form.temGrade ? null : form.codigo_barras.trim(),
       nome: form.nome.trim(),
       categoria: form.categoria.trim() || null,
       preco,
       custo,
-      estoque: form.temGrade ? 0 : parseInt(form.estoque) || 0,
-      fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
-      variacoes: form.temGrade
+      estoque: ehServico || form.temGrade ? 0 : parseInt(form.estoque) || 0,
+      fornecedor_id: !ehServico && form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
+      variacoes: form.temGrade && !ehServico
         ? ativos.map((v) => ({
             tamanho: v.tamanho,
             codigo_barras: v.codigo_barras.trim(),
@@ -424,25 +438,26 @@ const Produtos: FC = () => {
   const confirmar = useConfirm()
   const imprimir = useImprimir()
 
-  const excluir = async (id: number, nome: string) => {
+  const excluir = async (p: Produto) => {
+    const rotulo = p.tipo === 'servico' ? 'serviço' : 'produto'
     if (
       !(await confirmar({
-        titulo: 'Excluir produto',
-        mensagem: `Tem certeza que deseja excluir o produto "${nome}"?`,
+        titulo: `Excluir ${rotulo}`,
+        mensagem: `Tem certeza que deseja excluir o ${rotulo} "${p.nome}"?`,
         variante: 'destructive'
       }))
     )
       return
-    const resp = await window.api.produtos.deletar(id)
+    const resp = await window.api.produtos.deletar(p.id)
     if (resp.success) await carregar()
     else alert(`Erro: ${resp.error}`)
   }
 
   const gerarRelatorio = async (acao: 'pdf' | 'imprimir') => {
-    if (lista.length === 0) return
+    if (produtosFisicos.length === 0) return
     setGerandoRelatorio(true)
     try {
-      const html = gerarHtmlRelatorio(lista)
+      const html = gerarHtmlRelatorio(produtosFisicos)
       const nome = nomeImpressao.relatorioEstoque()
       if (acao === 'imprimir') {
         const ok = await imprimir(html, nome, 'documento')
@@ -463,7 +478,7 @@ const Produtos: FC = () => {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Produtos</h2>
+        <h2 className="text-2xl font-bold">Produtos e Serviços</h2>
         <div className="flex gap-2">
           {ehDono && (
             <Button variant="outline" onClick={() => setModalCategoriasAberto(true)}>
@@ -474,16 +489,22 @@ const Produtos: FC = () => {
           <Button
             variant="outline"
             onClick={() => setRelatorioAberto(true)}
-            disabled={lista.length === 0}
+            disabled={produtosFisicos.length === 0}
           >
             <Printer className="w-4 h-4 mr-2" />
             Imprimir Estoque
           </Button>
           {ehDono && (
-            <Button onClick={abrirNovo}>
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Produto
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => abrirNovo('servico')}>
+                <Wrench className="w-4 h-4 mr-2" />
+                Novo Serviço
+              </Button>
+              <Button onClick={() => abrirNovo('produto')}>
+                <Plus className="w-4 h-4 mr-2" />
+                Novo Produto
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -530,7 +551,7 @@ const Produtos: FC = () => {
             {listaFiltrada.length === 0 && (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-muted-foreground">
-                  {busca ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
+                  {busca ? 'Nenhum item encontrado.' : 'Nenhum item cadastrado.'}
                 </td>
               </tr>
             )}
@@ -556,6 +577,11 @@ const Produtos: FC = () => {
                       <Layers className="w-3.5 h-3.5" />
                       {p.variacoes.length} tam.
                     </button>
+                  ) : p.tipo === 'servico' ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-[11px] font-semibold font-sans">
+                      <Wrench className="w-3 h-3" />
+                      Serviço
+                    </span>
                   ) : (
                     <div className="truncate max-w-[150px]" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
                   )}
@@ -571,8 +597,8 @@ const Produtos: FC = () => {
                 <td className="px-4 py-3 text-right">
                   {p.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </td>
-                <td className={`px-4 py-3 text-right font-medium ${p.estoque === 0 ? 'text-destructive' : p.estoque <= 5 ? 'text-amber-600' : ''}`}>
-                  {p.estoque}
+                <td className={`px-4 py-3 text-right font-medium ${p.tipo === 'servico' ? 'text-muted-foreground font-normal' : p.estoque === 0 ? 'text-destructive' : p.estoque <= 5 ? 'text-amber-600' : ''}`}>
+                  {p.tipo === 'servico' ? '—' : p.estoque}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {p.fornecedor_nome
@@ -589,7 +615,7 @@ const Produtos: FC = () => {
                         variant="ghost"
                         size="icon"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => excluir(p.id, p.nome)}
+                        onClick={() => excluir(p)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -628,19 +654,50 @@ const Produtos: FC = () => {
         totalItens={listaFiltrada.length}
         itensPorPagina={ITENS_POR_PAGINA}
         onMudarPagina={setPaginaAtual}
-        rotuloItem="produto(s)"
+        rotuloItem="item(ns)"
       />
 
       {/* Dialog criar/editar */}
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
         <DialogContent className="max-w-[640px]">
           <DialogHeader>
-            <DialogTitle>{editando ? 'Editar Produto' : 'Novo Produto'}</DialogTitle>
+            <DialogTitle>
+              {editando
+                ? form.tipo === 'servico' ? 'Editar Serviço' : 'Editar Produto'
+                : form.tipo === 'servico' ? 'Novo Serviço' : 'Novo Produto'}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
-            {/* Código de barras + gerador (só quando o produto NÃO é de grade) */}
-            {!form.temGrade && (
+            {/* Produto de prateleira ou serviço prestado? Trocar aqui também é o
+                caminho pra reclassificar um "serviço-fantasma" cadastrado como
+                produto (herança de quem usava o sistema improvisado). */}
+            <div className="grid gap-1.5">
+              <div className="flex gap-2">
+                {(['produto', 'servico'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, tipo: t, temGrade: t === 'servico' ? false : f.temGrade }))}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                      form.tipo === t ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    {t === 'produto' ? <Package className="w-4 h-4" /> : <Wrench className="w-4 h-4" />}
+                    {t === 'produto' ? 'Produto' : 'Serviço'}
+                  </button>
+                ))}
+              </div>
+              {editando && editando.tipo === 'produto' && form.tipo === 'servico' && (
+                <p className="text-xs text-amber-600">
+                  Ao salvar como serviço, o código de barras, o estoque e o fornecedor deste
+                  cadastro serão removidos (o histórico de vendas não muda).
+                </p>
+              )}
+            </div>
+
+            {/* Código de barras + gerador (só produto físico fora da grade) */}
+            {form.tipo !== 'servico' && !form.temGrade && (
             <div className="grid gap-1.5">
               <Label htmlFor="codigo_barras">
                 Código de barras <span className="text-destructive">*</span>
@@ -687,7 +744,7 @@ const Produtos: FC = () => {
                   id="nome"
                   value={form.nome}
                   onChange={setF('nome')}
-                  placeholder="Nome do produto"
+                  placeholder={form.tipo === 'servico' ? 'Ex.: Formatação de computador' : 'Nome do produto'}
                 />
               </div>
 
@@ -719,6 +776,7 @@ const Produtos: FC = () => {
                 </div>
               </div>
 
+              {form.tipo !== 'servico' && (
               <div className="grid gap-1.5">
                 <Label htmlFor="fornecedor">Fornecedor</Label>
                 <div className="flex gap-2">
@@ -746,10 +804,11 @@ const Produtos: FC = () => {
                   </Button>
                 </div>
               </div>
+              )}
 
               {/* Esse produto tem tamanhos? Só aparece para categorias que usam
                   grade (ou se o produto já é de grade, ao editar). */}
-              {mostrarOpcaoGrade && (
+              {form.tipo !== 'servico' && mostrarOpcaoGrade && (
                 <label className="col-span-2 flex items-center gap-2 text-sm font-medium cursor-pointer select-none rounded-md border bg-muted/30 px-3 py-2">
                   <input
                     type="checkbox"
@@ -779,8 +838,14 @@ const Produtos: FC = () => {
 
               <div className="grid gap-1.5">
                 <Label htmlFor="custo" className="flex items-center gap-1.5">
-                  Preço de compra (R$)
-                  <Tooltip content="Quanto você paga no produto. Usado pro lucro/margem na dashboard.">
+                  {form.tipo === 'servico' ? 'Custo (R$)' : 'Preço de compra (R$)'}
+                  <Tooltip
+                    content={
+                      form.tipo === 'servico'
+                        ? 'Custo de material/peças embutido no serviço, se houver. Usado pro lucro/margem na dashboard.'
+                        : 'Quanto você paga no produto. Usado pro lucro/margem na dashboard.'
+                    }
+                  >
                     <Info className="w-3.5 h-3.5 cursor-help text-muted-foreground" />
                   </Tooltip>
                 </Label>
@@ -795,7 +860,7 @@ const Produtos: FC = () => {
                 />
               </div>
 
-              {!form.temGrade && (
+              {form.tipo !== 'servico' && !form.temGrade && (
               <div className="grid gap-1.5">
                 <Label htmlFor="estoque">Estoque inicial</Label>
                 <Input
@@ -916,7 +981,7 @@ const Produtos: FC = () => {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              {lista.length} produto(s) em estoque. Escolha como deseja gerar o relatório.
+              {produtosFisicos.length} produto(s) em estoque. Escolha como deseja gerar o relatório.
             </p>
             <div className="flex gap-2">
               <Button

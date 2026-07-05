@@ -6,6 +6,7 @@ import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 
 export type ProdutoChat = {
   nome: string
+  tipo: string // 'produto' | 'servico' — o modelo usa pra não falar de "estoque" de serviço
   categoria: string | null
   preco: number
   estoque: number
@@ -20,7 +21,7 @@ export function buscarProdutos(termo: string | undefined, limite = 40): ProdutoC
   const like = `%${(termo ?? '').trim()}%`
   return db
     .prepare(
-      `SELECT p.nome, p.categoria, p.preco,
+      `SELECT p.nome, p.tipo, p.categoria, p.preco,
               CASE WHEN EXISTS (SELECT 1 FROM produto_variacoes v WHERE v.produto_id = p.id)
                    THEN (SELECT COALESCE(SUM(v.estoque), 0) FROM produto_variacoes v WHERE v.produto_id = p.id)
                    ELSE p.estoque END AS estoque,

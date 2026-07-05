@@ -365,7 +365,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
              ) AS INTEGER
            ) AS dias_parado
          FROM produtos p
-         WHERE p.estoque > 0
+         WHERE p.estoque > 0 AND p.tipo != 'servico'
        )
        WHERE dias_parado >= 30
        ORDER BY dias_parado DESC, estoque DESC, nome COLLATE NOCASE
@@ -382,6 +382,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
          SELECT p.id AS produto_id, p.nome AS nome, p.estoque AS estoque, NULL AS tamanho
          FROM produtos p
          WHERE p.estoque > 0 AND p.estoque <= 5
+           AND p.tipo != 'servico'
            AND NOT EXISTS (SELECT 1 FROM produto_variacoes v WHERE v.produto_id = p.id)
          UNION ALL
          SELECT p.id AS produto_id, p.nome AS nome, pv.estoque AS estoque, pv.tamanho AS tamanho

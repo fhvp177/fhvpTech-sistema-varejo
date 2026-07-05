@@ -273,11 +273,12 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       }
     } else {
       const produto = db
-        .prepare('SELECT nome, estoque FROM produtos WHERE id = ?')
-        .get(item.produto_id) as { nome: string; estoque: number } | undefined
+        .prepare('SELECT nome, estoque, tipo FROM produtos WHERE id = ?')
+        .get(item.produto_id) as { nome: string; estoque: number; tipo: string } | undefined
 
       if (!produto) throw new Error(`Produto #${item.produto_id} não encontrado.`)
-      if (item.quantidade > produto.estoque) {
+      // Serviço não tem estoque — a quantidade é livre.
+      if (produto.tipo !== 'servico' && item.quantidade > produto.estoque) {
         throw new Error(
           `Estoque insuficiente para "${produto.nome}": ` +
           `solicitado ${item.quantidade}, disponível ${produto.estoque}.`
@@ -336,8 +337,10 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
     `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario)
      VALUES (@venda_id, @produto_id, @variacao_id, @quantidade, @preco_unitario)`
   )
+  // O `tipo != 'servico'` no próprio UPDATE garante que estoque de serviço
+  // nunca se mexe, não importa o chamador (idem no cancelamento e na devolução).
   const decrementarEstoqueProduto = db.prepare(
-    'UPDATE produtos SET estoque = estoque - ? WHERE id = ?'
+    "UPDATE produtos SET estoque = estoque - ? WHERE id = ? AND tipo != 'servico'"
   )
   const decrementarEstoqueVariacao = db.prepare(
     'UPDATE produto_variacoes SET estoque = estoque - ? WHERE id = ?'
@@ -678,7 +681,9 @@ export function cancelarVenda(id: number, canceladaPorId: number, motivo: string
   db.transaction(() => {
     if (elegivel.cenario === 'virgem') {
       // Venda nunca acertada por devolução: devolve o estoque ao cancelar.
-      const incProduto = db.prepare('UPDATE produtos SET estoque = estoque + ? WHERE id = ?')
+      const incProduto = db.prepare(
+        "UPDATE produtos SET estoque = estoque + ? WHERE id = ? AND tipo != 'servico'"
+      )
       const incVariacao = db.prepare('UPDATE produto_variacoes SET estoque = estoque + ? WHERE id = ?')
       for (const it of itens) {
         if (it.variacao_id != null) incVariacao.run(it.quantidade, it.variacao_id)

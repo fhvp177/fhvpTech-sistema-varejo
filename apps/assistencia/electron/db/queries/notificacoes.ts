@@ -151,6 +151,7 @@ export function alertasDoBanco(): AlertaVivo[] {
       `SELECT COUNT(*) AS estoqueBaixo FROM (
          SELECT 1 FROM produtos p
          WHERE p.estoque > 0 AND p.estoque <= 5
+           AND p.tipo != 'servico'
            AND NOT EXISTS (SELECT 1 FROM produto_variacoes v WHERE v.produto_id = p.id)
          UNION ALL
          SELECT 1 FROM produto_variacoes pv
@@ -183,7 +184,7 @@ export function alertasDoBanco(): AlertaVivo[] {
            )
          ) AS INTEGER) AS dias
          FROM produtos p
-         WHERE p.estoque > 0
+         WHERE p.estoque > 0 AND p.tipo != 'servico'
        ) WHERE dias >= 30`
     )
     .get() as { parados: number }

@@ -169,7 +169,10 @@ export function registrarDevolucao(dados: DadosNovaDevolucao): Devolucao {
     `INSERT INTO itens_devolucao (devolucao_id, item_venda_id, produto_id, quantidade, valor_unitario_devolvido, restocado)
      VALUES (@devolucao_id, @item_venda_id, @produto_id, @quantidade, @valor_unitario_devolvido, @restocado)`
   )
-  const incrementarEstoqueProduto = db.prepare('UPDATE produtos SET estoque = estoque + ? WHERE id = ?')
+  // Serviço devolvido = dinheiro/crédito de volta, mas nada entra em estoque.
+  const incrementarEstoqueProduto = db.prepare(
+    "UPDATE produtos SET estoque = estoque + ? WHERE id = ? AND tipo != 'servico'"
+  )
   const incrementarEstoqueVariacao = db.prepare('UPDATE produto_variacoes SET estoque = estoque + ? WHERE id = ?')
   const inserirCredito = db.prepare(
     `INSERT INTO creditos_cliente (cliente_id, tipo, valor, devolucao_id)

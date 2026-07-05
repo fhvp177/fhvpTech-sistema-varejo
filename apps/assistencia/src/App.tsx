@@ -487,7 +487,7 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Cadastros',
     itens: [
-      { to: '/produtos', label: 'Produtos', icon: Package },
+      { to: '/produtos', label: 'Produtos e Serviços', icon: Package },
       { to: '/clientes', label: 'Clientes', icon: Users },
       { to: '/fornecedores', label: 'Fornecedores', icon: Truck }
     ]
