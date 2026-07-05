@@ -3,7 +3,7 @@ import {
 } from 'lucide-react'
 import type { SlideGuia } from '@fhvptech/core/ui/GuiaBoasVindas'
 
-// Monta os slides do guia de boas-vindas do varejo. Slides de features opcionais
+// Monta os slides do guia de boas-vindas da assistência técnica. Slides de features opcionais
 // (Dashboard, Etiquetas, Assistente IA) só entram se a EDIÇÃO os tiver ligados —
 // assim o tutorial nunca mostra algo que aquele build não tem.
 export function construirSlidesGuia(): SlideGuia[] {
@@ -13,7 +13,7 @@ export function construirSlidesGuia(): SlideGuia[] {
       corIcone: 'bg-blue-100 text-blue-600',
       titulo: 'Bem-vindo ao FHVP Tech',
       descricao:
-        'Seu sistema de gestão de loja, completo e fácil. Em menos de um minuto, vou te mostrar tudo que ele faz por você.'
+        'Seu sistema de gestão da assistência técnica, completo e fácil. Em menos de um minuto, vou te mostrar tudo que ele faz por você.'
     },
     {
       icone: <ShoppingCart className="w-8 h-8" />,
@@ -27,7 +27,7 @@ export function construirSlidesGuia(): SlideGuia[] {
       corIcone: 'bg-orange-100 text-orange-600',
       titulo: 'Controle seu estoque',
       descricao:
-        'Cadastre produtos com preço e quantidade, use grade de tamanhos (P ao GG) e receba alertas automáticos quando algo estiver acabando.'
+        'Cadastre produtos com preço e quantidade e receba alertas automáticos quando algo estiver acabando.'
     },
     {
       icone: <Users className="w-8 h-8" />,
@@ -44,7 +44,7 @@ export function construirSlidesGuia(): SlideGuia[] {
       corIcone: 'bg-indigo-100 text-indigo-600',
       titulo: 'Enxergue seu negócio',
       descricao:
-        'A Dashboard mostra faturamento, lucro, ticket médio, ranking de vendedores e muito mais — para você decidir com dados, não no achismo.'
+        'A Dashboard mostra faturamento, lucro, ticket médio, ranking de técnicos e muito mais — para você decidir com dados, não no achismo.'
     })
   }
 

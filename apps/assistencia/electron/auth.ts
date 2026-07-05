@@ -51,9 +51,9 @@ export async function verificarPinVendedor(
 export async function definirPinVendedor(vendedorId: number, pin: string): Promise<void> {
   validarFormatoPin(pin)
   const v = obterVendedor(vendedorId)
-  if (!v) throw new Error('Vendedor não encontrado.')
+  if (!v) throw new Error('Técnico não encontrado.')
   if (v.tem_pin === 1) {
-    throw new Error('Este vendedor já tem PIN definido. Use a opção de alterar.')
+    throw new Error('Este técnico já tem PIN definido. Use a opção de alterar.')
   }
   const hash = await gerarHash(pin)
   gravarPinHash(vendedorId, hash)

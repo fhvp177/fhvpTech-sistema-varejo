@@ -150,7 +150,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
     if (erroLista) {
       return (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-          <p className="font-semibold mb-1">Não foi possível carregar os vendedores</p>
+          <p className="font-semibold mb-1">Não foi possível carregar os técnicos</p>
           <p>{erroLista}</p>
         </div>
       )
@@ -159,7 +159,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
     if (vendedores.length === 0) {
       return (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-          Nenhum vendedor cadastrado. Entre em contato com o suporte.
+          Nenhum técnico cadastrado. Entre em contato com o suporte.
         </div>
       )
     }
@@ -191,7 +191,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
                         </>
                       ) : (
                         <>
-                          <UserIcon className="w-3 h-3" /> Vendedor
+                          <UserIcon className="w-3 h-3" /> Técnico
                         </>
                       )}
                       {v.tem_pin === 0 && (
@@ -220,7 +220,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate">{selecionado.nome}</p>
             <p className="text-xs text-slate-500">
-              {selecionado.papel === 'dono' ? 'Dono da loja' : 'Vendedor'}
+              {selecionado.papel === 'dono' ? 'Dono da loja' : 'Técnico'}
             </p>
           </div>
           {vendedores.length > 1 && (

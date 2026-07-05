@@ -295,7 +295,7 @@ const App: FC = () => {
       <>
         <LicencaBloqueada
           mensagemInicial={mensagemLicenca}
-          subtitulo="Sistema de Gestão de Varejo"
+          subtitulo="Sistema de Gestão de Assistência Técnica"
           onAtivar={(dias) => { setEstadoLicenca('valida'); if (dias !== undefined) setDiasRestantes(dias) }}
           onRenovarComPix={abrirPagamento}
         />
@@ -546,7 +546,7 @@ const UserMenu: FC<{ vendedor: SessaoVendedor; onSair: () => void }> = ({
                 <Crown className="w-3 h-3 text-amber-400" /> Dono
               </>
             ) : (
-              'Vendedor'
+              'Técnico'
             )}
           </p>
         </div>
@@ -581,7 +581,7 @@ const Sidebar: FC<{
   <nav className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
     <div className="mb-4">
       <h1 className="text-lg font-bold text-white">FHVP Tech</h1>
-      <p className="text-xs text-slate-400">Sistema de Gestão de Varejo</p>
+      <p className="text-xs text-slate-400">Sistema de Gestão de Assistência Técnica</p>
     </div>
 
     {vendedor && <UserMenu vendedor={vendedor} onSair={onBloquear} />}

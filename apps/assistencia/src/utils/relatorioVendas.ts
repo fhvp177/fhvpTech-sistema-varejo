@@ -136,7 +136,7 @@ export function gerarHtmlRelatorioVendas(
   // ── Por vendedor ──
   const mapaVendedor = new Map<string, { qtd: number; total: number }>()
   for (const v of vendas) {
-    const nome = v.vendedor_nome || 'Sem vendedor'
+    const nome = v.vendedor_nome || 'Sem técnico'
     const atual = mapaVendedor.get(nome) ?? { qtd: 0, total: 0 }
     atual.qtd += 1
     atual.total += v.total
@@ -253,9 +253,9 @@ export function gerarHtmlRelatorioVendas(
       </table>
     </div>
     <div class="grupo">
-      <div class="grupo-titulo">POR VENDEDOR</div>
+      <div class="grupo-titulo">POR TÉCNICO</div>
       <table>
-        <thead><tr><th>Vendedor</th><th class="col-num">Vendas</th><th class="col-num">Total</th></tr></thead>
+        <thead><tr><th>Técnico</th><th class="col-num">Vendas</th><th class="col-num">Total</th></tr></thead>
         <tbody>${vendedorHtml || '<tr><td colspan="3">—</td></tr>'}</tbody>
       </table>
     </div>
@@ -270,7 +270,7 @@ export function gerarHtmlRelatorioVendas(
         <th class="col-id">#</th>
         <th>Data</th>
         <th>Cliente</th>
-        <th>Vendedor</th>
+        <th>Técnico</th>
         <th class="col-num">Total</th>
         <th>Status</th>
       </tr></thead>

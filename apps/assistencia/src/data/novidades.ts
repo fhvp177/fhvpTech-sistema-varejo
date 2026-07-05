@@ -2,108 +2,12 @@ import type { ItemNovidade } from '@fhvptech/core/ui/NovidadesModal'
 
 export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 
-// Novidades por versão, em linguagem de lojista (não changelog técnico).
+// Novidades por versão, em linguagem do dono (não changelog técnico).
 // A CADA release, adicione uma entrada nova aqui com os destaques amigáveis.
 // A `versao` deve bater com a `version` do package.json.
-export const NOVIDADES: ReleaseNovidades[] = [
-  {
-    versao: '1.23.0',
-    itens: [
-      {
-        emoji: '📅',
-        titulo: 'Quanto vence no período',
-        descricao:
-          'O quadro "A receber" do painel e o relatório do mês agora mostram tudo o que vence no período — incluindo parcelas de vendas de meses anteriores — separando o que está a vencer do que já está em atraso.'
-      },
-      {
-        emoji: '🗓️',
-        titulo: 'Painel abre no mês corrente',
-        descricao:
-          'Ao abrir o sistema, o painel já mostra o mês atual (em vez dos últimos 30 dias). Os botões de período continuam lá para trocar quando quiser.'
-      },
-      {
-        emoji: '✨',
-        titulo: 'Toques de vida na interface',
-        descricao:
-          'O sino badala quando chega aviso novo, as confirmações ganham um check que se desenha, erros dão uma tremidinha e os ícones respondem ao passar do mouse. Tudo sutil — e quem pediu menos movimento no Windows não vê nada disso.'
-      }
-    ]
-  },
-  {
-    versao: '1.22.0',
-    itens: [
-      {
-        emoji: '↩️',
-        titulo: 'Estornar um recebimento',
-        descricao:
-          'Recebeu por engano? Agora o dono pode reverter um pagamento já registrado — uma parcela específica ou a venda inteira — direto no detalhe da venda. O valor sai do total recebido e a venda volta a ficar em aberto.'
-      },
-      {
-        emoji: '🗂️',
-        titulo: 'Aba "Canceladas"',
-        descricao:
-          'As vendas canceladas agora ficam numa aba própria no histórico, mostrando quem cancelou, quando e por quê — sem se misturar com as vendas ativas.'
-      },
-      {
-        emoji: '📊',
-        titulo: 'Relatório do mês mais fiel ao caixa',
-        descricao:
-          'As vendas à vista agora entram certinho no "Recebido" do relatório (antes ficavam de fora e ainda apareciam como "a receber"). Os números do mês ficaram mais fiéis ao que realmente entrou.'
-      }
-    ]
-  },
-  {
-    versao: '1.21.1',
-    itens: [
-      {
-        emoji: '💰',
-        titulo: 'Receba direto do painel',
-        descricao:
-          'Nos quadros de "Inadimplentes" e "Vencem hoje", clique no cliente e use o botão Receber para registrar o pagamento ali mesmo — total ou parcial, e parcela por parcela. Sem precisar abrir a tela de Vendas.'
-      },
-      {
-        emoji: '✨',
-        titulo: 'Abertura mais suave do painel',
-        descricao:
-          'Enquanto o painel carrega, agora aparece um esboço da própria tela no lugar do "Carregando…" — dá a sensação de que tudo abre mais rápido.'
-      }
-    ]
-  },
-  {
-    versao: '1.21.0',
-    itens: [
-      {
-        emoji: '🔄',
-        titulo: 'Atualizações sem interrupção',
-        descricao:
-          'Quando sai uma versão nova, o sistema instala sozinho e reabre na hora — sem aquela janela do Windows pedindo os "próximos passos".'
-      }
-    ]
-  },
-  {
-    versao: '1.20.0',
-    itens: [
-      {
-        emoji: '🪟',
-        titulo: 'Janelas com a cara do sistema',
-        descricao:
-          'As confirmações (excluir produto, cliente, etc.) e a janela de impressão agora seguem o visual do sistema — acabaram as caixas cinzas do Windows.'
-      },
-      {
-        emoji: '🖨️',
-        titulo: 'Impressora favorita',
-        descricao:
-          'O sistema lembra a impressora que você usa em cada coisa (cupom e relatórios/etiquetas) e já abre nela.'
-      },
-      {
-        emoji: '⚡',
-        titulo: 'Cupom direto no caixa',
-        descricao:
-          'Em Configurações → Impressão, ligue "imprimir direto" e o cupom sai na hora, sem abrir nenhuma janela.'
-      }
-    ]
-  }
-]
+// A assistência nasce sem histórico — as novidades do varejo não valem aqui.
+// A primeira entrada chega junto com a primeira release do nicho.
+export const NOVIDADES: ReleaseNovidades[] = []
 
 // Compara versões "x.y.z": >0 se a>b, <0 se a<b, 0 se iguais.
 export function compararVersao(a: string, b: string): number {

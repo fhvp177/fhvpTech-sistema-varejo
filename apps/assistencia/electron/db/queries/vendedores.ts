@@ -71,7 +71,7 @@ export function obterPinHash(id: number): string | null {
 export function gravarPinHash(id: number, pinHash: string): void {
   const db = obterBancoDeDados()
   const r = db.prepare('UPDATE vendedores SET pin_hash = ? WHERE id = ?').run(pinHash, id)
-  if (r.changes === 0) throw new Error('Vendedor não encontrado.')
+  if (r.changes === 0) throw new Error('Técnico não encontrado.')
 }
 
 export function contarDonosAtivos(): number {
@@ -88,7 +88,7 @@ export function criarVendedor(
 ): { id: number; nome: string } {
   const db = obterBancoDeDados()
   const limpo = nome.trim()
-  if (!limpo) throw new Error('Nome do vendedor não pode ficar vazio.')
+  if (!limpo) throw new Error('Nome do técnico não pode ficar vazio.')
   const papel: PapelVendedor = opts.papel ?? 'vendedor'
   const email = opts.email?.trim() || null
   const result = db
@@ -105,10 +105,10 @@ export function atualizarVendedor(
   const atual = db.prepare('SELECT nome, email FROM vendedores WHERE id = ?').get(id) as
     | { nome: string; email: string | null }
     | undefined
-  if (!atual) throw new Error('Vendedor não encontrado.')
+  if (!atual) throw new Error('Técnico não encontrado.')
 
   const novoNome = dados.nome !== undefined ? dados.nome.trim() : atual.nome
-  if (!novoNome) throw new Error('Nome do vendedor não pode ficar vazio.')
+  if (!novoNome) throw new Error('Nome do técnico não pode ficar vazio.')
   const novoEmail =
     dados.email !== undefined ? (dados.email?.trim() || null) : atual.email
 
@@ -128,7 +128,7 @@ export function alterarPapel(id: number, novoPapel: PapelVendedor): void {
   const atual = db.prepare('SELECT papel, ativo FROM vendedores WHERE id = ?').get(id) as
     | { papel: PapelVendedor; ativo: number }
     | undefined
-  if (!atual) throw new Error('Vendedor não encontrado.')
+  if (!atual) throw new Error('Técnico não encontrado.')
   if (atual.papel === novoPapel) return
 
   if (atual.papel === 'dono' && novoPapel === 'vendedor') {
@@ -139,7 +139,7 @@ export function alterarPapel(id: number, novoPapel: PapelVendedor): void {
       .get(id) as { c: number }
     if (outros.c === 0) {
       throw new Error(
-        'Não é possível rebaixar o último dono. Promova outro vendedor a dono antes.'
+        'Não é possível rebaixar o último dono. Promova outro técnico a dono antes.'
       )
     }
   }
@@ -164,7 +164,7 @@ export function alternarAtivoVendedor(id: number, ativo: boolean): void {
         .get(id) as { c: number }
       if (outros.c === 0) {
         throw new Error(
-          'Não é possível desativar o último dono. Promova outro vendedor a dono antes.'
+          'Não é possível desativar o último dono. Promova outro técnico a dono antes.'
         )
       }
     }
@@ -179,14 +179,14 @@ export function deletarVendedor(id: number): void {
   const v = db.prepare('SELECT papel, ativo FROM vendedores WHERE id = ?').get(id) as
     | { papel: PapelVendedor; ativo: number }
     | undefined
-  if (!v) throw new Error('Vendedor não encontrado.')
+  if (!v) throw new Error('Técnico não encontrado.')
 
   const { vendas_count } = db
     .prepare('SELECT COUNT(*) AS vendas_count FROM vendas WHERE vendedor_id = ?')
     .get(id) as { vendas_count: number }
   if (vendas_count > 0) {
     throw new Error(
-      `Este vendedor possui ${vendas_count} venda${vendas_count !== 1 ? 's' : ''} registrada${
+      `Este técnico possui ${vendas_count} venda${vendas_count !== 1 ? 's' : ''} registrada${
         vendas_count !== 1 ? 's' : ''
       } e não pode ser excluído. Você pode desativá-lo.`
     )
@@ -200,7 +200,7 @@ export function deletarVendedor(id: number): void {
       .get(id) as { c: number }
     if (outros.c === 0) {
       throw new Error(
-        'Não é possível excluir o último dono. Promova outro vendedor a dono antes.'
+        'Não é possível excluir o último dono. Promova outro técnico a dono antes.'
       )
     }
   }

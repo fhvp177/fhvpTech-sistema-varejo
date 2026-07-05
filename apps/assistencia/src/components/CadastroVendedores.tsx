@@ -129,7 +129,7 @@ const CadastroVendedores: FC = () => {
     const confirmacao =
       novoPapel === 'dono'
         ? `Promover "${v.nome}" a Dono? Ele terá acesso total ao sistema.`
-        : `Rebaixar "${v.nome}" a Vendedor? Ele perderá acesso a relatórios e cadastros sensíveis.`
+        : `Rebaixar "${v.nome}" a Técnico? Ele perderá acesso a relatórios e cadastros sensíveis.`
     if (
       !(await confirmar({
         titulo: 'Alterar função',
@@ -157,8 +157,8 @@ const CadastroVendedores: FC = () => {
     }
     if (
       !(await confirmar({
-        titulo: 'Excluir vendedor',
-        mensagem: `Tem certeza que deseja excluir o vendedor "${v.nome}"?`,
+        titulo: 'Excluir técnico',
+        mensagem: `Tem certeza que deseja excluir o técnico "${v.nome}"?`,
         variante: 'destructive'
       }))
     )
@@ -215,7 +215,7 @@ const CadastroVendedores: FC = () => {
             onKeyDown={(e) => {
               if (e.key === 'Enter') criar()
             }}
-            placeholder="Nome do vendedor"
+            placeholder="Nome do técnico"
             className="flex-1"
           />
           <Input
@@ -228,12 +228,12 @@ const CadastroVendedores: FC = () => {
             type="email"
             className="flex-1"
           />
-          <Button onClick={criar} size="icon" title="Adicionar vendedor">
+          <Button onClick={criar} size="icon" title="Adicionar técnico">
             <Plus className="w-4 h-4" />
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Vendedores novos são criados como "Vendedor" e precisam definir o próprio PIN no 1º acesso.
+          Técnicos novos são criados como "Técnico" e precisam definir o próprio PIN no 1º acesso.
         </p>
       </div>
 
@@ -244,7 +244,7 @@ const CadastroVendedores: FC = () => {
       <div className="border rounded-lg max-h-96 overflow-y-auto">
         {vendedores.length === 0 ? (
           <p className="text-center py-8 text-sm text-muted-foreground">
-            Nenhum vendedor cadastrado.
+            Nenhum técnico cadastrado.
           </p>
         ) : (
           <ul className="divide-y">
@@ -355,7 +355,7 @@ const CadastroVendedores: FC = () => {
                           ? 'text-muted-foreground hover:text-slate-700'
                           : 'text-muted-foreground hover:text-amber-600'
                       }`}
-                      title={ehDono ? 'Rebaixar a Vendedor' : 'Promover a Dono'}
+                      title={ehDono ? 'Rebaixar a Técnico' : 'Promover a Dono'}
                     >
                       {ehDono ? (
                         <ArrowDownCircle className="w-3.5 h-3.5" />
@@ -403,7 +403,7 @@ const CadastroVendedores: FC = () => {
         </p>
         <p>
           <span className="inline-block w-3 h-3 rounded-full bg-slate-500 mr-0.5 align-middle" />{' '}
-          <b>Vendedor:</b> opera o PDV. Para ações restritas, o sistema pede o PIN de um dono.
+          <b>Técnico:</b> opera o PDV. Para ações restritas, o sistema pede o PIN de um dono.
         </p>
       </div>
 
@@ -414,7 +414,7 @@ const CadastroVendedores: FC = () => {
           </DialogHeader>
           <div className="space-y-3 py-1">
             <p className="text-xs text-muted-foreground">
-              Define um novo PIN para este vendedor. Útil quando ele esquece o PIN. Avise o PIN
+              Define um novo PIN para este técnico. Útil quando ele esquece o PIN. Avise o PIN
               definido — ele pode trocar pelo próprio depois, em Configurações.
             </p>
             <div>

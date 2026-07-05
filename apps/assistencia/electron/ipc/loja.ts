@@ -18,17 +18,18 @@ export type DadosLoja = {
   exibir_logo: boolean
 }
 
-// Valores que a 1ª loja (GN Modas) já imprimia chumbados no código. Servem de
-// ponto de partida ATÉ o dono salvar os próprios dados pela tela — garante que o
-// cupom de quem já usa o sistema não muda ao atualizar (zero regressão).
-const LOJA_LEGADA: DadosLoja = {
-  nome: 'GN MODAS',
-  razao_social: 'Razão Social Ltda. — ME',
-  cnpj: '00.000.000/0001-00',
-  endereco: 'Praça Claudemiro Lopes Bezerra - Mercado Central',
-  cidade: 'Pacoti',
-  uf: 'CE',
-  cep: '62770-000',
+// No varejo este fallback preservava os dados da 1ª loja (GN Modas), que já
+// saíam chumbados no cupom. A assistência não tem legado: até o dono preencher
+// "Dados da loja", o cupom sai só com um nome genérico — os demais campos
+// vazios nem são impressos, porque as linhas do rodapé são condicionais.
+const LOJA_PADRAO: DadosLoja = {
+  nome: 'ASSISTÊNCIA TÉCNICA',
+  razao_social: '',
+  cnpj: '',
+  endereco: '',
+  cidade: '',
+  uf: '',
+  cep: '',
   telefone: '',
   logo: null,
   exibir_logo: false
@@ -37,7 +38,7 @@ const LOJA_LEGADA: DadosLoja = {
 function obterDadosLoja(): DadosLoja {
   // Enquanto ninguém configurou, devolve o legado. Depois de configurado,
   // respeita exatamente o que foi gravado — inclusive campos deixados em branco.
-  if (lerConfig('loja_configurada') !== '1') return LOJA_LEGADA
+  if (lerConfig('loja_configurada') !== '1') return LOJA_PADRAO
   const logo = lerConfig('loja_logo')
   return {
     nome: lerConfig('loja_nome'),

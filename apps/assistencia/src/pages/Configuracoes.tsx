@@ -395,7 +395,7 @@ const Configuracoes: FC = () => {
                 <Input
                   value={loja.nome}
                   onChange={(e) => atualizarLoja('nome', e.target.value)}
-                  placeholder="Ex.: GN Modas"
+                  placeholder="Ex.: Central da Informática"
                 />
               </div>
               <div className="sm:col-span-2">
@@ -489,9 +489,9 @@ const Configuracoes: FC = () => {
       </div>
 
       <div className="space-y-4 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2">Vendedores</h3>
+        <h3 className="text-lg font-semibold border-b pb-2">Técnicos</h3>
         <p className="text-sm text-muted-foreground -mt-1">
-          Cadastre os vendedores da loja. Cada venda registra o vendedor que a realizou,
+          Cadastre os técnicos da assistência. Cada venda registra o técnico que a realizou,
           permitindo acompanhar produção individual no histórico.
         </p>
         <CadastroVendedores />

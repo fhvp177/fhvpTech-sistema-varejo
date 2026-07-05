@@ -39,7 +39,7 @@ export function registrarHandlersVendedores(): void {
       } catch (error) {
         const msg = (error as Error).message
         if (msg.includes('UNIQUE')) {
-          return { success: false, error: 'Já existe um vendedor com esse nome.' }
+          return { success: false, error: 'Já existe um técnico com esse nome.' }
         }
         return { success: false, error: msg }
       }
@@ -59,7 +59,7 @@ export function registrarHandlersVendedores(): void {
       } catch (error) {
         const msg = (error as Error).message
         if (msg.includes('UNIQUE')) {
-          return { success: false, error: 'Já existe um vendedor com esse nome.' }
+          return { success: false, error: 'Já existe um técnico com esse nome.' }
         }
         return { success: false, error: msg }
       }

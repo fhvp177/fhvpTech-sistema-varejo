@@ -150,8 +150,8 @@ export const TOOLS: DefinicaoTool[] = [
   {
     name: 'desempenho_vendedores',
     description:
-      'Vendas por vendedor num período: número de vendas e faturamento de cada um, do que mais ' +
-      'vendeu ao que menos vendeu. Use para "qual vendedor vendeu mais", "quanto o João vendeu".',
+      'Vendas por técnico num período: número de vendas e faturamento de cada um, do que mais ' +
+      'vendeu ao que menos vendeu. Use para "qual técnico vendeu mais", "quanto o João vendeu".',
     input_schema: { type: 'object', properties: { ...PROPS_PERIODO } }
   },
   {

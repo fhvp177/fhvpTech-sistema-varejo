@@ -758,7 +758,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   {vendaDetalhada.cliente_nome || 'Avulso'}
                 </div>
                 <div className="min-w-0 truncate" title={vendaDetalhada.vendedor_nome || '—'}>
-                  <span className="font-medium text-foreground">Vendedor: </span>
+                  <span className="font-medium text-foreground">Técnico: </span>
                   {vendaDetalhada.vendedor_nome || '—'}
                 </div>
                 <div>
@@ -1147,7 +1147,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
               >
                 <p className="text-sm font-medium">Resumo gerencial</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Faturamento, ticket médio, totais por status e por vendedor, e a lista das vendas.
+                  Faturamento, ticket médio, totais por status e por técnico, e a lista das vendas.
                 </p>
               </button>
               <button

@@ -205,7 +205,7 @@ const ConfigSeguranca: FC = () => {
           <p className="text-destructive text-xs mt-1.5">{erroTeto}</p>
         )}
         <p className="text-xs text-muted-foreground mt-1">
-          Vendedor pode dar até este desconto. Acima disso, o sistema pedirá o PIN do dono.
+          Técnico pode dar até este desconto. Acima disso, o sistema pedirá o PIN do dono.
           {' '}<span className="italic">0% exige PIN pra qualquer desconto.</span>
           {!ehDono && (
             <span className="block mt-1 text-amber-600">

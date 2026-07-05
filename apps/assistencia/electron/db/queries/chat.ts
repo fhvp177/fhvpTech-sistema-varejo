@@ -282,7 +282,7 @@ export function desempenhoVendedores(p: Periodo): VendedorRanking[] {
   const db = obterBancoDeDados()
   return db
     .prepare(
-      `SELECT COALESCE(vd.nome, 'Sem vendedor') AS vendedor,
+      `SELECT COALESCE(vd.nome, 'Sem técnico') AS vendedor,
               COUNT(*) AS num_vendas,
               ROUND(COALESCE(SUM(v.total), 0), 2) AS faturamento
        FROM vendas v LEFT JOIN vendedores vd ON vd.id = v.vendedor_id

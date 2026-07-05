@@ -26,7 +26,10 @@ import { aplicar024Notificacoes } from './024_notificacoes'
 import { aplicar025CancelarVenda } from './025_cancelar_venda'
 import { aplicar026ValorPagoAvista } from './026_valor_pago_avista'
 
-// Lista de migrations do varejo, na ordem de aplicação. O runner genérico
+// Lista de migrations, na ordem de aplicação — herdadas do varejo e mantidas
+// IDÊNTICAS de propósito: o backup de um cliente do varejo restaura direto
+// aqui, e portar um fix vira copiar-colar. Novidades da assistência (ex.: OS)
+// entram como migrations NOVAS por cima, nunca editando as antigas. O runner
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
 // só o conteúdo, que é domínio deste app. Cada nicho terá a sua própria lista.
 export const MIGRATIONS: Migration[] = [

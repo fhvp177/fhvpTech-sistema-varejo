@@ -127,7 +127,7 @@ export function registrarDevolucao(dados: DadosNovaDevolucao): Devolucao {
         'Para vendas a prazo/parceladas, fale com o dono.'
     )
   }
-  if (!dados.vendedor_id) throw new Error('Vendedor responsável não informado.')
+  if (!dados.vendedor_id) throw new Error('Técnico responsável não informado.')
   if (!dados.itens.length) throw new Error('Selecione ao menos um item para devolver.')
   if (dados.tipo === 'credito' && !dados.cliente_id) {
     throw new Error('Para gerar crédito na loja é preciso identificar o cliente.')

@@ -246,13 +246,13 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   const ehParcelado = dados.status_pagamento === 'parcelado' && dados.num_parcelas && dados.num_parcelas > 1
 
   if (!dados.vendedor_id) {
-    throw new Error('Selecione o vendedor responsável pela venda.')
+    throw new Error('Selecione o técnico responsável pela venda.')
   }
   const vendedor = db
     .prepare('SELECT id FROM vendedores WHERE id = ? AND ativo = 1')
     .get(dados.vendedor_id) as { id: number } | undefined
   if (!vendedor) {
-    throw new Error('Vendedor inválido ou inativo.')
+    throw new Error('Técnico inválido ou inativo.')
   }
 
   for (const item of dados.itens) {

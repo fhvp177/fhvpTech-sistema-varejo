@@ -1148,7 +1148,7 @@ const CardRankingVendedores: FC<WidgetProps> = ({ metricas, carregando }) => {
     <div className="border rounded-xl p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <Trophy className="w-5 h-5 text-muted-foreground" />
-        <h3 className="font-semibold">Ranking de vendedores</h3>
+        <h3 className="font-semibold">Ranking de técnicos</h3>
       </div>
       {carregando ? (
         <SkeletonLista linhas={5} comRank />

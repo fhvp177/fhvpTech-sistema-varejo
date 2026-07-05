@@ -86,7 +86,7 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
     `<div class="loja-nome">${escapar(loja.nome)}</div>`
   ]
   if (loja.telefone) lojaLinhas.push(`<div>${escapar(loja.telefone)}</div>`)
-  if (venda.vendedor_nome) lojaLinhas.push(`<div>Vendedor: ${escapar(venda.vendedor_nome)}</div>`)
+  if (venda.vendedor_nome) lojaLinhas.push(`<div>Técnico: ${escapar(venda.vendedor_nome)}</div>`)
 
   // Rodapé legal — só inclui as linhas preenchidas. Some inteiro se a loja não
   // tiver nenhum dado de rodapé configurado.
