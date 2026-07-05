@@ -7,6 +7,7 @@ import {
   Users,
   Truck,
   ShoppingCart,
+  ClipboardList,
   Tags,
   Settings,
   DatabaseBackup,
@@ -21,6 +22,7 @@ import Fornecedores from './pages/Fornecedores'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
+import OrdensServico from './pages/OrdensServico'
 import Configuracoes from './pages/Configuracoes'
 import TelaRestauracao from './pages/TelaRestauracao'
 import LicencaBloqueada from '@fhvptech/core/ui/LicencaBloqueada'
@@ -372,6 +374,7 @@ const App: FC = () => {
                       <Route path="/produtos" element={<Produtos />} />
                       <Route path="/clientes" element={<Clientes />} />
                       <Route path="/vendas" element={<Vendas />} />
+                      <Route path="/os" element={<OrdensServico />} />
                       {EtiquetasA4 && (
                         <Route
                           path="/etiquetas"
@@ -495,6 +498,7 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Operação',
     itens: [
+      { to: '/os', label: 'Ordens de Serviço', icon: ClipboardList },
       { to: '/vendas', label: 'Vendas', icon: ShoppingCart },
       ...(__FEAT_ETIQUETAS__
         ? [{ to: '/etiquetas', label: 'Etiquetas A4', icon: Tags }]
