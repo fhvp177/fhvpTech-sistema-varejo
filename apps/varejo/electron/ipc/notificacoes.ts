@@ -17,6 +17,7 @@ import {
   type RecebivelDetalhe,
   type ProdutoAlertaDetalhe
 } from '../db/queries/alertasDetalhe'
+import { alertasContasPagar } from '../db/queries/contasPagar'
 
 // Detalhe que abre no popup ao clicar numa notificação (estado de AGORA).
 export type DetalheNotificacao =
@@ -162,7 +163,7 @@ function alertasDoSistema(): AlertaVivo[] {
 }
 
 function computarESincronizar(): void {
-  sincronizar([...alertasDoBanco(), ...alertasDoSistema()])
+  sincronizar([...alertasDoBanco(), ...alertasContasPagar(), ...alertasDoSistema()])
 }
 
 export function registrarHandlersNotificacoes(): void {

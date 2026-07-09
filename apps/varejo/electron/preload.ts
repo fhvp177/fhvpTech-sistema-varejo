@@ -42,6 +42,23 @@ const api = {
     deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('fornecedores:deletar', id)
   },
 
+  // Contas a pagar (o que a loja deve: fornecedor, aluguel, luz, salário…)
+  contasPagar: {
+    listar: (filtro?: 'aberto' | 'pago' | 'todas'): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:listar', filtro),
+    resumo: (): Promise<RespostaIPC> => ipcRenderer.invoke('contasPagar:resumo'),
+    criar: (dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:criar', dados),
+    atualizar: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:atualizar', id, dados),
+    deletar: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:deletar', id),
+    registrarPagamento: (id: number, valor: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:registrarPagamento', id, valor),
+    estornarPagamento: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:estornarPagamento', id)
+  },
+
   // Categorias
   categorias: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('categorias:listar'),

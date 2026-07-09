@@ -541,9 +541,14 @@ const Dashboard: FC = () => {
         <CardDiaSemana metricas={metricas} carregando={carregandoMetricas} />
       </div>
 
-      {/* ── Recebível futuro + Produtos parados + Estoque baixo ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+      {/* ── A receber + A pagar (as duas pontas do caixa) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
         <CardRecebivel metricas={metricas} rotuloPeriodo={rotuloPeriodo} />
+        <CardAPagar metricas={metricas} rotuloPeriodo={rotuloPeriodo} />
+      </div>
+
+      {/* ── Produtos parados + Estoque baixo ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
         <CardProdutosParados metricas={metricas} carregando={carregandoMetricas} />
         <CardEstoqueBaixo metricas={metricas} />
       </div>
@@ -1063,6 +1068,57 @@ const CardRecebivel: FC<{ metricas: MetricasDashboard | null; rotuloPeriodo: str
         <div className="flex items-baseline justify-between">
           <span className="text-sm text-muted-foreground">Próximos 90 dias</span>
           <span className="font-semibold">{recebivel ? fmt(recebivel.proximos_90d) : '...'}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const CardAPagar: FC<{ metricas: MetricasDashboard | null; rotuloPeriodo: string }> = ({
+  metricas, rotuloPeriodo
+}) => {
+  const futuro = metricas?.a_pagar_futuro
+  const periodo = metricas?.a_pagar_periodo
+  const totalPeriodo = periodo ? periodo.a_vencer + periodo.vencido : 0
+
+  return (
+    <div className="anim-gatilho border rounded-xl p-4 bg-card">
+      <div className="flex items-center gap-2 mb-3">
+        <Receipt className="anim-alvo-acena w-5 h-5 text-muted-foreground" />
+        <h3 className="font-semibold">A pagar</h3>
+      </div>
+      <p className="text-xs text-muted-foreground -mt-2 mb-3">
+        Contas da loja, pelo vencimento
+      </p>
+      {/* Vencimentos dentro do período filtrado — o espelho do "A receber". */}
+      <div className="rounded-lg bg-muted/60 px-3 py-2.5 mb-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-sm text-muted-foreground truncate" title={rotuloPeriodo}>
+            {rotuloPeriodo}
+          </span>
+          <span className="font-bold shrink-0">{periodo ? fmt(totalPeriodo) : '...'}</span>
+        </div>
+        {periodo && totalPeriodo > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {fmt(periodo.a_vencer)} a vencer
+            {periodo.vencido > 0 && (
+              <> · <span className="font-medium text-red-600">{fmt(periodo.vencido)} vencido</span></>
+            )}
+          </p>
+        )}
+      </div>
+      <div className="space-y-2.5">
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm text-muted-foreground">Próximos 30 dias</span>
+          <span className="font-bold">{futuro ? fmt(futuro.proximos_30d) : '...'}</span>
+        </div>
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm text-muted-foreground">Próximos 60 dias</span>
+          <span className="font-semibold">{futuro ? fmt(futuro.proximos_60d) : '...'}</span>
+        </div>
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm text-muted-foreground">Próximos 90 dias</span>
+          <span className="font-semibold">{futuro ? fmt(futuro.proximos_90d) : '...'}</span>
         </div>
       </div>
     </div>

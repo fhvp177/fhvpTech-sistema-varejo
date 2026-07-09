@@ -1,6 +1,12 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { aReceberPorVencimento, type AReceberPorVencimento } from './vendas'
+import {
+  aPagarPorVencimento,
+  aPagarFuturo,
+  type APagarPorVencimento,
+  type APagarFuturo
+} from './contasPagar'
 
 // Chave na tabela `config` onde fica a meta de faturamento mensal (editável pelo
 // próprio card da dashboard). Ausente/0 = meta não definida.
@@ -111,6 +117,10 @@ export type MetricasDashboard = {
   // A receber com VENCIMENTO dentro do período filtrado (inclui vendas de
   // períodos anteriores). Não somar com faturamento — são âncoras diferentes.
   a_receber_periodo: AReceberPorVencimento
+  // A pagar (contas da loja) — espelho do a_receber: recorte pelo vencimento no
+  // período filtrado + a projeção de 30/60/90 dias.
+  a_pagar_periodo: APagarPorVencimento
+  a_pagar_futuro: APagarFuturo
   produtos_parados: ProdutoParado[]
   estoque_baixo: ProdutoEstoqueBaixo[]
 }
@@ -341,6 +351,10 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
   // A receber ancorado no vencimento, recortado pelo período do filtro.
   const aReceberPeriodo = aReceberPorVencimento(inicio_atual, fim_atual)
 
+  // A pagar (contas da loja), mesmas âncoras do a receber.
+  const aPagarPeriodo = aPagarPorVencimento(inicio_atual, fim_atual)
+  const aPagarProjecao = aPagarFuturo()
+
   // Produtos parados — janela fixa de 30 dias, independente do filtro da dashboard.
   // dias_parado = dias desde a última venda do produto, ou desde o cadastro se nunca vendeu.
   // Aparece se >= 30 dias parado. Top 5 ordenado pelos mais críticos.
@@ -510,6 +524,8 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     distribuicao_pagamento: distribuicaoPagamento,
     recebivel_futuro: recebivelFuturo,
     a_receber_periodo: aReceberPeriodo,
+    a_pagar_periodo: aPagarPeriodo,
+    a_pagar_futuro: aPagarProjecao,
     produtos_parados: produtosParados,
     estoque_baixo: estoqueBaixo
   }

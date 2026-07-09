@@ -13,6 +13,7 @@ import { registrarBackupAoFechar } from '@fhvptech/core/electron/backup/BackupAo
 import { registrarHandlersLicenca } from '@fhvptech/core/electron/ipc/licenca'
 import { registrarHandlersLicencaPagamento } from '@fhvptech/core/electron/ipc/licenca-pagamento'
 import { registrarHandlersFornecedores } from './ipc/fornecedores'
+import { registrarHandlersContasPagar } from './ipc/contasPagar'
 import { registrarHandlersCategorias } from './ipc/categorias'
 import { registrarHandlersClientes } from './ipc/clientes'
 import { registrarHandlersProdutos } from './ipc/produtos'
@@ -91,6 +92,7 @@ app.whenReady().then(() => {
   registrarHandlersLicenca()
   registrarHandlersLicencaPagamento()
   registrarHandlersFornecedores()
+  registrarHandlersContasPagar()
   registrarHandlersCategorias()
   registrarHandlersClientes()
   registrarHandlersProdutos()

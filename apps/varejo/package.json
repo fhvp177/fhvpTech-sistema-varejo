@@ -1,6 +1,6 @@
 {
   "name": "sistema-rt",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "description": "Sistema de gestão para pequenas lojas de varejo",
   "main": "out/main/index.js",
   "author": "",

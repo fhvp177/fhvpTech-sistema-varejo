@@ -102,6 +102,15 @@ type MetricasDashboard = {
     a_vencer: number
     vencido: number
   }
+  a_pagar_periodo: {
+    a_vencer: number
+    vencido: number
+  }
+  a_pagar_futuro: {
+    proximos_30d: number
+    proximos_60d: number
+    proximos_90d: number
+  }
   produtos_parados: Array<{
     produto_id: number
     nome: string
@@ -115,6 +124,29 @@ type MetricasDashboard = {
     estoque: number
     tamanho: string | null
   }>
+}
+
+type ContaPagar = {
+  id: number
+  descricao: string
+  categoria: string | null
+  fornecedor_id: number | null
+  fornecedor_nome: string | null
+  valor_total: number
+  valor_pago: number
+  restante: number
+  vencimento: string | null
+  observacao: string | null
+  criada_em: string
+  pago_em: string | null
+  situacao: 'aberta' | 'vencida' | 'paga'
+}
+
+type ResumoContasPagar = {
+  vencido_total: number
+  vence_7d_total: number
+  aberto_total: number
+  pago_mes: number
 }
 
 interface Window {
@@ -139,6 +171,15 @@ interface Window {
       criar: (dados: unknown) => Promise<RespostaIPC>
       atualizar: (id: number, dados: unknown) => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>
+    }
+    contasPagar: {
+      listar: (filtro?: 'aberto' | 'pago' | 'todas') => Promise<RespostaIPC<ContaPagar[]>>
+      resumo: () => Promise<RespostaIPC<ResumoContasPagar>>
+      criar: (dados: unknown) => Promise<RespostaIPC<ContaPagar>>
+      atualizar: (id: number, dados: unknown) => Promise<RespostaIPC>
+      deletar: (id: number) => Promise<RespostaIPC>
+      registrarPagamento: (id: number, valor: number) => Promise<RespostaIPC>
+      estornarPagamento: (id: number) => Promise<RespostaIPC>
     }
     categorias: {
       listar: () => Promise<RespostaIPC<Array<{ id: number; nome: string; produtos_count: number; usa_tamanhos: number }>>>

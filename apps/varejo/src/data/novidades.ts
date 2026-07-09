@@ -7,6 +7,23 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.24.0',
+    itens: [
+      {
+        emoji: '📥',
+        titulo: 'Contas a Pagar',
+        descricao:
+          'Uma aba nova para anotar tudo o que a loja tem a pagar — duplicata de fornecedor, aluguel, luz, água, salário, imposto. Cadastre com valor e vencimento, dê baixa quando pagar (de uma vez ou em partes) e veja num relance o que está vencido, o que vence nos próximos dias e o total em aberto.'
+      },
+      {
+        emoji: '🔔',
+        titulo: 'Aviso de conta a vencer',
+        descricao:
+          'O sino te lembra quando uma conta está vencida, vence hoje ou vence em breve — para nunca mais pagar em atraso por esquecimento. E o painel agora mostra "A pagar" lado a lado com "A receber", fechando a conta do caixa: quanto entra e quanto sai.'
+      }
+    ]
+  },
+  {
     versao: '1.23.0',
     itens: [
       {

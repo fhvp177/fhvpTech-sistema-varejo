@@ -8,6 +8,7 @@ import {
   Truck,
   ShoppingCart,
   Tags,
+  Receipt,
   Settings,
   DatabaseBackup,
   MessageCircle,
@@ -18,6 +19,7 @@ import {
   LucideIcon
 } from 'lucide-react'
 import Fornecedores from './pages/Fornecedores'
+import ContasPagar from './pages/ContasPagar'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
@@ -369,6 +371,14 @@ const App: FC = () => {
                         <Route path="/" element={<Navigate to="/produtos" replace />} />
                       )}
                       <Route path="/fornecedores" element={<Fornecedores />} />
+                      <Route
+                        path="/contas-pagar"
+                        element={
+                          <RotaSomenteDono titulo="Contas a Pagar">
+                            <ContasPagar />
+                          </RotaSomenteDono>
+                        }
+                      />
                       <Route path="/produtos" element={<Produtos />} />
                       <Route path="/clientes" element={<Clientes />} />
                       <Route path="/vendas" element={<Vendas />} />
@@ -499,6 +509,12 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
       ...(__FEAT_ETIQUETAS__
         ? [{ to: '/etiquetas', label: 'Etiquetas A4', icon: Tags }]
         : [])
+    ]
+  },
+  {
+    titulo: 'Financeiro',
+    itens: [
+      { to: '/contas-pagar', label: 'Contas a Pagar', icon: Receipt, somenteDono: true }
     ]
   },
   {
