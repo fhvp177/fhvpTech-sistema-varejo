@@ -20,6 +20,7 @@ export type Variacao = {
 export type Produto = {
   id: number
   codigo_barras: string | null // null em produto de grade (o código vive nos tamanhos)
+  referencia: string | null // código curto e único pra busca rápida sem leitor (ex.: "10")
   nome: string
   categoria: string | null
   preco: number
@@ -39,6 +40,8 @@ export type DadosVariacao = {
 
 export type DadosProduto = {
   codigo_barras: string | null
+  // Ausente/vazia => o sistema numera sozinho (próximo número livre).
+  referencia?: string | null
   nome: string
   categoria: string | null
   preco: number
@@ -109,6 +112,10 @@ export function obterProdutoPorId(id: number): Produto | undefined {
 // para saber de qual tamanho baixar o estoque.
 export type ResultadoBuscaCodigo = Produto & { variacao_encontrada: Variacao | null }
 
+// Busca exata por código de barras OU referência — é o que o campo do leitor
+// usa: bipou, acha pelo código; digitou "10" + Enter, acha pela referência.
+// A ordem importa (código primeiro), mas não há colisão real: código de barras
+// tem 8+ dígitos, referência é curta.
 export function buscarProdutoPorCodigoBarras(codigo: string): ResultadoBuscaCodigo | undefined {
   const db = obterBancoDeDados()
   // 1) Produto simples — código no próprio produto.
@@ -133,7 +140,34 @@ export function buscarProdutoPorCodigoBarras(codigo: string): ResultadoBuscaCodi
     if (produto) return { ...produto, variacao_encontrada: variacao }
   }
 
+  // 3) Referência exata (caixa sem leitor digita "10" + Enter).
+  const porReferencia = db
+    .prepare(
+      `SELECT p.*, f.nome AS fornecedor_nome
+       FROM produtos p
+       LEFT JOIN fornecedores f ON f.id = p.fornecedor_id
+       WHERE p.referencia = ? COLLATE NOCASE`
+    )
+    .get(codigo.trim()) as ProdutoRow | undefined
+  if (porReferencia) {
+    return { ...anexarVariacoes([porReferencia])[0], variacao_encontrada: null }
+  }
+
   return undefined
+}
+
+// Próximo número livre de referência, olhando só as numéricas ("AZ-15" não
+// participa da numeração automática).
+function proximaReferencia(): string {
+  const db = obterBancoDeDados()
+  const row = db
+    .prepare(
+      `SELECT COALESCE(MAX(CAST(referencia AS INTEGER)), 0) + 1 AS prox
+       FROM produtos
+       WHERE referencia IS NOT NULL AND referencia != '' AND referencia NOT GLOB '*[^0-9]*'`
+    )
+    .get() as { prox: number }
+  return String(row.prox)
 }
 
 // Sincroniza as variações de um produto com o conjunto enviado: casa por tamanho
@@ -181,11 +215,12 @@ export function criarProduto(dados: DadosProduto): Produto {
   const criar = db.transaction(() => {
     const result = db
       .prepare(
-        `INSERT INTO produtos (codigo_barras, nome, categoria, preco, custo, estoque, fornecedor_id)
-         VALUES (@codigo_barras, @nome, @categoria, @preco, @custo, @estoque, @fornecedor_id)`
+        `INSERT INTO produtos (codigo_barras, referencia, nome, categoria, preco, custo, estoque, fornecedor_id)
+         VALUES (@codigo_barras, @referencia, @nome, @categoria, @preco, @custo, @estoque, @fornecedor_id)`
       )
       .run({
         codigo_barras: temGrade ? null : dados.codigo_barras,
+        referencia: dados.referencia?.trim() || proximaReferencia(),
         nome: dados.nome,
         categoria: dados.categoria,
         preco: dados.preco,
@@ -210,6 +245,7 @@ export function atualizarProduto(id: number, dados: DadosProduto): void {
     db.prepare(
       `UPDATE produtos
        SET codigo_barras = @codigo_barras,
+           referencia = @referencia,
            nome = @nome,
            categoria = @categoria,
            preco = @preco,
@@ -220,6 +256,8 @@ export function atualizarProduto(id: number, dados: DadosProduto): void {
     ).run({
       id,
       codigo_barras: temGrade ? null : dados.codigo_barras,
+      // Campo limpo na edição = "me dá um número novo" (produto nunca fica sem)
+      referencia: dados.referencia?.trim() || proximaReferencia(),
       nome: dados.nome,
       categoria: dados.categoria,
       preco: dados.preco,

@@ -181,6 +181,19 @@ interface Window {
       registrarPagamento: (id: number, valor: number) => Promise<RespostaIPC>
       estornarPagamento: (id: number) => Promise<RespostaIPC>
     }
+    notasEntrada: {
+      analisar: (
+        chave: string,
+        fornecedorCnpj: string | null,
+        itens: unknown[]
+      ) => Promise<RespostaIPC>
+      importar: (dados: unknown) => Promise<RespostaIPC>
+      listar: (mes?: string) => Promise<RespostaIPC>
+      meses: () => Promise<RespostaIPC<string[]>>
+      exportarXmls: (
+        mes: string
+      ) => Promise<RespostaIPC<{ pasta: string; quantidade: number } | null>>
+    }
     categorias: {
       listar: () => Promise<RespostaIPC<Array<{ id: number; nome: string; produtos_count: number; usa_tamanhos: number }>>>
       criar: (nome: string) => Promise<RespostaIPC<{ id: number; nome: string }>>

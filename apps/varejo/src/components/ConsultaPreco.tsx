@@ -11,6 +11,7 @@ import {
 export type ProdutoConsulta = {
   id: number
   codigo_barras: string | null
+  referencia?: string | null
   nome: string
   preco: number
   estoque: number // simples: o próprio; grade: soma dos tamanhos
@@ -42,6 +43,7 @@ const ConsultaPreco: FC<Props> = ({ aberto, onFechar, produtos }) => {
   }, [aberto])
 
   const termoLimpo = termo.trim().toLowerCase()
+  // Referência exata primeiro: "10" mostra o produto ref. 10 no topo.
   const filtrados = !termoLimpo
     ? []
     : produtos
@@ -49,8 +51,14 @@ const ConsultaPreco: FC<Props> = ({ aberto, onFechar, produtos }) => {
           (p) =>
             p.nome.toLowerCase().includes(termoLimpo) ||
             (p.codigo_barras ?? '').includes(termoLimpo) ||
+            (p.referencia ?? '').toLowerCase().includes(termoLimpo) ||
             (p.variacoes ?? []).some((v) => v.codigo_barras.includes(termoLimpo))
         )
+        .sort((a, b) => {
+          const exato = (p: ProdutoConsulta) =>
+            (p.referencia ?? '').toLowerCase() === termoLimpo ? 1 : 0
+          return exato(b) - exato(a)
+        })
         .slice(0, 30)
 
   return (
@@ -69,7 +77,7 @@ const ConsultaPreco: FC<Props> = ({ aberto, onFechar, produtos }) => {
             ref={inputRef}
             value={termo}
             onChange={(e) => setTermo(e.target.value)}
-            placeholder="Digite o nome ou código de barras do produto..."
+            placeholder="Nome, referência ou código de barras..."
             className="pl-9 h-11"
           />
         </div>
@@ -91,7 +99,12 @@ const ConsultaPreco: FC<Props> = ({ aberto, onFechar, produtos }) => {
                   className="flex items-center justify-between gap-3 px-4 py-3"
                 >
                   <div className="min-w-0">
-                    <p className="font-medium text-sm truncate">{p.nome}</p>
+                    <p className="font-medium text-sm truncate">
+                      {p.nome}
+                      {p.referencia && (
+                        <span className="ml-2 text-xs font-normal font-mono text-muted-foreground">Ref. {p.referencia}</span>
+                      )}
+                    </p>
                     {p.variacoes && p.variacoes.length > 0 ? (
                       <p className="text-xs text-muted-foreground">
                         {p.variacoes.map((v) => `${v.tamanho}: ${v.estoque}`).join(' · ')}

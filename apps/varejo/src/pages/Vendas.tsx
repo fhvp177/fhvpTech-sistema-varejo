@@ -114,6 +114,7 @@ type Variacao = {
 type Produto = {
   id: number
   codigo_barras: string | null
+  referencia: string | null
   nome: string
   preco: number
   estoque: number // simples: o próprio; grade: soma dos tamanhos
@@ -1699,12 +1700,21 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     }
   }
 
-  const produtosFiltrados = produtos.filter(
-    (p) =>
-      p.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
-      (p.codigo_barras ?? '').includes(termoBusca) ||
-      p.variacoes.some((v) => v.codigo_barras.includes(termoBusca))
-  )
+  // Referência exata primeiro: digitou "10", o produto ref. 10 encabeça a lista.
+  const termoBuscaLimpo = termoBusca.trim().toLowerCase()
+  const produtosFiltrados = produtos
+    .filter(
+      (p) =>
+        p.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
+        (p.codigo_barras ?? '').includes(termoBusca) ||
+        (p.referencia ?? '').toLowerCase().includes(termoBuscaLimpo) ||
+        p.variacoes.some((v) => v.codigo_barras.includes(termoBusca))
+    )
+    .sort((a, b) => {
+      if (!termoBuscaLimpo) return 0
+      const exato = (p: Produto) => ((p.referencia ?? '').toLowerCase() === termoBuscaLimpo ? 1 : 0)
+      return exato(b) - exato(a)
+    })
 
   return (
     <div className="flex flex-col h-full">
@@ -1730,7 +1740,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 value={codigoScan}
                 onChange={(e) => setCodigoScan(e.target.value)}
                 onKeyDown={handleScan}
-                placeholder="Aponte o leitor ou digite o código de barras..."
+                placeholder="Aponte o leitor ou digite o código/referência..."
                 className="flex h-10 w-full rounded-md border-2 border-primary bg-background px-3 py-2 pl-9 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
@@ -2332,7 +2342,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               autoFocus
-              placeholder="Nome ou código de barras..."
+              placeholder="Nome, referência ou código de barras..."
               value={termoBusca}
               onChange={(e) => setTermoBusca(e.target.value)}
               className="pl-9"
@@ -2346,7 +2356,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 return (
                   <div key={p.id} className={`px-3 py-2.5 text-sm ${i > 0 ? 'border-t' : ''}`}>
                     <div className="flex justify-between items-center gap-3">
-                      <div className="font-medium truncate min-w-0" title={p.nome}>{p.nome}</div>
+                      <div className="font-medium truncate min-w-0" title={p.nome}>
+                        {p.nome}
+                        {p.referencia && (
+                          <span className="ml-2 text-xs font-normal font-mono text-muted-foreground">Ref. {p.referencia}</span>
+                        )}
+                      </div>
                       <div className="font-semibold shrink-0">{fmt(p.preco)}</div>
                     </div>
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -2386,7 +2401,9 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 >
                   <div className="min-w-0">
                     <div className="font-medium truncate" title={p.nome}>{p.nome}</div>
-                    <div className="text-xs text-muted-foreground font-mono truncate" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
+                    <div className="text-xs text-muted-foreground font-mono truncate" title={p.codigo_barras ?? undefined}>
+                      {p.referencia ? `Ref. ${p.referencia} · ` : ''}{p.codigo_barras}
+                    </div>
                   </div>
                   <div className="text-right shrink-0 ml-3">
                     <div className="font-semibold">{fmt(p.preco)}</div>

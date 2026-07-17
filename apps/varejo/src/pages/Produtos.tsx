@@ -1,5 +1,5 @@
 import { FC, Fragment, useEffect, useRef, useState } from 'react'
-import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, ChevronRight, ChevronDown, Layers, Info } from 'lucide-react'
+import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, FileUp, FileText, ChevronRight, ChevronDown, Layers, Info } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { useImprimir } from '@/components/ImpressaoProvider'
@@ -14,9 +14,12 @@ import {
 } from '@fhvptech/core/ui/dialog'
 import BarcodeGenerator, { gerarEAN13 } from '@/components/BarcodeGenerator'
 import { nomeImpressao } from '@/utils/nomeImpressao'
+import { gerarHtmlRelatorioEstoque, gerarHtmlTabelaReferencias } from '@/utils/relatoriosProdutos'
 import Paginacao from '@fhvptech/core/ui/paginacao'
 import { Tooltip } from '@fhvptech/core/ui/tooltip'
 import ModalCategorias from '@/components/ModalCategorias'
+import ModalImportarXml from '@/components/ModalImportarXml'
+import ModalNotasEntrada from '@/components/ModalNotasEntrada'
 import { useSessao } from '@/App'
 
 const ITENS_POR_PAGINA = 20
@@ -32,6 +35,7 @@ type Variacao = {
 type Produto = {
   id: number
   codigo_barras: string | null
+  referencia: string | null
   nome: string
   categoria: string | null
   preco: number
@@ -51,6 +55,7 @@ type FormVariacao = { tamanho: string; codigo_barras: string; estoque: string }
 
 type FormProduto = {
   codigo_barras: string
+  referencia: string
   nome: string
   categoria: string
   preco: string
@@ -80,6 +85,7 @@ const construirGrade = (vs: Variacao[]): FormVariacao[] => {
 
 const FORM_VAZIO: FormProduto = {
   codigo_barras: '',
+  referencia: '',
   nome: '',
   categoria: '',
   preco: '',
@@ -91,109 +97,6 @@ const FORM_VAZIO: FormProduto = {
 }
 
 type Categoria = { id: number; nome: string; produtos_count: number; usa_tamanhos: number }
-
-function gerarHtmlRelatorio(produtos: Produto[]): string {
-  const data = new Date().toLocaleString('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  })
-
-  const grupos = new Map<string, Produto[]>()
-  for (const p of produtos) {
-    const cat = p.categoria || 'Sem Categoria'
-    if (!grupos.has(cat)) grupos.set(cat, [])
-    grupos.get(cat)!.push(p)
-  }
-
-  const categoriasOrdenadas = [...grupos.keys()].sort((a, b) => {
-    if (a === 'Sem Categoria') return 1
-    if (b === 'Sem Categoria') return -1
-    return a.localeCompare(b, 'pt-BR')
-  })
-
-  const totalProdutos = produtos.length
-  const totalItens = produtos.reduce((acc, p) => acc + p.estoque, 0)
-
-  const tabelasHtml = categoriasOrdenadas.map((cat) => {
-    const prods = grupos.get(cat)!.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-    const linha = (nome: string, codigo: string, estoque: number, comFornecedor: string) => {
-      const cls = estoque === 0 ? 'estoque-zero' : estoque <= 5 ? 'estoque-baixo' : ''
-      return `<tr>
-        <td>${nome}${comFornecedor}</td>
-        <td class="col-codigo">${codigo}</td>
-        <td class="col-estoque ${cls}">${estoque}</td>
-        <td class="col-contagem"></td>
-      </tr>`
-    }
-    const linhas = prods.map((p) => {
-      const fornecedor = p.fornecedor_nome
-        ? `<div class="fornecedor-nome">${p.fornecedor_nome}</div>`
-        : ''
-      // Produto de grade: uma linha por tamanho (cada um com seu código/estoque).
-      if (p.variacoes.length > 0) {
-        return p.variacoes
-          .map((v) => linha(`${p.nome} — ${v.tamanho}`, v.codigo_barras, v.estoque, ''))
-          .join('')
-      }
-      return linha(p.nome, p.codigo_barras ?? '—', p.estoque, fornecedor)
-    }).join('')
-    return `<div class="grupo-categoria">
-      <div class="grupo-titulo">${cat} (${prods.length} produto${prods.length !== 1 ? 's' : ''})</div>
-      <table>
-        <thead><tr>
-          <th>Produto</th>
-          <th class="col-codigo">Cód. Barras</th>
-          <th class="col-estoque">Estoque Sist.</th>
-          <th class="col-contagem">Contagem Física</th>
-        </tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
-    </div>`
-  }).join('')
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <title>${nomeImpressao.relatorioEstoque()}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 11px; color: #000; }
-    @page { margin: 15mm; }
-    .cabecalho { text-align: center; margin-bottom: 16px; border-bottom: 2px solid #000; padding-bottom: 12px; }
-    .cabecalho h1 { font-size: 16px; font-weight: bold; letter-spacing: 1px; }
-    .cabecalho .info { font-size: 10px; color: #555; margin-top: 4px; }
-    .resumo { display: flex; gap: 24px; margin-bottom: 16px; padding: 8px 12px; background: #f5f5f5; border: 1px solid #ddd; }
-    .resumo div { font-size: 11px; }
-    .resumo span { font-weight: bold; }
-    .grupo-categoria { margin-bottom: 14px; page-break-inside: avoid; }
-    .grupo-titulo { background: #333; color: #fff; padding: 4px 8px; font-weight: bold; font-size: 11px; }
-    table { width: 100%; border-collapse: collapse; }
-    thead th { background: #eee; border: 1px solid #ccc; padding: 4px 6px; text-align: left; font-size: 10px; font-weight: bold; }
-    tbody td { border: 1px solid #ddd; padding: 4px 6px; font-size: 10px; }
-    .col-codigo { width: 130px; font-family: monospace; font-size: 9px; }
-    .col-estoque { width: 90px; text-align: center; font-weight: bold; }
-    .col-contagem { width: 110px; text-align: center; background: #fffef0; }
-    .estoque-zero { color: #cc0000; }
-    .estoque-baixo { color: #d97706; }
-    .fornecedor-nome { font-size: 9px; color: #666; font-style: italic; margin-top: 1px; }
-    .rodape { margin-top: 20px; text-align: center; font-size: 9px; color: #888; border-top: 1px solid #ccc; padding-top: 8px; }
-  </style>
-</head>
-<body>
-  <div class="cabecalho">
-    <h1>RELATÓRIO DE ESTOQUE</h1>
-    <div class="info">Gerado em: ${data}</div>
-  </div>
-  <div class="resumo">
-    <div>Total de produtos: <span>${totalProdutos}</span></div>
-    <div>Total de itens em estoque: <span>${totalItens}</span></div>
-  </div>
-  ${tabelasHtml}
-  <div class="rodape">FHVP Tech — Balanço de Estoque</div>
-</body>
-</html>`
-}
 
 const Produtos: FC = () => {
   const { ehDono } = useSessao()
@@ -217,6 +120,10 @@ const Produtos: FC = () => {
   const [salvandoFornecedor, setSalvandoFornecedor] = useState(false)
   const [relatorioAberto, setRelatorioAberto] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+
+  // Importação de NF-e (XML) + histórico das notas importadas
+  const [importarXmlAberto, setImportarXmlAberto] = useState(false)
+  const [notasEntradaAberto, setNotasEntradaAberto] = useState(false)
 
   // Controle do leitor USB — detecta leitura rápida (< 80ms entre teclas)
   const scanBuffer = useRef('')
@@ -269,16 +176,26 @@ const Produtos: FC = () => {
     }, 300)
   }
 
-  const listaFiltrada = lista.filter((p) => {
-    const t = busca.toLowerCase()
-    return (
-      p.nome.toLowerCase().includes(t) ||
-      (p.codigo_barras ?? '').includes(busca) ||
-      p.variacoes.some((v) => v.codigo_barras.includes(busca)) ||
-      (p.categoria ?? '').toLowerCase().includes(t) ||
-      (p.fornecedor_nome ?? '').toLowerCase().includes(t)
-    )
-  })
+  // Quem bate EXATO na referência vai pro topo: digitou "10", o produto ref. 10
+  // aparece primeiro e os "contém 10" (nome/código) vêm depois.
+  const termoBusca = busca.trim().toLowerCase()
+  const listaFiltrada = lista
+    .filter((p) => {
+      const t = busca.toLowerCase()
+      return (
+        p.nome.toLowerCase().includes(t) ||
+        (p.codigo_barras ?? '').includes(busca) ||
+        (p.referencia ?? '').toLowerCase().includes(termoBusca) ||
+        p.variacoes.some((v) => v.codigo_barras.includes(busca)) ||
+        (p.categoria ?? '').toLowerCase().includes(t) ||
+        (p.fornecedor_nome ?? '').toLowerCase().includes(t)
+      )
+    })
+    .sort((a, b) => {
+      if (!termoBusca) return 0
+      const exato = (p: Produto) => ((p.referencia ?? '').toLowerCase() === termoBusca ? 1 : 0)
+      return exato(b) - exato(a)
+    })
 
   useEffect(() => {
     setPaginaAtual(1)
@@ -299,6 +216,7 @@ const Produtos: FC = () => {
     setEditando(p)
     setForm({
       codigo_barras: p.codigo_barras ?? '',
+      referencia: p.referencia ?? '',
       nome: p.nome,
       categoria: p.categoria ?? '',
       preco: p.preco.toFixed(2),
@@ -361,6 +279,7 @@ const Produtos: FC = () => {
 
     const dados = {
       codigo_barras: form.temGrade ? null : form.codigo_barras.trim(),
+      referencia: form.referencia.trim() || null,
       nome: form.nome.trim(),
       categoria: form.categoria.trim() || null,
       preco,
@@ -384,7 +303,13 @@ const Produtos: FC = () => {
       await carregar()
       setDialogAberto(false)
     } else {
-      setErro(resp.error.includes('UNIQUE') ? 'Já existe um produto com este código de barras.' : resp.error)
+      setErro(
+        resp.error.includes('referencia')
+          ? 'Já existe outro produto com esta referência.'
+          : resp.error.includes('UNIQUE')
+            ? 'Já existe um produto com este código de barras.'
+            : resp.error
+      )
     }
     setCarregando(false)
   }
@@ -438,12 +363,14 @@ const Produtos: FC = () => {
     else alert(`Erro: ${resp.error}`)
   }
 
-  const gerarRelatorio = async (acao: 'pdf' | 'imprimir') => {
+  const gerarRelatorio = async (tipo: 'estoque' | 'referencias', acao: 'pdf' | 'imprimir') => {
     if (lista.length === 0) return
     setGerandoRelatorio(true)
     try {
-      const html = gerarHtmlRelatorio(lista)
-      const nome = nomeImpressao.relatorioEstoque()
+      const html =
+        tipo === 'estoque' ? gerarHtmlRelatorioEstoque(lista) : gerarHtmlTabelaReferencias(lista)
+      const nome =
+        tipo === 'estoque' ? nomeImpressao.relatorioEstoque() : nomeImpressao.tabelaReferencias()
       if (acao === 'imprimir') {
         const ok = await imprimir(html, nome, 'documento')
         if (ok) setRelatorioAberto(false)
@@ -471,13 +398,33 @@ const Produtos: FC = () => {
               Categorias
             </Button>
           )}
+          {ehDono && (
+            <Button
+              variant="outline"
+              onClick={() => setNotasEntradaAberto(true)}
+              title="Notas fiscais de compra já importadas — relatório mensal e XMLs pro contador"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Notas de entrada
+            </Button>
+          )}
+          {ehDono && (
+            <Button
+              variant="outline"
+              onClick={() => setImportarXmlAberto(true)}
+              title="Cadastrar produtos e repor estoque a partir do XML da nota fiscal de compra"
+            >
+              <FileUp className="w-4 h-4 mr-2" />
+              Importar XML
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => setRelatorioAberto(true)}
             disabled={lista.length === 0}
           >
             <Printer className="w-4 h-4 mr-2" />
-            Imprimir Estoque
+            Imprimir
           </Button>
           {ehDono && (
             <Button onClick={abrirNovo}>
@@ -517,6 +464,7 @@ const Produtos: FC = () => {
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground w-16">Ref.</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Código</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Categoria</th>
@@ -529,7 +477,7 @@ const Produtos: FC = () => {
           <tbody>
             {listaFiltrada.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                <td colSpan={8} className="text-center py-12 text-muted-foreground">
                   {busca ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
                 </td>
               </tr>
@@ -544,6 +492,9 @@ const Produtos: FC = () => {
                   i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
                 }`}
               >
+                <td className="px-4 py-3 font-mono text-xs font-semibold">
+                  {p.referencia ?? '—'}
+                </td>
                 <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                   {temGrade ? (
                     <button
@@ -599,7 +550,7 @@ const Produtos: FC = () => {
               </tr>
               {temGrade && aberto && (
                 <tr className="bg-muted/40 border-b border-border last:border-b-0">
-                  <td colSpan={7} className="px-4 py-2">
+                  <td colSpan={8} className="px-4 py-2">
                     <div className="flex flex-wrap gap-2">
                       {p.variacoes.map((v) => (
                         <div
@@ -688,6 +639,22 @@ const Produtos: FC = () => {
                   value={form.nome}
                   onChange={setF('nome')}
                   placeholder="Nome do produto"
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="referencia" className="flex items-center gap-1.5">
+                  Referência
+                  <Tooltip content="Código curto pra achar o produto rápido sem leitor (digite a referência no campo do leitor + Enter). Deixe vazio pra numerar sozinho.">
+                    <Info className="w-3.5 h-3.5 cursor-help text-muted-foreground" />
+                  </Tooltip>
+                </Label>
+                <Input
+                  id="referencia"
+                  value={form.referencia}
+                  onChange={setF('referencia')}
+                  placeholder={editando ? '' : 'Automática (ex.: 10)'}
+                  className="font-mono"
                 />
               </div>
 
@@ -910,31 +877,65 @@ const Produtos: FC = () => {
       </Dialog>
 
       <Dialog open={relatorioAberto} onOpenChange={(open) => !open && setRelatorioAberto(false)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Relatório de estoque</DialogTitle>
+            <DialogTitle>Imprimir relatórios de produtos</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {lista.length} produto(s) em estoque. Escolha como deseja gerar o relatório.
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => gerarRelatorio('pdf')}
-                disabled={gerandoRelatorio || lista.length === 0}
-              >
-                <FileDown className="w-3.5 h-3.5 mr-1.5" /> Salvar PDF
-              </Button>
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => gerarRelatorio('imprimir')}
-                disabled={gerandoRelatorio || lista.length === 0}
-              >
-                <Printer className="w-3.5 h-3.5 mr-1.5" /> Imprimir
-              </Button>
+            <div className="rounded-md border px-3 py-3 space-y-2">
+              <p className="text-sm font-medium">Relatório de estoque</p>
+              <p className="text-xs text-muted-foreground">
+                {lista.length} produto(s) por categoria, com estoque do sistema e coluna pra
+                contagem física (balanço).
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => gerarRelatorio('estoque', 'pdf')}
+                  disabled={gerandoRelatorio || lista.length === 0}
+                >
+                  <FileDown className="w-3.5 h-3.5 mr-1.5" /> Salvar PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => gerarRelatorio('estoque', 'imprimir')}
+                  disabled={gerandoRelatorio || lista.length === 0}
+                >
+                  <Printer className="w-3.5 h-3.5 mr-1.5" /> Imprimir
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-md border px-3 py-3 space-y-2">
+              <p className="text-sm font-medium">Tabela de referências</p>
+              <p className="text-xs text-muted-foreground">
+                Só referência + nome, em colunas compactas e ordem alfabética — pra deixar no
+                balcão como cola do vendedor.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => gerarRelatorio('referencias', 'pdf')}
+                  disabled={gerandoRelatorio || lista.length === 0}
+                >
+                  <FileDown className="w-3.5 h-3.5 mr-1.5" /> Salvar PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => gerarRelatorio('referencias', 'imprimir')}
+                  disabled={gerandoRelatorio || lista.length === 0}
+                >
+                  <Printer className="w-3.5 h-3.5 mr-1.5" /> Imprimir
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
@@ -944,6 +945,19 @@ const Produtos: FC = () => {
         aberto={modalCategoriasAberto}
         onFechar={() => setModalCategoriasAberto(false)}
         onMudancas={carregar}
+      />
+
+      <ModalImportarXml
+        aberto={importarXmlAberto}
+        onFechar={() => setImportarXmlAberto(false)}
+        onImportado={carregar}
+        categorias={categorias}
+        produtos={lista}
+      />
+
+      <ModalNotasEntrada
+        aberto={notasEntradaAberto}
+        onFechar={() => setNotasEntradaAberto(false)}
       />
     </div>
   )

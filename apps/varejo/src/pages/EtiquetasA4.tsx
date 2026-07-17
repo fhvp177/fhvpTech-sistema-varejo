@@ -17,6 +17,7 @@ type Variacao = {
 type Produto = {
   id: number
   codigo_barras: string | null
+  referencia: string | null
   nome: string
   preco: number
   estoque: number
@@ -29,6 +30,7 @@ type Etiquetavel = {
   chave: string
   nome: string
   codigo_barras: string
+  referencia: string | null
   preco: number
 }
 
@@ -59,10 +61,10 @@ const EtiquetasA4: FC = () => {
     for (const p of produtos) {
       if (p.variacoes.length > 0) {
         for (const v of p.variacoes) {
-          out.push({ chave: `v${v.id}`, nome: `${p.nome} (${v.tamanho})`, codigo_barras: v.codigo_barras, preco: p.preco })
+          out.push({ chave: `v${v.id}`, nome: `${p.nome} (${v.tamanho})`, codigo_barras: v.codigo_barras, referencia: p.referencia, preco: p.preco })
         }
       } else if (p.codigo_barras) {
-        out.push({ chave: `p${p.id}`, nome: p.nome, codigo_barras: p.codigo_barras, preco: p.preco })
+        out.push({ chave: `p${p.id}`, nome: p.nome, codigo_barras: p.codigo_barras, referencia: p.referencia, preco: p.preco })
       }
     }
     return out
@@ -71,9 +73,17 @@ const EtiquetasA4: FC = () => {
   const etiquetaveisFiltrados = useMemo(() => {
     const q = filtro.trim().toLowerCase()
     if (!q) return etiquetaveis
-    return etiquetaveis.filter(
-      (e) => e.nome.toLowerCase().includes(q) || e.codigo_barras.includes(q)
-    )
+    return etiquetaveis
+      .filter(
+        (e) =>
+          e.nome.toLowerCase().includes(q) ||
+          e.codigo_barras.includes(q) ||
+          (e.referencia ?? '').toLowerCase().includes(q)
+      )
+      .sort((a, b) => {
+        const exato = (e: Etiquetavel) => ((e.referencia ?? '').toLowerCase() === q ? 1 : 0)
+        return exato(b) - exato(a)
+      })
   }, [etiquetaveis, filtro])
 
   const todosSlots = useMemo(() => {

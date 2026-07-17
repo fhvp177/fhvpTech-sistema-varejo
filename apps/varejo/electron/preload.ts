@@ -59,6 +59,23 @@ const api = {
       ipcRenderer.invoke('contasPagar:estornarPagamento', id)
   },
 
+  // Notas de entrada (importação de NF-e via XML)
+  notasEntrada: {
+    analisar: (
+      chave: string,
+      fornecedorCnpj: string | null,
+      itens: unknown[]
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notasEntrada:analisar', chave, fornecedorCnpj, itens),
+    importar: (dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notasEntrada:importar', dados),
+    listar: (mes?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notasEntrada:listar', mes),
+    meses: (): Promise<RespostaIPC> => ipcRenderer.invoke('notasEntrada:meses'),
+    exportarXmls: (mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notasEntrada:exportarXmls', mes)
+  },
+
   // Categorias
   categorias: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('categorias:listar'),

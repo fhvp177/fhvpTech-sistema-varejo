@@ -3,6 +3,7 @@ import { MemoryRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom
 import {
   Lock,
   LayoutDashboard,
+  BarChart3,
   Package,
   Users,
   Truck,
@@ -24,6 +25,7 @@ import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
 import Configuracoes from './pages/Configuracoes'
+import Relatorios from './pages/Relatorios'
 import TelaRestauracao from './pages/TelaRestauracao'
 import LicencaBloqueada from '@fhvptech/core/ui/LicencaBloqueada'
 import LoginSistema from './pages/LoginSistema'
@@ -393,6 +395,14 @@ const App: FC = () => {
                         />
                       )}
                       <Route
+                        path="/relatorios"
+                        element={
+                          <RotaSomenteDono titulo="Relatórios">
+                            <Relatorios />
+                          </RotaSomenteDono>
+                        }
+                      />
+                      <Route
                         path="/configuracoes"
                         element={
                           <RotaSomenteDono titulo="Configurações">
@@ -486,14 +496,15 @@ const ToastInicial: FC<{ aviso: string | null; onMostrado: () => void }> = ({
 
 type ItemSidebar = { to: string; label: string; icon: LucideIcon; somenteDono?: boolean }
 const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
-  ...(__FEAT_DASHBOARD__
-    ? [
-        {
-          titulo: 'Visão geral',
-          itens: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, somenteDono: true }]
-        }
-      ]
-    : []),
+  {
+    titulo: 'Visão geral',
+    itens: [
+      ...(__FEAT_DASHBOARD__
+        ? [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, somenteDono: true }]
+        : []),
+      { to: '/relatorios', label: 'Relatórios', icon: BarChart3, somenteDono: true }
+    ]
+  },
   {
     titulo: 'Cadastros',
     itens: [

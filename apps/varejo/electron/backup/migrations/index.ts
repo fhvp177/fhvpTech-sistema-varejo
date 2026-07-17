@@ -26,6 +26,8 @@ import { aplicar024Notificacoes } from './024_notificacoes'
 import { aplicar025CancelarVenda } from './025_cancelar_venda'
 import { aplicar026ValorPagoAvista } from './026_valor_pago_avista'
 import { aplicar027ContasPagar } from './027_contas_pagar'
+import { aplicar028NotasEntrada } from './028_notas_entrada'
+import { aplicar029ProdutoReferencia } from './029_produto_referencia'
 
 // Lista de migrations do varejo, na ordem de aplicação. O runner genérico
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
@@ -58,4 +60,6 @@ export const MIGRATIONS: Migration[] = [
   { nome: '025_cancelar_venda', aplicar: aplicar025CancelarVenda },
   { nome: '026_valor_pago_avista', aplicar: aplicar026ValorPagoAvista },
   { nome: '027_contas_pagar', aplicar: aplicar027ContasPagar },
+  { nome: '028_notas_entrada', aplicar: aplicar028NotasEntrada },
+  { nome: '029_produto_referencia', aplicar: aplicar029ProdutoReferencia },
 ]

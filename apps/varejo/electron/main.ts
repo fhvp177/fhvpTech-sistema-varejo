@@ -30,6 +30,7 @@ import { registrarHandlersLoja } from './ipc/loja'
 import { registrarHandlersOnboarding } from './ipc/onboarding'
 import { registrarHandlersNotificacoes } from './ipc/notificacoes'
 import { registrarHandlersNovidades } from './ipc/novidades'
+import { registrarHandlersNotasEntrada } from './ipc/notasEntrada'
 import { inicializarAtualizador } from './atualizador'
 import { resolverPastaDados } from './pastaDados'
 
@@ -109,6 +110,7 @@ app.whenReady().then(() => {
   registrarHandlersOnboarding()
   registrarHandlersNotificacoes()
   registrarHandlersNovidades()
+  registrarHandlersNotasEntrada()
 
   criarJanelaPrincipal()
 

@@ -1,6 +1,6 @@
 {
   "name": "sistema-rt",
-  "version": "1.24.0",
+  "version": "1.25.0",
   "description": "Sistema de gestão para pequenas lojas de varejo",
   "main": "out/main/index.js",
   "author": "",
@@ -51,6 +51,7 @@
     "electron": "31.7.7",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
+    "fast-xml-parser": "^5.10.1",
     "imask": "^7.6.1",
     "lucide-react": "^0.400.0",
     "postcss": "^8.4.38",

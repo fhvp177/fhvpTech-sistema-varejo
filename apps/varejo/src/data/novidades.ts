@@ -7,6 +7,41 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.25.0',
+    itens: [
+      {
+        emoji: '📄',
+        titulo: 'Importe a nota fiscal do fornecedor (XML)',
+        descricao:
+          'Chegou mercadoria? Arraste o XML da nota pra dentro do sistema (botão "Importar XML" em Produtos): ele lê os produtos, cadastra o fornecedor e calcula o custo real — com frete e impostos. Você só informa o lucro que quer (ex.: 30% em cima do custo) e confirma. Na recompra, o sistema reconhece os itens sozinho e repõe o estoque, sem digitar nada de novo.'
+      },
+      {
+        emoji: '🧾',
+        titulo: 'Notas de entrada + pacote do contador',
+        descricao:
+          'Cada nota importada fica guardada em "Notas de entrada": de lá sai o relatório mensal de compras e o botão "Exportar XMLs", que salva os arquivos originais do mês numa pasta — é exatamente o que o contador pede todo mês.'
+      },
+      {
+        emoji: '🔢',
+        titulo: 'Referência curta nos produtos',
+        descricao:
+          'Todo produto agora tem uma referência curta (ex.: "10"), numerada sozinha e editável. Sem leitor na mão? No caixa, digite a referência + Enter e o produto cai direto no carrinho. Nas buscas, quem bate na referência aparece em primeiro. E dá pra imprimir a "Tabela de referências" — a cola pro vendedor deixar no balcão.'
+      },
+      {
+        emoji: '📊',
+        titulo: 'Aba Relatórios',
+        descricao:
+          'Uma aba nova no menu reúne todos os relatórios do sistema num lugar só: vendas do mês, balanço de estoque, tabela de referências e compras por nota fiscal — cada um com "Salvar PDF" e "Imprimir".'
+      },
+      {
+        emoji: '🧭',
+        titulo: 'Configurações mais claras',
+        descricao:
+          'O "Backup manual" ganhou casa própria dentro da seção de backup (com aviso de sucesso ali mesmo), e o "Salvar configurações" ficou sozinho no rodapé — acabou a confusão entre os dois botões. O tutorial de boas-vindas também foi renovado e agora apresenta o sistema inteirinho.'
+      }
+    ]
+  },
+  {
     versao: '1.24.0',
     itens: [
       {

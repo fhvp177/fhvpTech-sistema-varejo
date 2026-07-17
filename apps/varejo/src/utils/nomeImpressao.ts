@@ -19,7 +19,9 @@ export const nomeImpressao = {
   devolucao: (devId: number, vendaId: number): string =>
     `Devolucao-${pad(devId)}-ref-Venda-${pad(vendaId)}`,
   relatorioEstoque: (d: Date = new Date()): string => `Relatorio-Estoque-${dataSlug(d)}`,
+  tabelaReferencias: (d: Date = new Date()): string => `Tabela-Referencias-${dataSlug(d)}`,
   // mes vem como 'YYYY-MM' (já filesystem-safe) — ex.: Relatorio-Vendas-2026-06
   relatorioVendas: (mes: string): string => `Relatorio-Vendas-${mes}`,
+  relatorioEntradas: (mes: string): string => `Relatorio-Entradas-${mes}`,
   etiquetas: (d: Date = new Date()): string => `Etiquetas-${dataHoraSlug(d)}`
 }

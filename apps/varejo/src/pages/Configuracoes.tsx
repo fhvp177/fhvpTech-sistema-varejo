@@ -2,7 +2,7 @@ import { FC, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
@@ -65,6 +65,9 @@ const Configuracoes: FC = () => {
   const [salvando, setSalvando] = useState(false)
   const [fazendoBackup, setFazendoBackup] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+  // Feedback do backup manual mora DENTRO do card dele — mensagem de backup
+  // aparecendo ao lado do "Salvar configurações" era metade da confusão.
+  const [feedbackBackup, setFeedbackBackup] = useState<Feedback | null>(null)
 
   // Dados da loja (identidade no cupom)
   const [loja, setLoja] = useState<DadosLoja | null>(null)
@@ -199,15 +202,19 @@ const Configuracoes: FC = () => {
 
   const fazerBackup = async () => {
     setFazendoBackup(true)
-    setFeedback(null)
+    setFeedbackBackup(null)
     const resp = await window.api.backup.fazerManual()
     setFazendoBackup(false)
     if (resp.success) {
-      mostrarFeedback('ok', 'Backup manual realizado com sucesso!')
+      setFeedbackBackup({ tipo: 'ok', msg: 'Backup criado com sucesso!' })
       await carregarStatus()
     } else {
-      mostrarFeedback('erro', `Falha no backup: ${(resp as { success: false; error: string }).error}`)
+      setFeedbackBackup({
+        tipo: 'erro',
+        msg: `Falha no backup: ${(resp as { success: false; error: string }).error}`
+      })
     }
+    setTimeout(() => setFeedbackBackup(null), 4000)
   }
 
   return (
@@ -650,9 +657,37 @@ const Configuracoes: FC = () => {
           </p>
         </div>
 
-        {/* Salvar */}
-        <div className="flex items-center gap-3">
+        {/* Backup manual — é ação de BACKUP, então mora aqui na seção de backup,
+            num card com cara própria (longe do rodapé, que é território do Salvar) */}
+        <div className="border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-start gap-3">
+            <HardDriveDownload className="w-5 h-5 mt-0.5 text-muted-foreground shrink-0" />
+            <div className="flex-1">
+              <h4 className="font-medium text-sm">Backup manual</h4>
+              <p className="text-sm text-muted-foreground mt-0.5 mb-3">
+                Cria um backup imediato salvo na pasta{' '}
+                <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">manuais/</code>.
+                Útil antes de operações importantes.
+              </p>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" onClick={fazerBackup} disabled={fazendoBackup}>
+                  <HardDriveDownload className="w-4 h-4 mr-2" />
+                  {fazendoBackup ? 'Criando backup...' : 'Fazer backup agora'}
+                </Button>
+                {feedbackBackup && (
+                  <p className={`text-sm font-medium ${feedbackBackup.tipo === 'ok' ? 'text-green-600' : 'text-destructive'}`}>
+                    {feedbackBackup.msg}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Salvar — rodapé clássico do formulário: sozinho, com divisória e ícone */}
+        <div className="border-t pt-5 flex items-center gap-3">
           <Button onClick={salvar} disabled={salvando}>
+            <Save className="w-4 h-4 mr-2" />
             {salvando ? 'Salvando...' : 'Salvar configurações'}
           </Button>
           {feedback && (
@@ -660,19 +695,6 @@ const Configuracoes: FC = () => {
               {feedback.msg}
             </p>
           )}
-        </div>
-
-        {/* Backup manual */}
-        <div className="border-t pt-5">
-          <h4 className="font-medium mb-1">Backup manual</h4>
-          <p className="text-sm text-muted-foreground mb-3">
-            Cria um backup imediato salvo na pasta{' '}
-            <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">manuais/</code>.
-            Útil antes de operações importantes.
-          </p>
-          <Button variant="outline" onClick={fazerBackup} disabled={fazendoBackup}>
-            {fazendoBackup ? 'Criando backup...' : 'Fazer backup agora'}
-          </Button>
         </div>
       </div>
     </div>
