@@ -7,6 +7,23 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.27.0',
+    itens: [
+      {
+        emoji: '🛡️',
+        titulo: 'Atualizações mais confiáveis',
+        descricao:
+          'Alguns lojistas viam o erro "Falha ao desinstalar os arquivos do aplicativo antigo" na hora de atualizar. Descobrimos a causa: o sistema podia ser aberto duas vezes sem querer (dois cliques no atalho), e a cópia extra travava a atualização. Agora só existe uma: se tentar abrir de novo, a janela que já está aberta vem pra frente — atualização destravada e seus dados mais protegidos.'
+      },
+      {
+        emoji: '✨',
+        titulo: 'Relatórios com destaque',
+        descricao:
+          'Na aba Relatórios, cada card agora responde ao mouse com um realce suave — fica na cara qual relatório você está prestes a gerar.'
+      }
+    ]
+  },
+  {
     versao: '1.26.0',
     itens: [
       {
