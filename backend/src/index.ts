@@ -158,9 +158,10 @@ function licencaAtiva(cliente: Cliente): boolean {
 // então, diferente de contar "perguntas", não dá pra burlar dizendo que uma
 // chamada não conta. O limite é teto de GASTO, não de quantidade.
 //
-// ≈ R$30/mês por loja, supondo ~R$5,50/US$ → ~US$5,45 → 5.450.000 µ$.
+// ≈ R$5/mês por loja, supondo ~R$5,50/US$ → ~US$0,91 → 910.000 µ$.
+// (Era R$30; reduzido em 2026-07-17 — teto igual nos planos Básico e Pro por ora.)
 // Ajuste este número se o câmbio mudar ou se quiser outro teto.
-const LIMITE_CUSTO_MICRO_MES = 5_450_000
+const LIMITE_CUSTO_MICRO_MES = 910_000
 
 // Trava de tamanho do prompt: corta de cara um payload absurdo (ex.: colar
 // centenas de KB) ANTES de gastar qualquer token. ~200 KB ≈ 50k tokens — folgado
