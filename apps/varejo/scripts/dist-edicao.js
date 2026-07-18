@@ -8,7 +8,7 @@
 // do git) e roda o build do electron-vite com a EDICAO certa — é aí que o
 // tree-shaking remove do binário as features fora do plano.
 const { spawnSync } = require('node:child_process')
-const { readFileSync } = require('node:fs')
+const { readFileSync, rmSync } = require('node:fs')
 const path = require('node:path')
 
 const edicao = process.argv[2]
@@ -44,6 +44,10 @@ function rodar(cmd, args) {
   })
   if (r.status !== 0) process.exit(r.status ?? 1)
 }
+
+// Limpa a saída da edição: o electron-builder não remove instaladores de
+// versões anteriores, e sobras já fizeram o publicar-r2 subir o exe errado.
+rmSync(path.join(__dirname, '..', 'dist', edicao), { recursive: true, force: true })
 
 rodar('npm', ['run', 'build'])
 // O electron-builder SÓ empacota (--publish never): o upload é do publicar-r2.js,

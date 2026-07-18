@@ -39,13 +39,18 @@ const HOST = `${CONTA}.r2.cloudflarestorage.com`
 const BUCKET = 'updates-fhvptech'
 
 // ── Artefatos da edição ─────────────────────────────────────────────────────
+const versao = require(path.join(__dirname, '..', 'package.json')).version
 const pastaDist = path.join(__dirname, '..', 'dist', edicao)
-const nomeExe = readdirSync(pastaDist).find((n) => n.endsWith('.exe') && n.includes('Setup'))
+// EXATAMENTE o instalador da versão atual: a pasta pode ter sobras de builds
+// antigos (o electron-builder não limpa), e um ".find" solto já publicou o exe
+// velho com latest.yml novo — o updater dos clientes caiu em 404.
+const nomeExe = readdirSync(pastaDist).find((n) => n.endsWith(`Setup ${versao}.exe`))
 if (!nomeExe) {
-  console.error(`[publicar-r2] Nenhum "* Setup *.exe" em dist/${edicao} — rode o build antes.`)
+  console.error(
+    `[publicar-r2] Não achei o instalador da v${versao} ("* Setup ${versao}.exe") em dist/${edicao} — rode o build antes.`
+  )
   process.exit(1)
 }
-const versao = require(path.join(__dirname, '..', 'package.json')).version
 const exe = readFileSync(path.join(pastaDist, nomeExe))
 const blockmap = readFileSync(path.join(pastaDist, `${nomeExe}.blockmap`))
 const nomeRemoto = nomeExe.replace(/ /g, '-') // "FHVP Tech ... 1.26.0.exe" → "FHVP-Tech-...-1.26.0.exe"
