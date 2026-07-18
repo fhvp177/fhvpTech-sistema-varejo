@@ -44,9 +44,11 @@ const CardRelatorio: FC<{
   descricao: string
   children: ReactNode
 }> = ({ icone, titulo, descricao, children }) => (
-  <div className="border rounded-lg p-5 bg-background flex flex-col gap-3">
+  <div className="group border rounded-lg p-5 bg-background flex flex-col gap-3 transition-all duration-200 hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5 motion-reduce:transform-none">
     <div className="flex items-start gap-3">
-      <div className="rounded-md bg-muted p-2 text-muted-foreground shrink-0">{icone}</div>
+      <div className="rounded-md bg-muted p-2 text-muted-foreground shrink-0 transition-colors duration-200 group-hover:bg-primary/10 group-hover:text-primary">
+        {icone}
+      </div>
       <div>
         <h3 className="font-semibold">{titulo}</h3>
         <p className="text-sm text-muted-foreground mt-0.5">{descricao}</p>
