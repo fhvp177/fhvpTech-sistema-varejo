@@ -7,6 +7,17 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.26.0',
+    itens: [
+      {
+        emoji: '🔦',
+        titulo: 'Tour guiado pelas telas',
+        descricao:
+          'O sistema agora se apresenta sozinho: um holofote destaca cada parte importante da tela, na ordem certa, com uma explicação curta do que ela faz. Pro dono, o tour começa logo depois do guia de boas-vindas; pro vendedor, no primeiro login dele — cada um vê só o que usa. Quer rever depois? É só clicar em "Fazer o tour" nas Configurações.'
+      }
+    ]
+  },
+  {
     versao: '1.25.0',
     itens: [
       {

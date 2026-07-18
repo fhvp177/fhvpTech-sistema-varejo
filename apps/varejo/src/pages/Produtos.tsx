@@ -411,6 +411,7 @@ const Produtos: FC = () => {
           {ehDono && (
             <Button
               variant="outline"
+              data-tour="produtos-importar-xml"
               onClick={() => setImportarXmlAberto(true)}
               title="Cadastrar produtos e repor estoque a partir do XML da nota fiscal de compra"
             >
@@ -420,6 +421,7 @@ const Produtos: FC = () => {
           )}
           <Button
             variant="outline"
+            data-tour="produtos-imprimir"
             onClick={() => setRelatorioAberto(true)}
             disabled={lista.length === 0}
           >
@@ -427,7 +429,7 @@ const Produtos: FC = () => {
             Imprimir
           </Button>
           {ehDono && (
-            <Button onClick={abrirNovo}>
+            <Button onClick={abrirNovo} data-tour="produtos-novo">
               <Plus className="w-4 h-4 mr-2" />
               Novo Produto
             </Button>
@@ -437,7 +439,7 @@ const Produtos: FC = () => {
 
       {/* Busca + Leitor USB */}
       <div className="flex gap-3 mb-4 max-w-xl">
-        <div className="relative flex-1">
+        <div className="relative flex-1" data-tour="produtos-busca">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome, código, categoria..."
@@ -446,7 +448,7 @@ const Produtos: FC = () => {
             className="pl-9"
           />
         </div>
-        <div className="relative">
+        <div className="relative" data-tour="produtos-leitor">
           <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             ref={inputScanRef}

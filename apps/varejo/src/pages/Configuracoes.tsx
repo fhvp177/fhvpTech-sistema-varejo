@@ -2,13 +2,13 @@ import { FC, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
 import ConfigImpressao from '@/components/ConfigImpressao'
 import CidadeSeletor from '@/components/CidadeSeletor'
-import { useOnboarding, useNovidades } from '@/App'
+import { useOnboarding, useNovidades, useTour } from '@/App'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
 import { UFS } from '@/data/ufs'
 
@@ -53,6 +53,7 @@ const fmtData = (iso: string | null) => {
 const Configuracoes: FC = () => {
   const { abrirGuia } = useOnboarding()
   const { abrirNovidades } = useNovidades()
+  const { abrirTour } = useTour()
   const [infoAtualizacao, setInfoAtualizacao] = useState<InfoAtualizacao | null>(null)
   const [verificandoUpdate, setVerificandoUpdate] = useState(false)
   const [status, setStatus] = useState<StatusBackup | null>(null)
@@ -292,6 +293,21 @@ const Configuracoes: FC = () => {
           </div>
           <Button variant="outline" size="sm" onClick={abrirGuia} className="shrink-0">
             Ver novamente
+          </Button>
+        </div>
+
+        <div className="border rounded-lg p-4 bg-muted/30 flex items-start justify-between gap-4">
+          <div>
+            <p className="font-medium text-sm flex items-center gap-1.5">
+              <Footprints className="w-4 h-4 text-blue-600" /> Tour pelas telas
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Um passeio guiado pelo sistema de verdade: cada parada acende o botão certo e
+              explica pra que ele serve.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={abrirTour} className="shrink-0">
+            Fazer o tour
           </Button>
         </div>
       </div>

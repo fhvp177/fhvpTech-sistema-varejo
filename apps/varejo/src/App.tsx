@@ -1,5 +1,5 @@
 import { createContext, FC, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { MemoryRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import {
   Lock,
   LayoutDashboard,
@@ -39,6 +39,8 @@ import ErrorBoundary from './components/ErrorBoundary'
 import DashboardSkeleton from './components/DashboardSkeleton'
 import RotaSomenteDono from './components/RotaSomenteDono'
 import GuiaBoasVindas from '@fhvptech/core/ui/GuiaBoasVindas'
+import TourGuiado, { type PassoTour } from '@fhvptech/core/ui/TourGuiado'
+import { construirPassosTour } from './data/passosTour'
 import ChecklistPrimeirosPassos, { type EstadoOnboarding } from './components/ChecklistPrimeirosPassos'
 import { construirSlidesGuia } from './data/slidesGuia'
 import NovidadesModal, { type ItemNovidade } from '@fhvptech/core/ui/NovidadesModal'
@@ -109,6 +111,11 @@ export const useOnboarding = () => useContext(OnboardingContext)
 // Permite que Configurações reabra as novidades da versão atual ("Ver novidades").
 type NovidadesCtx = { abrirNovidades: () => void }
 const NovidadesContext = createContext<NovidadesCtx>({ abrirNovidades: () => {} })
+
+// Permite que Configurações reinicie o tour guiado pelas telas ("Refazer tour").
+type TourCtx = { abrirTour: () => void }
+const TourContext = createContext<TourCtx>({ abrirTour: () => {} })
+export const useTour = () => useContext(TourContext)
 export const useNovidades = () => useContext(NovidadesContext)
 
 // MemoryRouter é necessário no Electron: não existe servidor HTTP nem hash routing
@@ -210,11 +217,34 @@ const App: FC = () => {
     }
   }, [onboarding, vendedor?.papel])
 
+  // Tour guiado pelas telas reais (holofote + balão). Passos != null = tour rodando.
+  const [tourPassos, setTourPassos] = useState<PassoTour[] | null>(null)
+  const iniciarTour = useCallback((ehDonoTour: boolean) => {
+    setPdvAtivo(false) // o tour navega pelas telas; o modo PDV esconderia o menu
+    setTourPassos(construirPassosTour(ehDonoTour))
+  }, [])
+  const fecharTour = useCallback(() => setTourPassos(null), [])
+  const abrirTour = useCallback(() => iniciarTour(true), [iniciarTour])
+
   const fecharGuia = useCallback(async () => {
+    // Primeira abertura de verdade (não um replay)? Emenda o tour pelas telas
+    // logo depois do carrossel — o dono novo sai sabendo ONDE cada coisa mora.
+    const primeiraVez = onboarding ? !onboarding.guiaVisto : false
     setGuiaAberto(false)
     await window.api.onboarding.marcarGuiaVisto()
     recarregarOnboarding()
-  }, [recarregarOnboarding])
+    if (primeiraVez) iniciarTour(true)
+  }, [recarregarOnboarding, onboarding, iniciarTour])
+
+  // Vendedor entrou pela primeira vez nesta máquina → tour enxuto do dia a dia.
+  // Flag em localStorage (é só UI): marcada já no início pra nunca insistir.
+  useEffect(() => {
+    if (estadoAuth !== 'desbloqueado' || !vendedor || vendedor.papel === 'dono' || guiaAberto) return
+    const chave = `fhvp-tour-visto-vendedor-${vendedor.id}`
+    if (localStorage.getItem(chave)) return
+    localStorage.setItem(chave, '1')
+    iniciarTour(false)
+  }, [estadoAuth, vendedor, guiaAberto, iniciarTour])
 
   const abrirGuia = useCallback(() => setGuiaAberto(true), [])
 
@@ -330,6 +360,7 @@ const App: FC = () => {
       >
        <OnboardingContext.Provider value={{ abrirGuia }}>
         <NovidadesContext.Provider value={{ abrirNovidades }}>
+        <TourContext.Provider value={{ abrirTour }}>
         <LockContext.Provider value={{ bloquear, autoLockMinutos, setAutoLockMinutos }}>
           <PdvModeContext.Provider value={{ ativo: pdvAtivo, setAtivo: setPdvAtivo }}>
             <MemoryRouter>
@@ -346,7 +377,9 @@ const App: FC = () => {
                   {!pdvAtivo && <AlertaBackupFalhando />}
                   {!pdvAtivo && vendedor?.papel === 'dono' && (
                     <div className="h-12 shrink-0 border-b bg-background flex items-center justify-end px-6">
-                      <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
+                      <span data-tour="sino">
+                        <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
+                      </span>
                     </div>
                   )}
                   <main className={`flex-1 overflow-auto ${pdvAtivo ? '' : 'pb-24'}`}>
@@ -423,6 +456,9 @@ const App: FC = () => {
                 </div>
               </div>
               <IndicadorBackupAtivo />
+              {tourPassos && estadoAuth === 'desbloqueado' && !guiaAberto && (
+                <TourHost passos={tourPassos} onFechar={fecharTour} />
+              )}
               {ChatAssistente && vendedor && !pdvAtivo && (
                 <ErrorBoundary rotulo="ChatAssistente">
                   <Suspense fallback={null}>
@@ -440,6 +476,7 @@ const App: FC = () => {
             </MemoryRouter>
           </PdvModeContext.Provider>
         </LockContext.Provider>
+        </TourContext.Provider>
         </NovidadesContext.Provider>
        </OnboardingContext.Provider>
       </SessaoContext.Provider>
@@ -599,13 +636,20 @@ const UserMenu: FC<{ vendedor: SessaoVendedor; onSair: () => void }> = ({
   )
 }
 
+// O motor do tour precisa navegar entre rotas — por isso este host vive DENTRO
+// do MemoryRouter e injeta o navigate no componente genérico do core.
+const TourHost: FC<{ passos: PassoTour[]; onFechar: () => void }> = ({ passos, onFechar }) => {
+  const navigate = useNavigate()
+  return <TourGuiado passos={passos} onNavegar={navigate} onFechar={onFechar} />
+}
+
 const Sidebar: FC<{
   diasRestantes: number | null
   onBloquear: () => void
   onRenovarComPix: () => void
   vendedor: SessaoVendedor | null
 }> = ({ diasRestantes, onBloquear, onRenovarComPix, vendedor }) => (
-  <nav className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
+  <nav data-tour="menu" className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
     <div className="mb-4">
       <h1 className="text-lg font-bold text-white">FHVP Tech</h1>
       <p className="text-xs text-slate-400">Sistema de Gestão de Varejo</p>

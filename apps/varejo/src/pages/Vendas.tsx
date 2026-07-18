@@ -552,13 +552,14 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         <div className="flex gap-2">
           <Button
             variant="outline"
+            data-tour="vendas-relatorio"
             onClick={() => { setRelMes(filtroMes || mesMaximo); setRelatorioAberto(true) }}
             disabled={lista.length === 0}
           >
             <FileText className="w-4 h-4 mr-2" />
             Relatório do mês
           </Button>
-          <Button onClick={onNova}>
+          <Button onClick={onNova} data-tour="vendas-nova">
             <Plus className="w-4 h-4 mr-2" />
             Nova Venda (PDV)
           </Button>
@@ -1741,10 +1742,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 onChange={(e) => setCodigoScan(e.target.value)}
                 onKeyDown={handleScan}
                 placeholder="Aponte o leitor ou digite o código/referência..."
+                data-tour="pdv-leitor"
                 className="flex h-10 w-full rounded-md border-2 border-primary bg-background px-3 py-2 pl-9 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
-            <Button variant="outline" onClick={() => { setBuscaProdutos(true); setTermoBusca('') }}>
+            <Button variant="outline" data-tour="pdv-buscar" onClick={() => { setBuscaProdutos(true); setTermoBusca('') }}>
               <ShoppingCart className="w-4 h-4 mr-2" />
               Buscar produto
             </Button>
