@@ -44,6 +44,24 @@ app.setPath('userData', resolverPastaDados())
 
 let janelaAtual: BrowserWindow | null = null
 
+// Trava de instância única. Sem ela dava pra abrir o sistema DUAS vezes, e a
+// cópia extra (a) segura os arquivos do app durante o update — o instalador
+// falha com "Falha ao desinstalar os arquivos do aplicativo antigo" até a
+// máquina reiniciar — e (b) escreve no mesmo banco da primeira. Quem perde a
+// trava só acorda a cópia original (via 'second-instance' nela) e se encerra.
+const instanciaUnica = app.requestSingleInstanceLock()
+if (!instanciaUnica) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (janelaAtual && !janelaAtual.isDestroyed()) {
+      if (janelaAtual.isMinimized()) janelaAtual.restore()
+      janelaAtual.show()
+      janelaAtual.focus()
+    }
+  })
+}
+
 function criarJanelaPrincipal(): void {
   janelaAtual = new BrowserWindow({
     width: 1280,
@@ -81,6 +99,10 @@ function criarJanelaPrincipal(): void {
 }
 
 app.whenReady().then(() => {
+  // Cópia que perdeu a trava de instância única: não toca no banco nem cria
+  // janela — o quit() acima já está a caminho.
+  if (!instanciaUnica) return
+
   // Injeta os ganchos de domínio no núcleo (schema, migrations, licença) antes
   // de inicializar banco e backup, que dependem deles.
   configurarNucleo({ criarTabelas, migrations: MIGRATIONS, validarLicenca })
