@@ -18,8 +18,17 @@
  */
 const Database = require('better-sqlite3')
 const path = require('path')
+const fs = require('fs')
 
-const CAMINHO = path.join(process.env.APPDATA, 'sistema-rt', 'database.sqlite')
+// O nome da pasta de dados mudou ao longo das versões (ver
+// electron/pastaDadosLogica.ts): usa a primeira que tem banco.
+const CAMINHO = ['FHVP Tech Varejo', 'Sistema RT', 'sistema-rt']
+  .map((nome) => path.join(process.env.APPDATA, nome, 'database.sqlite'))
+  .find((c) => fs.existsSync(c))
+if (!CAMINHO) {
+  console.error('Nenhum banco encontrado nas pastas de dados conhecidas.')
+  process.exit(1)
+}
 
 // ── RNG determinístico (mulberry32) ───────────────────────────────────────────
 let _seed = 0x9e3779b9

@@ -14,9 +14,9 @@ REM  (licenca.heartbeat), a ultima data em que o sistema rodou. Se o relogio
 REM  do PC esteve no FUTURO em algum momento, esse arquivo ficou com uma data
 REM  adiantada e a trava passa a achar que o relogio "voltou no tempo".
 REM
-REM  Este script apenas RENOMEIA esse arquivo (faz backup, nao apaga) nas duas
-REM  pastas de dados possiveis. Seus dados (database.sqlite) e sua licenca
-REM  (licenca.lic) NAO sao tocados. Na proxima abertura o sistema recria o
+REM  Este script apenas RENOMEIA esse arquivo (faz backup, nao apaga) nas
+REM  pastas de dados possiveis (o nome mudou ao longo das versoes). Seus dados
+REM  (database.sqlite) e sua licenca (licenca.lic) NAO sao tocados. Na proxima abertura o sistema recria o
 REM  arquivo a partir do relogio (agora correto) e destrava.
 REM
 REM  IMPORTANTE:
@@ -34,7 +34,7 @@ echo  Destravar guardiao de relogio - FHVP Tech Varejo
 echo  ------------------------------------------------
 echo.
 
-for %%P in ("Sistema RT" "sistema-rt") do (
+for %%P in ("FHVP Tech Varejo" "Sistema RT" "sistema-rt") do (
   set "HB=%APPDATA%\%%~P\licenca.heartbeat"
   if exist "!HB!" (
     ren "!HB!" "licenca.heartbeat.bkp-%STAMP%"

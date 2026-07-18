@@ -11,6 +11,11 @@ REM  (sistema-rt) e o sistema passou a abrir a pasta nova (Sistema RT), vazia.
 REM  Este script copia os dados da pasta antiga para a nova, fazendo backup do
 REM  que existir (nada e apagado).
 REM
+REM  NOTA: so serve para versoes ANTIGAS (anteriores a 1.13.1). Das versoes
+REM  novas em diante o sistema se recupera sozinho no boot e migra a pasta
+REM  para "FHVP Tech Varejo" (ver electron/pastaDados.ts) - nelas este script
+REM  nao e necessario.
+REM
 REM  IMPORTANTE: FECHE O SISTEMA antes de rodar.
 REM ============================================================================
 

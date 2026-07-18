@@ -32,14 +32,16 @@ import { registrarHandlersNotificacoes } from './ipc/notificacoes'
 import { registrarHandlersNovidades } from './ipc/novidades'
 import { registrarHandlersNotasEntrada } from './ipc/notasEntrada'
 import { inicializarAtualizador } from './atualizador'
-import { resolverPastaDados } from './pastaDados'
+import { corrigirCaminhosBackupLegados, resolverPastaDados } from './pastaDados'
 
 // A pasta de dados (banco + licença + heartbeat) segue, por padrão, o
 // productName do Electron — que mudou ao longo das versões e por isso JÁ órfãou
 // o banco de máquinas que atualizaram de versões antigas. `resolverPastaDados`
 // olha as pastas que o app já usou, acha a que tem dados de verdade e aponta o
-// userData pra ela (sem mover/apagar nada). Tem que rodar antes de qualquer uso
-// de userData (banco, licença, backup). Ver electron/pastaDados.ts.
+// userData pra ela — renomeando a pasta legada ("Sistema RT") pro nome oficial
+// ("FHVP Tech Varejo") quando dá, com fallback pra legada se o Windows recusar.
+// Tem que rodar antes de qualquer uso de userData (banco, licença, backup).
+// Ver electron/pastaDados.ts.
 app.setPath('userData', resolverPastaDados())
 
 let janelaAtual: BrowserWindow | null = null
@@ -108,6 +110,10 @@ app.whenReady().then(() => {
   configurarNucleo({ criarTabelas, migrations: MIGRATIONS, validarLicenca })
   inicializarBancoDeDados(criarTabelas)
   executarMigrations(obterBancoDeDados(), MIGRATIONS)
+  // Depois do rename da pasta de dados (ou de um restore de outra máquina), a
+  // config pode apontar pra pasta de backups que não existe mais — conserta
+  // antes do BackupManager/Restaurador lerem.
+  corrigirCaminhosBackupLegados()
   inicializarBackupManager()
   inicializarBackupAutomatico()
 

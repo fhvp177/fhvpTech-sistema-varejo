@@ -32,15 +32,20 @@ function resolverCaminhoDb(): string {
 
   if (argDb && argDb !== 'undefined') return argDb
 
-  // Caminho padrão do Electron (app.getPath('userData')) por plataforma
+  // Caminho padrão do Electron (app.getPath('userData')) por plataforma.
+  // O nome da pasta mudou ao longo das versões (ver electron/pastaDadosLogica.ts):
+  // procura na ordem oficial → legadas e usa a primeira que tem banco.
+  const nomes = ['FHVP Tech Varejo', 'Sistema RT', 'sistema-rt']
+  let basePorPlataforma: string
   if (process.platform === 'win32') {
-    const appData = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
-    return join(appData, 'Sistema RT', 'database.sqlite')
+    basePorPlataforma = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
+  } else if (process.platform === 'darwin') {
+    basePorPlataforma = join(homedir(), 'Library', 'Application Support')
+  } else {
+    basePorPlataforma = join(homedir(), '.config')
   }
-  if (process.platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', 'Sistema RT', 'database.sqlite')
-  }
-  return join(homedir(), '.config', 'Sistema RT', 'database.sqlite')
+  const candidatos = nomes.map((nome) => join(basePorPlataforma, nome, 'database.sqlite'))
+  return candidatos.find((c) => existsSync(c)) ?? candidatos[0]
 }
 
 // ─── Script principal ─────────────────────────────────────────────────────────

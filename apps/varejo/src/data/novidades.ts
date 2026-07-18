@@ -7,6 +7,23 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.28.0',
+    itens: [
+      {
+        emoji: '🗂️',
+        titulo: 'Pasta de dados com o nome do sistema',
+        descricao:
+          'A pasta onde o sistema guarda os dados e backups no computador passa a se chamar "FHVP Tech Varejo". A mudança é automática e não exige nenhuma ação: dados, licença e backups são preservados e continuam funcionando normalmente.'
+      },
+      {
+        emoji: '🛠️',
+        titulo: 'Melhorias internas e correção de bugs',
+        descricao:
+          'Ajustes internos de manutenção e correções para deixar o sistema mais estável.'
+      }
+    ]
+  },
+  {
     versao: '1.27.0',
     itens: [
       {
