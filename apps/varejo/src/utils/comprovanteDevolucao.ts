@@ -36,7 +36,9 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao, lo
   const numeroDev = String(dev.id).padStart(3, '0')
   const numeroPedido = String(dev.venda_id).padStart(3, '0')
 
-  const lojaLinhas: string[] = [`<div class="loja-nome">${escapar(loja.nome)}</div>`]
+  // Loja sem nome (identidade ainda não preenchida) não imprime linha vazia.
+  const lojaLinhas: string[] = []
+  if (loja.nome) lojaLinhas.push(`<div class="loja-nome">${escapar(loja.nome)}</div>`)
   if (loja.telefone) lojaLinhas.push(`<div>${escapar(loja.telefone)}</div>`)
   if (dev.vendedor_nome) lojaLinhas.push(`<div>Atendente: ${escapar(dev.vendedor_nome)}</div>`)
 

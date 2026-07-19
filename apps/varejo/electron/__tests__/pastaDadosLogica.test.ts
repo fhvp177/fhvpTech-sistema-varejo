@@ -287,3 +287,68 @@ describe('corrigirCaminhosBackup', () => {
     expect(valores.get('backup_pasta_secundaria')).toBe(join(base, OFICIAL))
   })
 })
+
+describe('log de boot (eventos emitidos pro boot.log)', () => {
+  let linhas: string[]
+  const log = (l: string) => linhas.push(l)
+
+  beforeEach(() => {
+    linhas = []
+  })
+
+  it('rename bem-sucedido é registrado', () => {
+    criarPastaComBanco('Sistema RT', 5)
+    resolverPastaDadosEm(base, contar, log)
+    expect(linhas.join('\n')).toContain('pasta renomeada: "Sistema RT" -> "FHVP Tech Varejo"')
+  })
+
+  it('legada mantida porque a oficial já existe: registrado como "sem rename"', () => {
+    criarPastaComBanco('Sistema RT', 5)
+    mkdirSync(join(base, OFICIAL))
+    resolverPastaDadosEm(base, contar, log)
+    expect(linhas.join('\n')).toContain('sem rename')
+  })
+
+  it('instalação nova é registrada', () => {
+    resolverPastaDadosEm(base, contar, log)
+    expect(linhas.join('\n')).toContain('instalação nova')
+  })
+
+  it('oficial com dados eleita direto é registrada', () => {
+    criarPastaComBanco(OFICIAL, 5)
+    resolverPastaDadosEm(base, contar, log)
+    expect(linhas.join('\n')).toContain('oficial, com dados')
+  })
+
+  it.runIf(process.platform === 'win32')('rename recusado (pasta segurada) é registrado', () => {
+    const pasta = criarPastaComBanco('Sistema RT', 5)
+    const trava = new DatabaseSync(join(pasta, 'database.sqlite'))
+    try {
+      resolverPastaDadosEm(base, contar, log)
+    } finally {
+      trava.close()
+    }
+    expect(linhas.join('\n')).toContain('recusado')
+  })
+
+  it('correção de config é registrada com de/para', () => {
+    const valores = new Map([['backup_pasta_padrao', join(base, 'Sistema RT', 'Backups')]])
+    corrigirCaminhosBackup(
+      join(base, OFICIAL),
+      { ler: (c) => valores.get(c) ?? '', gravar: (c, v) => void valores.set(c, v) },
+      log
+    )
+    expect(linhas.join('\n')).toContain('backup_pasta_padrao corrigida')
+    expect(linhas.join('\n')).toContain(join(base, OFICIAL, 'Backups'))
+  })
+
+  it('config já correta: nenhum evento', () => {
+    const valores = new Map([['backup_pasta_padrao', join(base, OFICIAL, 'Backups')]])
+    corrigirCaminhosBackup(
+      join(base, OFICIAL),
+      { ler: (c) => valores.get(c) ?? '', gravar: (c, v) => void valores.set(c, v) },
+      log
+    )
+    expect(linhas).toEqual([])
+  })
+})

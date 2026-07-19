@@ -18,26 +18,30 @@ export type DadosLoja = {
   exibir_logo: boolean
 }
 
-// Valores que a 1ª loja (GN Modas) já imprimia chumbados no código. Servem de
-// ponto de partida ATÉ o dono salvar os próprios dados pela tela — garante que o
-// cupom de quem já usa o sistema não muda ao atualizar (zero regressão).
-const LOJA_LEGADA: DadosLoja = {
-  nome: 'GN MODAS',
-  razao_social: 'Razão Social Ltda. — ME',
-  cnpj: '00.000.000/0001-00',
-  endereco: 'Praça Claudemiro Lopes Bezerra - Mercado Central',
-  cidade: 'Pacoti',
-  uf: 'CE',
-  cep: '62770-000',
+// Enquanto o dono não preencher "Dados da loja", a identidade fica em BRANCO —
+// nunca com dados de outra loja. Até a v1.28.0 este fallback trazia os dados da
+// 1ª loja do sistema (GN Modas) chumbados, o que vazava a identidade dela pro
+// cupom das lojas novas; o legado dela virou config de verdade na migration
+// 030_loja_identidade_legada. Campos vazios simplesmente não são impressos (as
+// linhas do cupom são condicionais), e o checklist de boas-vindas cobra o
+// preenchimento.
+const LOJA_EM_BRANCO: DadosLoja = {
+  nome: '',
+  razao_social: '',
+  cnpj: '',
+  endereco: '',
+  cidade: '',
+  uf: '',
+  cep: '',
   telefone: '',
   logo: null,
   exibir_logo: false
 }
 
 function obterDadosLoja(): DadosLoja {
-  // Enquanto ninguém configurou, devolve o legado. Depois de configurado,
+  // Enquanto ninguém configurou, devolve em branco. Depois de configurado,
   // respeita exatamente o que foi gravado — inclusive campos deixados em branco.
-  if (lerConfig('loja_configurada') !== '1') return LOJA_LEGADA
+  if (lerConfig('loja_configurada') !== '1') return LOJA_EM_BRANCO
   const logo = lerConfig('loja_logo')
   return {
     nome: lerConfig('loja_nome'),

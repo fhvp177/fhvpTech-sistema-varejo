@@ -82,9 +82,9 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
   const numeroPedido = String(venda.id).padStart(3, '0')
   const entrada = venda.entrada ?? 0
 
-  const lojaLinhas: string[] = [
-    `<div class="loja-nome">${escapar(loja.nome)}</div>`
-  ]
+  // Loja sem nome (identidade ainda não preenchida) não imprime linha vazia.
+  const lojaLinhas: string[] = []
+  if (loja.nome) lojaLinhas.push(`<div class="loja-nome">${escapar(loja.nome)}</div>`)
   if (loja.telefone) lojaLinhas.push(`<div>${escapar(loja.telefone)}</div>`)
   if (venda.vendedor_nome) lojaLinhas.push(`<div>Vendedor: ${escapar(venda.vendedor_nome)}</div>`)
 

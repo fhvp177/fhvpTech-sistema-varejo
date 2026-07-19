@@ -418,7 +418,7 @@ const Configuracoes: FC = () => {
                 <Input
                   value={loja.nome}
                   onChange={(e) => atualizarLoja('nome', e.target.value)}
-                  placeholder="Ex.: GN Modas"
+                  placeholder="Nome que aparece no cupom"
                 />
               </div>
               <div className="sm:col-span-2">

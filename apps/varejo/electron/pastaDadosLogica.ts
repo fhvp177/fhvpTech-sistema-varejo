@@ -18,7 +18,15 @@ export const PASTAS_LEGADAS = ['Sistema RT', 'sistema-rt']
 // recém-criado (sem produtos/clientes/vendas) deve contar 0 = "sem dados".
 export type ContadorRegistros = (caminhoBanco: string) => number
 
-export function resolverPastaDadosEm(base: string, contar: ContadorRegistros): string {
+// Recebe cada decisão do resolver como uma linha de texto — o wrapper Electron
+// grava no boot.log da pasta de dados (diagnóstico pós-fato de migração).
+export type LogBoot = (linha: string) => void
+
+export function resolverPastaDadosEm(
+  base: string,
+  contar: ContadorRegistros,
+  log: LogBoot = () => {}
+): string {
   const oficial = join(base, PASTA_OFICIAL)
 
   try {
@@ -33,7 +41,10 @@ export function resolverPastaDadosEm(base: string, contar: ContadorRegistros): s
       // a que o cliente realmente estava usando.
       comDados.sort((a, b) => b.mtime - a.mtime)
       const eleita = comDados[0].pasta
-      if (basename(eleita) === PASTA_OFICIAL) return eleita
+      if (basename(eleita) === PASTA_OFICIAL) {
+        log(`pasta eleita: "${basename(eleita)}" (oficial, com dados)`)
+        return eleita
+      }
 
       // A pasta com dados tem nome legado: renomeia pro nome oficial. rename no
       // mesmo volume é atômico — ou a pasta inteira muda de nome, ou nada
@@ -45,17 +56,22 @@ export function resolverPastaDadosEm(base: string, contar: ContadorRegistros): s
       if (!existsSync(oficial)) {
         try {
           renameSync(eleita, oficial)
+          log(`pasta renomeada: "${basename(eleita)}" -> "${PASTA_OFICIAL}"`)
           return oficial
-        } catch {
+        } catch (e) {
+          log(`rename de "${basename(eleita)}" recusado (${(e as Error).message}) — seguindo na legada`)
           return eleita
         }
       }
+      log(`pasta eleita: "${basename(eleita)}" (legada; oficial já existe, sem rename)`)
       return eleita
     }
-  } catch {
+  } catch (e) {
     // Qualquer imprevisto: cai no padrão (instalação nova), nunca trava o boot.
+    log(`resolução falhou (${(e as Error).message}) — caindo no padrão`)
   }
 
+  log(`sem pasta com dados: usando "${PASTA_OFICIAL}" (instalação nova)`)
   return oficial
 }
 
@@ -70,7 +86,11 @@ export type ConfigStore = {
 // banco veio de um restore feito com backup de OUTRA máquina e trouxe o
 // caminho de lá. Roda depois das migrations e antes do BackupManager, e só
 // age quando o userData atual já é o oficial.
-export function corrigirCaminhosBackup(userDataAtual: string, config: ConfigStore): void {
+export function corrigirCaminhosBackup(
+  userDataAtual: string,
+  config: ConfigStore,
+  log: LogBoot = () => {}
+): void {
   if (basename(userDataAtual) !== PASTA_OFICIAL) return
 
   // backup_pasta_padrao nunca é escolhida pelo lojista — é sempre o
@@ -82,6 +102,7 @@ export function corrigirCaminhosBackup(userDataAtual: string, config: ConfigStor
   const padrao = config.ler('backup_pasta_padrao')
   if (padrao && padrao !== padraoDesta && pareceBackupsDeInstalacao(padrao)) {
     config.gravar('backup_pasta_padrao', padraoDesta)
+    log(`backup_pasta_padrao corrigida: "${padrao}" -> "${padraoDesta}"`)
   }
 
   // backup_pasta_secundaria É escolhida pelo lojista (espelho, normalmente em
@@ -93,7 +114,9 @@ export function corrigirCaminhosBackup(userDataAtual: string, config: ConfigStor
     for (const legado of PASTAS_LEGADAS) {
       const prefixo = join(base, legado)
       if (secundaria === prefixo || secundaria.startsWith(prefixo + sep)) {
-        config.gravar('backup_pasta_secundaria', join(userDataAtual, secundaria.slice(prefixo.length + 1)))
+        const corrigida = join(userDataAtual, secundaria.slice(prefixo.length + 1))
+        config.gravar('backup_pasta_secundaria', corrigida)
+        log(`backup_pasta_secundaria corrigida: "${secundaria}" -> "${corrigida}"`)
         break
       }
     }
