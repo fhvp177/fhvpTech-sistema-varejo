@@ -8,7 +8,21 @@
 
 import type { Hono } from 'hono'
 import { exigirLicenca } from './licencaGuard.ts'
-import { gravarCliente } from './db.ts'
+import {
+  gravarCliente,
+  reservarNumeroNfce,
+  devolverNumeroNfce,
+  obterEmissaoNfce,
+  gravarEmissaoNfce,
+  contarNotasMes,
+  registrarNotaMes
+} from './db.ts'
+import {
+  montarPedidoNfce,
+  ErroMontagem,
+  type VendaParaNfce,
+  type EmitenteNfce
+} from './nfce.ts'
 import {
   garantirEmpresa,
   enviarCertificado,
@@ -18,7 +32,22 @@ import {
   type DadosEmpresa,
   type ConfigNfce
 } from './fiscal.ts'
-import { consultarCreditos, ErroAcbr, type CodigoErroAcbr } from './acbr.ts'
+import { consultarCreditos, chamarAcbr, ErroAcbr, type CodigoErroAcbr } from './acbr.ts'
+
+// O que a ACBr devolve numa emissão/consulta de DF-e (subconjunto que usamos).
+type RespostaDfe = {
+  id?: string
+  status?: string
+  numero?: number
+  serie?: number
+  chave?: string
+  autorizacao?: { codigo_status?: number; motivo_status?: string }
+}
+
+// Status que significam "a nota foi transmitida à SEFAZ" — a partir daqui o
+// número está consumido de vez (mesmo se rejeitada). Só a AUSÊNCIA de resposta
+// (exceção) devolve o número ao pool.
+const TRANSMITIDA = new Set(['autorizado', 'rejeitado', 'denegado', 'pendente', 'cancelado'])
 
 const soDigitos = (v: string) => (v ?? '').replace(/\D/g, '')
 
@@ -194,6 +223,130 @@ export function registrarRotasFiscais(app: Hono): void {
     } catch (e) {
       const { status, corpo } = responderErro(e)
       return c.json(corpo, status as 400)
+    }
+  })
+
+  // Emite uma NFC-e a partir de uma venda. O app manda a venda + os dados do
+  // emitente (que ele já tem no config); o CNPJ vem do vínculo da loja, não do
+  // corpo. `referencia` (ex.: "v123") é a chave de idempotência.
+  app.post('/fiscal/nfce', async (c) => {
+    const body = await c.req.json<{
+      clienteId?: string
+      referencia?: string
+      serie?: number
+      emitente?: Omit<EmitenteNfce, 'cnpj'>
+      venda?: VendaParaNfce
+    }>()
+    const lic = exigirLicenca(body.clienteId)
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+    if (!lic.cliente.cnpjEmitente) {
+      return c.json({ erro: 'Empresa emitente ainda não cadastrada.' }, 400)
+    }
+    if (!body.referencia) return c.json({ erro: 'referencia obrigatória' }, 400)
+    if (!body.venda || !body.emitente) return c.json({ erro: 'venda e emitente obrigatórios' }, 400)
+
+    const clienteId = lic.cliente.clienteId
+
+    // 1) Idempotência: mesma venda reenviada devolve a emissão que já existe,
+    //    nunca gera uma segunda nota.
+    const existente = obterEmissaoNfce(clienteId, body.referencia)
+    if (existente) {
+      return c.json({ ok: true, jaEmitida: true, emissao: existente })
+    }
+
+    const serie = Number.isInteger(body.serie) ? (body.serie as number) : 1
+    // 2) Reserva o número ANTES de montar/enviar.
+    const numero = reservarNumeroNfce(clienteId, serie)
+
+    let pedido: Record<string, unknown>
+    try {
+      pedido = montarPedidoNfce({
+        venda: body.venda,
+        emitente: { ...body.emitente, cnpj: lic.cliente.cnpjEmitente },
+        serie,
+        numero,
+        ambiente: c.req.query('ambiente') === 'producao' ? 'producao' : 'homologacao',
+        referencia: body.referencia
+      })
+    } catch (e) {
+      // Erro de montagem (ex.: produto sem NCM): a nota nem foi transmitida —
+      // devolve o número pra não abrir buraco na sequência.
+      devolverNumeroNfce(clienteId, serie, numero)
+      if (e instanceof ErroMontagem) return c.json({ erro: e.message, codigo: 'validacao' }, 400)
+      throw e
+    }
+
+    // 3) Emite. Exceção = não transmitiu → devolve o número. Retorno = foi
+    //    transmitida (mesmo se rejeitada) → número consumido, registra.
+    let dfe: RespostaDfe
+    try {
+      dfe = await chamarAcbr<RespostaDfe>('/nfce', { metodo: 'POST', corpo: pedido })
+    } catch (e) {
+      devolverNumeroNfce(clienteId, serie, numero)
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+
+    const status = dfe.status ?? 'pendente'
+    gravarEmissaoNfce({
+      cliente_id: clienteId,
+      referencia: body.referencia,
+      serie,
+      numero,
+      acbr_id: dfe.id ?? null,
+      status,
+      chave: dfe.chave ?? null,
+      criada_em: new Date().toISOString()
+    })
+    // Conta a nota do mês só quando foi de fato transmitida.
+    if (TRANSMITIDA.has(status)) registrarNotaMes(clienteId)
+
+    return c.json({
+      ok: true,
+      emissao: {
+        referencia: body.referencia,
+        serie,
+        numero,
+        acbr_id: dfe.id ?? null,
+        status,
+        chave: dfe.chave ?? null,
+        motivo: dfe.autorizacao?.motivo_status ?? null
+      },
+      notasNoMes: contarNotasMes(clienteId)
+    })
+  })
+
+  // Consulta o status atual de uma emissão. Se ainda está "pendente" na SEFAZ,
+  // pergunta à ACBr e atualiza — o polling do app cai aqui. Consultar status
+  // na ACBr não custa crédito.
+  app.get('/fiscal/nfce/:referencia', async (c) => {
+    const lic = exigirLicenca(c.req.query('clienteId'))
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+
+    const emissao = obterEmissaoNfce(lic.cliente.clienteId, c.req.param('referencia'))
+    if (!emissao) return c.json({ erro: 'emissão não encontrada' }, 404)
+
+    // Estado final: nada a atualizar.
+    if (emissao.status !== 'pendente' || !emissao.acbr_id) {
+      return c.json({ ok: true, emissao })
+    }
+
+    try {
+      const dfe = await chamarAcbr<RespostaDfe>(`/nfce/${emissao.acbr_id}`)
+      if (dfe.status && dfe.status !== emissao.status) {
+        gravarEmissaoNfce({
+          ...emissao,
+          status: dfe.status,
+          chave: dfe.chave ?? emissao.chave
+        })
+        emissao.status = dfe.status
+        if (dfe.chave) emissao.chave = dfe.chave
+      }
+      return c.json({ ok: true, emissao })
+    } catch (e) {
+      // Falha ao consultar não muda o que já sabemos — devolve o estado atual.
+      const { corpo } = responderErro(e)
+      return c.json({ ok: true, emissao, avisoConsulta: corpo })
     }
   })
 }

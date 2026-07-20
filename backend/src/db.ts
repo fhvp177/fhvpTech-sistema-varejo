@@ -67,6 +67,43 @@ db.exec(`
     total INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (ambiente, hora)
   );
+
+  -- Numeração da NFC-e por loja e série. A ACBr exige nNF no envio (não gera
+  -- sequência), e o número tem que ser único e sequencial. Fica AQUI, no
+  -- backend, e não no app, porque assim vários caixas da mesma loja
+  -- (multi-caixa) compartilham o mesmo contador — dois terminais nunca emitem
+  -- com o mesmo número. A coluna 'proximo' guarda o próximo a usar.
+  CREATE TABLE IF NOT EXISTS nfce_numero (
+    cliente_id TEXT NOT NULL,
+    serie INTEGER NOT NULL,
+    proximo INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (cliente_id, serie)
+  );
+
+  -- Registro de cada emissão TRANSMITIDA, por referência. É o que garante
+  -- idempotência: se o app reenviar a mesma venda (timeout/retry), devolvemos a
+  -- emissão que já existe em vez de gerar outra nota. A referência é única por
+  -- loja (o app manda "v<venda_id>").
+  CREATE TABLE IF NOT EXISTS nfce_emissao (
+    cliente_id TEXT NOT NULL,
+    referencia TEXT NOT NULL,
+    serie INTEGER NOT NULL,
+    numero INTEGER NOT NULL,
+    acbr_id TEXT,
+    status TEXT NOT NULL,
+    chave TEXT,
+    criada_em TEXT NOT NULL,
+    PRIMARY KEY (cliente_id, referencia)
+  );
+
+  -- Contagem de notas emitidas por loja e mês. Sustenta a regra comercial
+  -- (ex.: 100 notas/mês no plano) — é acompanhamento, não trava técnica.
+  CREATE TABLE IF NOT EXISTS nfce_contagem (
+    cliente_id TEXT NOT NULL,
+    mes TEXT NOT NULL,
+    total INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (cliente_id, mes)
+  );
 `)
 
 const stmts = {
@@ -108,7 +145,81 @@ const stmts = {
   incTentativasToken: db.prepare(
     `INSERT INTO acbr_token_tentativas (ambiente, hora, total) VALUES (?, ?, 1)
      ON CONFLICT(ambiente, hora) DO UPDATE SET total = total + 1`
+  ),
+  getNumero: db.prepare('SELECT proximo FROM nfce_numero WHERE cliente_id = ? AND serie = ?'),
+  reservarNumero: db.prepare(
+    `INSERT INTO nfce_numero (cliente_id, serie, proximo) VALUES (?, ?, 2)
+     ON CONFLICT(cliente_id, serie) DO UPDATE SET proximo = proximo + 1
+     RETURNING proximo`
+  ),
+  devolverNumero: db.prepare(
+    // Só recua se o número a devolver for o topo (o último reservado). Se outra
+    // emissão já andou, deixa o buraco (resolvível por inutilização) em vez de
+    // arriscar reusar um número que virou de outra nota.
+    `UPDATE nfce_numero SET proximo = proximo - 1
+     WHERE cliente_id = ? AND serie = ? AND proximo = ? + 1`
+  ),
+  getEmissao: db.prepare(
+    'SELECT * FROM nfce_emissao WHERE cliente_id = ? AND referencia = ?'
+  ),
+  setEmissao: db.prepare(
+    `INSERT INTO nfce_emissao (cliente_id, referencia, serie, numero, acbr_id, status, chave, criada_em)
+     VALUES (@cliente_id, @referencia, @serie, @numero, @acbr_id, @status, @chave, @criada_em)
+     ON CONFLICT(cliente_id, referencia) DO UPDATE SET
+       acbr_id = excluded.acbr_id, status = excluded.status, chave = excluded.chave`
+  ),
+  getContagem: db.prepare('SELECT total FROM nfce_contagem WHERE cliente_id = ? AND mes = ?'),
+  incContagem: db.prepare(
+    `INSERT INTO nfce_contagem (cliente_id, mes, total) VALUES (?, ?, 1)
+     ON CONFLICT(cliente_id, mes) DO UPDATE SET total = total + 1`
   )
+}
+
+// Reserva o próximo número da NFC-e (por loja+série), incrementando o contador
+// de forma atômica. better-sqlite3 é síncrono e single-thread, então não há
+// corrida entre requisições dentro do processo.
+export function reservarNumeroNfce(clienteId: string, serie: number): number {
+  const row = stmts.reservarNumero.get(clienteId, serie) as { proximo: number }
+  // `proximo` já foi incrementado; o número reservado é o anterior.
+  return row.proximo - 1
+}
+
+// Devolve um número ao pool quando a nota NÃO chegou a ser transmitida à SEFAZ
+// (erro de certificado, validação, etc.), pra não queimar a sequência à toa.
+export function devolverNumeroNfce(clienteId: string, serie: number, numero: number): void {
+  stmts.devolverNumero.run(clienteId, serie, numero)
+}
+
+export type EmissaoNfce = {
+  cliente_id: string
+  referencia: string
+  serie: number
+  numero: number
+  acbr_id: string | null
+  status: string
+  chave: string | null
+  criada_em: string
+}
+
+export function obterEmissaoNfce(clienteId: string, referencia: string): EmissaoNfce | null {
+  return (stmts.getEmissao.get(clienteId, referencia) as EmissaoNfce | undefined) ?? null
+}
+
+export function gravarEmissaoNfce(e: EmissaoNfce): void {
+  stmts.setEmissao.run(e)
+}
+
+// Contagem do mês corrente (UTC) e incremento — só de notas efetivamente
+// transmitidas. Espelha a mecânica do custo do chat.
+export function contarNotasMes(clienteId: string): number {
+  const mes = new Date().toISOString().slice(0, 7)
+  const row = stmts.getContagem.get(clienteId, mes) as { total: number } | undefined
+  return row?.total ?? 0
+}
+
+export function registrarNotaMes(clienteId: string): void {
+  const mes = new Date().toISOString().slice(0, 7)
+  stmts.incContagem.run(clienteId, mes)
 }
 
 export type TokenAcbrGravado = {
