@@ -49,6 +49,7 @@ export type ConfigFiscal = {
   endereco_complemento: string
   endereco_bairro: string
   // Derivados — preenchidos pelo sistema, não digitados.
+  empresa_cadastrada: boolean // já registrada como emitente na ACBr
   csc_configurado: boolean
   certificado_titular: string
   certificado_validade: string // ISO; vazio quando não há certificado
@@ -71,6 +72,7 @@ const FISCAL_EM_BRANCO: ConfigFiscal = {
   endereco_numero: '',
   endereco_complemento: '',
   endereco_bairro: '',
+  empresa_cadastrada: false,
   csc_configurado: false,
   certificado_titular: '',
   certificado_validade: '',
@@ -121,6 +123,7 @@ function obterConfigFiscal(): ConfigFiscal {
     csc_id: lerConfig('fiscal_csc_id'),
     ambiente,
     ...lerEnderecoFiscal(),
+    empresa_cadastrada: lerConfig('fiscal_empresa_cadastrada') === '1',
     csc_configurado: lerConfig('fiscal_csc_configurado') === '1',
     certificado_titular: lerConfig('fiscal_certificado_titular'),
     certificado_validade: lerConfig('fiscal_certificado_validade'),

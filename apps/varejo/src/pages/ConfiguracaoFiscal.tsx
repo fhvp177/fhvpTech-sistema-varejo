@@ -1,4 +1,4 @@
-import { FC, useCallback, useEffect, useState } from 'react'
+import { FC, useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
@@ -62,6 +62,31 @@ const Erro: FC<{ mostrar: boolean; texto: string | null }> = ({ mostrar, texto }
     </p>
   ) : null
 
+// ISO → "12/03/2027". Vazio quando a data não faz sentido.
+function formatarData(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+// Caixa de erro vermelha reutilizada pelos passos de rede (certificado, CSC).
+const ErroAcao: FC<{ texto: string | null }> = ({ texto }) =>
+  texto ? (
+    <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2.5 text-xs text-red-800">
+      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+      <p>{texto}</p>
+    </div>
+  ) : null
+
+// Aviso mostrado nos passos 2/3 enquanto o passo 1 não foi concluído.
+const CompleteOPasso1: FC = () => (
+  <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+    <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+    <p>Conclua o passo 1 (dados da empresa) antes desta etapa.</p>
+  </div>
+)
+
 const Passo: FC<{
   numero: number
   titulo: string
@@ -96,32 +121,6 @@ const Passo: FC<{
   )
 }
 
-// Passo que ainda não dá pra executar. Não é enfeite: é a lista de compras da
-// habilitação fiscal — o lojista lê e já sai atrás, em paralelo ao resto.
-const PassoBloqueado: FC<{
-  numero: number
-  titulo: string
-  descricao: string
-  icone: FC<{ className?: string }>
-  comoObter: string[]
-}> = ({ numero, titulo, descricao, icone, comoObter }) => (
-  <Passo numero={numero} titulo={titulo} descricao={descricao} estado="bloqueado" icone={icone}>
-    <div className="flex items-start gap-2 text-xs text-muted-foreground">
-      <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-      <div className="space-y-2">
-        <p className="font-medium text-foreground">
-          Ainda não disponível — o envio entra na próxima etapa do sistema.
-        </p>
-        <p>Aproveite pra ir providenciando, porque depende de terceiros e costuma demorar:</p>
-        <ul className="list-disc pl-4 space-y-1">
-          {comoObter.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  </Passo>
-)
 
 const ConfiguracaoFiscal: FC = () => {
   const [config, setConfig] = useState<ConfigFiscal | null>(null)
@@ -130,6 +129,16 @@ const ConfiguracaoFiscal: FC = () => {
   const [salvando, setSalvando] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [tocados, setTocados] = useState<Record<string, boolean>>({})
+
+  // Passo 2 (certificado) e passo 3 (CSC): ação de rede em curso e campos.
+  const [enviando, setEnviando] = useState<null | 'certificado' | 'csc'>(null)
+  const [senhaCert, setSenhaCert] = useState('')
+  const [arquivoCert, setArquivoCert] = useState<{ nome: string; base64: string } | null>(null)
+  const [erroCert, setErroCert] = useState<string | null>(null)
+  const [csc, setCsc] = useState('')
+  const [idCsc, setIdCsc] = useState('')
+  const [erroCsc, setErroCsc] = useState<string | null>(null)
+  const inputCertRef = useRef<HTMLInputElement>(null)
 
   const tocar = (campo: string) => setTocados((t) => ({ ...t, [campo]: true }))
 
@@ -189,6 +198,135 @@ const ConfiguracaoFiscal: FC = () => {
   const alterar = <K extends keyof ConfigFiscal>(campo: K, valor: ConfigFiscal[K]) =>
     setConfig((c) => (c ? { ...c, [campo]: valor } : c))
 
+  // Lê o .pfx escolhido e devolve o conteúdo em base64 (sem o prefixo data:).
+  // O certificado nunca é gravado no disco daqui — vai direto pro backend.
+  const escolherCertificado = (arquivo: File | undefined) => {
+    setErroCert(null)
+    if (!arquivo) return
+    const nome = arquivo.name.toLowerCase()
+    if (!nome.endsWith('.pfx') && !nome.endsWith('.p12')) {
+      setErroCert('O certificado A1 é um arquivo .pfx (ou .p12).')
+      return
+    }
+    const leitor = new FileReader()
+    leitor.onerror = () => setErroCert('Não foi possível ler o arquivo.')
+    leitor.onload = () => {
+      const txt = String(leitor.result)
+      const base64 = txt.slice(txt.indexOf(',') + 1) // tira "data:...;base64,"
+      setArquivoCert({ nome: arquivo.name, base64 })
+    }
+    leitor.readAsDataURL(arquivo)
+  }
+
+  const enviarCertificado = async () => {
+    if (!arquivoCert || !senhaCert) return
+    setEnviando('certificado')
+    setErroCert(null)
+    // A empresa precisa existir na ACBr antes do certificado. Garante isso de
+    // forma transparente pro lojista, em vez de exigir um passo separado.
+    if (!config?.empresa_cadastrada) {
+      const rc = await window.api.fiscal.cadastrarEmpresa()
+      if (!rc.success) {
+        setEnviando(null)
+        setErroCert(rc.error)
+        return
+      }
+    }
+    const r = await window.api.fiscal.enviarCertificado({
+      certificadoBase64: arquivoCert.base64,
+      senha: senhaCert
+    })
+    setEnviando(null)
+    if (!r.success) {
+      setErroCert(r.error)
+      return
+    }
+    // Some com a senha da memória assim que dá certo.
+    setSenhaCert('')
+    setArquivoCert(null)
+    setFeedback({ tipo: 'ok', msg: 'Certificado enviado.' })
+    carregar()
+  }
+
+  const salvarCsc = async () => {
+    if (!csc.trim() || !idCsc.trim()) return
+    setEnviando('csc')
+    setErroCsc(null)
+    if (!config?.empresa_cadastrada) {
+      const rc = await window.api.fiscal.cadastrarEmpresa()
+      if (!rc.success) {
+        setEnviando(null)
+        setErroCsc(rc.error)
+        return
+      }
+    }
+    const r = await window.api.fiscal.configurarCsc({ csc: csc.trim(), idCsc: idCsc.trim() })
+    setEnviando(null)
+    if (!r.success) {
+      setErroCsc(r.error)
+      return
+    }
+    setCsc('') // o CSC não fica guardado do lado do app
+    setFeedback({ tipo: 'ok', msg: 'Código de segurança configurado.' })
+    carregar()
+  }
+
+  // Bloco de envio do certificado (dropzone + senha + botão), reusado no estado
+  // inicial e no "trocar certificado".
+  const renderEnvioCertificado = () => (
+    <div className="space-y-3">
+      <input
+        ref={inputCertRef}
+        type="file"
+        accept=".pfx,.p12"
+        className="hidden"
+        onChange={(e) => escolherCertificado(e.target.files?.[0])}
+      />
+      <div
+        onClick={() => inputCertRef.current?.click()}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault()
+          escolherCertificado(e.dataTransfer.files?.[0])
+        }}
+        className="flex items-center gap-3 rounded-md border border-dashed p-3 cursor-pointer hover:bg-muted/30 transition-colors"
+      >
+        <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
+        <div className="min-w-0 flex-1">
+          {arquivoCert ? (
+            <p className="text-sm truncate">{arquivoCert.nome}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Clique ou arraste o arquivo <strong>.pfx</strong> aqui
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="senhaCert">Senha do certificado</Label>
+        <Input
+          id="senhaCert"
+          type="password"
+          value={senhaCert}
+          onChange={(e) => setSenhaCert(e.target.value)}
+          placeholder="A senha que você definiu ao comprar o certificado"
+        />
+      </div>
+
+      <ErroAcao texto={erroCert} />
+
+      <div className="flex justify-end">
+        <Button
+          onClick={enviarCertificado}
+          disabled={enviando !== null || !arquivoCert || !senhaCert}
+        >
+          {enviando === 'certificado' ? 'Enviando…' : 'Enviar certificado'}
+        </Button>
+      </div>
+    </div>
+  )
+
   if (!config) {
     return <p className="p-8 text-sm text-muted-foreground">Carregando…</p>
   }
@@ -197,6 +335,12 @@ const ConfiguracaoFiscal: FC = () => {
   // o que falta. Sem CNPJ não há emitente possível.
   const identidadeOk = Boolean(loja?.cnpj && loja?.razao_social)
   const dadosOk = identidadeOk && config.configurada && podeSalvar
+
+  // Passos 2 e 3 só liberam depois do passo 1 salvo — antes disso, cadastrar a
+  // empresa na ACBr falharia por falta de dado.
+  const passo1Feito = identidadeOk && config.configurada
+  const certificadoOk = Boolean(config.certificado_validade)
+  const cscOk = config.csc_configurado
 
   const semNcm = diagnostico?.produtos_sem_ncm ?? 0
   const totalProdutos = diagnostico?.total_produtos ?? 0
@@ -462,32 +606,107 @@ const ConfiguracaoFiscal: FC = () => {
         </Passo>
 
         {/* ── 2. Certificado digital ── */}
-        <PassoBloqueado
+        <Passo
           numero={2}
           titulo="Certificado digital A1"
           descricao="A assinatura eletrônica da empresa — sem ele a SEFAZ não aceita a nota."
+          estado={certificadoOk ? 'ok' : passo1Feito ? 'pendente' : 'bloqueado'}
           icone={FileText}
-          comoObter={[
-            'Compre um certificado e-CNPJ do tipo A1 (arquivo, não cartão nem token). Custa entre R$120 e R$250 por ano.',
-            'A emissão exige uma videoconferência de validação — agende com antecedência.',
-            'Guarde o arquivo .pfx e a senha; você vai enviar os dois por aqui.',
-            'Vale por 1 ano. O sistema vai avisar quando estiver perto de vencer.'
-          ]}
-        />
+        >
+          {!passo1Feito ? (
+            <CompleteOPasso1 />
+          ) : certificadoOk ? (
+            // Já enviado: mostra o titular e a validade (a data que alimenta o
+            // aviso de vencimento no sino).
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Certificado enviado.</p>
+                  {config.certificado_titular && (
+                    <p className="text-xs mt-0.5">{config.certificado_titular}</p>
+                  )}
+                  <p className="text-xs mt-0.5">
+                    Válido até <strong>{formatarData(config.certificado_validade)}</strong>. O
+                    sistema avisa quando estiver perto de vencer.
+                  </p>
+                </div>
+              </div>
+              <details className="text-xs text-muted-foreground">
+                <summary className="cursor-pointer">Trocar certificado</summary>
+                <div className="mt-3">{renderEnvioCertificado()}</div>
+              </details>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Envie o arquivo <strong>.pfx</strong> do seu certificado e-CNPJ A1 e a senha
+                dele. O arquivo vai criptografado para o servidor fiscal — não fica guardado
+                neste computador.
+              </p>
+              {renderEnvioCertificado()}
+            </div>
+          )}
+        </Passo>
 
         {/* ── 3. CSC ── */}
-        <PassoBloqueado
+        <Passo
           numero={3}
           titulo="Código de Segurança do Contribuinte (CSC)"
           descricao="O código que autentica o QR Code impresso na nota do consumidor."
+          estado={cscOk ? 'ok' : passo1Feito ? 'pendente' : 'bloqueado'}
           icone={KeyRound}
-          comoObter={[
-            'É gerado no portal da SEFAZ do seu estado, não tem custo.',
-            'Normalmente quem faz é o contador, com o acesso da empresa.',
-            'Vêm dois valores: o identificador (um número curto, tipo 000001) e o código em si.',
-            'Exclusivo da NFC-e — a nota entre empresas não usa.'
-          ]}
-        />
+        >
+          {!passo1Feito ? (
+            <CompleteOPasso1 />
+          ) : (
+            <div className="space-y-3">
+              {cscOk && (
+                <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                  <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p>
+                    Código configurado{config.csc_id ? ` (identificador ${config.csc_id})` : ''}.
+                    Pode reenviar se ele mudar.
+                  </p>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                O CSC é gerado no portal da SEFAZ do seu estado — normalmente pelo contador. São
+                dois valores: um identificador curto (ex.: 000001) e o código em si.
+              </p>
+              <div className="grid grid-cols-[8rem_1fr] gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="idCsc">Identificador</Label>
+                  <Input
+                    id="idCsc"
+                    inputMode="numeric"
+                    value={idCsc}
+                    onChange={(e) => setIdCsc(apenasDigitos(e.target.value))}
+                    placeholder="000001"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="csc">Código (CSC)</Label>
+                  <Input
+                    id="csc"
+                    value={csc}
+                    onChange={(e) => setCsc(e.target.value)}
+                    placeholder="Cole aqui o código"
+                  />
+                </div>
+              </div>
+              <ErroAcao texto={erroCsc} />
+              <div className="flex justify-end">
+                <Button
+                  onClick={salvarCsc}
+                  disabled={enviando !== null || !csc.trim() || !idCsc.trim()}
+                >
+                  {enviando === 'csc' ? 'Enviando…' : cscOk ? 'Reenviar código' : 'Salvar código'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </Passo>
 
         {/* ── 4. Classificação dos produtos ── */}
         <Passo

@@ -32,6 +32,7 @@ type ConfigFiscal = {
   endereco_numero: string
   endereco_complemento: string
   endereco_bairro: string
+  empresa_cadastrada: boolean
   csc_configurado: boolean
   certificado_titular: string
   certificado_validade: string
