@@ -279,6 +279,19 @@ interface Window {
       salvar: (dados: Partial<ConfigFiscal>) => Promise<RespostaIPC<null>>
       diagnostico: () => Promise<RespostaIPC<DiagnosticoFiscal>>
       diasParaVencerCertificado: () => Promise<RespostaIPC<number | null>>
+      resolverMunicipio: () => Promise<RespostaIPC<{ codigo_municipio: string; cidade: string }>>
+      cadastrarEmpresa: () => Promise<RespostaIPC<null>>
+      enviarCertificado: (args: {
+        certificadoBase64: string
+        senha: string
+      }) => Promise<RespostaIPC<{ validade: string; titular: string }>>
+      configurarCsc: (args: { csc: string; idCsc: string }) => Promise<RespostaIPC<null>>
+      statusRemoto: () => Promise<
+        RespostaIPC<{
+          certificado: { existe: boolean; validade: string } | null
+          creditos: number | null
+        }>
+      >
     }
     novidades: {
       estado: () => Promise<RespostaIPC<{ ultimaVersaoVista: string; guiaVisto: boolean }>>

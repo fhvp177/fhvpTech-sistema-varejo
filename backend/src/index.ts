@@ -34,6 +34,8 @@ import {
   somarDiasNaExpiracao,
   gerarChaveLicenca
 } from './licenca.ts'
+import { licencaAtiva } from './licencaGuard.ts'
+import { registrarRotasFiscais } from './rotasFiscais.ts'
 function obrigatoria(chave: string): string {
   const v = process.env[chave]
   if (!v) throw new Error(`env ${chave} obrigatória`)
@@ -58,6 +60,9 @@ const app = new Hono()
 app.use('*', cors())
 
 app.get('/', (c) => c.text('FHVP Tech — licenca API ok'))
+
+// Rotas da nota fiscal (NFC-e via ACBr). Protegidas por licença lá dentro.
+registrarRotasFiscais(app)
 
 // ───── Admin ─────────────────────────────────────────────────────────
 // Protege rotas /admin/* com Bearer token (vem do env ADMIN_TOKEN).
@@ -145,12 +150,7 @@ app.post('/admin/marcar-pago', async (c) => {
 })
 
 // ───── Chatbot (proxy autenticado pra Claude API) ─────────────────────
-// Licença válida até o fim do dia de validadeAtual (AAAA-MM-DD).
-function licencaAtiva(cliente: Cliente): boolean {
-  if (!cliente.validadeAtual) return false
-  const exp = new Date(cliente.validadeAtual + 'T23:59:59Z')
-  return !isNaN(exp.getTime()) && exp.getTime() >= Date.now()
-}
+// licencaAtiva vive em licencaGuard.ts (compartilhado com as rotas fiscais).
 
 // Proteção de custo do assistente: ORÇAMENTO MENSAL DE GASTO por loja, medido em
 // microdólares (1 µ$ = US$0,000001) a partir do gasto real de cada chamada que a

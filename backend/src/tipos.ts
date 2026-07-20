@@ -12,6 +12,11 @@ export type Cliente = {
   // definido, sobrescreve o que o app envia em POST /cobranca. Permite cobrar
   // valores diferentes por cliente sem precisar de release do app.
   valorCentavosRenovacao?: number
+  // CNPJ do emitente fiscal desta loja (só dígitos). A conta ACBr é uma só
+  // (guarda-chuva), e cada loja cadastra a própria empresa dentro dela. Este
+  // vínculo trava uma loja de operar a NFC-e de OUTRO CNPJ que não o seu —
+  // gravado no 1º cadastro e conferido nas chamadas seguintes.
+  cnpjEmitente?: string
 }
 
 export type StatusCobranca = 'pendente' | 'paga' | 'expirada'

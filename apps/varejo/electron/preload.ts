@@ -212,7 +212,15 @@ const api = {
     salvar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:salvar', dados),
     diagnostico: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:diagnostico'),
     diasParaVencerCertificado: (): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('fiscal:diasParaVencerCertificado')
+      ipcRenderer.invoke('fiscal:diasParaVencerCertificado'),
+    // Ponte com o backend/ACBr (passos 2 e 3 da habilitação).
+    resolverMunicipio: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:resolverMunicipio'),
+    cadastrarEmpresa: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:cadastrarEmpresa'),
+    enviarCertificado: (args: { certificadoBase64: string; senha: string }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:enviarCertificado', args),
+    configurarCsc: (args: { csc: string; idCsc: string }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:configurarCsc', args),
+    statusRemoto: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:statusRemoto')
   },
 
   // Onboarding (tutorial de primeira abertura: guia + checklist)
