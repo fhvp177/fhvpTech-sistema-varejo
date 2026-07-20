@@ -28,6 +28,10 @@ type ConfigFiscal = {
   cfop_padrao: string
   csc_id: string
   ambiente: 'homologacao' | 'producao'
+  endereco_logradouro: string
+  endereco_numero: string
+  endereco_complemento: string
+  endereco_bairro: string
   csc_configurado: boolean
   certificado_titular: string
   certificado_validade: string

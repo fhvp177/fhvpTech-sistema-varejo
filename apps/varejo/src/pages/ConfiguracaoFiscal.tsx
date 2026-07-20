@@ -151,13 +151,27 @@ const ConfiguracaoFiscal: FC = () => {
   // A UF da loja decide o formato da inscrição estadual — não existe formato
   // único no Brasil, cada estado tem o seu.
   const uf = (loja?.uf ?? '').toUpperCase()
+  // Endereço obrigatório pra nota: sem logradouro/número/bairro a ACBr recusa o
+  // cadastro do emitente. Número aceita "S/N" pra imóvel sem numeração.
+  const obrig = (v: string, campo: string) =>
+    (v ?? '').trim() ? null : `Informe ${campo}.`
   const erros = {
     ie: config ? validarInscricaoEstadual(config.inscricao_estadual, uf).erro : null,
     email: config ? validarEmail(config.email).erro : null,
     regime: config ? validarRegime(config.regime_tributario).erro : null,
-    serie: config ? validarSerie(config.serie_nfce).erro : null
+    serie: config ? validarSerie(config.serie_nfce).erro : null,
+    logradouro: config ? obrig(config.endereco_logradouro, 'o logradouro') : null,
+    numero: config ? obrig(config.endereco_numero, 'o número (ou S/N)') : null,
+    bairro: config ? obrig(config.endereco_bairro, 'o bairro') : null
   }
   const podeSalvar = Boolean(config) && !Object.values(erros).some(Boolean)
+
+  // Endereço veio da migration (há partes preenchidas) mas o lojista ainda não
+  // salvou — sinaliza que é sugestão a conferir.
+  const enderecoPrePreenchido =
+    Boolean(config) &&
+    !config!.configurada &&
+    Boolean(config!.endereco_logradouro || config!.endereco_bairro)
 
   const salvar = async () => {
     if (!config || !podeSalvar) return
@@ -304,6 +318,87 @@ const ConfiguracaoFiscal: FC = () => {
               />
               <p className="text-xs text-muted-foreground">Usado nas comunicações fiscais.</p>
               <Erro mostrar={Boolean(tocados.email)} texto={erros.email} />
+            </div>
+          </div>
+
+          {/* ── Endereço da nota ──
+              A SEFAZ exige o endereço em campos separados. Cidade, UF e CEP já
+              vêm de Dados da loja; aqui só o que falta. O cupom continua usando
+              o endereço em texto livre — estes campos são exclusivos da nota. */}
+          <div className="space-y-3 rounded-md border p-3 bg-muted/10">
+            <div>
+              <p className="text-sm font-medium">Endereço da nota</p>
+              <p className="text-xs text-muted-foreground">
+                A nota fiscal exige o endereço em campos separados.{' '}
+                {loja?.cep ? (
+                  <>
+                    Cidade, estado e CEP ({loja.cep}) vêm de Dados da loja.
+                  </>
+                ) : (
+                  <>Cidade, estado e CEP vêm de Dados da loja.</>
+                )}
+              </p>
+            </div>
+
+            {enderecoPrePreenchido && (
+              <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <p>
+                  Preenchemos a partir do endereço da loja. <strong>Confira</strong> antes de
+                  emitir — separar endereço escrito à mão nem sempre acerta.
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-[1fr_auto] gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="logradouro">Logradouro (rua, avenida…)</Label>
+                <Input
+                  id="logradouro"
+                  value={config.endereco_logradouro}
+                  onBlur={() => tocar('logradouro')}
+                  onChange={(e) => alterar('endereco_logradouro', e.target.value)}
+                  placeholder="Rua das Flores"
+                />
+                <Erro mostrar={Boolean(tocados.logradouro)} texto={erros.logradouro} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="numero">Número</Label>
+                <Input
+                  id="numero"
+                  className="w-28"
+                  value={config.endereco_numero}
+                  onBlur={() => tocar('numero')}
+                  onChange={(e) => alterar('endereco_numero', e.target.value)}
+                  placeholder="123 ou S/N"
+                />
+                <Erro mostrar={Boolean(tocados.numero)} texto={erros.numero} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="bairro">Bairro</Label>
+                <Input
+                  id="bairro"
+                  value={config.endereco_bairro}
+                  onBlur={() => tocar('bairro')}
+                  onChange={(e) => alterar('endereco_bairro', e.target.value)}
+                  placeholder="Centro"
+                />
+                <Erro mostrar={Boolean(tocados.bairro)} texto={erros.bairro} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="complemento">
+                  Complemento <span className="text-muted-foreground font-normal">(opcional)</span>
+                </Label>
+                <Input
+                  id="complemento"
+                  value={config.endereco_complemento}
+                  onChange={(e) => alterar('endereco_complemento', e.target.value)}
+                  placeholder="Sala 2, Loja B…"
+                />
+              </div>
             </div>
           </div>
 

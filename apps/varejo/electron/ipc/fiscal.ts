@@ -39,6 +39,13 @@ export type ConfigFiscal = {
   cfop_padrao: string
   csc_id: string
   ambiente: 'homologacao' | 'producao'
+  // Endereço decomposto que a ACBr exige no cadastro do emitente (o cupom segue
+  // usando o texto livre de Dados da loja; estes campos são só pra nota).
+  // Cidade, UF e CEP continuam vindo de Dados da loja — aqui só o que falta.
+  endereco_logradouro: string
+  endereco_numero: string
+  endereco_complemento: string
+  endereco_bairro: string
   // Derivados — preenchidos pelo sistema, não digitados.
   csc_configurado: boolean
   certificado_titular: string
@@ -58,10 +65,29 @@ const FISCAL_EM_BRANCO: ConfigFiscal = {
   cfop_padrao: '',
   csc_id: '',
   ambiente: 'homologacao',
+  endereco_logradouro: '',
+  endereco_numero: '',
+  endereco_complemento: '',
+  endereco_bairro: '',
   csc_configurado: false,
   certificado_titular: '',
   certificado_validade: '',
   configurada: false
+}
+
+// O endereço é lido SEMPRE, mesmo antes de o lojista configurar o resto: a
+// migration 032 pode tê-lo pré-preenchido a partir do endereço em texto livre,
+// e esse adiantamento tem que aparecer na tela já na primeira abertura.
+function lerEnderecoFiscal(): Pick<
+  ConfigFiscal,
+  'endereco_logradouro' | 'endereco_numero' | 'endereco_complemento' | 'endereco_bairro'
+> {
+  return {
+    endereco_logradouro: lerConfig('fiscal_endereco_logradouro'),
+    endereco_numero: lerConfig('fiscal_endereco_numero'),
+    endereco_complemento: lerConfig('fiscal_endereco_complemento'),
+    endereco_bairro: lerConfig('fiscal_endereco_bairro')
+  }
 }
 
 // Só dígitos — IE e código IBGE vêm com máscara dependendo de onde o lojista
@@ -71,7 +97,11 @@ function apenasDigitos(valor: string): string {
 }
 
 function obterConfigFiscal(): ConfigFiscal {
-  if (lerConfig('fiscal_configurada') !== '1') return FISCAL_EM_BRANCO
+  // Endereço vem sempre — mesmo sem o resto configurado, pode haver
+  // pré-preenchimento da migration esperando conferência.
+  if (lerConfig('fiscal_configurada') !== '1') {
+    return { ...FISCAL_EM_BRANCO, ...lerEnderecoFiscal() }
+  }
 
   const serie = Number.parseInt(lerConfig('fiscal_serie_nfce'), 10)
   const ambiente = lerConfig('fiscal_ambiente') === 'producao' ? 'producao' : 'homologacao'
@@ -88,6 +118,7 @@ function obterConfigFiscal(): ConfigFiscal {
     cfop_padrao: lerConfig('fiscal_cfop_padrao'),
     csc_id: lerConfig('fiscal_csc_id'),
     ambiente,
+    ...lerEnderecoFiscal(),
     csc_configurado: lerConfig('fiscal_csc_configurado') === '1',
     certificado_titular: lerConfig('fiscal_certificado_titular'),
     certificado_validade: lerConfig('fiscal_certificado_validade'),
@@ -161,6 +192,11 @@ export function registrarHandlersFiscal(): void {
       gravarConfig('fiscal_cfop_padrao', apenasDigitos(dados.cfop_padrao ?? ''))
       gravarConfig('fiscal_csc_id', apenasDigitos(dados.csc_id ?? ''))
       gravarConfig('fiscal_ambiente', dados.ambiente === 'producao' ? 'producao' : 'homologacao')
+      // Endereço estruturado (só pra nota; texto livre do cupom não é tocado).
+      gravarConfig('fiscal_endereco_logradouro', (dados.endereco_logradouro ?? '').trim())
+      gravarConfig('fiscal_endereco_numero', (dados.endereco_numero ?? '').trim())
+      gravarConfig('fiscal_endereco_complemento', (dados.endereco_complemento ?? '').trim())
+      gravarConfig('fiscal_endereco_bairro', (dados.endereco_bairro ?? '').trim())
       gravarConfig('fiscal_configurada', '1')
       return { success: true, data: null }
     } catch (error) {
