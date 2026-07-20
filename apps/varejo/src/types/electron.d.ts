@@ -15,6 +15,33 @@ declare const __FEAT_NFE__: boolean
 
 type RespostaIPC<T = unknown> = { success: true; data: T } | { success: false; error: string }
 
+// Configuração fiscal da NFC-e. Espelha ConfigFiscal em electron/ipc/fiscal.ts.
+// `regime_tributario` é o CRT da SEFAZ: 1 = Simples Nacional, 2 = Simples com
+// excesso de sublimite, 3 = Regime Normal. Certificado e CSC não vêm aqui —
+// só o que é seguro guardar localmente (identificador e metadados).
+type ConfigFiscal = {
+  inscricao_estadual: string
+  regime_tributario: '' | '1' | '2' | '3'
+  codigo_municipio: string
+  email: string
+  serie_nfce: number
+  cfop_padrao: string
+  csc_id: string
+  ambiente: 'homologacao' | 'producao'
+  csc_configurado: boolean
+  certificado_titular: string
+  certificado_validade: string
+  configurada: boolean
+}
+
+// Diagnóstico "a loja está pronta pra emitir?" — calculado no banco local,
+// sem chamar a API e sem gastar crédito.
+type DiagnosticoFiscal = {
+  total_produtos: number
+  produtos_sem_ncm: number
+  exemplos_sem_ncm: Array<{ id: number; nome: string; codigo_barras: string | null }>
+}
+
 type StatusLicenca = {
   valida: boolean
   diasRestantes?: number
@@ -242,6 +269,12 @@ interface Window {
     loja: {
       obter: () => Promise<RespostaIPC>
       salvar: (dados: unknown) => Promise<RespostaIPC>
+    }
+    fiscal: {
+      obter: () => Promise<RespostaIPC<ConfigFiscal>>
+      salvar: (dados: Partial<ConfigFiscal>) => Promise<RespostaIPC<null>>
+      diagnostico: () => Promise<RespostaIPC<DiagnosticoFiscal>>
+      diasParaVencerCertificado: () => Promise<RespostaIPC<number | null>>
     }
     novidades: {
       estado: () => Promise<RespostaIPC<{ ultimaVersaoVista: string; guiaVisto: boolean }>>

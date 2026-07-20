@@ -29,6 +29,7 @@ import { aplicar027ContasPagar } from './027_contas_pagar'
 import { aplicar028NotasEntrada } from './028_notas_entrada'
 import { aplicar029ProdutoReferencia } from './029_produto_referencia'
 import { aplicar030LojaIdentidadeLegada } from './030_loja_identidade_legada'
+import { aplicar031FiscalNfce } from './031_fiscal_nfce'
 
 // Lista de migrations do varejo, na ordem de aplicação. O runner genérico
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
@@ -64,4 +65,5 @@ export const MIGRATIONS: Migration[] = [
   { nome: '028_notas_entrada', aplicar: aplicar028NotasEntrada },
   { nome: '029_produto_referencia', aplicar: aplicar029ProdutoReferencia },
   { nome: '030_loja_identidade_legada', aplicar: aplicar030LojaIdentidadeLegada },
+  { nome: '031_fiscal_nfce', aplicar: aplicar031FiscalNfce },
 ]

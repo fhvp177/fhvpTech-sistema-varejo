@@ -1,0 +1,4292 @@
+# ACBr API - documentação para LLMs
+
+Fonte: https://dev.acbr.api.br/docs
+
+Este arquivo consolida a documentação textual da ACBr API em Markdown para uso por LLMs e agentes de desenvolvimento.
+
+---
+
+# ACBr API - resumo OpenAPI para LLMs
+
+Fonte original: https://prod.acbr.api.br/openapi/swagger.json
+
+Título: ACBr API
+Versão: 3.1.7
+
+## Visão geral e autenticação
+
+API para automação comercial e documentos fiscais.
+
+**Autenticação**
+Esta API usa OAuth 2.0 no fluxo `client_credentials`.
+
+**Ambientes disponíveis**
+- Produção: `https://prod.acbr.api.br`
+- Homologação: `https://hom.acbr.api.br`
+- Autenticação para ambos os ambientes: `https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token`
+
+**Endpoint para obter o token**
+- `POST https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token`
+
+**Content-Type**
+- `application/x-www-form-urlencoded`
+
+**Parâmetros do corpo**
+- `grant_type=client_credentials`
+- `client_id=SEU_CLIENT_ID`
+- `client_secret=SEU_CLIENT_SECRET`
+- `scope=empresa nfe nfse`
+
+**Exemplo de corpo**
+- `grant_type=client_credentials&client_id=SEU_CLIENT_ID&client_secret=SEU_CLIENT_SECRET&scope=empresa%20nfe`
+
+**Uso do token nas requisições**
+- `Authorization: Bearer SEU_ACCESS_TOKEN`
+
+## Ambientes
+
+- Produção: https://prod.acbr.api.br/
+- Homologação: https://hom.acbr.api.br/
+- Autenticação: https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token
+
+## Tags
+
+- Cep
+- Cnpj
+- Conta
+- Cte: Conhecimento de Transporte Eletrônico.
+- CteOs: Conhecimento de Transporte Eletrônico - Outros serviços.
+- Dce: Declaração de Conteúdo Eletrônica.
+- Debug: Endpoints auxiliares voltados à análise técnica e depuração de documentos fiscais. Permitem rastrear o processamento de DF-es na API, incluindo o conteúdo original recebido e as requisições realizadas aos serviços autorizadores (SEFAZ, prefeituras, etc).
+- Distribuição NF-e: O processo de distribuição de DFe envolve a disponibilização dos documentos fiscais eletrônicos para os envolvidos na transação (emitentes, destinatários e terceiros autorizados). Ele permite que os destinatários recebam as NF-e emitidas contra o seu CNPJ diretamente do Ambiente Nacional, facilitando o controle e a gestão dos documentos recebidos.
+- Email
+- Empresa: Cadastre e administre todas as empresas vinculadas à sua conta.
+- Mdfe: Manifesto Eletrônico de Documentos Fiscais.
+- Nfce: Nota Fiscal de Consumidor Eletrônica.
+- Nfcom: Nota Fiscal Fatura de Serviço de Comunicação Eletrônica.
+- Nfe: Nota Fiscal Eletrônica.
+- Nfse: Nota Fiscal de Serviço Eletrônica.
+
+## Endpoints por tag
+
+### Cep
+
+- `GET /cep/{Cep}`: Consultar endereço através do CEP
+  - operationId: `ConsultarCep`
+  - consumo: 0,1 unidade requisição
+  - parâmetros obrigatórios: `Cep` (path)
+
+### Cnpj
+
+- `GET /cnpj`: Listar estabelecimentos ativos a partir da base de CNPJ
+  - operationId: `ListarCnpj`
+  - consumo: 0,1 unidade por estabelecimento listado ou requisição
+  - parâmetros obrigatórios: `cnae_principal` (query), `municipio` (query), `natureza_juridica` (query)
+- `GET /cnpj/{Cnpj}`: Consultar dados do CNPJ
+  - operationId: `ConsultarCnpj`
+  - consumo: 0,1 unidade por requisição
+  - parâmetros obrigatórios: `Cnpj` (path)
+
+### Conta
+
+- `GET /conta/cotas` [DESCONTINUADO]: Consultar os limites de uso e consumo das cotas disponíveis, exceto a cota de créditos pré-pagos.
+  - operationId: `ListarCotasConta`
+- `GET /conta/cotas/{nome}`: Consultar o limite de uso e o consumo de uma cota específica.
+  - operationId: `ConsultarCotaConta`
+  - parâmetros obrigatórios: `nome` (path)
+- `GET /conta/cotas/prepago`: Consultar o resumo da cota de créditos pré-pagos.
+  - operationId: `ConsultarCotaPrePago`
+- `GET /conta/extrato`: Consultar o extrato de movimentação de créditos do tenant atual.
+  - operationId: `ListarExtratoCreditosConta`
+
+### Cte
+
+- `GET /cte`: Listar CT-e
+  - operationId: `ListarCte`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /cte`: Emitir CT-e
+  - operationId: `EmitirCte`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /cte/{id}`: Consultar CT-e
+  - operationId: `ConsultarCte`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/{id}/cancelamento`: Consultar o cancelamento do CT-e
+  - operationId: `ConsultarCancelamentoCte`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /cte/{id}/cancelamento`: Cancelar um CT-e autorizado
+  - operationId: `CancelarCte`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/{id}/cancelamento/pdf`: Baixar PDF do cancelamento
+  - operationId: `BaixarPdfCancelamentoCte`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/{id}/cancelamento/xml`: Baixar XML do cancelamento
+  - operationId: `BaixarXmlCancelamentoCte`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/{id}/carta-correcao`: Consultar a solicitação de correção do CT-e
+  - operationId: `ConsultarCartaCorrecaoCte`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /cte/{id}/carta-correcao`: Solicitar correção do CT-e
+  - operationId: `CriarCartaCorrecaoCte`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body), `id` (path)
+- `GET /cte/{id}/carta-correcao/pdf`: Baixar PDF da carta de correção
+  - operationId: `BaixarPdfCartaCorrecaoCte`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/{id}/carta-correcao/xml`: Baixar XML da carta de correção
+  - operationId: `BaixarXmlCartaCorrecaoCte`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/{id}/pdf`: Baixar PDF do DACTE
+  - operationId: `BaixarPdfCte`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /cte/{id}/sincronizar`: Sincroniza dados no CT-e a partir da SEFAZ
+  - operationId: `SincronizarCte`
+  - consumo: 1 unidade por evento sincronizado ou requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/{id}/xml`: Baixar XML do CT-e processado
+  - operationId: `BaixarXmlCte`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/{id}/xml/conhecimento`: Baixar XML do CT-e
+  - operationId: `BaixarXmlCteConhecimento`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/{id}/xml/protocolo`: Baixar XML do Protocolo da SEFAZ
+  - operationId: `BaixarXmlCteProtocolo`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/eventos/{id}`: Consultar evento
+  - operationId: `ConsultarEventoCte`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/eventos/{id}/pdf`: Baixar PDF do evento
+  - operationId: `BaixarPdfEventoCte`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/eventos/{id}/xml`: Baixar XML do evento
+  - operationId: `BaixarXmlEventoCte`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cte/sefaz/status`: Consulta do Status do Serviço na SEFAZ Autorizadora
+  - operationId: `ConsultarStatusSefazCte`
+  - parâmetros obrigatórios: `cpf_cnpj` (query)
+- `POST /cte/simp`: Emitir CT-e Simplificado
+  - operationId: `EmitirCteSimp`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+
+### CteOs
+
+- `GET /cteos`: Listar CT-e OS
+  - operationId: `ListarCteOs`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /cteos`: Emitir CT-e OS
+  - operationId: `EmitirCteOs`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /cteos/{id}`: Consultar CT-e OS
+  - operationId: `ConsultarCteOs`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/{id}/cancelamento`: Consultar o cancelamento do CT-e OS
+  - operationId: `ConsultarCancelamentoCteOs`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /cteos/{id}/cancelamento`: Cancelar um CT-e OS autorizado
+  - operationId: `CancelarCteOs`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/{id}/cancelamento/pdf`: Baixar PDF do cancelamento
+  - operationId: `BaixarPdfCancelamentoCteOs`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/{id}/cancelamento/xml`: Baixar XML do cancelamento
+  - operationId: `BaixarXmlCancelamentoCteOs`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/{id}/carta-correcao`: Consultar a solicitação de correção do CT-e OS
+  - operationId: `ConsultarCartaCorrecaoCteOs`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /cteos/{id}/carta-correcao`: Solicitar correção do CT-e OS
+  - operationId: `CriarCartaCorrecaoCteOs`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body), `id` (path)
+- `GET /cteos/{id}/carta-correcao/pdf`: Baixar PDF da carta de correção
+  - operationId: `BaixarPdfCartaCorrecaoCteOs`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/{id}/carta-correcao/xml`: Baixar XML da carta de correção
+  - operationId: `BaixarXmlCartaCorrecaoCteOs`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/{id}/pdf`: Baixar PDF do DACTE
+  - operationId: `BaixarPdfCteOs`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /cteos/{id}/sincronizar`: Sincroniza dados no CT-e OS a partir da SEFAZ
+  - operationId: `SincronizarCteOs`
+  - consumo: 1 unidade por evento sincronizado ou requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/{id}/xml`: Baixar XML do CT-e OS processado
+  - operationId: `BaixarXmlCteOs`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/{id}/xml/conhecimento`: Baixar XML do CT-e OS
+  - operationId: `BaixarXmlCteOsConhecimento`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/{id}/xml/protocolo`: Baixar XML do Protocolo da SEFAZ
+  - operationId: `BaixarXmlCteOsProtocolo`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/eventos/{id}`: Consultar evento
+  - operationId: `ConsultarEventoCteOs`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/eventos/{id}/pdf`: Baixar PDF do evento
+  - operationId: `BaixarPdfEventoCteOs`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/eventos/{id}/xml`: Baixar XML do evento
+  - operationId: `BaixarXmlEventoCteOs`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /cteos/sefaz/status`: Consulta do Status do Serviço na SEFAZ Autorizadora
+  - operationId: `ConsultarStatusSefazCteOs`
+  - parâmetros obrigatórios: `cpf_cnpj` (query)
+
+### Dce
+
+- `GET /dce`: Listar DC-e
+  - operationId: `ListarDce`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /dce`: Emitir DC-e
+  - operationId: `EmitirDce`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /dce/{id}`: Consultar DC-e
+  - operationId: `ConsultarDce`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /dce/{id}/cancelamento`: Consultar o cancelamento da DC-e
+  - operationId: `ConsultarCancelamentoDce`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /dce/{id}/cancelamento`: Cancelar uma DC-e autorizada
+  - operationId: `CancelarDce`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /dce/{id}/cancelamento/xml`: Baixar XML do cancelamento
+  - operationId: `BaixarXmlCancelamentoDce`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /dce/{id}/pdf`: Baixar PDF do DACE
+  - operationId: `BaixarPdfDce`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /dce/{id}/xml`: Baixar XML da DC-e processada
+  - operationId: `BaixarXmlDce`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /dce/{id}/xml/declaracao`: Baixar XML da DC-e
+  - operationId: `BaixarXmlDceDeclaracao`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /dce/{id}/xml/protocolo`: Baixar XML do Protocolo da SEFAZ
+  - operationId: `BaixarXmlDceProtocolo`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /dce/sefaz/status`: Consulta do Status do Serviço na SEFAZ Autorizadora
+  - operationId: `ConsultarStatusSefazDce`
+  - parâmetros obrigatórios: `cpf_cnpj` (query)
+
+### Debug
+
+- `GET /debug/{id}`: Debug de DF-e
+  - operationId: `DebugDfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /debug/{id}/original-payload`: Payload original recebido
+  - operationId: `DebugDfeOriginalPayload`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /debug/http-requests/{id}/request-content`: Corpo da requisição HTTP
+  - operationId: `DebugHttpRequestContent`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /debug/http-requests/{id}/response-content`: Corpo da resposta HTTP
+  - operationId: `DebugHttpResponseContent`
+  - parâmetros obrigatórios: `id` (path)
+
+### Distribuição NF-e
+
+- `GET /distribuicao/nfe`: Listar distribuições
+  - operationId: `ListarDistribuicaoNfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /distribuicao/nfe`: Distribuir documentos
+  - operationId: `GerarDistribuicaoNfe`
+  - consumo: 1 unidade por documento distribuído (retornado) ou requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /distribuicao/nfe/{id}`: Consultar distribuição
+  - operationId: `ConsultarDistribuicaoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /distribuicao/nfe/documentos`: Listar documentos
+  - operationId: `ListarDocumentoDistribuicaoNfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `GET /distribuicao/nfe/documentos/{id}`: Consultar documento
+  - operationId: `ConsultarDocumentoDistribuicaoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /distribuicao/nfe/documentos/{id}/pdf`: Baixar PDF do documento
+  - operationId: `BaixarPdfDocumentoDistribuicaoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /distribuicao/nfe/documentos/{id}/xml`: Baixar XML do documento
+  - operationId: `BaixarXmlDocumentoDistribuicaoNfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /distribuicao/nfe/manifestacoes`: Listar Manifestações
+  - operationId: `ListarManifestacaoNfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /distribuicao/nfe/manifestacoes`: Manifestar nota
+  - operationId: `ManifestarNfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /distribuicao/nfe/manifestacoes/{id}`: Consultar manifestação
+  - operationId: `ConsultarManifestacaoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /distribuicao/nfe/notas-sem-manifestacao`: Listar notas sem manifestação
+  - operationId: `ListarNfeSemManifestacao`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+
+### Email
+
+- `GET /emails`: Listar e-mails
+  - operationId: `ListarEmails`
+  - parâmetros obrigatórios: `cpf_cnpj` (query)
+- `GET /emails/{id}`: Consultar e-mail
+  - operationId: `ConsultarEmail`
+  - parâmetros obrigatórios: `id` (path)
+
+### Empresa
+
+- `GET /empresas`: Listar empresas
+  - operationId: `ListarEmpresas`
+- `POST /empresas`: Cadastrar empresa
+  - operationId: `CriarEmpresa`
+  - parâmetros obrigatórios: `body` (body)
+- `DELETE /empresas/{cpf_cnpj}`: Deletar empresa
+  - operationId: `ExcluirEmpresa`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}`: Consultar empresa
+  - operationId: `ConsultarEmpresa`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}`: Alterar empresa
+  - operationId: `AtualizarEmpresa`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `DELETE /empresas/{cpf_cnpj}/certificado`: Deletar certificado
+  - operationId: `ExcluirCertificadoEmpresa`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/certificado`: Consultar certificado
+  - operationId: `ConsultarCertificadoEmpresa`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/certificado`: Cadastrar certificado
+  - operationId: `CadastrarCertificadoEmpresa`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/certificado/upload`: Upload de certificado
+  - operationId: `EnviarCertificadoEmpresa`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/cte`: Consultar configuração de CT-e
+  - operationId: `ConsultarConfigCte`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/cte`: Alterar configuração de CT-e
+  - operationId: `AlterarConfigCte`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/cteos`: Consultar configuração de CT-e OS
+  - operationId: `ConsultarConfigCteOs`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/cteos`: Alterar configuração de CT-e OS
+  - operationId: `AlterarConfigCteOs`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/dce`: Consultar configuração de DC-e
+  - operationId: `ConsultarConfigDce`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/dce`: Alterar configuração de DC-e
+  - operationId: `AlterarConfigDce`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/distnfe`: Consultar configuração de Distribuição de NF-e
+  - operationId: `ConsultarConfigDistribuicaoNfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/distnfe`: Alterar configuração de Distribuição de NF-e
+  - operationId: `AlterarConfigDistribuicaoNfe`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `DELETE /empresas/{cpf_cnpj}/logotipo`: Deletar logotipo
+  - operationId: `ExcluirLogotipoEmpresa`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/logotipo`: Baixar logotipo
+  - operationId: `BaixarLogotipoEmpresa`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/logotipo`: Enviar logotipo
+  - operationId: `EnviarLogotipoEmpresa`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/mdfe`: Consultar configuração de MDF-e
+  - operationId: `ConsultarConfigMdfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/mdfe`: Alterar configuração de MDF-e
+  - operationId: `AlterarConfigMdfe`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/nfce`: Consultar configuração de NFC-e
+  - operationId: `ConsultarConfigNfce`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/nfce`: Alterar configuração de NFC-e
+  - operationId: `AlterarConfigNfce`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/nfcom`: Consultar configuração de NFCom
+  - operationId: `ConsultarConfigNfcom`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/nfcom`: Alterar configuração de NFCom
+  - operationId: `AlterarConfigNfcom`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/nfe`: Consultar configuração de NF-e
+  - operationId: `ConsultarConfigNfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/nfe`: Alterar configuração de NF-e
+  - operationId: `AlterarConfigNfe`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `GET /empresas/{cpf_cnpj}/nfse`: Consultar configuração de NFS-e
+  - operationId: `ConsultarConfigNfse`
+  - parâmetros obrigatórios: `cpf_cnpj` (path)
+- `PUT /empresas/{cpf_cnpj}/nfse`: Alterar configuração de NFS-e
+  - operationId: `AlterarConfigNfse`
+  - parâmetros obrigatórios: `body` (body), `cpf_cnpj` (path)
+- `GET /empresas/certificados`: Listar certificados
+  - operationId: `ListarCertificados`
+
+### Mdfe
+
+- `GET /mdfe`: Listar MDF-e
+  - operationId: `ListarMdfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /mdfe`: Emitir MDF-e
+  - operationId: `EmitirMdfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /mdfe/{id}`: Consultar manifesto
+  - operationId: `ConsultarMdfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/{id}/cancelamento`: Consultar o cancelamento do MDF-e
+  - operationId: `ConsultarCancelamentoMdfe`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /mdfe/{id}/cancelamento`: Cancelar um MDF-e autorizado
+  - operationId: `CancelarMdfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/{id}/cancelamento/pdf`: Baixar PDF do cancelamento
+  - operationId: `BaixarPdfCancelamentoMdfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/{id}/cancelamento/xml`: Baixar XML do cancelamento
+  - operationId: `BaixarXmlCancelamentoMdfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/{id}/encerramento`: Consultar encerramento do MDF-e
+  - operationId: `ConsultarEncerramentoMdfe`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /mdfe/{id}/encerramento`: Encerrar um MDF-e autorizado
+  - operationId: `EncerrarMdfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body), `id` (path)
+- `GET /mdfe/{id}/encerramento/pdf`: Baixar PDF do encerramento
+  - operationId: `BaixarPdfEncerramentoMdfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/{id}/encerramento/xml`: Baixar XML do encerramento
+  - operationId: `BaixarXmlEncerramentoMdfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `POST /mdfe/{id}/inclusao-condutor`: Incluir um condutor em um MDF-e autorizado
+  - operationId: `IncluirCondutorMdfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body), `id` (path)
+- `POST /mdfe/{id}/inclusao-dfe`: Incluir um DF-e em um MDF-e autorizado
+  - operationId: `IncluirDfeMdfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body), `id` (path)
+- `GET /mdfe/{id}/pdf`: Baixar PDF do DAMDFE
+  - operationId: `BaixarPdfMdfe`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /mdfe/{id}/sincronizar`: Sincroniza dados no MDF-e a partir da SEFAZ
+  - operationId: `SincronizarMdfe`
+  - consumo: 1 unidade por evento sincronizado ou requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/{id}/xml`: Baixar XML do MDF-e processado
+  - operationId: `BaixarXmlMdfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/{id}/xml/manifesto`: Baixar XML do MDF-e
+  - operationId: `BaixarXmlMdfeManifesto`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/{id}/xml/protocolo`: Baixar XML do Protocolo da SEFAZ
+  - operationId: `BaixarXmlMdfeProtocolo`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/eventos/{id}`: Consultar evento do MDF-e
+  - operationId: `ConsultarEventoMdfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/eventos/{id}/pdf`: Baixar PDF do evento
+  - operationId: `BaixarPdfEventoMdfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/eventos/{id}/xml`: Baixar XML do evento
+  - operationId: `BaixarXmlEventoMdfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/lotes`: Listar lotes de MDF-e
+  - operationId: `ListarLotesMdfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /mdfe/lotes`: Emitir lote de MDF-e
+  - operationId: `EmitirLoteMdfe`
+  - consumo: 1 unidade por MDF-e
+  - parâmetros obrigatórios: `body` (body)
+- `GET /mdfe/lotes/{id}`: Consultar lote de MDF-e
+  - operationId: `ConsultarLoteMdfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /mdfe/nao-encerrados`: Consulta MDF-e não encerrados
+  - operationId: `ConsultarMdfeNaoEncerrados`
+  - parâmetros obrigatórios: `cpf_cnpj` (query)
+- `GET /mdfe/sefaz/status`: Consulta do Status do Serviço na SEFAZ Autorizadora
+  - operationId: `ConsultarStatusSefazMdfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (query)
+
+### Nfce
+
+- `GET /nfce`: Listar NFC-e
+  - operationId: `ListarNfce`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /nfce`: Emitir NFC-e
+  - operationId: `EmitirNfce`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfce/{id}`: Consultar NFC-e
+  - operationId: `ConsultarNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/{id}/cancelamento`: Consultar o cancelamento da NFC-e
+  - operationId: `ConsultarCancelamentoNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfce/{id}/cancelamento`: Cancelar uma NFC-e autorizada
+  - operationId: `CancelarNfce`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/{id}/cancelamento/pdf`: Baixar PDF do cancelamento
+  - operationId: `BaixarPdfCancelamentoNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/{id}/cancelamento/xml`: Baixar XML do cancelamento
+  - operationId: `BaixarXmlCancelamentoNfce`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfce/{id}/email`: Enviar e-mail
+  - operationId: `EnviarEmailNfce`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/{id}/escpos`: Comandos ESC/POS para impressão do DANFCE
+  - operationId: `BaixarEscPosNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/{id}/pdf`: Baixar PDF do DANFCE
+  - operationId: `BaixarPdfNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfce/{id}/sincronizar`: Sincroniza dados na NFC-e a partir da SEFAZ
+  - operationId: `SincronizarNfce`
+  - consumo: 1 unidade por evento sincronizado ou requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/{id}/xml`: Baixar XML da NFC-e processada
+  - operationId: `BaixarXmlNfce`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/{id}/xml/nota`: Baixar XML da NFC-e
+  - operationId: `BaixarXmlNfceNota`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/{id}/xml/protocolo`: Baixar XML do Protocolo da SEFAZ
+  - operationId: `BaixarXmlNfceProtocolo`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/eventos`: Listar eventos
+  - operationId: `ListarEventosNfce`
+  - parâmetros obrigatórios: `dfe_id` (query)
+- `GET /nfce/eventos/{id}`: Consultar evento
+  - operationId: `ConsultarEventoNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/eventos/{id}/pdf`: Baixar PDF do evento
+  - operationId: `BaixarPdfEventoNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/eventos/{id}/xml`: Baixar XML do evento
+  - operationId: `BaixarXmlEventoNfce`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfce/inutilizacoes`: Inutilizar uma sequência de numeração de NFC-e
+  - operationId: `InutilizarNumeracaoNfce`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfce/inutilizacoes/{id}`: Consultar a inutilização de sequência de numeração
+  - operationId: `ConsultarInutilizacaoNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/inutilizacoes/{id}/pdf`: Baixar PDF da inutilização
+  - operationId: `BaixarPdfInutilizacaoNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/inutilizacoes/{id}/xml`: Baixar XML da inutilização
+  - operationId: `BaixarXmlInutilizacaoNfce`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfce/lotes`: Listar lotes de NFC-e
+  - operationId: `ListarLotesNfce`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /nfce/lotes`: Emitir lote de NFC-e
+  - operationId: `EmitirLoteNfce`
+  - consumo: 1 unidade por NFC-e
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfce/lotes/{id}`: Consultar lote de NFC-e
+  - operationId: `ConsultarLoteNfce`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfce/previa/pdf`: Prévia do PDF do DANFCE
+  - operationId: `BaixarPreviaPdfNfce`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `POST /nfce/previa/xml`: Prévia do XML da NFC-e
+  - operationId: `BaixarPreviaXmlNfce`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfce/sefaz/status`: Consulta do Status do Serviço na SEFAZ Autorizadora
+  - operationId: `ConsultarStatusSefazNfce`
+  - parâmetros obrigatórios: `cpf_cnpj` (query)
+
+### Nfcom
+
+- `GET /nfcom`: Listar NFCom
+  - operationId: `ListarNfcom`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /nfcom`: Emitir NFCom
+  - operationId: `EmitirNfcom`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfcom/{id}`: Consultar NFCom
+  - operationId: `ConsultarNfcom`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfcom/{id}/cancelamento`: Consultar o cancelamento da NFCom
+  - operationId: `ConsultarCancelamentoNfcom`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfcom/{id}/cancelamento`: Cancelar uma NFCom autorizada
+  - operationId: `CancelarNfcom`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfcom/{id}/cancelamento/xml`: Baixar XML do cancelamento
+  - operationId: `BaixarXmlCancelamentoNfcom`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfcom/{id}/pdf`: Baixar PDF do DANFE-COM
+  - operationId: `BaixarPdfNfcom`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfcom/{id}/xml`: Baixar XML da NFCom processada
+  - operationId: `BaixarXmlNfcom`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfcom/{id}/xml/nota`: Baixar XML da NFCom
+  - operationId: `BaixarXmlNfcomNota`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfcom/{id}/xml/protocolo`: Baixar XML do Protocolo da SEFAZ
+  - operationId: `BaixarXmlNfcomProtocolo`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfcom/sefaz/status`: Consulta do Status do Serviço na SEFAZ Autorizadora
+  - operationId: `ConsultarStatusSefazNfcom`
+  - parâmetros obrigatórios: `cpf_cnpj` (query)
+
+### Nfe
+
+- `GET /nfe`: Listar NF-e
+  - operationId: `ListarNfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /nfe`: Emitir NF-e
+  - operationId: `EmitirNfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfe/{id}`: Consultar NF-e
+  - operationId: `ConsultarNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/{id}/cancelamento`: Consultar o cancelamento da NF-e
+  - operationId: `ConsultarCancelamentoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfe/{id}/cancelamento`: Cancelar uma NF-e autorizada
+  - operationId: `CancelarNfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/{id}/cancelamento/pdf`: Baixar PDF do cancelamento
+  - operationId: `BaixarPdfCancelamentoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/{id}/cancelamento/xml`: Baixar XML do cancelamento
+  - operationId: `BaixarXmlCancelamentoNfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/{id}/carta-correcao`: Consultar a solicitação de correção da NF-e
+  - operationId: `ConsultarCartaCorrecaoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfe/{id}/carta-correcao`: Solicitar correção da NF-e
+  - operationId: `CriarCartaCorrecaoNfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body), `id` (path)
+- `GET /nfe/{id}/carta-correcao/pdf`: Baixar PDF da carta de correção
+  - operationId: `BaixarPdfCartaCorrecaoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/{id}/carta-correcao/xml`: Baixar XML da carta de correção
+  - operationId: `BaixarXmlCartaCorrecaoNfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfe/{id}/email`: Enviar e-mail
+  - operationId: `EnviarEmailNfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/{id}/pdf`: Baixar PDF do DANFE
+  - operationId: `BaixarPdfNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfe/{id}/sincronizar`: Sincroniza dados na NF-e a partir da SEFAZ
+  - operationId: `SincronizarNfe`
+  - consumo: 1 unidade por evento sincronizado ou requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/{id}/xml`: Baixar XML da NF-e processada
+  - operationId: `BaixarXmlNfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/{id}/xml/nota`: Baixar XML da NF-e
+  - operationId: `BaixarXmlNfeNota`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/{id}/xml/protocolo`: Baixar XML do Protocolo da SEFAZ
+  - operationId: `BaixarXmlNfeProtocolo`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/cadastro-contribuinte`: Consultar contribuinte
+  - operationId: `ConsultarContribuinteNfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `argumento` (query), `documento` (query)
+- `GET /nfe/eventos`: Listar eventos
+  - operationId: `ListarEventosNfe`
+  - parâmetros obrigatórios: `dfe_id` (query)
+- `GET /nfe/eventos/{id}`: Consultar evento
+  - operationId: `ConsultarEventoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/eventos/{id}/pdf`: Baixar PDF do evento
+  - operationId: `BaixarPdfEventoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/eventos/{id}/xml`: Baixar XML do evento
+  - operationId: `BaixarXmlEventoNfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfe/inutilizacoes`: Inutilizar uma sequência de numeração de NF-e
+  - operationId: `InutilizarNumeracaoNfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfe/inutilizacoes/{id}`: Consultar a inutilização de sequência de numeração
+  - operationId: `ConsultarInutilizacaoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/inutilizacoes/{id}/pdf`: Baixar PDF da inutilização
+  - operationId: `BaixarPdfInutilizacaoNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/inutilizacoes/{id}/xml`: Baixar XML da inutilização
+  - operationId: `BaixarXmlInutilizacaoNfe`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfe/lotes`: Listar lotes de NF-e
+  - operationId: `ListarLotesNfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /nfe/lotes`: Emitir lote de NF-e
+  - operationId: `EmitirLoteNfe`
+  - consumo: 1 unidade por NF-e
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfe/lotes/{id}`: Consultar lote de NF-e
+  - operationId: `ConsultarLoteNfe`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfe/previa/pdf`: Prévia do PDF do DANFE
+  - operationId: `BaixarPreviaPdfNfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `POST /nfe/previa/xml`: Prévia do XML da NF-e
+  - operationId: `BaixarPreviaXmlNfe`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfe/sefaz/status`: Consulta do Status do Serviço na SEFAZ Autorizadora
+  - operationId: `ConsultarStatusSefazNfe`
+  - parâmetros obrigatórios: `cpf_cnpj` (query)
+
+### Nfse
+
+- `GET /nfse`: Listar NFS-e
+  - operationId: `ListarNfse`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /nfse` [DESCONTINUADO]: Emitir NFS-e
+  - operationId: `EmitirNfse`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfse/{id}`: Consultar NFS-e
+  - operationId: `ConsultarNfse`
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfse/{id}/cancelamento`: Consultar o cancelamento da NFS-e
+  - operationId: `ConsultarCancelamentoNfse`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfse/{id}/cancelamento`: Cancelar uma NFS-e autorizada
+  - operationId: `CancelarNfse`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfse/{Id}/cancelamento/xml`: Baixar XML do evento de cancelamento
+  - operationId: `BaixarXmlCancelamentoNfse`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `Id` (path)
+- `GET /nfse/{id}/pdf`: Baixar PDF do DANFSE
+  - operationId: `BaixarPdfNfse`
+  - parâmetros obrigatórios: `id` (path)
+- `POST /nfse/{id}/sincronizar`: Sincroniza dados na NFS-e a partir da Prefeitura
+  - operationId: `SincronizarNfse`
+  - consumo: 1 unidade por evento sincronizado ou requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfse/{id}/xml`: Baixar XML da NFS-e processada
+  - operationId: `BaixarXmlNfse`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfse/{id}/xml/dps`: Baixar XML da DPS
+  - operationId: `BaixarXmlDps`
+  - consumo: Primeira requisição isenta, posteriores 1 unidade por requisição
+  - parâmetros obrigatórios: `id` (path)
+- `GET /nfse/cidades`: Cidades atendidas
+  - operationId: `CidadesAtendidas`
+- `GET /nfse/cidades/{codigo_ibge}`: Consultar metadados
+  - operationId: `ConsultarMetadados`
+  - parâmetros obrigatórios: `codigo_ibge` (path)
+- `POST /nfse/dps`: Emitir NFS-e
+  - operationId: `EmitirNfseDps`
+  - consumo: 1 unidade por requisição
+  - parâmetros obrigatórios: `body` (body)
+- `POST /nfse/dps/lotes`: Emitir lote de NFS-e
+  - operationId: `EmitirLoteNfseDps`
+  - consumo: 1 unidade por NFS-e
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfse/lotes`: Listar lotes de NFS-e
+  - operationId: `ListarLotesNfse`
+  - parâmetros obrigatórios: `cpf_cnpj` (query), `ambiente` (query)
+- `POST /nfse/lotes` [DESCONTINUADO]: Emitir lote de NFS-e
+  - operationId: `EmitirLoteNfse`
+  - consumo: 1 unidade por NFS-e
+  - parâmetros obrigatórios: `body` (body)
+- `GET /nfse/lotes/{id}`: Consultar lote de NFS-e
+  - operationId: `ConsultarLoteNfse`
+  - parâmetros obrigatórios: `id` (path)
+
+## Modelos de dados
+
+- `AtvEvento`
+- `BeneficioMunicipal`
+- `CepEndereco`
+- `CnpjCnae`
+- `CnpjCnaeSecundario`
+- `CnpjEmpresa`
+- `CnpjEndereco`
+- `CnpjFaixaEtaria`
+- `CnpjIdentificadorSocio`
+- `CnpjListagem`
+- `CnpjMotivoSituacaoCadastral`
+- `CnpjMunicipio`
+- `CnpjNaturezaJuridica`
+- `CnpjOpcaoSimei`
+- `CnpjOpcaoSimples`
+- `CnpjPais`
+- `CnpjPorteEmpresa`
+- `CnpjQualificacaoSocio`
+- `CnpjRepresentanteLegal`
+- `CnpjSituacaoCadastral`
+- `CnpjSituacaoEspecial`
+- `CnpjSocio`
+- `CnpjTelefone`
+- `ComExterior`
+- `ContaCota`
+- `ContaCotaListagem`
+- `ContaCotaPrePago`
+- `ContaExtratoCredito`
+- `ContaExtratoCreditoListagem`
+- `CServ`
+- `CteCartaCorrecao`
+- `CteInfCorrecao`
+- `CteOsCartaCorrecao`
+- `CteOsInfCorrecao`
+- `CteOsPedidoCancelamento`
+- `CteOsPedidoCartaCorrecao`
+- `CteOsPedidoEmissao`
+- `CteOsSefazALCZFMCBSOS`
+- `CteOsSefazAutXMLOS`
+- `CteOsSefazCIBSOS`
+- `CteOsSefazCobrOS`
+- `CteOsSefazComplOS`
+- `CteOsSefazCompOS`
+- `CteOsSefazCompraGovReduzidoOS`
+- `CteOsSefazDevTribOS`
+- `CteOsSefazDifOS`
+- `CteOsSefazDupOS`
+- `CteOsSefazEmitOS`
+- `CteOsSefazEndeEmiOS`
+- `CteOsSefazEnderecoOS`
+- `CteOsSefazEstornoCredOS`
+- `CteOsSefazFatOS`
+- `CteOsSefazGCBSOS`
+- `CteOsSefazGIBSMunOS`
+- `CteOsSefazGIBSUFOS`
+- `CteOsSefazGPagAntecipadoOS`
+- `CteOsSefazICMS00OS`
+- `CteOsSefazICMS20OS`
+- `CteOsSefazICMS45OS`
+- `CteOsSefazICMS90OS`
+- `CteOsSefazICMSOutraUFOS`
+- `CteOsSefazICMSSNOS`
+- `CteOsSefazICMSUFFimOS`
+- `CteOsSefazIdeOS`
+- `CteOsSefazImpOS`
+- `CteOsSefazInfCte_ImpOS`
+- `CteOsSefazInfCteCompOS`
+- `CteOsSefazInfCTeNormOS`
+- `CteOsSefazInfCteOS`
+- `CteOsSefazInfCteSubOS`
+- `CteOsSefazInfCTeSuplOS`
+- `CteOsSefazInfDocRefOS`
+- `CteOsSefazInfFretamentoOS`
+- `CteOsSefazInfGTVe_CompOS`
+- `CteOsSefazInfGTVeOS`
+- `CteOsSefazInfModalOS`
+- `CteOsSefazInfPercursoOS`
+- `CteOsSefazInfQOS`
+- `CteOsSefazInfServicoOS`
+- `CteOsSefazInfTribFedOS`
+- `CteOsSefazObsContOS`
+- `CteOsSefazObsFiscoOS`
+- `CteOsSefazPagamentoRTCOS`
+- `CteOsSefazPgtoVincOS`
+- `CteOsSefazPropOS`
+- `CteOsSefazRedOS`
+- `CteOsSefazRespTecOS`
+- `CteOsSefazRodoOS`
+- `CteOsSefazSegOS`
+- `CteOsSefazTomaOS`
+- `CteOsSefazTribCompraGovOS`
+- `CteOsSefazTribCTeOS`
+- `CteOsSefazTribRegularOS`
+- `CteOsSefazVeicOS`
+- `CteOsSefazVPrestOS`
+- `CtePedidoCancelamento`
+- `CtePedidoCartaCorrecao`
+- `CtePedidoEmissao`
+- `CteSefazAereo`
+- `CteSefazALCZFMCBS`
+- `CteSefazAquav`
+- `CteSefazAutXML`
+- `CteSefazBalsa`
+- `CteSefazCIBS`
+- `CteSefazCobr`
+- `CteSefazComData`
+- `CteSefazComHora`
+- `CteSefazComp`
+- `CteSefazCompl`
+- `CteSefazCompraGovReduzido`
+- `CteSefazDest`
+- `CteSefazDetCont`
+- `CteSefazDetCont_InfDoc`
+- `CteSefazDetCont_InfDoc_InfNF`
+- `CteSefazDetCont_InfDoc_InfNFe`
+- `CteSefazDevTrib`
+- `CteSefazDif`
+- `CteSefazDocAnt`
+- `CteSefazDup`
+- `CteSefazDuto`
+- `CteSefazEmiDocAnt`
+- `CteSefazEmiOcc`
+- `CteSefazEmit`
+- `CteSefazEndeEmi`
+- `CteSefazEndereco`
+- `CteSefazEnderFer`
+- `CteSefazEntrega`
+- `CteSefazEstornoCred`
+- `CteSefazExped`
+- `CteSefazFat`
+- `CteSefazFerroEnv`
+- `CteSefazFerrov`
+- `CteSefazFluxo`
+- `CteSefazGCBS`
+- `CteSefazGIBSMun`
+- `CteSefazGIBSUF`
+- `CteSefazGPagAntecipado`
+- `CteSefazICMS00`
+- `CteSefazICMS20`
+- `CteSefazICMS45`
+- `CteSefazICMS60`
+- `CteSefazICMS90`
+- `CteSefazICMSOutraUF`
+- `CteSefazICMSSN`
+- `CteSefazICMSUFFim`
+- `CteSefazIdDocAnt`
+- `CteSefazIdDocAntEle`
+- `CteSefazIdDocAntPap`
+- `CteSefazIde`
+- `CteSefazImp`
+- `CteSefazInfCarga`
+- `CteSefazInfCte`
+- `CteSefazInfCte_Imp`
+- `CteSefazInfCteComp`
+- `CteSefazInfCTeMultimodal`
+- `CteSefazInfCTeNorm`
+- `CteSefazInfCteSub`
+- `CteSefazInfCTeSupl`
+- `CteSefazInfDCe`
+- `CteSefazInfDoc`
+- `CteSefazInfGlobalizado`
+- `CteSefazInfModal`
+- `CteSefazInfNF`
+- `CteSefazInfNFe`
+- `CteSefazInfOutros`
+- `CteSefazInfQ`
+- `CteSefazInfSeg`
+- `CteSefazInfServVinc`
+- `CteSefazInfSolicNFF`
+- `CteSefazInfTotAP`
+- `CteSefazLacre`
+- `CteSefazLacUnidCarga`
+- `CteSefazLacUnidTransp`
+- `CteSefazMultimodal`
+- `CteSefazNatCarga`
+- `CteSefazNoInter`
+- `CteSefazNoPeriodo`
+- `CteSefazObsCont`
+- `CteSefazObsFisco`
+- `CteSefazOcc`
+- `CteSefazPagamentoRTC`
+- `CteSefazPass`
+- `CteSefazPeri`
+- `CteSefazPgtoVinc`
+- `CteSefazReceb`
+- `CteSefazRed`
+- `CteSefazRem`
+- `CteSefazRespTec`
+- `CteSefazRodo`
+- `CteSefazSeg`
+- `CteSefazSemData`
+- `CteSefazSemHora`
+- `CteSefazTarifa`
+- `CteSefazToma3`
+- `CteSefazToma4`
+- `CteSefazTrafMut`
+- `CteSefazTribCompraGov`
+- `CteSefazTribCTe`
+- `CteSefazTribRegular`
+- `CteSefazUnidadeTransp`
+- `CteSefazUnidCarga`
+- `CteSefazVeicNovos`
+- `CteSefazVPrest`
+- `CteSimpPedidoEmissao`
+- `CteSimpSefazAereoSimp`
+- `CteSimpSefazALCZFMCBSSimp`
+- `CteSimpSefazAquavSimp`
+- `CteSimpSefazAutXMLSimp`
+- `CteSimpSefazBalsaSimp`
+- `CteSimpSefazCIBSSimp`
+- `CteSimpSefazCobrSimp`
+- `CteSimpSefazComplSimp`
+- `CteSimpSefazCompraGovReduzidoSimp`
+- `CteSimpSefazCompSimp`
+- `CteSimpSefazDetContSimp`
+- `CteSimpSefazDetSimp`
+- `CteSimpSefazDevTribSimp`
+- `CteSimpSefazDifSimp`
+- `CteSimpSefazDupSimp`
+- `CteSimpSefazDutoSimp`
+- `CteSimpSefazEmiOccSimp`
+- `CteSimpSefazEmitSimp`
+- `CteSimpSefazEndeEmiSimp`
+- `CteSimpSefazEnderecoSimp`
+- `CteSimpSefazEnderFerSimp`
+- `CteSimpSefazEstornoCredSimp`
+- `CteSimpSefazFatSimp`
+- `CteSimpSefazFerroEnvSimp`
+- `CteSimpSefazFerrovSimp`
+- `CteSimpSefazFluxoSimp`
+- `CteSimpSefazGCBSSimp`
+- `CteSimpSefazGIBSMunSimp`
+- `CteSimpSefazGIBSUFSimp`
+- `CteSimpSefazGPagAntecipadoSimp`
+- `CteSimpSefazICMS00Simp`
+- `CteSimpSefazICMS20Simp`
+- `CteSimpSefazICMS45Simp`
+- `CteSimpSefazICMS60Simp`
+- `CteSimpSefazICMS90Simp`
+- `CteSimpSefazICMSOutraUFSimp`
+- `CteSimpSefazICMSSNSimp`
+- `CteSimpSefazICMSUFFimSimp`
+- `CteSimpSefazIdeSimp`
+- `CteSimpSefazImpSimp`
+- `CteSimpSefazInfCargaSimp`
+- `CteSimpSefazInfCte_ImpSimp`
+- `CteSimpSefazInfCteSimp`
+- `CteSimpSefazInfCteSubSimp`
+- `CteSimpSefazInfCTeSuplSimp`
+- `CteSimpSefazInfDoc_InfNFeSimp`
+- `CteSimpSefazInfDocAntSimp`
+- `CteSimpSefazInfDocSimp`
+- `CteSimpSefazInfModalSimp`
+- `CteSimpSefazInfNFeSimp`
+- `CteSimpSefazInfNFeTranspParcialSimp`
+- `CteSimpSefazInfNFSimp`
+- `CteSimpSefazInfQSimp`
+- `CteSimpSefazInfSegSimp`
+- `CteSimpSefazInfSolicNFFSimp`
+- `CteSimpSefazInfTotAPSimp`
+- `CteSimpSefazLacreSimp`
+- `CteSimpSefazLacUnidCargaSimp`
+- `CteSimpSefazLacUnidTranspSimp`
+- `CteSimpSefazMultimodalSimp`
+- `CteSimpSefazNatCargaSimp`
+- `CteSimpSefazObsContSimp`
+- `CteSimpSefazObsFiscoSimp`
+- `CteSimpSefazOccSimp`
+- `CteSimpSefazPagamentoRTCSimp`
+- `CteSimpSefazPassSimp`
+- `CteSimpSefazPeriSimp`
+- `CteSimpSefazPgtoVincSimp`
+- `CteSimpSefazRedSimp`
+- `CteSimpSefazRespTecSimp`
+- `CteSimpSefazRodoSimp`
+- `CteSimpSefazSegSimp`
+- `CteSimpSefazTarifaSimp`
+- `CteSimpSefazTomaSimp`
+- `CteSimpSefazTotalSimp`
+- `CteSimpSefazTrafMutSimp`
+- `CteSimpSefazTribCompraGovSimp`
+- `CteSimpSefazTribCTeSimp`
+- `CteSimpSefazTribRegularSimp`
+- `CteSimpSefazUnidadeTranspSimp`
+- `CteSimpSefazUnidCargaSimp`
+- `DcePedidoCancelamento`
+- `DcePedidoEmissao`
+- `DceSefazAutXML`
+- `DceSefazDest`
+- `DceSefazDet`
+- `DceSefazECT`
+- `DceSefazEmit`
+- `DceSefazEndeDest`
+- `DceSefazEndeEmi`
+- `DceSefazFisco`
+- `DceSefazIde`
+- `DceSefazInfAdic`
+- `DceSefazInfDCe`
+- `DceSefazInfDec`
+- `DceSefazInfSolicDCe`
+- `DceSefazMarketplace`
+- `DceSefazObsECT`
+- `DceSefazObsEmit`
+- `DceSefazObsFisco`
+- `DceSefazObsMarketplace`
+- `DceSefazProd`
+- `DceSefazTotal`
+- `DceSefazTransp`
+- `DceSefazTransportadora`
+- `Dfe`
+- `DfeAutorEvento`
+- `DfeAutorizacao`
+- `DfeCancelamento`
+- `DfeCartaCorrecao`
+- `DfeContribuinteEndereco`
+- `DfeContribuinteInfCad`
+- `DfeContribuinteInfCons`
+- `DfeDebug`
+- `DfeEvento`
+- `DfeEventoListagem`
+- `DfeInutilizacao`
+- `DfeListagem`
+- `DfeLote`
+- `DfeLoteListagem`
+- `DfePedidoEnvioEmail`
+- `DfePedidoInutilizacao`
+- `DfeRecibo`
+- `DfeRequisicaoDebug`
+- `DfeSefazStatus`
+- `DfeSincronizacao`
+- `DistribuicaoNfe`
+- `DistribuicaoNfeDocumento`
+- `DistribuicaoNfeDocumentoListagem`
+- `DistribuicaoNfeEvento`
+- `DistribuicaoNfeListagem`
+- `DistribuicaoNfeNota`
+- `DistribuicaoNfeNotaListagem`
+- `DistribuicaoNfePedido`
+- `DistribuicaoNfePedidoManifestacao`
+- `DocDedRed`
+- `DocNFNFS`
+- `DocOutNFSe`
+- `DPS`
+- `Email`
+- `EmailAttachment`
+- `EmailEvent`
+- `EmailListagem`
+- `EmailResumo`
+- `EmailStatusResponse`
+- `Empresa`
+- `EmpresaCertificado`
+- `EmpresaCertificadoListagem`
+- `EmpresaConfigCte`
+- `EmpresaConfigCteOs`
+- `EmpresaConfigDce`
+- `EmpresaConfigDistribuicaoNfe`
+- `EmpresaConfigMdfe`
+- `EmpresaConfigNfce`
+- `EmpresaConfigNfceSefaz`
+- `EmpresaConfigNfcom`
+- `EmpresaConfigNfe`
+- `EmpresaConfigNfse`
+- `EmpresaConfigNfseRegTrib`
+- `EmpresaConfigPrefeitura`
+- `EmpresaConfigRps`
+- `EmpresaEndereco`
+- `EmpresaListagem`
+- `EmpresaPedidoCadastroCertificado`
+- `Endereco`
+- `EnderecoEmail`
+- `EnderecoSimples`
+- `EnderExt`
+- `EnderExtSimples`
+- `EnderNac`
+- `EnderObraEvento`
+- `ExigSuspensa`
+- `HttpRequestDebug`
+- `InfDPS`
+- `InfoCompl`
+- `InfoDedRed`
+- `InfoFornecDocDedRed`
+- `InfoIntermediario`
+- `InfoItemPed`
+- `InfoObra`
+- `InfoPrestador`
+- `InfoRefNFSe`
+- `InfoTomador`
+- `InfoTributacao`
+- `InfoValores`
+- `ListaDocDedRed`
+- `LocPrest`
+- `ManifestacaoNfeListagem`
+- `MdfeDocumentoVinculado`
+- `MdfeEncerramento`
+- `MdfeInclusaoCondutor`
+- `MdfeInclusaoDfe`
+- `MdfeNaoEncerrado`
+- `MdfeNaoEncerrados`
+- `MdfePedidoCancelamento`
+- `MdfePedidoEmissao`
+- `MdfePedidoEmissaoLote`
+- `MdfePedidoEncerramento`
+- `MdfePedidoInclusaoCondutor`
+- `MdfePedidoInclusaoDfe`
+- `MdfeSefazAereo`
+- `MdfeSefazAquav`
+- `MdfeSefazAutXML`
+- `MdfeSefazComp`
+- `MdfeSefazCondutor`
+- `MdfeSefazDisp`
+- `MdfeSefazEmit`
+- `MdfeSefazEndeEmi`
+- `MdfeSefazFerrov`
+- `MdfeSefazIde`
+- `MdfeSefazInfAdic`
+- `MdfeSefazInfANTT`
+- `MdfeSefazInfBanc`
+- `MdfeSefazInfCIOT`
+- `MdfeSefazInfContratante`
+- `MdfeSefazInfContrato`
+- `MdfeSefazInfCTe`
+- `MdfeSefazInfDoc`
+- `MdfeSefazInfEmbComb`
+- `MdfeSefazInfEntregaParcial`
+- `MdfeSefazInfLocalCarrega`
+- `MdfeSefazInfLocalDescarrega`
+- `MdfeSefazInfLotacao`
+- `MdfeSefazInfMDFe`
+- `MdfeSefazInfMDFeSupl`
+- `MdfeSefazInfMDFeTransp`
+- `MdfeSefazInfMDFeTransp_Peri`
+- `MdfeSefazInfModal`
+- `MdfeSefazInfMunCarrega`
+- `MdfeSefazInfMunDescarga`
+- `MdfeSefazInfNFe`
+- `MdfeSefazInfNFe_Peri`
+- `MdfeSefazInfNFePrestParcial`
+- `MdfeSefazInfPag`
+- `MdfeSefazInfPercurso`
+- `MdfeSefazInfPrazo`
+- `MdfeSefazInfResp`
+- `MdfeSefazInfSeg`
+- `MdfeSefazInfSolicNFF`
+- `MdfeSefazInfTermCarreg`
+- `MdfeSefazInfTermDescarreg`
+- `MdfeSefazInfUnidCargaVazia`
+- `MdfeSefazInfUnidTranspVazia`
+- `MdfeSefazLacres`
+- `MdfeSefazLacRodo`
+- `MdfeSefazLacUnidCarga`
+- `MdfeSefazLacUnidTransp`
+- `MdfeSefazPeri`
+- `MdfeSefazProdPred`
+- `MdfeSefazProp`
+- `MdfeSefazRespTec`
+- `MdfeSefazRodo`
+- `MdfeSefazSeg`
+- `MdfeSefazTot`
+- `MdfeSefazTrem`
+- `MdfeSefazUnidadeTransp`
+- `MdfeSefazUnidCarga`
+- `MdfeSefazVag`
+- `MdfeSefazValePed`
+- `MdfeSefazVeicReboque`
+- `MdfeSefazVeicReboque_Prop`
+- `MdfeSefazVeicTracao`
+- `NfcomPedidoCancelamento`
+- `NfcomPedidoEmissao`
+- `NfcomSefazALCZFMCBS`
+- `NfcomSefazAssinante`
+- `NfcomSefazAutXML`
+- `NfcomSefazCIBS`
+- `NfcomSefazCOFINS`
+- `NfcomSefazCompraGovReduzido`
+- `NfcomSefazDest`
+- `NfcomSefazDet`
+- `NfcomSefazDevTrib`
+- `NfcomSefazDif`
+- `NfcomSefazEmit`
+- `NfcomSefazEndeDest`
+- `NfcomSefazEndeEmi`
+- `NfcomSefazEstornoCred`
+- `NfcomSefazFUNTTEL`
+- `NfcomSefazFUST`
+- `NfcomSefazGCBS`
+- `NfcomSefazGCofat`
+- `NfcomSefazGCofat_GNF`
+- `NfcomSefazGEstornoCred`
+- `NfcomSefazGFat`
+- `NfcomSefazGFatCentral`
+- `NfcomSefazGFidelidade`
+- `NfcomSefazGIBS`
+- `NfcomSefazGIBS_GIBSMun`
+- `NfcomSefazGIBS_GIBSUF`
+- `NfcomSefazGIBSMun`
+- `NfcomSefazGIBSUF`
+- `NfcomSefazGNF`
+- `NfcomSefazGPagAntecipado`
+- `NfcomSefazGPIX`
+- `NfcomSefazGProc`
+- `NfcomSefazGProcRef`
+- `NfcomSefazGRessarc`
+- `NfcomSefazGSub`
+- `NfcomSefazIBSCBSTot`
+- `NfcomSefazIBSCBSTot_GCBS`
+- `NfcomSefazICMS00`
+- `NfcomSefazICMS20`
+- `NfcomSefazICMS40`
+- `NfcomSefazICMS51`
+- `NfcomSefazICMS90`
+- `NfcomSefazICMSSN`
+- `NfcomSefazICMSTot`
+- `NfcomSefazICMSUFDest`
+- `NfcomSefazIde`
+- `NfcomSefazImposto`
+- `NfcomSefazInfAdic`
+- `NfcomSefazInfNFCom`
+- `NfcomSefazPagamentoRTC`
+- `NfcomSefazPgtoVinc`
+- `NfcomSefazPIS`
+- `NfcomSefazProd`
+- `NfcomSefazRed`
+- `NfcomSefazRespTec`
+- `NfcomSefazRetTrib`
+- `NfcomSefazTotal`
+- `NfcomSefazTribCompraGov`
+- `NfcomSefazTribNFCom`
+- `NfcomSefazTribRegular`
+- `NfcomSefazVRetTribTot`
+- `NfePedidoCancelamento`
+- `NfePedidoCartaCorrecao`
+- `NfePedidoEmissao`
+- `NfePedidoEmissaoLote`
+- `NfeSefazAdi`
+- `NfeSefazAgropecuario`
+- `NfeSefazAjusteCompet`
+- `NfeSefazArma`
+- `NfeSefazAutXML`
+- `NfeSefazAvulsa`
+- `NfeSefazCana`
+- `NfeSefazCard`
+- `NfeSefazCIBS`
+- `NfeSefazCIDE`
+- `NfeSefazCobr`
+- `NfeSefazCOFINS`
+- `NfeSefazCOFINSAliq`
+- `NfeSefazCOFINSNT`
+- `NfeSefazCOFINSOutr`
+- `NfeSefazCOFINSQtde`
+- `NfeSefazCOFINSST`
+- `NfeSefazComb`
+- `NfeSefazCompra`
+- `NfeSefazCompraGov`
+- `NfeSefazCredPres`
+- `NfeSefazCredPresIBSZFM`
+- `NfeSefazCredPresOper`
+- `NfeSefazDeduc`
+- `NfeSefazDefensivo`
+- `NfeSefazDest`
+- `NfeSefazDet`
+- `NfeSefazDetExport`
+- `NfeSefazDetPag`
+- `NfeSefazDevTrib`
+- `NfeSefazDFeReferenciado`
+- `NfeSefazDI`
+- `NfeSefazDif`
+- `NfeSefazDup`
+- `NfeSefazEmit`
+- `NfeSefazEncerrante`
+- `NfeSefazEndereco`
+- `NfeSefazEnderEmi`
+- `NfeSefazEstornoCred`
+- `NfeSefazExporta`
+- `NfeSefazExportInd`
+- `NfeSefazFat`
+- `NfeSefazForDia`
+- `NfeSefazGCBS`
+- `NfeSefazGCred`
+- `NfeSefazGEstornoCred`
+- `NfeSefazGIBS`
+- `NfeSefazGIBS_GIBSMun`
+- `NfeSefazGIBS_GIBSUF`
+- `NfeSefazGIBSMun`
+- `NfeSefazGIBSUF`
+- `NfeSefazGMono`
+- `NfeSefazGMonoDif`
+- `NfeSefazGMonoPadrao`
+- `NfeSefazGMonoRet`
+- `NfeSefazGMonoReten`
+- `NfeSefazGPagAntecipado`
+- `NfeSefazGuiaTransito`
+- `NfeSefazIBSCBSMonoTot`
+- `NfeSefazIBSCBSMonoTot_GCBS`
+- `NfeSefazICMS`
+- `NfeSefazICMS00`
+- `NfeSefazICMS02`
+- `NfeSefazICMS10`
+- `NfeSefazICMS15`
+- `NfeSefazICMS20`
+- `NfeSefazICMS30`
+- `NfeSefazICMS40`
+- `NfeSefazICMS51`
+- `NfeSefazICMS53`
+- `NfeSefazICMS60`
+- `NfeSefazICMS61`
+- `NfeSefazICMS70`
+- `NfeSefazICMS90`
+- `NfeSefazICMSPart`
+- `NfeSefazICMSSN101`
+- `NfeSefazICMSSN102`
+- `NfeSefazICMSSN201`
+- `NfeSefazICMSSN202`
+- `NfeSefazICMSSN500`
+- `NfeSefazICMSSN900`
+- `NfeSefazICMSST`
+- `NfeSefazICMSTot`
+- `NfeSefazICMSUFDest`
+- `NfeSefazIde`
+- `NfeSefazII`
+- `NfeSefazImposto`
+- `NfeSefazImpostoDevol`
+- `NfeSefazImpostoDevol_IPI`
+- `NfeSefazInfAdic`
+- `NfeSefazInfAdic_ObsCont`
+- `NfeSefazInfAdic_ObsFisco`
+- `NfeSefazInfIntermed`
+- `NfeSefazInfNFe`
+- `NfeSefazInfNFeSupl`
+- `NfeSefazInfPAA`
+- `NfeSefazInfProdEmb`
+- `NfeSefazInfProdNFF`
+- `NfeSefazInfRespTec`
+- `NfeSefazInfSolicNFF`
+- `NfeSefazIpi`
+- `NfeSefazIPINT`
+- `NfeSefazIPITrib`
+- `NfeSefazIS`
+- `NfeSefazISSQN`
+- `NfeSefazISSQNtot`
+- `NfeSefazISTot`
+- `NfeSefazLacres`
+- `NfeSefazLocal`
+- `NfeSefazMed`
+- `NfeSefazMonofasia`
+- `NfeSefazNFref`
+- `NfeSefazObsCont`
+- `NfeSefazObsFisco`
+- `NfeSefazObsItem`
+- `NfeSefazOrigComb`
+- `NfeSefazPAASignature`
+- `NfeSefazPag`
+- `NfeSefazPIS`
+- `NfeSefazPISAliq`
+- `NfeSefazPISNT`
+- `NfeSefazPISOutr`
+- `NfeSefazPISQtde`
+- `NfeSefazPISST`
+- `NfeSefazProcRef`
+- `NfeSefazProd`
+- `NfeSefazRastro`
+- `NfeSefazRed`
+- `NfeSefazRefECF`
+- `NfeSefazRefNF`
+- `NfeSefazRefNFP`
+- `NfeSefazRetTransp`
+- `NfeSefazRetTrib`
+- `NfeSefazRSAKeyValueType`
+- `NfeSefazTotal`
+- `NfeSefazTransfCred`
+- `NfeSefazTransp`
+- `NfeSefazTransporta`
+- `NfeSefazTribCompraGov`
+- `NfeSefazTribNFe`
+- `NfeSefazTribRegular`
+- `NfeSefazVeicProd`
+- `NfeSefazVeiculo`
+- `NfeSefazVol`
+- `Nfse`
+- `NfseCancelamento`
+- `NfseCidadeMetadados`
+- `NfseCidadesAtendidas`
+- `NfseDpsPedidoEmissao`
+- `NfseListagem`
+- `NfseLoteDpsPedidoEmissao`
+- `NfseMensagemRetorno`
+- `NfsePedidoCancelamento`
+- `NfsePedidoEmissao`
+- `NfsePedidoSincronizacao`
+- `NfseSincronizacao`
+- `RegTrib`
+- `Rps`
+- `RpsDados`
+- `RpsDadosConstrucaoCivil`
+- `RpsDadosIntermediario`
+- `RpsDadosPrestador`
+- `RpsDadosServico`
+- `RpsDadosTomador`
+- `RpsDadosTomadorEndereco`
+- `RpsIdentificacao`
+- `RpsIdentificacaoPrestador`
+- `RpsLote`
+- `RpsLoteListagem`
+- `RpsPedidoEmissao`
+- `RpsPedidoEmissaoLote`
+- `RpsServicoValores`
+- `RTCInfoDest`
+- `RTCInfoIBSCBS`
+- `RTCInfoImovel`
+- `RTCInfoReeRepRes`
+- `RTCInfoTributosDif`
+- `RTCInfoTributosIBSCBS`
+- `RTCInfoTributosSitClas`
+- `RTCInfoTributosTribRegular`
+- `RTCInfoValoresIBSCBS`
+- `RTCListaDoc`
+- `RTCListaDocDFe`
+- `RTCListaDocFiscalOutro`
+- `RTCListaDocFornec`
+- `RTCListaDocOutro`
+- `Serv`
+- `Substituicao`
+- `TribFederal`
+- `TribMunicipal`
+- `TribOutrosPisCofins`
+- `TribTotal`
+- `TribTotalMonet`
+- `TribTotalPercent`
+- `VDescCondIncond`
+- `VServPrest`
+
+---
+
+# Onboarding de integração ACBr API
+
+Este roteiro orienta a ordem recomendada para uma nova integração com a ACBr API.
+
+## Ordem recomendada para começar
+
+1. Criar ou acessar uma conta no Console da ACBr API.
+2. Contratar ou ativar um plano antes de criar credenciais produtivas.
+3. Criar credenciais de API no console e guardar `client_id` e `client_secret` em local seguro.
+4. Escolher o ambiente inicial: `https://hom.acbr.api.br` para homologação ou `https://prod.acbr.api.br` para produção.
+5. Obter um token OAuth 2 usando o fluxo `client_credentials`.
+6. Testar uma chamada simples, como `GET /cep/{Cep}` ou `GET /cnpj/{Cnpj}`.
+7. Cadastrar a empresa quando o serviço exigir emissão ou operação fiscal em nome de um CNPJ.
+8. Implementar o serviço fiscal desejado: NF-e, NFC-e, NFS-e, CT-e, MDF-e, NFCom, DC-e ou Distribuição NF-e.
+9. Tratar respostas, erros HTTP, cotas, consumo de créditos e retentativas.
+10. Validar em homologação, revisar logs/debug e promover para produção.
+
+## Flowchart de integração
+
+```mermaid
+flowchart TD
+  A[Criar conta no Console ACBr API] --> B[Ativar plano]
+  B --> C[Criar credenciais de API]
+  C --> D[Escolher ambiente: homologação ou produção]
+  D --> E[Solicitar token OAuth2 client_credentials]
+  E --> F[Testar endpoint simples: CEP ou CNPJ]
+  F --> G{Vai emitir ou operar documento fiscal?}
+  G -- Sim --> H[Cadastrar empresa, certificado e configurações]
+  G -- Não --> I[Implementar consulta ou serviço escolhido]
+  H --> J[Implementar endpoint fiscal desejado]
+  I --> K[Tratar erros, paginação, cotas e limites]
+  J --> K
+  K --> L[Testar em homologação]
+  L --> M[Validar XML, PDF, eventos e status]
+  M --> N[Promover para produção]
+```
+
+## Modelos de comunicação
+
+- **REST sobre HTTPS**: todas as chamadas são feitas por endpoints HTTP publicados nos ambientes da ACBr API.
+- **Autenticação OAuth 2**: use `client_credentials` para obter `access_token` e envie `Authorization: Bearer <token>` nas chamadas.
+- **Payload JSON**: operações de consulta e emissão usam JSON nos corpos de requisição e resposta quando aplicável.
+- **Arquivos fiscais**: endpoints de download retornam XML ou PDF para documentos, eventos, cancelamentos e cartas de correção.
+- **Operações síncronas com acompanhamento por status**: emissões e eventos retornam identificadores/status que devem ser consultados e tratados pela integração.
+- **Paginação**: listagens usam parâmetros como `$top`, `$skip` e `$inlinecount` quando definidos no OpenAPI.
+- **Cotas e créditos**: algumas operações consomem créditos pré-pagos ou cotas; trate respostas como `402` e `429`.
+
+## Limites, rate limit e consumo de cota
+
+- A cota principal é `prepago-creditos`.
+- Operações com documentos fiscais normalmente consomem créditos por documento fiscal processado, não apenas por chamada HTTP.
+- Emissão, cancelamento, inutilização, distribuição, manifestação e eventos fiscais podem consumir créditos quando encaminhados para SEFAZ, prefeituras ou serviços integrados.
+- Downloads de XML/PDF têm uma franquia gratuita de 1 download por arquivo; downloads adicionais podem consumir crédito.
+- Consulta de CEP consome 0,1 crédito por consulta.
+- Consulta de CNPJ consome 0,1 crédito por consulta.
+- Listagem de CNPJ por CNAE consome 0,1 crédito por estabelecimento retornado.
+- Endpoints que atualizam consumo podem retornar `x-quota-name`, `x-quota-used` e `x-quota-limit`.
+- Falta de crédito ou extrapolação de cota retorna HTTP `402 Payment Required` com erros como `InsufficientCredits` ou `QuotaExceeded`.
+- Rate limit do endpoint de token: 4 requisições por hora (excedente retorna HTTP 429).
+- Rate limit padrão para endpoints protegidos GET: 360 requisições por minuto.
+- Rate limit padrão para demais endpoints protegidos: 240 requisições por minuto.
+- Ao receber HTTP `429 Too Many Requests`, leia `Retry-After` e `X-Retry-In` e aguarde antes de tentar novamente.
+- Use backoff exponencial quando múltiplas respostas `429` forem recebidas.
+
+### Consumos extraídos do Swagger
+
+| Tag | Endpoint | Operação | Consumo informado |
+| --- | --- | --- | --- |
+| Cep | `GET /cep/{Cep}` | Consultar endereço através do CEP | 0,1 unidade requisição |
+| Cnpj | `GET /cnpj` | Listar estabelecimentos ativos a partir da base de CNPJ | 0,1 unidade por estabelecimento listado ou requisição |
+| Cnpj | `GET /cnpj/{Cnpj}` | Consultar dados do CNPJ | 0,1 unidade por requisição |
+| Cte | `POST /cte` | Emitir CT-e | 1 unidade por requisição |
+| Cte | `POST /cte/{id}/cancelamento` | Cancelar um CT-e autorizado | 1 unidade por requisição |
+| Cte | `GET /cte/{id}/cancelamento/xml` | Baixar XML do cancelamento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Cte | `POST /cte/{id}/carta-correcao` | Solicitar correção do CT-e | 1 unidade por requisição |
+| Cte | `GET /cte/{id}/carta-correcao/xml` | Baixar XML da carta de correção | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Cte | `POST /cte/{id}/sincronizar` | Sincroniza dados no CT-e a partir da SEFAZ | 1 unidade por evento sincronizado ou requisição |
+| Cte | `GET /cte/{id}/xml` | Baixar XML do CT-e processado | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Cte | `GET /cte/{id}/xml/conhecimento` | Baixar XML do CT-e | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Cte | `GET /cte/{id}/xml/protocolo` | Baixar XML do Protocolo da SEFAZ | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Cte | `GET /cte/eventos/{id}/xml` | Baixar XML do evento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Cte | `POST /cte/simp` | Emitir CT-e Simplificado | 1 unidade por requisição |
+| CteOs | `POST /cteos` | Emitir CT-e OS | 1 unidade por requisição |
+| CteOs | `POST /cteos/{id}/cancelamento` | Cancelar um CT-e OS autorizado | 1 unidade por requisição |
+| CteOs | `GET /cteos/{id}/cancelamento/xml` | Baixar XML do cancelamento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| CteOs | `POST /cteos/{id}/carta-correcao` | Solicitar correção do CT-e OS | 1 unidade por requisição |
+| CteOs | `GET /cteos/{id}/carta-correcao/xml` | Baixar XML da carta de correção | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| CteOs | `POST /cteos/{id}/sincronizar` | Sincroniza dados no CT-e OS a partir da SEFAZ | 1 unidade por evento sincronizado ou requisição |
+| CteOs | `GET /cteos/{id}/xml` | Baixar XML do CT-e OS processado | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| CteOs | `GET /cteos/{id}/xml/conhecimento` | Baixar XML do CT-e OS | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| CteOs | `GET /cteos/{id}/xml/protocolo` | Baixar XML do Protocolo da SEFAZ | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| CteOs | `GET /cteos/eventos/{id}/xml` | Baixar XML do evento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Dce | `POST /dce` | Emitir DC-e | 1 unidade por requisição |
+| Dce | `POST /dce/{id}/cancelamento` | Cancelar uma DC-e autorizada | 1 unidade por requisição |
+| Dce | `GET /dce/{id}/cancelamento/xml` | Baixar XML do cancelamento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Dce | `GET /dce/{id}/xml` | Baixar XML da DC-e processada | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Dce | `GET /dce/{id}/xml/declaracao` | Baixar XML da DC-e | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Dce | `GET /dce/{id}/xml/protocolo` | Baixar XML do Protocolo da SEFAZ | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Distribuição NF-e | `POST /distribuicao/nfe` | Distribuir documentos | 1 unidade por documento distribuído (retornado) ou requisição |
+| Distribuição NF-e | `GET /distribuicao/nfe/documentos/{id}/xml` | Baixar XML do documento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Distribuição NF-e | `POST /distribuicao/nfe/manifestacoes` | Manifestar nota | 1 unidade por requisição |
+| Mdfe | `POST /mdfe` | Emitir MDF-e | 1 unidade por requisição |
+| Mdfe | `POST /mdfe/{id}/cancelamento` | Cancelar um MDF-e autorizado | 1 unidade por requisição |
+| Mdfe | `GET /mdfe/{id}/cancelamento/xml` | Baixar XML do cancelamento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Mdfe | `POST /mdfe/{id}/encerramento` | Encerrar um MDF-e autorizado | 1 unidade por requisição |
+| Mdfe | `GET /mdfe/{id}/encerramento/xml` | Baixar XML do encerramento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Mdfe | `POST /mdfe/{id}/inclusao-condutor` | Incluir um condutor em um MDF-e autorizado | 1 unidade por requisição |
+| Mdfe | `POST /mdfe/{id}/inclusao-dfe` | Incluir um DF-e em um MDF-e autorizado | 1 unidade por requisição |
+| Mdfe | `POST /mdfe/{id}/sincronizar` | Sincroniza dados no MDF-e a partir da SEFAZ | 1 unidade por evento sincronizado ou requisição |
+| Mdfe | `GET /mdfe/{id}/xml` | Baixar XML do MDF-e processado | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Mdfe | `GET /mdfe/{id}/xml/manifesto` | Baixar XML do MDF-e | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Mdfe | `GET /mdfe/{id}/xml/protocolo` | Baixar XML do Protocolo da SEFAZ | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Mdfe | `GET /mdfe/eventos/{id}/xml` | Baixar XML do evento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Mdfe | `POST /mdfe/lotes` | Emitir lote de MDF-e | 1 unidade por MDF-e |
+| Nfce | `POST /nfce` | Emitir NFC-e | 1 unidade por requisição |
+| Nfce | `POST /nfce/{id}/cancelamento` | Cancelar uma NFC-e autorizada | 1 unidade por requisição |
+| Nfce | `GET /nfce/{id}/cancelamento/xml` | Baixar XML do cancelamento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfce | `POST /nfce/{id}/email` | Enviar e-mail | 1 unidade por requisição |
+| Nfce | `POST /nfce/{id}/sincronizar` | Sincroniza dados na NFC-e a partir da SEFAZ | 1 unidade por evento sincronizado ou requisição |
+| Nfce | `GET /nfce/{id}/xml` | Baixar XML da NFC-e processada | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfce | `GET /nfce/{id}/xml/nota` | Baixar XML da NFC-e | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfce | `GET /nfce/{id}/xml/protocolo` | Baixar XML do Protocolo da SEFAZ | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfce | `GET /nfce/eventos/{id}/xml` | Baixar XML do evento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfce | `POST /nfce/inutilizacoes` | Inutilizar uma sequência de numeração de NFC-e | 1 unidade por requisição |
+| Nfce | `GET /nfce/inutilizacoes/{id}/xml` | Baixar XML da inutilização | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfce | `POST /nfce/lotes` | Emitir lote de NFC-e | 1 unidade por NFC-e |
+| Nfce | `POST /nfce/previa/pdf` | Prévia do PDF do DANFCE | 1 unidade por requisição |
+| Nfce | `POST /nfce/previa/xml` | Prévia do XML da NFC-e | 1 unidade por requisição |
+| Nfcom | `POST /nfcom` | Emitir NFCom | 1 unidade por requisição |
+| Nfcom | `POST /nfcom/{id}/cancelamento` | Cancelar uma NFCom autorizada | 1 unidade por requisição |
+| Nfcom | `GET /nfcom/{id}/cancelamento/xml` | Baixar XML do cancelamento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfcom | `GET /nfcom/{id}/xml` | Baixar XML da NFCom processada | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfcom | `GET /nfcom/{id}/xml/nota` | Baixar XML da NFCom | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfcom | `GET /nfcom/{id}/xml/protocolo` | Baixar XML do Protocolo da SEFAZ | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfe | `POST /nfe` | Emitir NF-e | 1 unidade por requisição |
+| Nfe | `POST /nfe/{id}/cancelamento` | Cancelar uma NF-e autorizada | 1 unidade por requisição |
+| Nfe | `GET /nfe/{id}/cancelamento/xml` | Baixar XML do cancelamento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfe | `POST /nfe/{id}/carta-correcao` | Solicitar correção da NF-e | 1 unidade por requisição |
+| Nfe | `GET /nfe/{id}/carta-correcao/xml` | Baixar XML da carta de correção | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfe | `POST /nfe/{id}/email` | Enviar e-mail | 1 unidade por requisição |
+| Nfe | `POST /nfe/{id}/sincronizar` | Sincroniza dados na NF-e a partir da SEFAZ | 1 unidade por evento sincronizado ou requisição |
+| Nfe | `GET /nfe/{id}/xml` | Baixar XML da NF-e processada | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfe | `GET /nfe/{id}/xml/nota` | Baixar XML da NF-e | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfe | `GET /nfe/{id}/xml/protocolo` | Baixar XML do Protocolo da SEFAZ | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfe | `GET /nfe/cadastro-contribuinte` | Consultar contribuinte | 1 unidade por requisição |
+| Nfe | `GET /nfe/eventos/{id}/xml` | Baixar XML do evento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfe | `POST /nfe/inutilizacoes` | Inutilizar uma sequência de numeração de NF-e | 1 unidade por requisição |
+| Nfe | `GET /nfe/inutilizacoes/{id}/xml` | Baixar XML da inutilização | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfe | `POST /nfe/lotes` | Emitir lote de NF-e | 1 unidade por NF-e |
+| Nfe | `POST /nfe/previa/pdf` | Prévia do PDF do DANFE | 1 unidade por requisição |
+| Nfe | `POST /nfe/previa/xml` | Prévia do XML da NF-e | 1 unidade por requisição |
+| Nfse | `POST /nfse` | Emitir NFS-e | 1 unidade por requisição |
+| Nfse | `POST /nfse/{id}/cancelamento` | Cancelar uma NFS-e autorizada | 1 unidade por requisição |
+| Nfse | `GET /nfse/{Id}/cancelamento/xml` | Baixar XML do evento de cancelamento | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfse | `POST /nfse/{id}/sincronizar` | Sincroniza dados na NFS-e a partir da Prefeitura | 1 unidade por evento sincronizado ou requisição |
+| Nfse | `GET /nfse/{id}/xml` | Baixar XML da NFS-e processada | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfse | `GET /nfse/{id}/xml/dps` | Baixar XML da DPS | Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfse | `POST /nfse/dps` | Emitir NFS-e | 1 unidade por requisição |
+| Nfse | `POST /nfse/dps/lotes` | Emitir lote de NFS-e | 1 unidade por NFS-e |
+| Nfse | `POST /nfse/lotes` | Emitir lote de NFS-e | 1 unidade por NFS-e |
+
+## Linguagens suportadas
+
+- **SDK oficial .NET**: indicado para aplicações C#/.NET.
+- **SDK oficial PHP**: indicado para integrações em PHP.
+- **SDK oficial Delphi**: indicado para aplicações Delphi.
+- **Qualquer linguagem com HTTP e JSON**: JavaScript/TypeScript, Java, Python, Go, Ruby, Kotlin, Swift, C/C++ e outras podem integrar diretamente pela API REST.
+- **Postman**: recomendado para validar autenticação e endpoints antes de codificar.
+
+## Tags e serviços do OpenAPI
+
+| Tag | Escopo sugerido | Endpoints | Primeira rota | Descrição | Consumos informados |
+| --- | --- | ---: | --- | --- | --- |
+| Cep | `cep` | 1 | `/cep/{Cep}` | Grupo de endpoints da ACBr API. | 0,1 unidade requisição |
+| Cnpj | `cnpj` | 2 | `/cnpj` | Grupo de endpoints da ACBr API. | 0,1 unidade por estabelecimento listado ou requisição; 0,1 unidade por requisição |
+| Cte | `cte` | 21 | `/cte` | Conhecimento de Transporte Eletrônico. | 1 unidade por requisição; Primeira requisição isenta, posteriores 1 unidade por requisição; 1 unidade por evento sincronizado ou requisição |
+| CteOs | `cteos` | 20 | `/cteos` | Conhecimento de Transporte Eletrônico - Outros serviços. | 1 unidade por requisição; Primeira requisição isenta, posteriores 1 unidade por requisição; 1 unidade por evento sincronizado ou requisição |
+| Dce | `dce` | 11 | `/dce` | Declaração de Conteúdo Eletrônica. | 1 unidade por requisição; Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Debug | `debug` | 4 | `/debug/http-requests/{id}/request-content` | Endpoints auxiliares voltados à análise técnica e depuração de documentos fiscais. Permitem rastrear o processamento de DF-es na API, incluindo o conteúdo original recebido e as requisições realizadas aos serviços autorizadores (SEFAZ, prefeituras, etc). | - |
+| Distribuição NF-e | `distribuicao-nf-e` | 11 | `/distribuicao/nfe` | O processo de distribuição de DFe envolve a disponibilização dos documentos fiscais eletrônicos para os envolvidos na transação (emitentes, destinatários e terceiros autorizados). Ele permite que os destinatários recebam as NF-e emitidas contra o seu CNPJ diretamente do Ambiente Nacional, facilitando o controle e a gestão dos documentos recebidos. | 1 unidade por documento distribuído (retornado) ou requisição; Primeira requisição isenta, posteriores 1 unidade por requisição; 1 unidade por requisição |
+| Mdfe | `mdfe` | 26 | `/mdfe` | Manifesto Eletrônico de Documentos Fiscais. | 1 unidade por requisição; Primeira requisição isenta, posteriores 1 unidade por requisição; 1 unidade por MDF-e; 1 unidade por evento sincronizado ou requisição |
+| Nfce | `nfce` | 28 | `/nfce` | Nota Fiscal de Consumidor Eletrônica. | 1 unidade por requisição; Primeira requisição isenta, posteriores 1 unidade por requisição; 1 unidade por NFC-e; 1 unidade por evento sincronizado ou requisição |
+| Nfcom | `nfcom` | 11 | `/nfcom` | Nota Fiscal Fatura de Serviço de Comunicação Eletrônica. | 1 unidade por requisição; Primeira requisição isenta, posteriores 1 unidade por requisição |
+| Nfe | `nfe` | 32 | `/nfe` | Nota Fiscal Eletrônica. | 1 unidade por requisição; Primeira requisição isenta, posteriores 1 unidade por requisição; 1 unidade por NF-e; 1 unidade por evento sincronizado ou requisição |
+| Nfse | `nfse` | 17 | `/nfse` | Nota Fiscal de Serviço Eletrônica. | 1 unidade por requisição; 1 unidade por NFS-e; Primeira requisição isenta, posteriores 1 unidade por requisição; 1 unidade por evento sincronizado ou requisição |
+
+## Tags auxiliares e administrativas
+
+| Tag | Escopo sugerido | Endpoints | Primeira rota | Descrição | Consumos informados |
+| --- | --- | ---: | --- | --- | --- |
+| Conta | `conta` | 4 | `/conta/cotas` | Grupo de endpoints da ACBr API. | - |
+| Email | `email` | 2 | `/emails` | Grupo de endpoints da ACBr API. | - |
+| Empresa | `empresa` | 31 | `/empresas` | Cadastre e administre todas as empresas vinculadas à sua conta. | - |
+
+## Checklist de implementação
+
+- [ ] Conta criada no Console da ACBr API.
+- [ ] Plano ativo ou créditos disponíveis.
+- [ ] Credenciais criadas e armazenadas fora do código-fonte.
+- [ ] Ambiente de homologação configurado.
+- [ ] Token OAuth 2 obtido com os escopos necessários.
+- [ ] Chamada simples validada com `Authorization: Bearer <token>`.
+- [ ] Empresa, certificado e configurações fiscais cadastrados quando necessário.
+- [ ] Serviço fiscal escolhido e endpoints mapeados pelo OpenAPI.
+- [ ] Consumo de cota dos endpoints utilizados mapeado.
+- [ ] Cabeçalhos `x-quota-name`, `x-quota-used` e `x-quota-limit` lidos quando retornados.
+- [ ] Payloads JSON validados contra exemplos e modelos da referência.
+- [ ] Tratamento de erros HTTP, rejeições fiscais e mensagens da SEFAZ/prefeituras implementado.
+- [ ] Paginação implementada em listagens.
+- [ ] Download de XML/PDF implementado quando aplicável.
+- [ ] Eventos como cancelamento, carta de correção, inutilização ou encerramento implementados quando aplicável.
+- [ ] Controle de cota, crédito, resposta `402` e resposta `429` implementado.
+- [ ] Backoff baseado em `Retry-After` e `X-Retry-In` implementado.
+- [ ] Logs e endpoints de debug avaliados para suporte.
+- [ ] Testes em homologação concluídos.
+- [ ] URLs, credenciais e ambiente produtivo revisados antes do go-live.
+
+## Links essenciais
+
+- [Primeiros passos](https://dev.acbr.api.br/docs/primeiros-passos.md)
+- [Autenticação](https://dev.acbr.api.br/docs/autenticacao.md)
+- [Postman](https://dev.acbr.api.br/docs/postman.md)
+- [Resumo OpenAPI](https://dev.acbr.api.br/llms/openapi-summary.md)
+- [Swagger JSON](https://prod.acbr.api.br/openapi/swagger.json)
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/nfe.md
+
+NF-e: Nota fiscal eletrônica
+
+Com a API da ACBr API para nota fiscal eletrônica (NF-e) você pode efetuar diversas operações como:
+
+* Emissão e consulta de NF-e
+* Download do XML
+* Envio de email com XML e PDF
+* Emissão em lote e consultas relacionadas
+* Inutilização
+* Cancelamento
+* Carta de correção
+* Consulta de eventos
+* Consulta ao status da SEFAZ
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `nfe`.
+
+Certifique-se também de [cadastrar a empresa, o certificado digital e as configurações](https://dev.acbr.api.br/docs/empresas) para usar este serviço.
+
+Consulte a referência à **[API para NF-e](https://dev.acbr.api.br/docs/api#tag/Nfe)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/nfce.md
+
+NFC-e: Nota fiscal de consumidor eletrônica
+
+Com a API da ACBr API para nota fiscal de consumidor eletrônica (NFC-e) você pode efetuar diversas operações como:
+
+* Emissão e consulta de NFC-e
+* Download do XML
+* Envio de email com XML e PDF
+* Emissão em lote e consultas relacionadas
+* Inutilização
+* Cancelamento
+* Consulta ao status da SEFAZ
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `nfce`.
+
+Certifique-se também de [cadastrar a empresa, o certificado digital e as configurações](https://dev.acbr.api.br/docs/empresas) para usar este serviço.
+
+Consulte a referência à **[API para NFC-e](https://dev.acbr.api.br/docs/api#tag/Nfce)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/distribuicao-nfe.md
+
+Distribuição NF-e
+
+Com a API da ACBr API para Distribuição NF-e você pode efetuar diversas operações como:
+
+* Pedido de distribuição de documentos fiscais (DF-e)
+* Consulta de informações resumidas de documentos
+* Manifestação do destinatário
+* Download do XML completo de notas e eventos
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `distribuicao-nfe`.
+
+Certifique-se também de [cadastrar a empresa, o certificado digital e as configurações](https://dev.acbr.api.br/docs/empresas) para usar este serviço.
+
+Consulte a referência à **[API de Distribuição NF-e](https://dev.acbr.api.br/docs/api#tag/Distribuicao-NF-e)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/nfse.md
+
+NFS-e: Nota fiscal de serviços eletrônica
+
+Com a API da ACBr API para nota fiscal de serviços eletrônica (NFS-e) você pode efetuar diversas operações como:
+
+* Emissão e consulta de NFS-e
+* Download do XML
+* Emissão em lote e consultas relacionadas
+* Cancelamento
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `nfse`.
+
+Certifique-se também de [cadastrar a empresa, o certificado digital e as configurações](https://dev.acbr.api.br/docs/empresas) para usar este serviço.
+
+Consulte a referência à **[API para NFS-e](https://dev.acbr.api.br/docs/api#tag/Nfse)** para saber mais sobre todos os endpoints disponíveis.
+
+## Cidades atendidas
+
+Para dúvidas se uma cidade é atendida na NFS-e, utilize o endpoint [ConsultarMetadados](https://dev.acbr.api.br/docs/api#tag/Nfse/operation/ConsultarMetadados). Ele retorna os metadados disponíveis para a cidade consultada e deve ser usado como fonte atualizada para validar atendimento e características do provedor. Ou [acessar o site](https://acbr.api.br/consulta-nfse/) para conferir se a cidade é atendida.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/cte.md
+
+CT-e: Conhecimento de transporte eletrônico
+
+Com a API da ACBr API para conhecimento de transporte eletrônico (CT-e) você pode efetuar diversas operações como:
+
+* Emissão de CT-e
+* Emissão de de CT-e Simplificado
+* Consulta de CT-e
+* Download do XML
+* Cancelamento
+* Correção
+* Consulta ao status da SEFAZ
+* Consulta de eventos
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `cte`.
+
+Certifique-se também de [cadastrar a empresa, o certificado digital e as configurações](https://dev.acbr.api.br/docs/empresas) para usar este serviço.
+
+Consulte a referência à **[API para CT-e](https://dev.acbr.api.br/docs/api#tag/Cte)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/cteos.md
+
+CT-e OS: Conhecimento de transporte eletrônico - Outros serviços
+
+Com a API da ACBr API para conhecimento de transporte eletrônico outros serviços (CT-e OS) você pode efetuar diversas operações como:
+
+* Emissão e consulta de CT-e OS
+* Download do XML
+* Cancelamento
+* Correção
+* Consulta ao status da SEFAZ
+* Consulta de eventos
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `cteos`.
+
+Certifique-se também de [cadastrar a empresa, o certificado digital e as configurações](https://dev.acbr.api.br/docs/empresas) para usar este serviço.
+
+Consulte a referência à **[API para CT-e OS](https://dev.acbr.api.br/docs/api#tag/CteOs)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/mdfe.md
+
+MDF-e: Manifesto eletrônico de documentos fiscais
+
+Com a API da ACBr API para manifesto eletrônico de documentos fiscais (MDF-e) você pode efetuar diversas operações como:
+
+* Emissão e consulta de MDF-e
+* Emissão em lote e consultas relacionadas
+* Download do XML
+* Encerramento
+* Cancelamento
+* Inclusão de condutor
+* Inclusão de DF-e
+* Consulta ao status da SEFAZ
+* Consulta de eventos
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `mdfe`.
+
+Certifique-se também de [cadastrar a empresa, o certificado digital e as configurações](https://dev.acbr.api.br/docs/empresas) para usar este serviço.
+
+Consulte a referência à **[API para MDF-e](https://dev.acbr.api.br/docs/api#tag/Mdfe)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/nfcom.md
+
+NFCom: Nota fiscal fatura de serviço de comunicação eletrônica
+
+Com a API da ACBr API para nota fiscal fatura de serviço de comunicação eletrônica (NFCom) você pode efetuar diversas operações como:
+
+* Emissão e consulta de NFCom
+* Download do XML
+* Cancelamento
+* Consulta ao status da SEFAZ
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `nfcom`.
+
+Certifique-se também de [cadastrar a empresa, o certificado digital e as configurações](https://dev.acbr.api.br/docs/empresas) para usar este serviço.
+
+Consulte a referência à **[API para NFCom](https://dev.acbr.api.br/docs/api#tag/Nfcom)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/dce.md
+
+DC-e: Declaração de conteúdo eletrônica
+
+Com a API da ACBr API para declaração de conteúdo eletrônica (DC-e) você pode efetuar diversas operações como:
+
+* Emissão e consulta de DC-e
+* Download do XML
+* Cancelamento
+* Consulta ao status da SEFAZ
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `dce`.
+
+Certifique-se também de [cadastrar a empresa, o certificado digital e as configurações](https://dev.acbr.api.br/docs/empresas) para usar este serviço.
+
+Consulte a referência à **[API para DC-e](https://dev.acbr.api.br/docs/api#tag/Dce)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/debug.md
+
+Debug
+
+A funcionalidade de debug da ACBr API permite analisar a comunicação realizada com os servidores da SEFAZ ou prefeituras durante as transmissões de documentos fiscais. Com ela, é possível coletar os envelopes SOAP (requisição e resposta) e outras informações técnicas úteis para diagnóstico de falhas e abertura de chamados.
+
+### Quando usar o fluxo de debug?
+* Listar os eventos técnicos registrados durante o envio de documentos
+* Visualizar e decodificar os envelopes de requisição e resposta
+* Identificar erros de schema ou falhas na comunicação com a SEFAZ/prefeitura
+* Analisar o conteúdo das transmissões em casos de rejeição ou problemas sistêmicos
+* Gerar evidências para envio ao suporte técnico à ACBr API ou aos órgãos autorizadores (SEFAZ/prefeitura)
+
+### Exemplo de fluxo de uso
+1. Identifique o ID do documento fiscal (ex: nfe_3a196d092d3a42c3a1f83706a47eb64c)
+2. Chame o endpoint **[Debug de DF-e](https://dev.acbr.api.br/docs/api#tag/Debug/operation/DebugDfe)** informando o ID do documento fiscal
+3. Caso queira verificar o payload recebido pela ACBr API no momento da emissão do documento fiscal, utilize o endpoint **[Payload original recebido](https://dev.acbr.api.br/docs/api#tag/Debug/operation/DebugDfeOriginalPayload)**
+4. Na resposta do endpoint **[Debug de DF-e](https://dev.acbr.api.br/docs/api#tag/Debug/operation/DebugDfe)**, identifique o ID da requisição HTTP que queira inspecionar
+    - Chame o endpoint **[Corpo da requisição HTTP](https://dev.acbr.api.br/docs/api#tag/Debug/operation/DebugHttpRequestContent)** para obter o conteúdo enviado ao autorizador (geralmente um envelope SOAP)
+    - Chame o endpoint **[Corpo da resposta HTTP](https://dev.acbr.api.br/docs/api#tag/Debug/operation/DebugHttpResponseContent)** para obter o conteúdo recebido do autorizador (geralmente um envelope SOAP)
+5. Encaminhe esses arquivos ao suporte da SEFAZ ou prefeitura, se necessário
+
+### Autenticação e escopo necessário
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `debug`.
+
+Consulte a referência à **[API para Debug](https://dev.acbr.api.br/docs/api#tag/Debug)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/cnpj.md
+
+CNPJ: Cadastro Nacional de Pessoa Jurídica
+
+Com a API da ACBr API para CNPJ você pode efetuar as seguintes operações:
+
+* Consulta de dados de um CNPJ, incluindo dados como razão social, endereço, atividade principal, sócios, entre outros.
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `cnpj`.
+
+Consulte a referência à **[API para CNPJ](https://dev.acbr.api.br/docs/api#tag/Cnpj)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/cep.md
+
+CEP: Codigo de Endereçamento Postal
+
+Com a API da ACBr API para CEP você pode efetuar as seguintes operações:
+
+* Consulta de endereço a partir do CEP
+
+Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `cep`.
+
+Consulte a referência à **[API para CEP](https://dev.acbr.api.br/docs/api#tag/Cep)** para saber mais sobre todos os endpoints disponíveis.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/cnpj-cnae.md
+
+CNPJ/CNAE: Consulta de estabelecimentos por CNAE
+
+A ACBr API oferece uma ferramenta útil para sua equipe de vendas e marketing: uma listagem de estabelecimentos por código CNAE (Classificação Nacional de Atividades Econômicas). Outros dois filtros obrigatórios são o município e a natureza jurídica. Nas informações retornadas estão o CNPJ, endereço e e-mail cadastrado na Receita Federal, entre outros.
+
+Isso permite que você possa, por exemplo, listar estabelecimentos na sua cidade de um segmento comercial específico. São informações valiosas para ajudar na sua estratégia de vendas.
+
+## Utilização 
+
+Os detalhes estão disponíveis na documentação do **[endpoint ListarCnpj](docs/api/#tag/Cnpj/operation/ListarCnpj)**. 
+
+* Todas a requisições à API devem ser [autenticadas usando um token de acesso](https://dev.acbr.api.br/docs/autenticacao) contendo o scope `cnpj`.
+* O token de acesso deve ter o scope `cnpj`.
+
+A requisição a seguir é um exemplo que traz as 50 primeiras empresas no ramo de desenvolvimento de software customizável (6202300) na cidade de Curitiba (código IBGE 4106902) que são micro empresas individuais (MEI, natureza jurídica 2135):
+
+```http
+GET https://prod.acbr.api.br/cnpj?$top=50&cnae_principal=6202300&municipio=4106902&natureza_juridica=2135
+```
+
+Para obter os próximos 50 estabelecimentos com o mesmo critério, basta incluir o parâmetro `$skip` e indicar quantos estabelecimentos você já consultou anteriormente, e que serão ignorados:
+
+```http
+GET https://prod.acbr.api.br/cnpj?$top=50&$skip=50&cnae_principal=6202300&municipio=4106902&natureza_juridica=2135
+```
+
+A quantidade de estabelecimentos retornados será contabilizada como consumo na conta `prepago-creditos`, à razão de **0,1 crédito por estabelecimento retornado**.
+
+O consumo da conta não discrimina estabelecimentos repetidos. Ou seja, se você fizer a mesma consulta duas vezes e trouxer os mesmos 50 estabelecimentos, seu consumo será contabilizado como 100. Sempre use os parâmetros `$top` e `$skip` para fazer a paginação correta e evitar trazer estabelecimentos duplicados.
+
+O [código CNAE](https://concla.ibge.gov.br/busca-online-cnae.html) deve ser fornecido sem máscara (apenas números).
+
+No código do município você pode utilizar o [código IBGE](https://www.ibge.gov.br/explica/codigos-dos-municipios.php) ou o código TOM, também somente dígitos.
+
+A natureza jurídica deve ser somente com dígitos. A lista de códigos está disponível no [Anexo V](http://normas.receita.fazenda.gov.br/sijut2consulta/anexoOutros.action?idArquivoBinario=67752) da [Instrução Normativa RFB 2119/2002](http://normas.receita.fazenda.gov.br/sijut2consulta/link.action?idAto=127567). 
+
+Alguns exemplos de códigos são:
+
+* 2062 - Sociedade Empresária Limitada
+* 2135 - Empresário Individual
+* 2143 - Cooperativa
+* 2305 - Empresa Individual de Responsabilidade Limitada (de Natureza Empresária)
+* 2313 - Empresa Individual de Responsabilidade Limitada (de Natureza Simples)
+* 3085 - Condomínio Edifício
+* 4014 - Empresa Individual Imobiliária
+* 4120 - Produtor Rural (Pessoa Física)
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/sdk-net.md
+
+SDK para .NET
+
+Comece a usar rapidamente a ACBr API com o nosso SDK para .NET! O SDK é uma biblioteca *open source* cujo código-fonte completo está disponível no GitHub:
+
+* SDK da ACBr API para .NET: https://github.com/projeto-acbr-oficial/acbrapi-sdk-net
+
+## Frameworks suportadas
+
+- .NET Core >=1.0
+- .NET Framework >=4.6
+- Mono/Xamarin >=vNext
+
+## Instalação
+
+O SDK da ACBr API para .NET está [disponível no Nuget](https://www.nuget.org/packages/ACBrAPI.Sdk).
+
+Para adicionar o SDK ao seu projeto, basta instalar o package `ACBrAPI.Sdk` utilizando sua ferramenta preferida de gerenciamento de packages do Nuget.
+
+Se preferir instalar a partir do console/terminal:
+
+```
+PM> Install-Package ACBrAPI.Sdk
+```
+
+Ou a partir do .NET CLI (cross-platform:
+
+```
+dotnet add package ACBrAPI.Sdk
+```
+
+## Utilização
+
+Após adicionar o package `ACBrAPI.Sdk` ao seu projeto C#, use os namespaces:
+```csharp
+using ACBrAPI.Sdk.Api;
+using ACBrAPI.Sdk.Client;
+using ACBrAPI.Sdk.Model;
+```
+
+### Instanciando a API 
+Cada ApiClass (mais especificamente o ApiClient dentro dela) irá criar uma instância de HttpClient, e irá usá-la 
+durante todo o ciclo de vida da ApiClass, e fará um dispose quando o método Dispose for chamado.
+
+Para melhor gerenciar as conexões, é uma boa prática reutilizar os objetos HttpClient e HttpClientHandler 
+(visite [here](https://docs.microsoft.com/en-us/dotnet/architecture/microservices/implement-resilient-applications/use-httpclientfactory-to-implement-resilient-http-requests#issues-with-the-original-httpclient-class-available-in-net) para mais informações). 
+Para usar sua própria instância de HttpClient, simplesmente passe-a ao construtor da ApiClass. 
+Também é importante **habilitar a descompactação automática para conteúdos gzip**, para ser possível receber XML e PDF (DANFE) via SDK:
+
+```csharp
+HttpClientHandler httpClientHandler = new HttpClientHandler();
+httpClientHandler.AutomaticDecompression = DecompressionMethods.All;
+HttpClient httpClient = new HttpClient(httpClientHandler);
+var api = new CepApi(httpClient, httpClientHandler);
+```
+
+Caso queira usar o HttpClient e não tiver acesso ao handler (por exemplo, em um contexto DI no Asp.net Core onde esitver usando o IHttpClientFactory):
+
+```csharp
+HttpClient yourHttpClient = new HttpClient();
+var api = new CepApi(yourHttpClient);
+```
+
+Você perderá algumas configurações, por exemplo: Setar e obter Cookies, Client Certificates, Proxy settings. 
+Você precisará gerenciar isso manualmente no setup do seu HttpClient, caso contrário esses recursos não estarão disponíveis.
+
+Segue um exemplo de setup do DI em um projeto web:
+
+```csharp
+services.AddHttpClient<CepApi>(httpClient => new CepApi(httpClient)
+  .ConfigurePrimaryHttpMessageHandler(config => new HttpClientHandler
+    {
+       AutomaticDecompression = DecompressionMethods.All
+    });
+```
+
+### Uso opcional de proxy
+
+Para usar o client da API com um proxy HTTP, configure um `System.Net.WebProxy`
+```csharp
+Configuration c = new Configuration();
+System.Net.WebProxy webProxy = new System.Net.WebProxy("http://myProxyUrl:80/");
+webProxy.Credentials = System.Net.CredentialCache.DefaultCredentials;
+c.Proxy = webProxy;
+```
+
+## Exemplo 1
+
+```csharp
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Net.Http;
+using ACBrAPI.Sdk.Api;
+using ACBrAPI.Sdk.Client;
+using ACBrAPI.Sdk.Model;
+
+namespace Example
+{
+    public class Example
+    {
+        public static void Main()
+        {
+
+            Configuration config = new Configuration();
+            // Configure OAuth2 access token for authorization: oauth2
+            config.AccessToken = "YOUR_ACCESS_TOKEN";
+
+            // cria instâncias de HttpClient, HttpClientHandler para serem reutilizadas em qualquer Api
+            HttpClient httpClient = new HttpClient();
+            HttpClientHandler httpClientHandler = new HttpClientHandler();
+            var apiInstance = new CepApi(httpClient, config, httpClientHandler);
+            var cep = "cep_example";  // string | CEP sem máscara.
+
+            try
+            {
+                // Consultar endereço através do CEP
+                CepEndereco result = apiInstance.ConsultarCep(cep);
+                Debug.WriteLine(result);
+            }
+            catch (ApiException e)
+            {
+                Debug.Print("Erro ao chamar CepApi.ConsultarCep: " + e.Message );
+                Debug.Print("Status Code: "+ e.ErrorCode);
+                Debug.Print(e.StackTrace);
+            }
+
+        }
+    }
+}
+```
+
+## Exemplo 2
+
+```csharp
+using IdentityModel.Client;
+using ACBrAPI.Sdk.Client;
+using ACBrAPI.Sdk.Api;
+using ACBrAPI.Sdk.Model;
+
+// Cria o HttpClient para uso nas requisições
+var httpClient = new HttpClient();
+var httpClientHandler = new HttpClientHandler();
+
+// Obtém o access token a partir das credenciais
+var tokenResponse = await httpClient.RequestClientCredentialsTokenAsync(new ClientCredentialsTokenRequest
+    {
+        Address = "https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token",
+        ClientId = Environment.GetEnvironmentVariable("ACBRAPI_CLIENTID"),
+        ClientSecret = Environment.GetEnvironmentVariable("ACBRAPI_CLIENTSECRET"),
+        Scope = "empresa cep"
+    }
+);
+if (tokenResponse.IsError) throw new Exception(String.Format("{0}: {1}", tokenResponse.Error, tokenResponse.ErrorDescription));
+
+// Cria a configuração com o Access Token
+var config = new Configuration
+{
+    AccessToken = tokenResponse.AccessToken
+};
+
+// Cria a API de CEP e faz a consulta
+var cepApi = new CepApi(httpClient, config, httpClientHandler);
+var cepResult = cepApi.ConsultarCep("80030030");
+Console.WriteLine(cepResult);
+
+// Cria a API de empresa e faz upload the um certificado para uma empresa 
+// que já está previamente cadastrada
+var empresaApi = new EmpresaApi(httpClient, config, httpClientHandler);
+var empresa = new Empresa();
+var pedidoCadastro = new EmpresaPedidoCadastroCertificado
+{
+    certificado = File.ReadAllBytes("C:\dados\meucertificado.pfx"),
+    password = "123"
+};
+
+// Cadastra o certificado
+var resposta = empresaApi.CadastrarCertificadoEmpresa("18760540000139", pedidoCadastro);
+``` 
+
+## Referência completa
+
+O repositório do GitHub contém a lista de todos os endpoints e métodos correspondentes, classes DTOs, parâmetros, e mais. Visite o repositório para uma referência completa do SDK para .NET:
+
+* SDK da ACBr API para .NET: https://github.com/projeto-acbr-oficial/acbrapi-sdk-net
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/sdk-php.md
+
+SDK para PHP
+
+Comece a usar rapidamente a ACBr API com o nosso SDK para PHP! O SDK é uma biblioteca *open source* cujo código-fonte completo está disponível no GitHub:
+
+* SDK da ACBr API para PHP: https://github.com/projeto-acbr-oficial/acbrapi-sdk-php
+
+## Instalação e uso
+
+### Requisitos
+
+PHP 7.4 ou posterior.
+
+### Composer
+
+Para instalar os bindings via [Composer](https://getcomposer.org/), adicione o seguinte ao `composer.json`:
+
+```json
+{
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/projeto-acbr-oficial/acbrapi-sdk-php.git"
+    }
+  ],
+  "require": {
+    "projeto-acbr-oficial/acbrapi-sdk-php": "*@dev"
+  }
+}
+```
+
+Então execute `composer install`
+
+### Instalação manual
+
+Baixe os arquivos e inclua o `autoload.php`:
+
+```php
+<?php
+require_once('/path/to/acbrapi/vendor/autoload.php');
+```
+
+## Guia rápido
+
+Siga os [passos para instalação](#installation--usage) e então execute o seguinte:
+
+```php
+<?php
+require_once(__DIR__ . '/vendor/autoload.php');
+
+// Obter token a partir das credenciais
+$token = get_oauth2_token(
+    'https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token', 
+    getenv('ACBRAPI_CLIENTID'),
+    getenv('ACBRAPI_CLIENTSECRET'),
+    'cep cnpj' // defina o scope a ser usado
+);
+
+// Configurar access token OAuth2 para autorização: oauth2
+$config = ACBrAPI\Configuration::getDefaultConfiguration()->setAccessToken($token->access_token);
+
+// Configurações gerais
+$config->setBooleanFormatForQueryString(Configuration::BOOLEAN_FORMAT_STRING);
+
+// Efetuar a chamada ao endpoint
+$apiInstance = new ACBrAPI\Api\CepApi(
+    // Se quiser usar um client http customizado, passe um client que implemente `GuzzleHttp\ClientInterface`.
+    // Isso é opcional, `GuzzleHttp\Client` será usado por padrão.
+    new GuzzleHttp\Client(),
+    $config
+);
+$cep = '80030030'; // string | CEP sem máscara.
+
+try {
+    $result = $apiInstance->consultarCep($cep);
+    print_r($result);
+} catch (Exception $e) {
+    echo 'Exception when calling CepApi->consultarCep: ', $e->getMessage(), PHP_EOL;
+}
+```
+
+A função `get_oauth2_token` é uma função genérica para buscar o token OAuth2 a partir das credenciais. Isso não é definido pela ACBr API,
+mas sim pelo padrão OAuth2. A seguir apresentamos uma sugestão básica de uso, mas essa função fica sob sua responsabilidade:
+
+```php
+function get_oauth2_token($auth_url, $client_id, $client_secret, $scope) {
+    $curl = curl_init();
+    curl_setopt($curl, CURLOPT_URL, $auth_url);
+    curl_setopt($curl, CURLOPT_POST, TRUE);
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($curl, CURLOPT_POSTFIELDS, http_build_query(array(        
+        'grant_type' => 'client_credentials', 
+        'scope' => $scope,  
+    )));
+
+    $headers[] = "Authorization: Basic " . base64_encode($client_id . ":" . $client_secret);
+    $headers[] = "Content-Type: application/x-www-form-urlencoded";
+    curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+
+    $response = curl_exec($curl);
+    $err = curl_error($curl);
+
+    curl_close($curl);
+    if ($err) {
+        echo "cURL Error #:" . $err;
+    } else {
+        return json_decode($response);
+    }
+}
+```
+
+## Referência completa
+
+O repositório do GitHub contém a lista de todos os endpoints e métodos correspondentes, classes DTOs, parâmetros, e mais. Visite o repositório para uma referência completa do SDK para PHP:
+
+* SDK da ACBr API para PHP: https://github.com/projeto-acbr-oficial/acbrapi-sdk-php
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/sdk-delphi.md
+
+SDK para Delphi
+
+Comece a usar rapidamente a ACBr API com o nosso SDK para Delphi! O SDK é uma biblioteca *open source* cujo código-fonte completo está disponível no GitHub:
+
+* SDK da ACBr API para Delphi: https://github.com/projeto-acbr-oficial/acbrapi-sdk-delphi
+
+## IDEs e plataformas suportadas
+
+O SDK é suportado no Delphi XE8 e posterior e no Lazarus/FreePascal. Funciona em todas plataformas suportadas por essas IDEs.
+
+## Instalação
+
+Para utilizar a biblioteca, clone o [repositório do SDK para Delphi](https://github.com/projeto-acbr-oficial/acbrapi-sdk-delphi) e adicione o caminho completo da pasta Source do repositório ao `Library Path` da IDE do Delphi (ou ao `Search Path` do seu projeto) ou do Lazarus.
+
+## Utilização
+
+Para uso do client, você precisa adicionar as units `ACBrAPIClient` e `ACBrAPIDTOs` à clausula `uses` da sua unit. Caso queira usar a interface de geração de token, você também precisa adicionar a unit `OpenApiRest`:
+
+```pascal
+uses 
+  ACBrAPIClient, ACBrAPIDTOs, OpenApiRest;
+```
+
+### Obtendo o token de acesso
+
+O [processo de autenticação da ACBr API](https://dev.acbr.api.br/docs/autenticacao) envolve dois passos:
+
+* [Obtenção das credenciais](https://dev.acbr.api.br/docs/autenticacao#credenciais) (*Client ID* e *Client Secret*)
+* [Geração do token de acesso](https://dev.acbr.api.br/docs/autenticacao#token) usando as credenciais obtidas.
+
+O primeiro passo deve ser feito no [console da ACBr API](https://console.acbr.api.br), enquanto o segundo você deve fazer manualmente. O SDK do Delphi oferece uma forma fácil de obter esse token a partir das credenciais, da seguinte forma:
+
+```pascal
+var
+  TokenProvider: IClientCredencialsTokenProvider;
+  TokenData: ITokenData;
+  AccessToken: string;
+  DataExpiracao: TDateTime;
+begin
+  TokenProvider := TClientCredentialsTokenProvider.Create;
+  TokenProvider.TokenEndpoint := 'https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token';
+  TokenProvider.ClientId := '<seu client id>';
+  TokenProvider.ClientSecret := '<seu client secret>';
+  TokenProvider.Scope := 'empresa cep cnpj nfe nfse nfce cte mdfe';
+  TokenData := TokenProvider.RetrieveToken;
+  AccessToken := TokenData.AccessToken;
+  DataExpiracao := TokenData.ExpirationTime;
+...
+```
+
+### Criando o client
+
+Com um token de acesso em mãos, você pode instanciar e configurar o client:
+
+```pascal
+var
+  Client: IACBrAPIClient;
+{...}
+  Client := TACBrAPIClient.Create;
+  Client.Config.AccessToken := '<seu access token>';
+```
+
+### Executando os métodos
+
+Todos os [endpoints da API da ACBr API](https://dev.acbr.api.br/docs/api) estão disponíveis no client, agrupadas por interfaces de acordo com o serviço. Por exemplo, o client disponibiliza interfaces nas propriedades `Nfse` (métodos para emissão de Nfse e outras operações relacionadas), `Nfe` (operações relacionados a NFe), `Cep` (operações para consulta de CEP), e assim por diante.
+
+O exemplo a seguir faz uma consulta de dados de um CNPJ:
+
+```pascal
+var
+  Empresa: TCnpjEmpresa;
+  Endereco: TCnpjEndereco;
+begin
+  Empresa := Client.Cnpj.ConsultarCnpj('08421842000190');
+  try
+    // Dados do CNPJ estão disponíveis na variável Empresa, por exemplo:
+    // Empresa.RazaoSocial
+    // Empresa.Endereco.Logradouro
+    // Empresa.Endereco.Municipio
+    // Empresa.Endereco.Uf
+  finally
+    Empresa.Free;
+  end;
+end;
+```
+
+Todos os objetos criados e passados como parâmetros, bem como os objetos recebidos como retorno de função, precisam ser destruídos pelo usuário, caso contrário isso gerará um vazamento de memória.
+
+Você pode usar o *code completion* do Delphi para verificar os serviços, métodos, propriedades e classes disponíveis.
+
+### Usar Indy como alternativa
+
+Internamente, o SDK para Delphi utiliza a classe `THTTPClient` para executar as requisições à API. É a opção recomendada, mais moderna e segura. Porém, essa opção está disponível apenas a partir do Delphi XE8. Ainda, justamente por utilizar recursos mais modernos dos sistemas operacioais, em alguns casos pode não funcionar adequadamente em versões antigas do Windows.
+
+Nesses casos (versões antigas do Delphi ou do Windows), pode ser necessário alterar o SDK para utilizar a biblioteca Indy para fazer as requisições. Para isso, basta utilizar o código abaixo para alterar as configurações do SDK. O exemplo abaixo é executado em um data module qualquer `TDMPrincipal`, mas você pode utilizar em qualquer form ou data module de sua aplicação que seja criado no início da aplicação.
+
+```delphi
+uses
+  OpenApiRest, OpenApiIndy, IdSSLOpenSSL;
+
+procedure TDMPrincipal.DataModuleCreate(Sender: TObject);
+var
+  Factory: TIndyRestRequestFactory;
+begin
+  Factory := TIndyRestRequestFactory.Create;
+  Factory.OnClientCreated := IndyClientCreated;
+  DefaultRequestFactory := Factory;
+end;
+
+procedure TDMPrincipal.IndyClientCreated(Client: TIdHTTP);
+var
+  Handler : TIdSSLIOHandlerSocketOpenSSL;
+begin
+  Handler := TIdSSLIOHandlerSocketOpenSSL.Create;
+  Handler.SSLOptions.SSLVersions := [sslvTLSv1_2];
+  Client.IOHandler := Handler;
+  Client.ManagedIOHandler := True;
+end;
+```
+
+Ainda, é preciso usar as DLLs do OpenSSL. É recomendado usar as versões que são oficialmente suportadas pelo Indy, você pode baixar as DLLs diretamente a partir do repositório do Indy, aqui: https://github.com/IndySockets/OpenSSL-Binaries/blob/master/openssl-1.0.2u-i386-win32.zip
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/sdks.md
+
+SDKs para desenvolvimento
+
+A ACBr API oferece bibliotecas para [interagir com a API](https://dev.acbr.api.br/docs/api) em diversas linguagens de programação. 
+
+É claro que a API da ACBr API pode ser acessada de praticamente qualquer plataforma (Windows, Linux, Android, iOS, macOS...) ou linguagem de programação (.Net, Java, Python, PHP, JavaScript, Go, Ruby, Delphi...). Basta que o ambiente consiga efetuar requisições HTTP e processar JSON, o que, atualmente, inclui praticamente todos eles.
+
+Mas os SDKs reduzem em muito a complexidade da codificação. Isso facilita sua interação com as APIs na linguagem da sua escolha, permite que você use os recursos da sua IDE preferida para obter sugestões de nomes de propriedades e métodos, facilita a detecção de erros em tempo de desenvolvimento, e mais.
+
+A ACBr API oferece os seguintes SDKs, para mais detalhes consulte a documentação de cada um deles:
+
+* [SDK para .NET](https://dev.acbr.api.br/docs/sdk-net): Comece a usar rapidamente a ACBr API com o nosso SDK para .NET! O SDK é uma biblioteca open source cujo código-fonte completo está disponível no GitHub:
+* [SDK para PHP](https://dev.acbr.api.br/docs/sdk-php): Comece a usar rapidamente a ACBr API com o nosso SDK para PHP! O SDK é uma biblioteca open source cujo código-fonte completo está disponível no GitHub:
+* [SDK para Delphi](https://dev.acbr.api.br/docs/sdk-delphi): Comece a usar rapidamente a ACBr API com o nosso SDK para Delphi! O SDK é uma biblioteca open source cujo código-fonte completo está disponível no GitHub:
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/changelog.md
+
+Changelog
+
+Esta página documenta todas as alterações relevantes da **ACBr API**, incluindo novos recursos, melhorias, correções e mudanças que impactam integrações existentes.
+
+Recomendamos que **software houses** revisem este changelog antes de atualizar ambientes de produção.
+
+Este changelog pode conter **breaking changes** que exigem ajustes nas integrações.
+
+---
+## Versão 3.2.24 – 16/07/2026
+### 🔷 NFS-e
+- Adição do provedor **Tiplan** (`proTiplan`): os campos **NumeroRps** e **SerieRps** passam a ser validados também para esse provedor na consulta por RPS.
+
+## Versão 3.2.23 – 15/07/2026
+### 🔷 NF-e / NFC-e
+- Novos parâmetros de **formatação de impressão (DANFE)** no envio de e-mail:
+  - **NFC-e**: `logotipo`, `nome_fantasia`, `mensagem_rodape`, `resumido`, `qrcode_lateral`, `largura` e `margem`.
+  - **NF-e**: `logotipo`, `nome_fantasia`, `formato`, `mensagem_rodape` e `canhoto`.
+- Inclusão do campo `cIntContrib` (código do intermediário/contribuinte) no modelo de item de serviço (`CServ`).
+
+### 🔷 Documentação / SDK
+- Publicação da especificação **OpenAPI/Swagger 3.1.7**.
+- Publicação dos **SDKs oficiais .NET, PHP e Delphi** na versão **3.1.7**, contemplando os novos parâmetros de formatação de impressão no envio de e-mail de NF-e e NFC-e e o campo `cIntContrib` no modelo `CServ`.
+
+## Versão 3.2.22 – 13/07/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr (SVN) na revisão **47145**.
+
+### 🔷 NFS-e
+- Novo provedor **Agape** (schemas **v2.03**) adicionado à configuração de serviços.
+- Integração do provedor **DSF** habilitada para diversos municípios.
+- Atualização de configurações de provedores: **EL** (Eusébio) e **Giss** (Registro, migração de **Ginfes** para **Giss**).
+- Suporte à **consulta** de NFS-e para os provedores **Fiorilli** e **Tinus**.
+- Remoção de entrada duplicada de **Betha** na lista de provedores com cancelamento por evento.
+- Total de **19 provedores** com layouts atualizados para o **Padrão Nacional com Reforma Tributária**.
+
+### 🔷 NF-e / NFC-e
+- Endpoints de envio de e-mail (`EnviarEmailNfe` e `EnviarEmailNfce`) passam a aceitar a **configuração de PDF** como parâmetro de query.
+
+## Versão 3.2.21 – 08/07/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr (SVN) na revisão **47119**.
+
+### 🔷 NFS-e
+- Atualização de provedores (`ACBrNFSeXServicos.ini`):
+  - **Matão**: migração de **Giss** para **Padrão Nacional**.
+  - **São João Batista**: habilitação do provedor **Betha**.
+  - **Gentil**: configuração do provedor **Citta** com URL de serviço.
+
+## Versão 3.2.20 – 08/07/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr (SVN) na revisão **47113**.
+
+### 🔷 NFS-e
+- Schema **Giss 2.04**: novos tipos de operação de ICMS (códigos **49–99**), novo indicador de tributação (`TSTipoIndTotTrib`), correção do tipo de operação **07** (de "Tributável" para "Isenta"), *pattern* de CNPJ ampliado para aceitar caracteres alfanuméricos e ajustes de documentação (PIS/COFINS).
+
+## Versão 3.2.19 – 07/07/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr (SVN) na revisão **47065**.
+
+### 🔷 NFS-e
+- Adição do provedor **TaxTecnologia** (v2.04), com schemas de **produção** e **homologação** para o município de **Santa Izabel do Pará**.
+- Migração de municípios: **Assis** e **Laranjal Paulista** para **Padrão Nacional**, **Hortolândia** para **Giss 2.04** e **São Marcos** para **Tecnos 2.01**.
+- Correção do endpoint **HTTPS** do provedor de **Cubatão**.
+- Extensão do mapeamento de retenção **PIS/COFINS** (de 2 para 9 valores).
+
+### 🔷 DF-e
+- Tratamento do status **539** (NF-e duplicada com chave de acesso diferente), agora considerado como **rejeição**.
+- Schemas de **CT-e** e **MDF-e**: ajuste dos *patterns* de validação para aceitar **CNPJ Alfanumérico**.
+
+## Versão 3.2.18 – 03/07/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr (SVN) na revisão **47029**.
+
+### 🔷 NFS-e
+- Migração de diversos municípios para o provedor **Padrão Nacional** (incluindo ajustes em **Saltinho** e **Três Lagoas**).
+- Schema **ISSNet – Padrão Nacional 1.01**: inclusão do **modelo de pagamento** (formas e meios de pagamento, cartão), tipos de **lote**, campo `Correcao` e `ListaEvento`.
+- Exposição do campo `cIntContrib` (código do intermediário/contribuinte) na API.
+- Atualização de configurações e schemas de provedores NFS-e.
+
+### 🔷 DF-e
+- **CNPJ Alfanumérico**: validação passa a usar o utilitário comum (`TDocumentsUtils`), preservando letras.
+
+### 🔷 Documentação / SDK
+- Atualização da especificação **OpenAPI** e novas ferramentas geradoras de **SDK**.
+
+## Versão 3.2.17 – 26/06/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr (SVN) na revisão **46915**.
+
+### 🔷 NFS-e
+- Provedor **VersaTecnologia**: atualização para a **versão 2.04** (endpoints `ProRecepcionar`, namespaces e `ProSoapAction`), com inclusão dos schemas XSD v2.04 para os municípios atendidos.
+- Ajustes nos provedores **Ubá**, **Motuca** (migração para versão 1.01) e **Santa Bárbara do Leste** (migração para provedor **EL** com endpoint provisório).
+- Habilitação do **cancelamento por evento** para diversos provedores, anteriormente restrito ao **Tiplan**. Passam a ter suporte: **ISSNet**, **ISSDigital**, **Infisc**, **EL**, **Digifred**, **DBSeller**, **Citta**, **Betha**, **ABase**, **SpeedGov**, **SimplISS**, **SilTecnologia**, **RLZ**, **Pronim** e **Modernização Pública**.
+
+## Versão 3.2.16 – 25/06/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr (SVN) na revisão **46902**.
+
+### 🔷 NFS-e
+- Provedor **Tinus**: suporte à consulta de NFS-e por **RPS**.
+- Provedor **proBetha**: enfileiramento da consulta para lotes processados.
+- Schema **Tecnos 2.01**: inclusão dos campos `CodigoSituacaoTributariaPisCofins` e `TipoRetencaoPisCofins` (PIS/COFINS).
+- Schema **Futurize 2.02**: normalização do namespace XSD e correção da documentação (`TSCodTribNac`, `TSCodNBS`).
+- Correção de codificação (UTF-8 → string nativa) na descrição de erros retornados pelos WebServices.
+- Atualização de configurações, endpoints e parâmetros de provedores (`ACBrNFSeXServicos.ini`).
+
+### 🔷 DF-e
+- Validação de **CPF/CNPJ** atualizada para aceitar **CNPJ Alfanumérico** (12 caracteres alfanuméricos + 2 dígitos verificadores) em NF-e, MDF-e, DC-e, distribuição de NF-e, e-mail e empresa.
+
+### 🔷 Melhorias e Correções
+- **[CORE-253]** Melhoria: o valor do desconto (`vDesc`) não era exibido no PDF (DANFE), apesar de constar no XML.
+- Ajustes nos testes de **NFCom**.
+
+## Versão 3.2.15 – 15/06/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr (SVN) na revisão **46735**.
+
+### 🔷 Documentação / Swagger (OpenAPI)
+- Publicação da **versão 3.1.5** do Swagger (OpenAPI) da ACBr API.
+- Suporte aos **novos campos da NFS-e Padrão Nacional** (incluindo schemas CNC, CST PIS/COFINS, `tpRetPisCofins` e `vincPrest`).
+- Suporte a **CNPJ Alfanumérico** (NT2026.004) nos documentos fiscais.
+
+### 🔷 Reforma Tributária (IBS/CBS) – DF-e
+- Novos DTOs e campos de **CBS para ALC/ZFM** (alíquota zero em áreas incentivadas, conforme arts. 451 e 466 da LC 214/2025), distinguindo a existência de processo aprovado na **Suframa**, em **CT-e**, **CT-e Simplificado** e **CT-e OS**.
+- Estruturas de vínculo e antecipação de pagamento (`TPgtoVinc`, `TPagamentoRTC`, `TGPagAntecipado`), campos `tpPagAnt`/`ISUFEmit` e percentual `pDevTrib` com validação.
+
+### 🔷 NFS-e
+- Expansão das enumerações de **CST PIS/COFINS** e `tpRetPisCofins`, correção do *pattern* de validação da série da **DPS** e novo valor `9` em `vincPrest`.
+- Atualização de provedores, endpoints e parâmetros NFS-e.
+- Remoção das classes `TLocacaoSublocacao` e `TExploracaoRodoviaria` (limpeza das estruturas de pedágio/locação).
+
+### 🔷 Schemas DF-e (SPED)
+- **CNPJ Alfanumérico** – NT2026.004 v1.01 (PL de Eventos e Cadastro / Consulta Cadastro **CCC**).
+- **CT-e** v4.00 – NT2026.002 RTC v1.00.
+- **NFCom** v1.00 – NT2026.002 RTC v1.00 (com ajustes no importador).
+- **MDF-e** v3.00b – NT01/2025 v1.04.
+- **DC-e** v1.00 – BT2024.001 SVD; atualização de `tiposGeralDCe_v1.00`.
+
+### 🔷 Melhorias e Correções
+- Aumento do *timeout* dos WebServices para **35000 ms**.
+
+## Versão 3.2.14 – 12/06/2026
+### 🔷 NFS-e
+- Provedor **SilTecnologia**: correção do endpoint `/sincronizar`.
+
+## Versão 3.2.13 – 09/06/2026
+### 🔷 NFS-e
+- Atualização de configurações e XSDs de provedores NFS-e.
+- Provedor **SilTecnologia**: correção no *download* do XML.
+- Provedor **proBetha**: tratamento do código **X118**.
+
+## Versão 3.2.12 – 03/06/2026
+### 🔷 NFS-e
+- Adição do provedor **HM2** (com atualização de configurações e schemas de provedores NFS-e).
+- Provedor **Betha**: preenchimento dos campos de serviço.
+- Provedor **SpeedGov**: cópia do valor no campo `ItemListaServico`.
+- Remoção de schemas obsoletos da distribuição.
+
+## Versão 3.2.11 – 01/06/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr (SVN) na revisão **46542**.
+
+### 🔷 NFS-e
+- Provedores **Abase** e **Betha**: construção da chave da DPS e consulta direta por chave.
+- Definição de `SituacaoTrib` a partir dos valores de `InfDPS.trib`.
+- Preenchimento de `CodigoServicoNacional` em provedores específicos (SpeedGov, SystemPro).
+- Uso de `CodigoVerificacao` em determinados eventos e tratamento do provedor **Abase**.
+- Tratamento seguro (valor padrão) na conversão de `cMotivo`.
+- Atualização de dados e endpoints de provedores NFS-e (`ACBrNFSeXServicos.ini`).
+- Schema **ISSNet** (Padrão Nacional): novas enumerações `tpRetPisCofins` (valores 0–9) e atualização da documentação dos códigos de retenção.
+
+## Versão 3.2.10 – 19/05/2026
+### 🔷 Sincronização Projeto ACBr
+- Sincronização do componente ACBr até a revisão **46338**.
+- Remoção dos artefatos de documentação interna (xmldoc) do pacote de distribuição.
+
+### 🔷 NFS-e
+- Correção de *Access Violation* na emissão de NFS-e de **Obra**.
+- Atualização de schemas dos provedores: **Etherium 2.04**, **Giss 2.04**, **SigCorp 2.04**, **Tinus 2.03** e **ISS São Paulo 2.00**.
+
+### 🔷 Schemas DF-e (SPED)
+- Atualização ampla de schemas de **CT-e** (v2.00 / v3.00 / v4.00, incluindo GTV-e), **MDF-e** (v1.00 / v3.00), **NF-e** (v3.10 / v4.00), **NFCom** e **DC-e**.
+
+## Versão 3.2.9 – 18/05/2026
+- Sincronização do componente ACBr (SVN **46271**).
+- Ajustes no provedor **Betha** e inclusão/ajuste do provedor **Abase** na distribuição.
+- Correção de *Access Violation* na validação de **Exigibilidade Suspensa**.
+- Correção de *Access Violation* no *fallback* de código de município.
+- **Painel Administrativo**: implementação de endpoints e melhorias no dashboard.
+
+## Versão 3.2.8 – 11/05/2026
+### 🔷 Reforma Tributária (IBS/CBS) – Eventos NF-e
+- Implementação de diversas classes de eventos da NF-e relacionados à Reforma Tributária e a crédito fiscal:
+  - Crédito presumido (211110) com IBS/CBS.
+  - Apropriação de crédito (211140 e 211150) e controle de consumo/estoque (211120, 211124, 211128, 211130).
+  - Vistoria SUFRAMA (990900).
+  - Comprovante de Entrega NF-e/CT-e (110130, 110192, 110193, 610130, 610131, 110751).
+  - Transferência de crédito e prorrogação (eventos da família 212xxx/412xxx e cancelamentos 411502/411503).
+- Extensão do DTO de ICMS da NF-e com novos campos de desoneração e diferimento (`vICMSDeson`, `motDesICMS`, `pDif`, `vICMSDif`, `vFCPDif`, `vFCPEfet`, `cBenefRBC`, entre outros).
+
+### 🔷 Schemas
+- Adição dos schemas **NF-e v3.10** e novos layouts/eventos (ECONF, cancelamento, envEvento, consSit/consReci/inut/envi/proc/ret).
+- Adição dos schemas **MDF-e v1.00**.
+
+### 🔷 Painel Administrativo
+- Novos endpoints de listagem de **checkout** e **credit-grants**.
+
+## Versão 3.2.6 – 08/05/2026
+- Aumento do limite de paginação para usuários com escopo `console` (até 1000 registros; padrão permanece 250).
+- Remoção da restrição de mesmo mês/ano na validação do período de extrato de conta.
+- Adição do provedor **Fiorilli** (Santa Lúcia).
+
+## Versão 3.2.5 – 07/05/2026
+### 🔷 NFS-e
+- Provedor **Betha**: consulta por protocolo/situação, com extração da chave de acesso nacional.
+- Provedor **Fiorilli**: suporte a endpoints **Padrão Nacional** e **API Própria** (APIPropria101).
+- DANFSe: maior precisão decimal na exibição do valor unitário.
+
+### 🔷 DC-e
+- Correção na resolução da empresa e suporte a **CPF** no `tpEmit=2` (CORE-191).
+
+### 🔷 Plataforma
+- Novo endpoint `/dashboard-summary` (admin).
+- Correção dos limites de alerta de crédito pré-pago em valores de fronteira.
+- Workflows de *deploy* para os ambientes de **Produção** e **Sandbox**.
+
+## Versão 3.2.4 – 05/05/2026
+- **Controle de cotas**: as validações de Sandbox para CEP e CNPJ passam a consumir cota apenas quando aplicável (`ConsumeQuota`).
+- Schema NFS-e **Giss 2.04**: novas enumerações de retenção (0, 3–9).
+- NF-e: status `cStat 150` ("Autorizado o Uso Fora do Prazo") passa a ser tratado como **Autorizado**.
+- Mensagens de erro de NFS-e mais detalhadas (incluem `CodigoMunicipio` e `Provedor` para diagnóstico).
+- Alerta no Discord para vendas de checkout (C6).
+
+## Versão 3.2.3 – 04/05/2026
+- Suporte a **NBS** e **PIS/COFINS** no schema de NFS-e (novos campos `CodigoNbs`, `RetPisCofins`, `CSTPisCofins`).
+- Configuração de municípios para uso do **Padrão Nacional** (ex.: Natal, Alto Paraíso).
+- Documentação: exemplos de CEP/CNPJ exibidos **sem máscara**.
+- Início do desenvolvimento do **Painel Administrativo**.
+
+## Versão 3.2.2 – 03/05/2026
+- Implementação do **QuotaManager** (mecanismo de gerenciamento de cotas).
+
+## Versão 3.2.1 – 03/05/2026
+- Inicio do controle de cotas - previsto 07/05/2026 (consumo dos créditos por uso)
+- Inicio do período de vendas dos planos
+- Inicio do período de vendas dos planos promocional até 06/05/2026
+- Novas regras de Sandbox (CEP e CNPJ) para restrição de consultas para dados especificos, se informado diferente do esperado erro 400 - badrequest.
+  CEP só é permitidos os valores : '18270000',    '01310300',    '22010000',    '80020130'
+  CNPJ só é permitidos os valores :   '18760540000139',    '00000000000161',    '00038166000105',    '00394460000141',    '29979036000140'
+
+## Versão 3.1.11 – 29/04/2026
+- Sincroniza configurações e schemas de NFS-e com a ACBr v46017.
+
+## Versão 3.1.10 – 28/04/2026
+- Sincroniza configurações e schemas de NFS-e com a ACBr v45993.
+- Alteração no provedor SpeedGov 
+
+## Versão 3.1.9 – 24/04/2026
+- Sincroniza configurações e schemas de NFS-e com a ACBr v45929.
+
+## Versão 3.1.8 – 22/04/2026
+- Sincroniza configurações e schemas de NFS-e com a ACBr v45914.
+- Alteração na rotina de retorno de Metadados da NFSe, para exibir quando provedor é nacional.
+- Alteração na rotina de sincronizar nfse, para o provedor Betha.
+
+## Versão 3.1.7 – 16/04/2026
+- Implementa validação de vUnCom e vProd garantindo valores não negativos com precisão adequada
+- Altera procEventoDCe.versao de NullableDouble para NullableString
+- Sincroniza configurações e schemas de NFS-e com a ACBr v45815, adiciona schemas Actcon 2.02 e corrige erro de validação na geração da chave da DC-e.
+
+## Versão 3.1.6 – 10/04/2026 14:00 -0300
+### 🔷 Sincronização Projeto ACBr NFSeX
+- Atualizado o componente ACBrNFSeX até revisão #45776
+- Alteração na Chave DCe quando responsável pela emissão diferente de emit.cnpj
+- Atualização de Schemas provedores NFSe - MegaSoft / ISSNet
+- Alteração na consulta provedor Tinus
+Alterado configuração de provedor (Barão - RS / Cachoeira Alta - GO)
+
+## Versão 3.1.5 – 02/04/2026
+### 🔷 Sincronização Projeto ACBr NFSeX
+- Alterado provedor Giss para dividir por 100 a aliquota
+- Alterado Provedor ABase para informar WSChaveAcesso
+
+## Versão 3.1.4 – 01/04/2026
+- Alteração Provedor IPM
+- Alteração cidades resource
+
+## Versão 3.1.3 31/03/2026
+- Alteração Provedor Centi
+- Alteração cidades resource
+
+## Versão 3.1.2 17/03/2026
+- Compilação Semanal
+
+## Versão 3.1.1 – 04/02/2026
+### 🔷 Alteração do Endpoint de Autenticação
+
+- Como parte do processo de **modernização da arquitetura de segurança**, o endpoint responsável pela obtenção do token de acesso foi atualizado para o novo padrão baseado em **OpenID Connect**.
+
+#### ✅ Endpoint atual (padrão obrigatório)
+```
+https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token
+```
+
+#### 🚫 Endpoint anterior (descontinuado)
+~~https://auth.acbr.api.br/oauth/token~~
+
+- O endpoint antigo foi descontinuado definitivamente.  
+- Integrações que não forem atualizadas deixarão de autenticar.
+
+#### 📌 Impacto para integradores
+- Atualização obrigatória das configurações de autenticação
+- Nenhuma alteração no formato do token retornado
+- Mantida compatibilidade com fluxos OAuth 2.0 padrão
+
+#### 🔗 Links úteis
+
+- [Primeiros Passos](https://dev.acbr.api.br/docs/primeiros-passos)
+
+- [Autenticação e obtenção de token](https://dev.acbr.api.br/docs/autenticacao)
+
+---
+
+### 🔷 Controle de Limites/Cotas
+- O sistema de controle de limites e cotas **encontra-se temporariamente inativo** e **não está sendo aplicado às requisições** realizadas na plataforma.
+
+- A ativação desse mecanismo está prevista para **01/04/2026**, quando passará a operar de forma integral, conforme as regras e políticas definidas para cada contrato.
+
+- Até essa data, **não haverá bloqueio, restrição ou impacto operacional** relacionado a consumo de cotas ou limites de uso.
+
+---
+## Versão 3.1.0 20/01/2026
+- Controle inicial de Changelog
+
+---
+
+# MD for: https://dev.acbr.api.br/docs.md
+
+Introdução
+
+Seja bem vindo à documentação da ACBr API, a plataforma de automação comercial e fiscal para desenvolvedores. Consiste em API REST que oferece endpoints para emissão de documentos fiscais como NFe, NFCe, NFSe, MDFe, CTe, NFCom, consultas de CNPJ e CEP, e operações como cancelamento, carta de correção, manifestação do destinatário, entre outras. 
+
+Além da emissão, também oferecemos endpoints para Distribuição DF-e, onde é possível fazer o download completo do XML de notas emitidas contra o CNPJ da empresa, permitindo uma gestão mais eficiente e controle das transações fiscais.
+
+Nesta documentação você vai encontrar todas as informações necessárias para integrar com as nossas APIs. Se mesmo após a leitura da documentação ainda tiver dificuldades no uso da ACBr API, você pode pesquisar dúvidas anteriores de outros usuários, ou fazer perguntas que podem ser respondidas pela comunidade ou pela nossa equipe, visitando nossa **[Central de Suporte](https://suporte.acbr.api.br)**.
+
+Para acompanhar a disponibilidade dos serviços em tempo real, consulte a página de **[Status da ACBr API](https://status.acbr.api.br/status/acbr-api)**. Use esse link para verificar incidentes, degradações de desempenho e janelas de manutenção antes de abrir um chamado.
+
+## Comece por aqui
+
+Se você está iniciando a integração e quer localizar rapidamente o fluxo recomendado, as URLs e a autenticação:
+
+* [Onboard Integração](https://dev.acbr.api.br/docs/onboarding)
+* [FAQ](https://dev.acbr.api.br/docs/faq)
+* [Migrando da Nuvem Fiscal para a ACBr API](https://dev.acbr.api.br/docs/migrando-da-nuvem-fiscal-para-a-acbr-api)
+* [Autenticação](https://dev.acbr.api.br/docs/autenticacao)
+
+## Serviços disponíveis {#servicos}
+
+Lista gerada automaticamente a partir do Swagger/OpenAPI de produção:
+
+* **Cep**: Serviço disponível na ACBr API. 1 endpoint(s). Principais rotas: `GET /cep/{Cep}`.
+* **Cnpj**: Serviço disponível na ACBr API. 2 endpoint(s). Principais rotas: `GET /cnpj`, `GET /cnpj/{Cnpj}`.
+* **Cte**: Conhecimento de Transporte Eletrônico. 21 endpoint(s). Principais rotas: `GET /cte`, `POST /cte`, `GET /cte/eventos/{id}`, `GET /cte/eventos/{id}/pdf`, `GET /cte/eventos/{id}/xml`, `GET /cte/sefaz/status`.
+* **CteOs**: Conhecimento de Transporte Eletrônico - Outros serviços. 20 endpoint(s). Principais rotas: `GET /cteos`, `POST /cteos`, `GET /cteos/eventos/{id}`, `GET /cteos/eventos/{id}/pdf`, `GET /cteos/eventos/{id}/xml`, `GET /cteos/sefaz/status`.
+* **Dce**: Declaração de Conteúdo Eletrônica. 11 endpoint(s). Principais rotas: `GET /dce`, `POST /dce`, `GET /dce/sefaz/status`, `GET /dce/{id}`, `GET /dce/{id}/cancelamento`, `POST /dce/{id}/cancelamento`.
+* **Debug**: Endpoints auxiliares voltados à análise técnica e depuração de documentos fiscais. Permitem rastrear o processamento de DF-es na API, incluindo o conteúdo original recebido e as requisições realizadas aos serviços autorizadores (SEFAZ, prefeituras, etc). 4 endpoint(s). Principais rotas: `GET /debug/http-requests/{id}/request-content`, `GET /debug/http-requests/{id}/response-content`, `GET /debug/{id}`, `GET /debug/{id}/original-payload`.
+* **Distribuição NF-e**: O processo de distribuição de DFe envolve a disponibilização dos documentos fiscais eletrônicos para os envolvidos na transação (emitentes, destinatários e terceiros autorizados). Ele permite que os destinatários recebam as NF-e emitidas contra o seu CNPJ diretamente do Ambiente Nacional, facilitando o controle e a gestão dos documentos recebidos. 11 endpoint(s). Principais rotas: `GET /distribuicao/nfe`, `POST /distribuicao/nfe`, `GET /distribuicao/nfe/documentos`, `GET /distribuicao/nfe/documentos/{id}`, `GET /distribuicao/nfe/documentos/{id}/pdf`, `GET /distribuicao/nfe/documentos/{id}/xml`.
+* **Mdfe**: Manifesto Eletrônico de Documentos Fiscais. 26 endpoint(s). Principais rotas: `GET /mdfe`, `POST /mdfe`, `GET /mdfe/eventos/{id}`, `GET /mdfe/eventos/{id}/pdf`, `GET /mdfe/eventos/{id}/xml`, `GET /mdfe/lotes`.
+* **Nfce**: Nota Fiscal de Consumidor Eletrônica. 28 endpoint(s). Principais rotas: `GET /nfce`, `POST /nfce`, `GET /nfce/eventos`, `GET /nfce/eventos/{id}`, `GET /nfce/eventos/{id}/pdf`, `GET /nfce/eventos/{id}/xml`.
+* **Nfcom**: Nota Fiscal Fatura de Serviço de Comunicação Eletrônica. 11 endpoint(s). Principais rotas: `GET /nfcom`, `POST /nfcom`, `GET /nfcom/sefaz/status`, `GET /nfcom/{id}`, `GET /nfcom/{id}/cancelamento`, `POST /nfcom/{id}/cancelamento`.
+* **Nfe**: Nota Fiscal Eletrônica. 32 endpoint(s). Principais rotas: `GET /nfe`, `POST /nfe`, `GET /nfe/cadastro-contribuinte`, `GET /nfe/eventos`, `GET /nfe/eventos/{id}`, `GET /nfe/eventos/{id}/pdf`.
+* **Nfse**: Nota Fiscal de Serviço Eletrônica. 17 endpoint(s). Principais rotas: `GET /nfse`, `POST /nfse`, `GET /nfse/cidades`, `GET /nfse/cidades/{codigo_ibge}`, `POST /nfse/dps`, `POST /nfse/dps/lotes`.
+
+Consulte também o [resumo OpenAPI para LLMs](https://dev.acbr.api.br/llms/openapi-summary.md) e a [referência completa da API](https://dev.acbr.api.br/docs/api).
+
+## Onboarding de integração
+
+Consulte o [roteiro de onboarding para LLMs](https://dev.acbr.api.br/llms/onboarding.md) para ver a ordem recomendada de implementação, flowchart, modelos de comunicação, linguagens suportadas, tags dos serviços, consumo de cotas, rate limit e checklist.
+
+### Fluxo resumido
+
+```mermaid
+flowchart TD
+  A[Criar conta e plano] --> B[Criar credenciais]
+  B --> C[Obter token OAuth2]
+  C --> D[Testar CEP ou CNPJ]
+  D --> E[Cadastrar empresa quando necessário]
+  E --> F[Mapear consumo de cota e rate limit]
+  F --> G[Implementar serviço fiscal]
+  G --> H[Testar em homologação]
+  H --> I[Promover para produção]
+```
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/onboarding.md
+
+Onboard Integração
+
+Use este roteiro como checklist inicial para implementar uma integração com a ACBr API com segurança.
+
+## Ordem recomendada
+
+1. Crie ou acesse sua conta no [Console da ACBr API](https://console.acbr.api.br).
+2. Ative um plano ou garanta créditos disponíveis.
+3. Escolha o ambiente inicial:
+   * Homologação: `https://hom.acbr.api.br`
+   * Produção: `https://prod.acbr.api.br`
+4. Crie credenciais de API para o ambiente escolhido e armazene `client_id` e `client_secret` em local seguro.
+5. Gere um token OAuth 2 com o fluxo `client_credentials`.
+6. Teste uma chamada simples, como consulta de CEP ou CNPJ.
+7. Cadastre empresa, certificado e configurações fiscais quando o serviço exigir emissão ou operação fiscal.
+8. Implemente o serviço fiscal desejado.
+9. Trate erros HTTP, rejeições fiscais, paginação, cotas, consumo de créditos e retentativas.
+10. Valide em homologação, use o debug quando necessário e depois promova para produção.
+
+## Dados essenciais
+
+### URLs base
+
+Use a URL conforme o ambiente da sua credencial:
+
+**URL base da API de produção**
+
+```text
+https://prod.acbr.api.br
+```
+
+Aceita documentos com finalidade **produção** e **homologação**.
+
+**URL base da API de homologação**
+
+```text
+https://hom.acbr.api.br
+```
+
+Aceita documentos com finalidade **homologação**.
+
+**URL de autenticação OAuth 2**
+
+```text
+https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token
+```
+
+As credenciais do tipo **Produção** e **Sandbox** utilizam o mesmo endpoint de autenticação. O que muda é a URL base da API usada depois de obter o token.
+
+### Autenticação
+
+Toda requisição para a ACBr API deve enviar o header HTTP `Authorization` no formato abaixo:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Esse `access_token` é obtido via OAuth 2 usando o fluxo `client_credentials`.
+
+Para obter o token, faça uma requisição `POST` para a URL de autenticação com:
+
+* header `Content-Type: application/x-www-form-urlencoded`;
+* corpo com os campos `grant_type`, `client_id`, `client_secret` e `scope`.
+
+Exemplo:
+
+```http
+POST https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token HTTP/1.1
+Host: auth.acbr.api.br
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=abcdef&client_secret=123456&scope=cep%20cnpj%20nfse
+```
+
+Campos do payload:
+
+* `grant_type`: sempre `client_credentials`;
+* `client_id`: seu Client ID;
+* `client_secret`: seu Client Secret;
+* `scope`: escopos que o token deve possuir, separados por espaço, como `cep cnpj nfse`.
+
+### Primeiro teste
+
+Primeiro obtenha o token:
+
+```bash
+curl --request POST "https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token" \
+  --header "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=SEU_CLIENT_ID" \
+  --data-urlencode "client_secret=SEU_CLIENT_SECRET" \
+  --data-urlencode "scope=cep cnpj nfse"
+```
+
+Depois use o token nas chamadas da API:
+
+```http
+GET https://prod.acbr.api.br/cep/01311200 HTTP/1.1
+Host: prod.acbr.api.br
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJraWQiOiIw...
+Accept: */*
+```
+
+Para validar a integração antes de escrever código, consulte [Usando Postman](https://dev.acbr.api.br/docs/postman).
+
+## Fluxo de implementação
+
+<a className="button button--primary flow-open-button" href="/fluxos/onboarding">
+  Abrir fluxo em tela cheia
+</a>
+
+```mermaid
+flowchart TD
+  conta["Criar conta no Console ACBr API"] --> plano["Ativar plano ou créditos"]
+  plano --> ambiente["Escolher ambiente"]
+  ambiente --> credenciais["Criar credenciais de API"]
+  credenciais --> token["Gerar token OAuth 2"]
+  token --> teste["Testar CEP ou CNPJ"]
+  teste --> fiscal{"Vai emitir documento fiscal?"}
+  fiscal -- "Sim" --> cadastro["Cadastrar empresa, certificado e configurações"]
+  fiscal -- "Não" --> endpoint["Implementar endpoint escolhido"]
+  cadastro --> servico["Implementar serviço fiscal"]
+  endpoint --> tratamento["Tratar erros, paginação, cotas e rate limit"]
+  servico --> tratamento
+  tratamento --> homologacao["Testar em homologação"]
+  homologacao --> debug["Usar debug quando necessário"]
+  debug --> suporte{"Erro persiste?"}
+  suporte -- "Sim" --> chamado["Abrir chamado com evidências"]
+  suporte -- "Não" --> producao["Promover para produção"]
+  chamado --> ajuste["Ajustar integração"]
+  ajuste --> homologacao
+```
+
+## Checklist
+
+- [ ] Conta criada no Console da ACBr API.
+- [ ] Plano ativo ou créditos disponíveis.
+- [ ] Ambiente de homologação configurado.
+- [ ] Credenciais criadas para o ambiente escolhido e armazenadas fora do código-fonte.
+- [ ] Token OAuth 2 obtido com os escopos necessários.
+- [ ] Chamada simples validada com `Authorization: Bearer <token>`.
+- [ ] Empresa, certificado e configurações fiscais cadastrados quando necessário.
+- [ ] Serviço fiscal escolhido e endpoints mapeados pela [Referência API](https://dev.acbr.api.br/docs/api).
+- [ ] Consumo de cota dos endpoints utilizados mapeado.
+- [ ] Cabeçalhos `x-quota-name`, `x-quota-used` e `x-quota-limit` lidos quando retornados.
+- [ ] Payloads JSON validados contra exemplos e modelos da referência.
+- [ ] Tratamento de erros HTTP, rejeições fiscais e mensagens da SEFAZ/prefeituras implementado.
+- [ ] Paginação implementada em listagens.
+- [ ] Download de XML/PDF implementado quando aplicável.
+- [ ] Eventos como cancelamento, carta de correção, inutilização ou encerramento implementados quando aplicável.
+- [ ] Controle de cota, crédito, resposta `402` e resposta `429` implementado.
+- [ ] Backoff baseado em `Retry-After` e `X-Retry-In` implementado.
+- [ ] Logs e endpoints de debug avaliados para suporte.
+- [ ] Evidências de erro organizadas para abertura de chamado, quando necessário.
+- [ ] Testes em homologação concluídos.
+- [ ] URLs, credenciais e ambiente produtivo revisados antes do go-live.
+
+## Como usar o debug
+
+O debug ajuda a investigar falhas em emissões, eventos fiscais e comunicação com SEFAZ ou prefeituras.
+
+Use o debug quando precisar:
+
+* analisar rejeições ou falhas sistêmicas;
+* verificar o payload original recebido pela ACBr API;
+* consultar a sequência técnica de chamadas realizadas;
+* obter envelopes SOAP de requisição e resposta;
+* enviar evidências para suporte técnico ou órgão autorizador.
+
+Fluxo recomendado:
+
+1. Identifique o ID do documento fiscal.
+2. Chame [Debug de DF-e](https://dev.acbr.api.br/docs/api#tag/Debug/operation/DebugDfe) informando o ID do documento.
+3. Para ver o payload recebido pela ACBr API, chame [Payload original recebido](https://dev.acbr.api.br/docs/api#tag/Debug/operation/DebugDfeOriginalPayload).
+4. Na resposta do debug, localize o ID da requisição HTTP que deseja inspecionar.
+5. Chame [Corpo da requisição HTTP](https://dev.acbr.api.br/docs/api#tag/Debug/operation/DebugHttpRequestContent) para obter o conteúdo enviado ao autorizador.
+6. Chame [Corpo da resposta HTTP](https://dev.acbr.api.br/docs/api#tag/Debug/operation/DebugHttpResponseContent) para obter o conteúdo recebido do autorizador.
+7. Guarde os arquivos retornados para análise interna ou abertura de chamado.
+
+Todas as chamadas de debug exigem token com scope `debug`.
+
+## Como abrir suporte com evidências
+
+Antes de abrir um chamado, confira a página de [Status da ACBr API](https://status.acbr.api.br/status/acbr-api) para verificar se existe incidente, degradação ou manutenção em andamento.
+
+Abra um tópico em [Dúvidas Privadas ACBr API](https://www.projetoacbr.com.br/forum/forum/106-duvidas-privadas-acbr-api/) quando:
+
+* o erro persistir após nova tentativa;
+* a resposta da API não estiver clara para a sua integração;
+* houver divergência entre o payload enviado e o retorno recebido;
+* a rejeição fiscal não parecer compatível com os dados enviados;
+* o debug indicar falha de comunicação com SEFAZ, prefeitura ou autorizador.
+
+Quando a dúvida for rápida e não exigir envio de evidências, análise de payload ou investigação de documento fiscal, utilize os canais do Discord que começam com `api-`.
+
+Inclua no chamado:
+
+* ambiente utilizado: homologação ou produção;
+* URL chamada, método HTTP e horário aproximado da requisição;
+* código HTTP retornado pela ACBr API;
+* corpo da resposta da requisição, quando disponível;
+* ID da resposta ou ID da requisição retornado pela ACBr API, quando disponível;
+* `client_id` que gerou o ID da resposta ou da requisição;
+* link do endpoint na [Referência API](https://dev.acbr.api.br/docs/api);
+* ID do documento fiscal, quando aplicável;
+* payload original recebido pela ACBr API, obtido pelo debug;
+* corpo da requisição HTTP enviado ao autorizador, obtido pelo debug;
+* corpo da resposta HTTP recebida do autorizador, obtido pelo debug;
+* mensagem de rejeição da SEFAZ, prefeitura ou autorizador, quando houver;
+* passos para reproduzir o problema.
+
+<strong style={{color: 'var(--ifm-color-danger-dark)'}}>Não envie <code>client_secret</code>, token de acesso, certificado digital, senha do certificado ou outros segredos em local algum.</strong> Se precisar compartilhar payloads com dados sensíveis, envie no fórum em Dúvidas Privadas ACBr API, onde somente você e os consultores ACBr têm acesso.
+
+## Próximos passos
+
+* [FAQ](https://dev.acbr.api.br/docs/faq)
+* [Autenticação](https://dev.acbr.api.br/docs/autenticacao)
+* [Limites e cotas](https://dev.acbr.api.br/docs/limites)
+* [Debug](https://dev.acbr.api.br/docs/debug)
+* [Referência API](https://dev.acbr.api.br/docs/api)
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/faq.md
+
+FAQ
+
+## Quais cidades são atendidas?
+
+Para dúvidas se uma cidade é atendida na NFS-e, utilize o endpoint [ConsultarMetadados](https://dev.acbr.api.br/docs/api#tag/Nfse/operation/ConsultarMetadados). Ele retorna os metadados disponíveis para a cidade consultada e deve ser usado como fonte atualizada para validar atendimento e características do provedor. Ou [acessar o site](https://acbr.api.br/consulta-nfse/) para conferir se a cidade é atendida.
+
+Para saber se a cidade utiliza provedor padrão da prefeitura ou o padrão nacional, consulte o campo `provedor` retornado pelo endpoint. Quando o valor for `PadraoNacional`, a cidade utiliza o padrão nacional. Quando vier outro nome, como `Fiorilli`, `Betha`, `Ginfes` ou outro provedor, a cidade utiliza o provedor indicado.
+
+Na emissão de NFS-e, o campo `provedor` do payload usa o enum:
+
+* `padrao`: provedor padrão da prefeitura;
+* `nacional`: Ambiente de Dados Nacional (ADN) do Sistema Nacional NFS-e.
+
+O valor padrão é `padrao`. Use `nacional` quando os metadados da cidade indicarem `PadraoNacional`.
+
+Exemplo de cidade atendida por provedor padrão:
+
+```json
+{
+  "codigo_ibge": "5008305",
+  "uf": "MS",
+  "municipio": "Tres Lagoas",
+  "provedor": "Fiorilli",
+  "ambientes": [
+    "producao",
+    "homologacao"
+  ],
+  "credenciais": [
+    "certificado",
+    "login_senha"
+  ]
+}
+```
+
+Exemplo de cidade atendida pelo padrão nacional:
+
+```json
+{
+  "codigo_ibge": "4115200",
+  "uf": "PR",
+  "municipio": "Maringa",
+  "provedor": "PadraoNacional",
+  "ambientes": [
+    "producao",
+    "homologacao"
+  ],
+  "credenciais": [
+    "certificado"
+  ]
+}
+```
+
+## Erros de RateLimit
+
+Quando o limite de requisições for excedido, a API retorna:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 2
+X-Retry-In: 1.003928397s
+```
+
+Ao receber `429`, aguarde o tempo indicado nos headers `Retry-After` e `X-Retry-In` antes de tentar novamente. Para entender o funcionamento completo, consulte [Limites e cotas](https://dev.acbr.api.br/docs/limites).
+
+## Erros de falta de crédito
+
+Quando não houver créditos suficientes para processar a operação, a API retorna:
+
+```http
+HTTP/1.1 402 Payment Required
+```
+
+Código de erro:
+
+* `InsufficientCredits`
+
+Mensagem:
+
+* `Créditos insuficientes para concluir a operação. Adquira uma nova franquia para continuar.`
+
+Quando a requisição ultrapassar o limite permitido para a cota, a API também retorna `402`, com o código:
+
+* `QuotaExceeded`
+
+Mensagem:
+
+* `A requisição ultrapassa o limite de {limite} operações para a cota "{nome-da-cota}".`
+
+Para consultar como a cota é consumida, quais headers observar e como tratar esses retornos, veja [Limites e cotas](https://dev.acbr.api.br/docs/limites).
+
+## Como saber como a cota é usada?
+
+Consulte [Limites e cotas](https://dev.acbr.api.br/docs/limites). Essa página explica o consumo da cota `prepago-creditos`, os headers `x-quota-name`, `x-quota-used` e `x-quota-limit`, o endpoint de consulta da cota pré-paga e os comportamentos dos erros `402` e `429`.
+
+## Erro X999 na emissão em homologação de NFS-e
+
+Mensagem:
+
+* `X999: Erro de Conexão: Não informado a URL de Homologação, favor entrar em contato com a Prefeitura ou Provedor.`
+
+Para emitir NFS-e em ambiente de homologação, a prefeitura ou o provedor precisa disponibilizar uma URL de homologação. Nem todas as prefeituras possuem esse ambiente disponível.
+
+Quando a prefeitura ou o provedor não disponibiliza ambiente de homologação, é necessário utilizar o ambiente de produção.
+
+## O que fazer em erros 400 a 499 ou internal error?
+
+Se ocorrer erro HTTP entre `400` e `499`, ou se a API retornar uma mensagem de `internal error`, abra um tópico em [Dúvidas Privadas ACBr API](https://www.projetoacbr.com.br/forum/forum/106-duvidas-privadas-acbr-api/) com as evidências descritas em [Onboard Integração](https://dev.acbr.api.br/docs/onboarding), caso não for nenhuma das exceções tratadas abaixo.
+
+<a className="button button--primary flow-open-button" href="/fluxos/faq-erros">
+  Abrir fluxo em tela cheia
+</a>
+
+```mermaid
+flowchart TD
+  erro["Erro na integração"] --> status{"Status HTTP"}
+  status -- "401" --> auth["Verificar client_id, client_secret e fluxo OAuth 2"]
+  status -- "403" --> scopes["Verificar scopes do token"]
+  status -- "400 a 499" --> revisou{"Já verificou os dados enviados?"}
+  status -- "internal error" --> evidencias
+  status -- "429" --> retry["Respeitar Retry-After e X-Retry-In"]
+  status -- "402" --> creditos["Verificar créditos e cotas"]
+  revisou -- "Não" --> corrigir["Corrigir dados e enviar a requisição novamente"]
+  revisou -- "Sim" --> evidencias["Separar evidências da requisição"]
+  auth --> reenviar["Gerar novo token e enviar novamente"]
+  scopes --> reenviar
+  corrigir --> reenviar
+  retry --> limites["Consultar Limites e cotas"]
+  creditos --> limites
+  evidencias --> anexos["Coletar payload, arquivos de debug, corpo da resposta e dados da chamada"]
+  anexos --> forum["Abrir tópico em Dúvidas Privadas ACBr API"]
+```
+
+Para `401`, verifique se o `client_id` e o `client_secret` pertencem ao ambiente usado, se o token foi gerado pelo fluxo OAuth 2 `client_credentials` e se a requisição está enviando o header `Authorization: Bearer <access_token>`.
+
+Para `403`, verifique se o token possui os scopes necessários para o endpoint chamado. Gere um novo token com os scopes corretos e envie a requisição novamente.
+
+Para erros entre `400` e `499`, revise primeiro os dados enviados. Confira payload, parâmetros, ambiente, CPF/CNPJ, IDs informados, scopes e endpoint utilizado. Se encontrar erro nos dados, corrija e envie a requisição novamente. Se os dados já foram conferidos e o erro persistir, separe as evidências para análise.
+
+Inclua o corpo da resposta, ID da resposta ou da requisição quando disponível, `client_id`, ambiente, URL chamada, horário aproximado, endpoint usado e payloads/debug quando forem necessários para análise. <strong style={{color: 'var(--ifm-color-danger-dark)'}}>Não envie segredos como <code>client_secret</code>, token de acesso, certificado digital ou senha do certificado.</strong>
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/primeiros-passos.md
+
+Primeiros passos
+
+Se você quer só o essencial para começar a integrar com a ACBr API, use esta página como referência rápida.
+
+## URLs base
+
+Use a URL conforme o ambiente da sua credencial:
+
+**Credenciais do tipo Produção | Sandbox**
+
+**URL base da API de produção**
+
+```text
+https://prod.acbr.api.br
+```
+
+Aceita documentos com finalidade **produção** e **homologação**.
+
+**URL base da API de homologação**
+
+```text
+https://hom.acbr.api.br
+```
+
+Aceita documentos com finalidade **homologação**.
+
+**URL de autenticação OAuth 2**
+
+```text
+https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token
+```
+
+As credenciais do tipo **Produção** e **Sandbox** utilizam o mesmo endpoint de autenticação. O que muda é a URL base da API usada depois de obter o token.
+
+## Como a autenticação funciona
+
+Toda requisição para a ACBr API deve enviar o header HTTP `Authorization` no formato abaixo:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Esse `access_token` é obtido via OAuth 2 usando o fluxo `client_credentials`.
+
+## Payload para obter o token
+
+Faça uma requisição `POST` para a URL de autenticação com:
+
+* Header `Content-Type: application/x-www-form-urlencoded`
+* Corpo com os campos `grant_type`, `client_id`, `client_secret` e `scope`
+
+Exemplo:
+
+```http
+POST https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token HTTP/1.1
+Host: auth.acbr.api.br
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=abcdef&client_secret=123456&scope=cep%20cnpj%20nfse
+```
+
+Campos do payload:
+
+* `grant_type`: sempre `client_credentials`
+* `client_id`: seu Client ID
+* `client_secret`: seu Client Secret
+* `scope`: escopos que o token deve possuir, separados por espaço, como `cep cnpj nfse`
+
+## Exemplo completo
+
+Primeiro obtenha o token:
+
+```bash
+curl --request POST "https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token" \
+  --header "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=SEU_CLIENT_ID" \
+  --data-urlencode "client_secret=SEU_CLIENT_SECRET" \
+  --data-urlencode "scope=cep cnpj nfse"
+```
+
+Depois use o token nas chamadas da API:
+
+```http
+GET https://prod.acbr.api.br/cep/01311200 HTTP/1.1
+Host: prod.acbr.api.br
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJraWQiOiIw...
+Accept: */*
+```
+
+## Testando com Postman
+
+Se você prefere validar a integração antes de escrever código, recomendamos usar o Postman.
+
+Nele você pode:
+
+* importar a definição da ACBr API
+* gerar uma collection automaticamente
+* configurar a autenticação
+* testar os endpoints visualmente
+
+Consulte o guia completo em [Usando Postman](https://dev.acbr.api.br/docs/postman).
+
+## Próximos passos
+
+* Para aprender a testar a API com interface gráfica, consulte [Usando Postman](https://dev.acbr.api.br/docs/postman)
+* Para criar credenciais no console e ver o fluxo completo de autenticação, consulte [Autenticação](https://dev.acbr.api.br/docs/autenticacao)
+* Para ver todos os endpoints disponíveis, consulte a [referência da API](https://dev.acbr.api.br/docs/api)
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/postman.md
+
+Usando Postman
+
+## O que é o Postman
+
+O Postman é uma ferramenta para testar APIs sem precisar escrever código logo no início da integração. Com ele, você pode:
+
+* enviar requisições HTTP
+* configurar headers, autenticação e payloads
+* visualizar respostas da API
+* organizar chamadas em coleções
+
+Ele é uma boa opção para validar sua autenticação, testar endpoints e entender o comportamento da ACBr API antes de implementar isso no seu sistema.
+
+## Onde fazer o download
+
+Você pode baixar o Postman no site oficial:
+
+```text
+https://www.postman.com/downloads/
+```
+
+Se preferir, também é possível usar a versão web do Postman, mas a aplicação desktop costuma ser a opção mais prática para testes de API no dia a dia.
+
+## Como importar a collection da ACBr API
+
+Como a ACBr API disponibiliza sua definição OpenAPI, você pode importá-la diretamente no Postman para gerar a collection automaticamente.
+
+Use esta URL:
+
+```text
+https://prod.acbr.api.br/openapi/swagger.json
+```
+
+Passo a passo:
+
+1. Abra o Postman.
+2. Clique em `Import`.
+3. Escolha a opção para importar por `Link`.
+4. Cole a URL da OpenAPI da ACBr API.
+5. Confirme a importação.
+
+Após isso, o Postman irá criar uma collection com os endpoints disponíveis.
+
+## Como usar o Postman com a ACBr API
+
+O fluxo mais comum é este:
+
+1. Obter o token de acesso.
+2. Copiar o `access_token` retornado.
+3. Fazer chamadas para os endpoints da API usando `Authorization: Bearer <token>`.
+
+### 1. Criando a requisição para obter o token
+
+Crie uma requisição `POST` para:
+
+```text
+https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token
+```
+
+Configure:
+
+* Método: `POST`
+* Header `Content-Type`: `application/x-www-form-urlencoded`
+* Body do tipo `x-www-form-urlencoded`
+
+Campos do body:
+
+* `grant_type`: `client_credentials`
+* `client_id`: seu Client ID
+* `client_secret`: seu Client Secret
+* `scope`: os escopos desejados, como `cep cnpj nfse`
+
+### 2. Enviando a requisição
+
+Ao enviar a requisição, a API retornará um JSON com o `access_token`.
+
+Exemplo:
+
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJraWQiOiIw...",
+  "token_type": "bearer",
+  "scope": "cep cnpj nfse",
+  "expires_in": 2592000
+}
+```
+
+### 3. Usando o token nas demais chamadas
+
+Depois disso, crie ou abra uma requisição da collection importada e envie o header:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Exemplo de chamada:
+
+```http
+GET https://prod.acbr.api.br/cep/01311200
+Authorization: Bearer <access_token>
+```
+
+## Dicas práticas
+
+* Use `https://hom.acbr.api.br` quando estiver testando no ambiente de homologação.
+* Use `https://prod.acbr.api.br` quando estiver operando em produção.
+* Salve o token em uma variável do Postman para reutilizar nas requisições.
+* Se a API retornar `402`, verifique seus créditos e cotas em [console.acbr.api.br](https://console.acbr.api.br).
+* Se a API retornar `429`, reduza a frequência das chamadas e respeite os headers de retry.
+
+## Próximos passos
+
+* Para ver as URLs principais e o resumo da autenticação, consulte [Onboard Integração](https://dev.acbr.api.br/docs/onboarding)
+* Para entender em detalhe a autenticação, consulte [Autenticação](https://dev.acbr.api.br/docs/autenticacao)
+* Para ver limites, cotas e erro 402, consulte [Limites e cotas](https://dev.acbr.api.br/docs/limites)
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/autenticacao.md
+
+Autenticação
+
+Se você quer localizar rapidamente as **URLs base**, o **header de autenticação** e o **payload para gerar o token**, consulte primeiro [Onboard Integração](https://dev.acbr.api.br/docs/onboarding).
+
+Todas as requisições à API deve ser autenticadas através do envio de um header HTTP `Authorization` com o valor `Bearer <token>`, onde `<token>` é o token de acesso à API (*access token*). 
+
+A API suporta o padrão OAuth 2 (fluxo `client_credentials`) para a obtenção do token de acesso, e os passos necessários para isso são descritos a seguir.
+
+Alteração do Endpoint de Autenticação
+
+Como parte da modernização da arquitetura, o endpoint utilizado para obtenção de token de acesso também foi atualizado.
+
+**Endpoint atual (novo padrão):**
+```
+https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token
+```
+
+Endpoint anterior (descontinuado): ~~https://auth.acbr.api.br/oauth/token~~
+
+⚠️ **Importante:**
+Todas as integrações devem ser ajustadas para utilizar exclusivamente o novo endpoint. O uso do endereço antigo não é mais permitido e foi descontinuado definitivamente.
+
+## Criação das credenciais {#credenciais}
+
+Você deve navegar para o [Console da ACBr API](https://console.acbr.api.br) para a obtenção das suas credenciais.
+
+O acesso ao console requer que você esteja logado na ACBr API. Caso contrário você sera redirecionado a uma tela de login onde também poderá criar gratuitamente uma nova conta caso não tenha uma.
+
+No console, a seção *Credenciais de API* lista todas as credenciais que você criou previamente. Para criar uma nova credencial, clique no botão *Criar credencial*.
+
+O uso do console, incluindo a criação de credenciais, requer que sua conta tenha um plano ativo. Se você não possuir um, você será redirecionado para uma tela de seleção de plano. [nossos planos disponíveis](https://projetoacbr.com.br/api/#preco).
+
+Na tela para criação de nova credencial, escolha o tipo de credencial:
+
+* Produção: (Ambiente Fiscal :: Produção | Homologação) credenciais válidas para uso da API de produção (https://prod.acbr.api.br);
+* Sandbox: (Ambiente Fiscal :: Homologação) credenciais válidas para uso da API de teste (https://hom.acbr.api.br).
+
+Recomendamos começar usando a API de sandbox. Assim que sua integração estiver implementada e validada, você pode migrar para a API de produção.
+
+Clique em *Confirmar* para gerar as credenciais. Uma nova tela será mostrada informando os valores do *Client ID* e do *Client Secret*. Anote esses valores, ou clique no botão *Baixar credencial* pra fazer o download the um arquivo CSV contendo as credenciais.
+
+O *Client Secret* só é mostrado uma vez, nessa tela. Anote ou faça o download das credenciais. Se você não souber mais o *Client Secret*, você não poderá mais restaurá-lo e não poderá mais usar as credenciais do respectivo *Client ID*. Não se preocupe, você sempre pode criar novas credenciais, mas um outro *Client ID* será gerado.
+
+Mantenha o *Client ID* e principalmente o *Client Secret* em lugar seguro. Nunca inclua o *Client Secret* em arquivos texto ou de código-fonte, principalmente se incluídos em sistemas de versionamento de código-fonte como Git ou SVN. Evite usar o *Client Secret* em aplicações não seguras (mobile, desktop, web). O portador das credenciais terá acesso à API e poderá emitir ou excluir documentos fiscais.
+
+Com as credenciais criadas (*Client ID* e *Client Secret*), você pode obter o token de acesso à API.
+
+## Obtendo o token de acesso {#token}
+
+O token de acesso pode ser obtido através de uma [requisição padrão OAuth 2 à URL de token](https://www.oauth.com/oauth2-servers/access-tokens/client-credentials/), usando o fluxo `client_credencials`. A requisição deve ser construída da seguinte forma:
+
+* A URL para obtenção do token: `https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token`
+* Use o método HTTP `POST`
+* O header `Content-Type` deve ser `application/x-www-form-urlencoded`
+* O corpo da requisição deve conter os parâmetros `client_id`, `client_secret`, `grant_type` e `scope`, no formato `nome=valor`, separados por `&` e codificados com [percent-encoding](https://en.wikipedia.org/wiki/Percent-encoding).
+* O parâmetro `grant_type` deve conter o valor `client_credentials`.
+* Os parâmetros `client_id` e `client_secret` devem conter, respectivamente, os valores das credenciais *Client ID* e *Client Secret* obtidos no console da ACBr API.
+* O parâmetro `scope` deve conter as "permissões do token de acesso", separados por espaços (lembrando que ao usar o *percent encoding* o espaço torna-se `%20`. Cada serviço possui escopos respectivos. Alguns exemplos são `empresa`, `cep`, `cnpj`, `nfe`, `nfce`, `nfse`, `cte` e `mdfe`.
+
+**Exemplo de requisição para obtenção de token**
+
+A requisição HTTP a seguir obtém o token de acesso usando um *Client ID* de valor `acbdef`, um *Client Secret* de valor `123456` e o escopo `cep cnpj nfse`. Obviamente, ao fazer a sua requisição use os seu respectivo *Client ID* e *Client Secret*:
+
+```http
+POST https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token HTTP/1.1
+Host: auth.acbr.api.br
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=abcdef&client_secret=123456&scope=cep%20cnpj%20nfse
+```
+
+Se a requisição estiver correta e as credenciais válidas, a requisição retornará com código de status 200 (sucesso) e o corpo da resposta conterá um JSON similar ao seguinte:
+
+```json
+{
+    "access_token": "eyJ0eXAiOiJKV1QiLCJraWQiOiIw...",
+    "token_type": "bearer",
+    "scope": "conta empresa cep cnpj mdfe cte nfse nfe",
+    "expires_in": 2592000
+}
+```
+
+A propriedade `access_token` é a mais importante e contém o token de acesso (que em uma resposta real é bem mais longo do que o mostrado no exemplo). É esse valor que você deve usar para fazer as [requisições autenticadas](#requisicoes).
+
+As propriedades `bearer` e `scope` são informativas, a última indica para quais escopos o token é válido.
+
+A propriedade `expires_in` é relevante e indica em quantos segundos o token irá expirar, contados a partir do momento da emissão do token. Após esse tempo, o token ficará inválido e você deverá requisitar outro para ter acesso à API.
+
+Recomendamos que a renovação do token de acesso seja feita próximo de sua expiração para evitar bloqueio por excesso de requisições ao servidor de autorização.
+
+Para mais informações, consulte [limites de requisição](limites#limite-de-requisições).
+
+## Fazendo requisições autenticadas à API {#requisicoes}
+
+Uma vez de posse do token de acesso, você pode fazer requisições autenticadas à API da ACBr API. Para isso basta criar a sua requisição HTTP à API normalmente, e adicionar o header `Authorization`, com valor `Bearer ` seguido do token (atenção ao espaço entre o texto `Bearer` e o token). 
+
+O exemplo a seguir faz uma requisiçào autenticada à API de CEP usando o token de acesso obtido no passo anterior:
+
+```http
+GET https://prod.acbr.api.br/cep/01311200 HTTP/1.1
+Host: prod.acbr.api.br
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJraWQiOiIw...
+Accept: */*
+```
+
+Se você chegou até aqui efetuando com sucesso uma requisição à API, você está apto a fazer qualquer outra requisição, a ACBr API completa está ao seu alcance! Você pode emitir documentos fiscais, realizar consultas, efetuar cancelamento dos documentos, fazer download do XML, entre outras operações.
+
+Consulte a referência completa da ACBr API para conhecer todos os serviços disponíveis seus respetivos endpoints e como usá-los.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/empresas.md
+
+Empresas
+
+Vários serviços na ACBr API exigem que você cadastre previamente uma ou mais empresas em nome das quais os serviços serão efetuados. Por exemplo, para emitir um documento fiscal, realizar consultas, etc.
+
+O processo completo envolve:
+
+* [Cadastro da empresa](#cadastro)
+* [Cadastro/atualização do certificado digital](#certificado)
+* [Configuração do serviço](#configuracao)
+
+Você pode cadastrar quantas empresas quiser. Se você é uma *software house*, em geral para cada um dos seus clientes você cadastrará uma empresa na ACBr API, e isso pode ser feito de forma 100% automatizada pela nossa API.
+
+## Cadastro da empresa {#cadastro}
+
+A API fornece vários endpoints para as [operações com empresas](https://dev.acbr.api.br/docs/api#tag/Empresa), sendo o principal o endpoint [Cadastrar empresa](https://dev.acbr.api.br/docs/api/#tag/Empresa/operation/CriarEmpresa). Basicamente você precisa fazer uma requisição `POST` enviando os dados da empresa via JSON:
+
+```http
+POST https://prod.acbr.api.br/empresas
+Content-Type: application/json
+
+{
+    "cpf_cnpj": "18760540000139",
+    "inscricao_estadual": "12345",
+    "inscricao_municipal": "12345",
+    "nome_razao_social": "Empresa Ficticia Ltda.",
+    "email": "email@empresaficticia.com",
+    "endereco": {
+       "logradouro": "Rua Existente",
+       "numero": "1234",
+    ...
+{}
+```
+
+A requisição acima é um exemplo resumido para efeito de ilustração. Consulte a documentação do endpoint [Cadastrar empresa](https://dev.acbr.api.br/docs/api/#tag/Empresa/operation/CriarEmpresa) para saber todos os detalhes.
+
+## Cadastro do certificado digital {#certificado}
+
+Uma vez [cadastrada a empresa](#empresa), você deve atualizar seu certificado digital. Use o endpoint [Cadastrar certificado](https://dev.acbr.api.br/docs/api#tag/Empresa/operation/CadastrarCertificadoEmpresa) para essa operação. Basta fazer uma requisição `PUT` para o endpoint do certificado da empresa enviando os dados via JSON:
+
+```http
+PUT https://prod.acbr.api.br/empresas/18760540000139/certificado
+Content-Type: application/json
+
+{
+    "certificado": "Q29udGXDumRvIGZpY3TDrWNpbyBkbyBjZXJ0aWZpY2Fkbw==",
+    "password": "12345"
+}
+```
+
+O campo `certificado` deve conter o certificado digital codificado em [Base64](https://en.wikipedia.org/wiki/Base64).
+
+## Configuração do serviço
+
+Além do cadastro da empresa e do certificado, alguns serviços da API também exigem que você forneça os dados de configuração para aquele serviço, para uma empresa específica. Por exemplo, para uso do serviço de nota fiscal de serviços eletrônica você precisa informar números iniciais como série e lote, etc.
+
+```http
+PUT https://prod.acbr.api.br/empresas/18760540000139/nfse
+Content-Type: application/json
+
+{
+    "rps": {
+        "lote": 512,
+        "serie": "NF",
+        "numero": 10
+    },
+    "ambiente": "producao"
+}
+```
+
+O exemplo acima é meramente ilustrativo. Cada serviço possui sua forma específica de configuração. 
+
+Listamos abaixo os serviços que possuem configuração. Clique em cada um deles para visualizar detalhes do endpoint e como realizar efetivamente a configuração.
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/limites.md
+
+Limites e cotas
+
+A ACBr API utiliza um modelo de consumo por franquia pré-paga. A maioria das operações realizadas na plataforma incrementa o consumo da cota `prepago-creditos`, de acordo com o tipo e a quantidade de operações processadas.
+
+## Regras de comercialização das cotas
+Ao contratar os planos do ACBR API você escolhe a franquia que se enquadra de acordo com sua demanda de emissões.
+
+- **não há mensalidade**;
+- as franquias podem ser adquiridas a qualquer momento;
+- os créditos da franquia são **cumulativos** entre as compras;
+- o consumo ocorre conforme o uso efetivo da API;
+- os créditos expiram em caso de inatividade de uso da API por 1 ano; 
+- a resguarda automática de XML por 5 anos está inclusa nas operações com documentos fiscais;
+- o cadastro de [empresas](https://dev.acbr.api.br/docs/empresas) é ilimitado;
+- não há limite de CNPJs ou [empresas](https://dev.acbr.api.br/docs/empresas) cadastrados na conta;
+- existem franquias referenciais de 1.000, 2.000, 5.000, 10.000, 20.000 e 50.000 operações, além de planos customizados sob consulta.
+
+As faixas comerciais e eventuais condições específicas de contratação podem ser consultadas em [https://projetoacbr.com.br/api/#preco](https://projetoacbr.com.br/api/#preco) ou diretamente com o time comercial.
+
+## Cotas
+
+Atualmente, o consumo é contabilizado em uma única cota: `prepago-creditos`.
+
+### prepago-creditos
+
+Essa cota é utilizada para contabilizar o consumo das operações da API. O valor consumido depende do tipo de operação realizada.
+
+#### Operações com documentos fiscais
+
+As operações com documentos fiscais consomem **1 crédito por documento fiscal processado**.
+
+O consumo é contabilizado **por documento fiscal**, não por chamada à API. Assim, um pedido de emissão em lote de 50 notas fiscais eletrônicas irá consumir **50 créditos**, mesmo que todas as notas estejam incluídas em uma única chamada à API. De forma análoga, um pedido de distribuição de documentos que retorne 50 notas fiscais eletrônicas (mesmo que de forma resumida) também irá consumir 50 créditos.
+
+Todos os eventos em documentos fiscais são contabilizados nessa cota: não só pedidos de emissão, como também **cancelamentos, inutilizações, pedidos de distribuição, manifestações de destinatário, entre outros**.
+
+As operações em **todos os tipos de documentos fiscais** (NF-e, NFS-e, NFC-e, MDF-e, CT-e, NFCom) são contabilizadas na cota `prepago-creditos`.
+
+Uma operação em documento fiscal é contabilizada apenas quando **encaminhada** para comunicação com as APIs integradas (SEFAZ, Prefeituras, etc.), **mesmo quando a operação falha**. Por exemplo, se você solicitou uma emissão de NF-e e por algum motivo ela foi **rejeitada pela SEFAZ**, ainda assim ela é contabilizada no consumo da cota. Falhas ocorridas antes das requisições serem encaminhadas às APIs integradas **não são contabilizadas**. Por exemplo, JSON incorreto, validações que falham antes do encaminhamento, ou mesmo erros internos em nossos servidores.
+
+Envios de e-mails são contabilizados apenas quando **encaminhados** para envio, **mesmo quando não entregues**. Por exemplo, ao enviar um email do XML e PDF de uma NF-e e ele não seja entregue pelo fato do endereço do email ser inexistente, caixa de entrada cheia, problemas ou indisponibilidade do provedor de email do destinatário ou por qualquer outra razão, ainda assim a cota será consumida.
+
+Os seguintes endpoints da API podem gerar consumo nesta cota:
+
+#### NF-e
+
+* [EmitirNfe](https://dev.acbr.api.br/docs/api#tag/Nfe/operation/EmitirNfe)
+* [EmitirLoteNfe](https://dev.acbr.api.br/docs/api#tag/Nfe/operation/EmitirLoteNfe)
+* [CancelarNfe](https://dev.acbr.api.br/docs/api#tag/Nfe/operation/CancelarNfe)
+* [CriarCartaCorrecaoNfe](https://dev.acbr.api.br/docs/api#tag/Nfe/operation/CriarCartaCorrecaoNfe)
+* [InutilizarNumeracaoNfe](https://dev.acbr.api.br/docs/api#tag/Nfe/operation/InutilizarNumeracaoNfe)
+* [Consultar contribuinte](https://dev.acbr.api.br/docs/api#tag/Nfe/operation/ConsultarContribuinteNfe)
+* [EnviarEmailNfe](https://dev.acbr.api.br/docs/api#tag/Nfe/operation/EnviarEmailNfe)
+
+#### NFC-e
+
+* [EmitirNfce](https://dev.acbr.api.br/docs/api#tag/Nfce/operation/EmitirNfce)
+* [EmitirLoteNfce](https://dev.acbr.api.br/docs/api#tag/Nfce/operation/EmitirLoteNfce)
+* [CancelarNfce](https://dev.acbr.api.br/docs/api#tag/Nfce/operation/CancelarNfce)
+* [InutilizarNumeracaoNfce](https://dev.acbr.api.br/docs/api#tag/Nfce/operation/InutilizarNumeracaoNfce)
+* [EnviarEmailNfce](https://dev.acbr.api.br/docs/api#tag/Nfce/operation/EnviarEmailNfce)
+
+#### Distribuicao NF-e
+
+* [GerarDistribuicaoNfe](https://dev.acbr.api.br/docs/api#tag/Distribuicao-NF-e/operation/GerarDistribuicaoNfe)
+* [ManifestarNfe](https://dev.acbr.api.br/docs/api#tag/Distribuicao-NF-e/operation/ManifestarNfe)
+
+#### NFS-e
+
+* [EmitirNfse](https://dev.acbr.api.br/docs/api#tag/Nfse/operation/EmitirNfse)
+* [EmitirLoteNfse](https://dev.acbr.api.br/docs/api#tag/Nfse/operation/EmitirLoteNfse)
+* [CancelarNfse](https://dev.acbr.api.br/docs/api#tag/Nfse/operation/CancelarNfse)
+
+#### MDF-e
+
+* [EmitirMdfe](https://dev.acbr.api.br/docs/api#tag/Mdfe/operation/EmitirMdfe)
+* [EmitirLoteMdfe](https://dev.acbr.api.br/docs/api#tag/Mdfe/operation/EmitirLoteMdfe)
+* [CancelarMdfe](https://dev.acbr.api.br/docs/api#tag/Mdfe/operation/CancelarMdfe)
+* [EncerrarMdfe](https://dev.acbr.api.br/docs/api#tag/Mdfe/operation/EncerrarMdfe)
+* [IncluirCondutorMdfe](https://dev.acbr.api.br/docs/api#tag/Mdfe/operation/IncluirCondutorMdfe)
+* [IncluirDfeMdfe](https://dev.acbr.api.br/docs/api#tag/Mdfe/operation/IncluirDfeMdfe)
+
+#### CT-e
+
+* [EmitirCte](https://dev.acbr.api.br/docs/api#tag/Cte/operation/EmitirCte)
+* [EmitirLoteCte](https://dev.acbr.api.br/docs/api#tag/Cte/operation/EmitirLoteCte)
+* [CancelarCte](https://dev.acbr.api.br/docs/api#tag/Cte/operation/CancelarCte)
+* [CriarCartaCorrecaoCte](https://dev.acbr.api.br/docs/api#tag/Cte/operation/CriarCartaCorrecaoCte)
+* [InutilizarNumeracaoCte](https://dev.acbr.api.br/docs/api#tag/Cte/operation/InutilizarNumeracaoCte)
+
+#### NFCom
+
+* [EmitirNfcom](https://dev.acbr.api.br/docs/api#tag/Nfcom/operation/EmitirNfcom)
+* [CancelarNfcom](https://dev.acbr.api.br/docs/api#tag/Nfce/operation/CancelarNfcom)
+* [InutilizarNumeracaoNfcom](https://dev.acbr.api.br/docs/api#tag/Nfce/operation/InutilizarNumeracaoNfcom)
+
+Ainda, o **download de documentos fiscais**, como XML e DANFE (PDF), **pode ser contabilizado na cota como uma operação fiscal**. Portanto, você deve evitar o download excessivo desses arquivos para um mesmo documento fiscal. A franquia gratuita é de **1 (um) download por arquivo**.
+
+Por exemplo, após a emissão de uma NFS-e (onde é contabilizado 1 crédito pela operação fiscal), você pode fazer o download do XML e do DANFSe (PDF) dessa nota, sem que essa operação contabilize um crédito adicional. Porém, se você tentar **fazer pela segunda vez o download do XML e/ou do PDF, para essa mesma nota**, será **contabilizado 1 crédito** por download.
+
+#### Consulta de CNPJ
+
+As operações de [consulta dos dados de um CNPJ](https://dev.acbr.api.br/docs/servicos/cnpj) consomem **0,1 crédito por consulta**. Cada consulta é contabilizada no consumo da cota, ainda que o mesmo CNPJ já tenha sido consultado anteriormente, e mesmo que os dados do CNPJ não existam em nossa base de dados.
+
+Os seguintes endpoints da API podem gerar consumo nesta cota:
+
+* [ConsultarCnpj](https://dev.acbr.api.br/docs/api#tag/Cnpj/operation/ConsultarCnpj)
+
+#### Listagem de CNPJ por CNAE
+
+As operações de [consulta de estabelecimentos por CNAE](https://dev.acbr.api.br/docs/servicos/cnpj-cnae) consomem **0,1 crédito por estabelecimento retornado**. A **quantidade de estabelecimentos retornada é contabilizada na cota**, independentemente do número de chamadas na API. Por exemplo, se uma chamada na API retornou 30 estabelecimentos, o consumo de sua conta é incrementado em **3 créditos**. Ainda, todo estabelecimento consultado é contabilizado, ainda que o mesmo estabelecimento já tenha sido consultado em uma chamada anterior à API.
+
+Os seguintes endpoints da API podem gerar consumo nesta cota:
+
+* [ListarCnpj](https://dev.acbr.api.br/docs/api#tag/Cnpj/operation/ListarCnpj)
+
+#### Consulta de CEP
+
+As operações de [consulta de CEP](https://dev.acbr.api.br/docs/servicos/cep) consomem **0,1 crédito por consulta**. Cada consulta é contabilizada no consumo da cota, ainda que o mesmo CEP já tenha sido consultado anteriormente, ou mesmo que o CEP não exista.
+
+Os seguintes endpoints da API podem gerar consumo nesta cota:
+
+* [ConsultarCep](https://dev.acbr.api.br/docs/api#tag/Cep/operation/ConsultarCep)
+
+## Consulta do consumo
+
+A informação do consumo das cotas é fornecida a você de diversas maneiras.
+
+### Cabeçalhos na resposta HTTP
+
+Todos os endpoints que atualizam o consumo de alguma cota incluem na resposta HTTP os seguintes cabeçalhos:
+
+* `x-quota-name`: Contém o nome da cota atualizada
+* `x-quota-used`: Contém o consumo da cota
+* `x-quota-limit`: Contém o limite de uso da cota
+
+Por exemplo, após uma chamada a um endpoint de emissão de nota fiscal eletrônica, você pode receber os cabeçalhos a seguir:
+
+```http
+x-quota-name: prepago-creditos
+x-quota-used: 755
+x-quota-limit: 1000
+```
+
+### Consulta via API
+
+A API oferece endpoints para a consulta do consumo das cotas. Para ter permissão a esses endpoints, o [token utilizado](https://dev.acbr.api.br/docs/autenticacao) precisa ter o scope `conta`.
+
+#### Consumo de todas as cotas
+
+O endpoint [ListarCotasConta](https://dev.acbr.api.br/docs/api#tag/Conta/operation/ListarCotasConta) retorna o consumo e limite de todas as cotas existentes. Por exemplo, uma chamada à URL https://prod.acbr.api.br/conta/cotas retornaria uma resposta similar à seguinte:
+
+```json
+{
+    "data": [
+        {
+            "nome": "prepago-creditos",
+            "consumo": 3585.4,
+            "limite": 5000
+        }
+    ]
+}
+```
+
+#### Consumo da cota pré-paga
+
+O endpoint [ConsultarCotaPrePago](https://dev.acbr.api.br/docs/api/#tag/Conta/operation/ConsultarCotaPrePago) permite consultar o resumo da cota de créditos pré-pagos. Por exemplo, uma chamada à URL https://prod.acbr.api.br/conta/cotas/prepago retornaria uma resposta similar à seguinte:
+
+```json
+{
+    "nome": "prepago-creditos",
+    "consumo": 3585.4,
+    "limite": 5000
+}
+```
+
+## Erro 402 - Payment Required
+
+Quando uma operação não puder ser concluída por falta de créditos disponíveis ou por ultrapassar o limite da cota, a API retornará o status code HTTP `402`.
+
+### 402 por falta de créditos
+
+Quando não houver créditos suficientes para processar a operação, a API retornará:
+
+```http
+HTTP/1.1 402 Payment Required
+```
+
+Código de erro:
+
+* `InsufficientCredits`
+
+Mensagem:
+
+* `Créditos insuficientes para concluir a operação. Adquira uma nova franquia para continuar.`
+
+Para continuar processando novas operações, é necessário adquirir novos créditos na sua conta em [console.acbr.api.br](https://console.acbr.api.br).
+
+### 402 por limite da cota excedido
+
+Quando a requisição ultrapassar o limite permitido para a cota, a API retornará:
+
+```http
+HTTP/1.1 402 Payment Required
+```
+
+Código de erro:
+
+* `QuotaExceeded`
+
+Mensagem:
+
+* `A requisição ultrapassa o limite de {limite} operações para a cota "{nome-da-cota}".`
+
+Se o seu sistema tratava essas situações como `403`, atualize a integração para considerar `402` nos cenários relacionados a créditos insuficientes e extrapolação de cota.
+
+## Limite de Requisições
+
+### Visão Geral
+
+A API da ACBr API possui um "rate limit" (limite de requisições permitidas em um intervalo de tempo) para cada endpoint. Esse limite é implementado para garantir a estabilidade e a performance da API, protegendo contra abusos e uso excessivo de recursos. Quando o limite é extrapolado, a API retorna o status code HTTP 429 (Too Many Requests).
+
+### Limites dos endpoints
+
+#### Endpoints públicos
+
+* [Obtenção de token de acesso](autenticacao#token): **4 requisições por hora.** Ao ultrapassar esse limite, a API retorna o status code HTTP 429 (Too Many Requests).
+
+#### Endpoints protegidos
+
+* Requisições GET: **360 requisições por minuto.**
+* Demais requisições: **240 requisições por minuto.**
+
+Esses limites são aplicáveis globalmente a todos os endpoints protegidos da API. Caso não haja um valor explícito informado na referência da API para um endpoint específico, os limites acima serão os vigentes.
+
+Se você acredita que está recebendo bloqueios indevidos ou se necessita aumentar a taxa de requisições para o seu IP, entre em contato com o [suporte da ACBr API](https://suporte.acbr.api.br/).
+
+### Comportamento do HTTP 429
+
+Quando o status code 429 é retornado, a resposta da API inclui os headers `Retry-After` e `X-Retry-In`, que indicam quanto tempo o cliente deve esperar até enviar a próxima requisição. Implementar corretamente o controle sobre esses retornos é essencial para evitar bloqueios temporários no acesso à API.
+
+#### Headers na Resposta HTTP 429
+
+- **`Retry-After`**: Este header indica o tempo, em segundos, que o cliente deve esperar antes de tentar enviar outra requisição. É uma forma mais direta de saber o tempo de espera.
+
+- **`X-Retry-In`**: Este header fornece uma representação em string do tempo que o cliente deve aguardar antes de fazer uma nova tentativa.
+
+#### Exemplo de Resposta HTTP 429
+
+Abaixo está um exemplo de resposta que você pode receber ao extrapolar o limite de requisições:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 2
+X-Retry-In: 1.003928397s
+Date: Fri, 24 May 2024 12:03:36 GMT
+Content-Length: 17
+Content-Type: text/plain; charset=utf-8
+```
+
+No exemplo acima, os valores dos headers `Retry-After` e `X-Retry-In` indicam que o cliente deve aguardar aproximadamente 2 segundos antes de tentar novamente, com `X-Retry-In` oferecendo uma precisão maior.
+
+### Evitando bloqueios
+
+Para evitar o bloqueio temporário devido ao excesso de requisições 429, o cliente deve implementar um mecanismo de controle baseado nas informações retornadas pela API. Abaixo estão as etapas recomendadas para essa implementação:
+
+1. **Verificação do Status Code 429**:
+    - Sempre verifique o status code da resposta da API.
+    - Se o status code for 429, siga para o próximo passo.
+
+2. **Leitura dos Headers `Retry-After` e `X-Retry-In`**:
+    - Extraia os valores dos headers `Retry-After` e `X-Retry-In` da resposta.
+    - Esses valores indicam o tempo que você deve esperar antes de enviar uma nova requisição.
+
+3. **Implementação da Lógica de Espera**:
+    - Implemente uma lógica no seu código para aguardar o tempo especificado nos headers antes de tentar enviar a requisição novamente.
+    - Utilize funções de espera ou temporizadores (e.g., `sleep` em Python, `setTimeout` em JavaScript).
+
+4. **Tratamento de Múltiplas Respostas 429**:
+    - Se múltiplas respostas 429 forem recebidas, aumente o tempo de espera exponencialmente para reduzir a taxa de requisições.
+    - Considere utilizar um algoritmo de "backoff exponencial" para gerenciar o tempo de espera entre as requisições.
+
+### Exemplo de Código
+
+Aqui está um exemplo de como implementar essa lógica em Python:
+
+```python
+
+def make_request(url, headers):
+    while True:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 429:
+            retry_after = int(response.headers.get('Retry-After', 1))
+            retry_in = float(response.headers.get('X-Retry-In', retry_after))
+            print(f"Limite de requisições excedido. Aguardando {retry_in} segundos antes de tentar novamente.")
+            time.sleep(retry_in)
+        else:
+            return response
+
+url = "https://prod.acbr.api.br/endpoint"
+headers = {"Authorization": "Bearer YOUR_API_KEY"}
+response = make_request(url, headers)
+
+print(response.status_code, response.json())
+```
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/paginacao.md
+
+Paginação
+
+A API da ACBr API contém endpoints que retornam uma lista de dados, como por exemplo [ListarNfse](https://dev.acbr.api.br/docs/api/#tag/Nfse/operation/ListarNfse), [ListarNfe](https://dev.acbr.api.br/docs/api/#tag/Nfe/operation/ListarNfe) ou [ListarCnpj](https://dev.acbr.api.br/docs/api/#tag/Cnpj/operation/ListarCnpj), usados para obter uma lista de NFS-e, NF-e ou uma lista de estabelecimentos comerciais, respectivamente.
+
+Esses endpoints - cuja identificação geralmente inicia com a palavra "Listar" - podem oferecer opções de filtros específicos, mas todos eles oferecem um conjunto de parâmetros comuns, além de um comportamento similar.
+
+Os parâmetros devem ser passados na query string da URL. As listagens sempre retornam um número limitado de dados (`10` por padrão), independente dos filtros fornecidos. Se você precisar de mais de 10 registros, deve efetuar a paginação dos dados, pedindo à API os próximos dados.
+
+## Parâmetros
+
+Os seguintes parâmetros estão disponíveis em todas as listagens:
+
+### $top
+
+Informa o número de objetos a serem retornados na resposta. O valor deve estar entre `1` e `100`, e caso não informado o valor padrão é `10`. 
+
+### $skip
+
+Informa o número de objetos a serem ignorados na resposta. Caso não informado o valor padrão é `0`. Use esse parâmetro para retornar uma "página", ou seja, se você informar `10` neste parâmetro, a resposta irá ignorar os 10 primeiros objetos e a resposta incluirá dados do objeto 11 (décimo primeiro) em diante. Se você informar `20` neste parâmetro, a resposta incluirá dados do objeto 21 (vigésimo primeiro) em diante.
+
+### $inlinecount
+
+É um parâmetro booleano que indica se você deseja que o número total de objetos seja incluído na resposta. O número total de objetos independerá dos parâmetros `$top` e `$skip`. Ou seja, ele irá retornar o número total de objetos que atende o filtro, independente da paginação. A inclusão desta informação pode deixar a resposta do endpoint mais lenta, portanto use somente quando realmente necessário.
+
+O endpoint [ListarCnpj](https://dev.acbr.api.br/docs/api/#tag/Cnpj/operation/ListarCnpj) não suporta o parâmetro `$inlinecount`. 
+
+### Exemplos
+
+A URL a seguir irá listar as Notas Fiscais Eletrônicas (NF-e) emitidas via ACBr API para o CNPJ 46.363.985/0001-10 no ambiente de homologação. Como nenhum parâmetro de paginação foi incluído, irá retornar apenas as 10 primeiras notas:
+
+```http
+GET https://prod.acbr.api.br/nfe?cpf_cnpj=18760540000139&ambiente=homologacao
+```
+
+Já a URL a seguir irá listar 20 notas, ignorando as 100 primeiras. Ou seja, a resposta incluirá as notas 101 a 120:
+
+```http
+GET https://prod.acbr.api.br/nfe?cpf_cnpj=18760540000139&ambiente=homologacao&$top=20&$skip=100
+```
+
+## Resposta
+
+A resposta dos endpoints de listagem sempre será um objeto JSON com pelo menos a propriedade `data`. É essa propriedade que conterá os objetos listados:
+
+```json
+{
+    "data": [
+       <dados da resposta>
+    ]
+}
+```
+
+Caso o parâmetro $inlinecount seja incluído com valor `true` na URL, o número total de registros será também incluído na propriedade `@count`:
+
+```json
+{
+    "@count": 512,
+    "data": [
+       <dados da resposta>
+    ]
+}
+```
+
+---
+
+# MD for: https://dev.acbr.api.br/docs/migrando-da-nuvem-fiscal-para-a-acbr-api.md
+
+Migrando da Nuvem Fiscal para a ACBr API
+
+Boa notícia: a migração é simples. A ACBr API é compatível com a API da Nuvem Fiscal em endpoints, escopos, payloads e retornos.
+
+Na prática, você precisa fazer dois ajustes principais na sua aplicação:
+
+1. Ajustar a autenticação, gerando novas credenciais da ACBr API.
+2. Alterar a URL base das chamadas.
+
+Também manteremos mudanças de endpoints da ACBr API em versões diferentes, para preservar a compatibilidade das aplicações existentes.
+
+Você pode começar criando uma [conta para testes](https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/registrations?client_id=acbrapi-console-web&response_type=code&scope=openid&redirect_uri=https://console.acbr.api.br/callback).
+
+Após o processo de cadastro, você receberá um e-mail, com as Condições Comercial da ACBr.API
+
+Os SDKs da ACBr API já foram ajustados com as URLs e a autenticação atuais. Você pode baixá-los no [GitHub oficial do Projeto ACBr](https://github.com/projeto-acbr-oficial).
+
+Lembre-se apesar da compatibilidade entre as APIs, Nuvem Fiscal e ACBr API são serviços diferentes. Por isso, as empresas existentes na sua conta da Nuvem Fiscal precisam ser recadastradas na ACBr API.
+
+Os ID gerados na Nuvem Fiscal não são válido para utilização na ACBrAPI, portanto, cancelamento, eventos, download, impressão, retornará que o documento não foi encontrado.
+
+## Resumo da migração
+
+| Item | Nuvem Fiscal | ACBr API |
+| --- | --- | --- |
+| API de produção | `https://api.nuvemfiscal.com.br` | `https://prod.acbr.api.br` |
+| API de sandbox/homologação | `https://api.sandbox.nuvemfiscal.com.br` | `https://hom.acbr.api.br` |
+| Autenticação OAuth 2 | `https://auth.nuvemfiscal.com.br/oauth/token` | `https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token` |
+| Credenciais | Console da Nuvem Fiscal | `https://console.acbr.api.br` |
+| Fluxo OAuth 2 | `client_credentials` | `client_credentials` |
+| Header autenticado | `Authorization: Bearer <token>` | `Authorization: Bearer <token>` |
+
+As credenciais da Nuvem Fiscal não são reutilizadas na ACBr API. Gere um novo `Client ID` e um novo `Client Secret` no [Console da ACBr API](https://console.acbr.api.br) antes de atualizar a sua aplicação.
+
+## Antes de migrar
+
+1. Acesse o [Console da ACBr API](https://console.acbr.api.br).
+2. Crie uma nova credencial para o ambiente que deseja utilizar.
+3. Recadastre na ACBr API as empresas que já existem na sua conta da Nuvem Fiscal.
+4. Guarde o `Client ID` e o `Client Secret` em local seguro.
+5. Atualize a URL de autenticação da sua aplicação.
+6. Atualize a URL base usada nas chamadas da API.
+7. Gere um novo token e valide uma chamada simples, como consulta de CEP.
+
+O `Client Secret` deve ser tratado como segredo de produção. Não inclua esse valor em código-fonte, repositórios, aplicativos desktop, aplicativos mobile ou frontends públicos.
+
+## URLs base da ACBr API
+
+Use a URL conforme o ambiente da credencial:
+
+**Produção**
+
+```text
+https://prod.acbr.api.br
+```
+
+**Homologação**
+
+```text
+https://hom.acbr.api.br
+```
+
+**Autenticação OAuth 2**
+
+```text
+https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token
+```
+
+## Gerando o token
+
+A autenticação continua usando OAuth 2 com o fluxo `client_credentials`. Faça uma requisição `POST` para o endpoint de autenticação da ACBr API com o header `Content-Type: application/x-www-form-urlencoded`.
+
+Exemplo:
+
+```bash
+curl --request POST "https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token" \
+  --header "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=SEU_CLIENT_ID" \
+  --data-urlencode "client_secret=SEU_CLIENT_SECRET" \
+  --data-urlencode "scope=cep cnpj nfse"
+```
+
+Campos do payload:
+
+* `grant_type`: sempre `client_credentials`
+* `client_id`: o Client ID gerado no Console da ACBr API
+* `client_secret`: o Client Secret gerado no Console da ACBr API
+* `scope`: escopos que o token deve possuir, separados por espaço, como `cep cnpj nfse`
+
+Resposta esperada:
+
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJraWQiOiIw...",
+  "token_type": "bearer",
+  "scope": "cep cnpj nfse",
+  "expires_in": 2592000
+}
+```
+
+Use o valor de `access_token` no header `Authorization` das próximas chamadas.
+
+## Chamando a API
+
+Depois de gerar o token, mantenha a mesma URI do endpoint que você já utiliza e altere apenas a URL base.
+
+Exemplo de consulta de CEP em produção:
+
+```http
+GET https://prod.acbr.api.br/cep/01311200 HTTP/1.1
+Host: prod.acbr.api.br
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJraWQiOiIw...
+Accept: */*
+```
+
+Exemplo da mesma chamada em homologação:
+
+```http
+GET https://hom.acbr.api.br/cep/01311200 HTTP/1.1
+Host: hom.acbr.api.br
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJraWQiOiIw...
+Accept: */*
+```
+
+## Checklist de adaptação
+
+* Trocar `https://api.nuvemfiscal.com.br` por `https://prod.acbr.api.br`
+* Trocar `https://api.sandbox.nuvemfiscal.com.br` por `https://hom.acbr.api.br`
+* Trocar o endpoint de token para `https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token`
+* Gerar novas credenciais no [Console da ACBr API](https://console.acbr.api.br)
+* Recadastrar na ACBr API as empresas usadas pela integração
+* Atualizar `client_id` e `client_secret` na aplicação
+* Manter os mesmos escopos usados pela integração
+* Manter as mesmas URIs, payloads e leitura dos retornos dos endpoints
+* Renovar o token próximo da expiração informada em `expires_in`
+
+## Próximos passos
+
+* Para ver o fluxo completo de autenticação da ACBr API, consulte [Autenticação](https://dev.acbr.api.br/docs/autenticacao)
+* Para testar a integração visualmente, consulte [Usando Postman](https://dev.acbr.api.br/docs/postman)
+* Para conferir os endpoints disponíveis, consulte a [referência da API](https://dev.acbr.api.br/docs/api)

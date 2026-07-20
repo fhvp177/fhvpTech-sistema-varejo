@@ -205,6 +205,16 @@ const api = {
     salvar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('loja:salvar', dados)
   },
 
+  // Configuração fiscal da NFC-e (só plano Pro). Certificado A1 e CSC NÃO
+  // trafegam por aqui — ver electron/ipc/fiscal.ts.
+  fiscal: {
+    obter: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:obter'),
+    salvar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:salvar', dados),
+    diagnostico: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:diagnostico'),
+    diasParaVencerCertificado: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:diasParaVencerCertificado')
+  },
+
   // Onboarding (tutorial de primeira abertura: guia + checklist)
   onboarding: {
     estado: (): Promise<RespostaIPC> => ipcRenderer.invoke('onboarding:estado'),

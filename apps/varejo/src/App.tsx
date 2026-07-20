@@ -11,6 +11,7 @@ import {
   Tags,
   Receipt,
   Settings,
+  FileText,
   DatabaseBackup,
   MessageCircle,
   QrCode,
@@ -57,6 +58,7 @@ import { useAutoLock } from './hooks/useAutoLock'
 const Dashboard = __FEAT_DASHBOARD__ ? lazy(() => import('./pages/Dashboard')) : null
 const EtiquetasA4 = __FEAT_ETIQUETAS__ ? lazy(() => import('./pages/EtiquetasA4')) : null
 const ChatAssistente = __FEAT_CHATBOT__ ? lazy(() => import('./components/ChatAssistente')) : null
+const ConfiguracaoFiscal = __FEAT_NFE__ ? lazy(() => import('./pages/ConfiguracaoFiscal')) : null
 
 const FallbackCarregando: FC = () => (
   <div className="flex-1 flex items-center justify-center p-8">
@@ -435,6 +437,18 @@ const App: FC = () => {
                           </RotaSomenteDono>
                         }
                       />
+                      {ConfiguracaoFiscal && (
+                        <Route
+                          path="/fiscal"
+                          element={
+                            <RotaSomenteDono titulo="Nota fiscal">
+                              <Suspense fallback={<FallbackCarregando />}>
+                                <ConfiguracaoFiscal />
+                              </Suspense>
+                            </RotaSomenteDono>
+                          }
+                        />
+                      )}
                       <Route
                         path="/configuracoes"
                         element={
@@ -568,6 +582,10 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Sistema',
     itens: [
+      // Só existe no plano Pro; no Básico a flag remove o item e o chunk.
+      ...(__FEAT_NFE__
+        ? [{ to: '/fiscal', label: 'Nota fiscal', icon: FileText, somenteDono: true }]
+        : []),
       { to: '/configuracoes', label: 'Configurações', icon: Settings, somenteDono: true },
       { to: '/restauracao', label: 'Restauração', icon: DatabaseBackup, somenteDono: true }
     ]
