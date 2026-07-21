@@ -119,14 +119,26 @@ export function gerarHtmlRelatorioEstoque(produtos: ProdutoRelatorio[]): string 
 </html>`
 }
 
-// A "cola do balcão": só referência + nome, em 3 colunas compactas e ordem
-// alfabética — pra imprimir e deixar na mesa pro vendedor que ainda não decorou
-// as referências. Deliberadamente sem preço/estoque: esses mudam toda hora e
-// desatualizariam o papel; a referência é estável.
+// A "cola do balcão": só referência + nome, em 3 colunas compactas — pra
+// imprimir e deixar na mesa pro vendedor que ainda não decorou as referências.
+// Deliberadamente sem preço/estoque: esses mudam toda hora e desatualizariam o
+// papel; a referência é estável.
+//
+// Ordenado pela REFERÊNCIA, não pelo nome: no balcão o vendedor procura pelo
+// número que vai digitar no PDV, e uma lista 1, 2, 3… é varrida com o dedo.
+// A comparação é NUMÉRICA (`numeric: true`), senão "10" viria antes de "2" —
+// referência é texto no banco, porque também aceita formatos como "AZ-15" (do
+// catálogo do fornecedor). Assim os números saem em ordem de verdade e os
+// alfanuméricos vêm depois, agrupados.
 export function gerarHtmlTabelaReferencias(produtos: ProdutoRelatorio[]): string {
   const data = new Date().toLocaleDateString('pt-BR')
   const linhas = [...produtos]
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    .sort((a, b) =>
+      (a.referencia ?? '').localeCompare(b.referencia ?? '', 'pt-BR', {
+        numeric: true,
+        sensitivity: 'base'
+      })
+    )
     .map(
       (p) => `<div class="linha"><span class="ref">${p.referencia ?? '—'}</span><span class="nome">${p.nome}</span></div>`
     )

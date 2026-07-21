@@ -205,6 +205,14 @@ const api = {
     ): Promise<RespostaIPC> => ipcRenderer.invoke('chat:enviar', historico)
   },
 
+  // Preferências de interface (ex.: seções recolhidas das Configurações).
+  // Restrito a chaves de UI — ver electron/ipc/preferenciasUi.ts.
+  config: {
+    obter: (chave: string): Promise<RespostaIPC> => ipcRenderer.invoke('config:obter', chave),
+    salvar: (chave: string, valor: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('config:salvar', chave, valor)
+  },
+
   // Dados da loja (identidade nos cupons: nome, CNPJ, logo)
   loja: {
     obter: (): Promise<RespostaIPC> => ipcRenderer.invoke('loja:obter'),

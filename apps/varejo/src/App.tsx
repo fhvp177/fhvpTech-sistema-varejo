@@ -16,6 +16,7 @@ import {
   MessageCircle,
   QrCode,
   Crown,
+  Calculator,
   ChevronDown,
   LogOut,
   LucideIcon
@@ -59,6 +60,9 @@ const Dashboard = __FEAT_DASHBOARD__ ? lazy(() => import('./pages/Dashboard')) :
 const EtiquetasA4 = __FEAT_ETIQUETAS__ ? lazy(() => import('./pages/EtiquetasA4')) : null
 const ChatAssistente = __FEAT_CHATBOT__ ? lazy(() => import('./components/ChatAssistente')) : null
 const ConfiguracaoFiscal = __FEAT_NFE__ ? lazy(() => import('./pages/ConfiguracaoFiscal')) : null
+// Calculadora do balcão — existe em todos os planos (é ferramenta de operação,
+// não de plano). Carregada sob demanda: só entra na memória se for aberta.
+const Calculadora = lazy(() => import('./components/Calculadora'))
 
 const FallbackCarregando: FC = () => (
   <div className="flex-1 flex items-center justify-center p-8">
@@ -136,6 +140,7 @@ const App: FC = () => {
   // Onboarding (tutorial de primeira abertura): estado do banco + guia aberto.
   const [onboarding, setOnboarding] = useState<EstadoOnboarding | null>(null)
   const [guiaAberto, setGuiaAberto] = useState(false)
+  const [calculadoraAberta, setCalculadoraAberta] = useState(false)
   const slidesGuia = useMemo(() => construirSlidesGuia(), [])
   // "O que há de novo" — destaques exibidos uma vez após uma atualização.
   const [novidades, setNovidades] = useState<{ versao: string; itens: ItemNovidade[] } | null>(null)
@@ -371,6 +376,7 @@ const App: FC = () => {
                   <Sidebar
                     diasRestantes={diasRestantes}
                     onBloquear={bloquear}
+                    onAbrirCalculadora={() => setCalculadoraAberta((v) => !v)}
                     onRenovarComPix={abrirPagamento}
                     vendedor={vendedor}
                   />
@@ -472,6 +478,14 @@ const App: FC = () => {
               <IndicadorBackupAtivo />
               {tourPassos && estadoAuth === 'desbloqueado' && !guiaAberto && (
                 <TourHost passos={tourPassos} onFechar={fecharTour} />
+              )}
+              {vendedor && (
+                <Suspense fallback={null}>
+                  <Calculadora
+                    aberta={calculadoraAberta}
+                    onFechar={() => setCalculadoraAberta(false)}
+                  />
+                </Suspense>
               )}
               {ChatAssistente && vendedor && !pdvAtivo && (
                 <ErrorBoundary rotulo="ChatAssistente">
@@ -665,8 +679,9 @@ const Sidebar: FC<{
   diasRestantes: number | null
   onBloquear: () => void
   onRenovarComPix: () => void
+  onAbrirCalculadora: () => void
   vendedor: SessaoVendedor | null
-}> = ({ diasRestantes, onBloquear, onRenovarComPix, vendedor }) => (
+}> = ({ diasRestantes, onBloquear, onRenovarComPix, onAbrirCalculadora, vendedor }) => (
   <nav data-tour="menu" className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
     <div className="mb-4">
       <h1 className="text-lg font-bold text-white">FHVP Tech</h1>
@@ -733,6 +748,14 @@ const Sidebar: FC<{
           Renovar com PIX
         </button>
       )}
+      <button
+        onClick={onAbrirCalculadora}
+        title="Abrir a calculadora"
+        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium text-slate-300 bg-slate-800/60 hover:bg-slate-700 hover:text-white transition-colors"
+      >
+        <Calculator className="w-4 h-4" />
+        Calculadora
+      </button>
       <a
         href={URL_SUPORTE_WHATSAPP}
         target="_blank"

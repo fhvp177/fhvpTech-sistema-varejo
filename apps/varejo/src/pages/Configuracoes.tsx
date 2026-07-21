@@ -2,13 +2,14 @@ import { FC, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
 import ConfigImpressao from '@/components/ConfigImpressao'
 import CidadeSeletor from '@/components/CidadeSeletor'
-import { useOnboarding, useNovidades, useTour } from '@/App'
+import SecaoConfig from '@/components/SecaoConfig'
+import { useOnboarding, useNovidades, useTour, useLock } from '@/App'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
 import { UFS } from '@/data/ufs'
 
@@ -72,9 +73,15 @@ const Configuracoes: FC = () => {
 
   // Dados da loja (identidade no cupom)
   const [loja, setLoja] = useState<DadosLoja | null>(null)
+  // Resumos das seções fechadas — é o que permite ler a tela sem abrir nada.
+  const { autoLockMinutos } = useLock()
+  const [totalVendedores, setTotalVendedores] = useState<number | null>(null)
+  const [prefsImpressao, setPrefsImpressao] = useState<{
+    cupom: { printer: string }
+    documento: { printer: string }
+  } | null>(null)
   const [salvandoLoja, setSalvandoLoja] = useState(false)
   const [feedbackLoja, setFeedbackLoja] = useState<Feedback | null>(null)
-  const [lojaAberta, setLojaAberta] = useState(false)
   const [erroLogo, setErroLogo] = useState('')
   const inputLogoRef = useRef<HTMLInputElement>(null)
 
@@ -95,6 +102,15 @@ const Configuracoes: FC = () => {
   useEffect(() => { carregarStatus() }, [])
 
   useEffect(() => { obterDadosLoja().then(setLoja) }, [])
+  // Dados que alimentam os resumos das seções fechadas.
+  useEffect(() => {
+    window.api.vendedores.listar().then((r) => {
+      if (r.success) setTotalVendedores((r.data as unknown[]).length)
+    })
+    window.api.impressao.obterPreferencias().then((r) => {
+      if (r.success) setPrefsImpressao(r.data)
+    })
+  }, [])
 
   const atualizarLoja = (campo: keyof DadosLoja, valor: string | boolean | null) =>
     setLoja((prev) => (prev ? { ...prev, [campo]: valor } : prev))
@@ -218,12 +234,26 @@ const Configuracoes: FC = () => {
     setTimeout(() => setFeedbackBackup(null), 4000)
   }
 
+  // Textos curtos que aparecem ao lado do título quando a seção está fechada.
+  const resumoSeguranca = `bloqueio em ${autoLockMinutos} min`
+  const resumoVendedores =
+    totalVendedores === null
+      ? null
+      : `${totalVendedores} ${totalVendedores === 1 ? 'cadastrado' : 'cadastrados'}`
+  const impressoraCupom = prefsImpressao?.cupom?.printer
+  const resumoImpressao = impressoraCupom || 'nenhuma escolhida'
+
   return (
     <div className="p-8 max-w-2xl">
       <h2 className="text-2xl font-bold mb-6">Configurações</h2>
 
-      <div className="space-y-6 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2">Sistema</h3>
+      <SecaoConfig
+        id="sistema"
+        titulo="Sistema"
+        icone={<Sparkles className="w-4 h-4" />}
+        resumo={infoAtualizacao?.versaoAtual ? `versão ${infoAtualizacao.versaoAtual}` : null}
+      >
+        <div className="space-y-6">
 
         <div className="border rounded-lg p-4 bg-muted/30 space-y-3">
           <div className="flex items-start justify-between gap-4">
@@ -310,35 +340,27 @@ const Configuracoes: FC = () => {
             Fazer o tour
           </Button>
         </div>
-      </div>
+        </div>
+      </SecaoConfig>
 
-      <div className="space-y-4 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2">Segurança</h3>
+      <SecaoConfig
+        id="seguranca"
+        titulo="Segurança"
+        icone={<ShieldCheck className="w-4 h-4" />}
+        resumo={resumoSeguranca}
+      >
         <ConfigSeguranca />
-      </div>
+      </SecaoConfig>
 
-      {/* ── Dados da loja (identidade no cupom) — seção recolhível ── */}
-      <div className="space-y-4 mb-10">
-        <button
-          type="button"
-          onClick={() => setLojaAberta((v) => !v)}
-          className="w-full flex items-center justify-between border-b pb-2 text-left group"
-        >
-          <span className="text-lg font-semibold flex items-center gap-2">
-            <Store className="w-4 h-4" /> Dados da loja
-            {!lojaAberta && loja?.nome && (
-              <span className="text-sm font-normal text-muted-foreground">— {loja.nome}</span>
-            )}
-          </span>
-          <ChevronDown
-            className={`w-5 h-5 text-muted-foreground transition-transform group-hover:text-foreground ${
-              lojaAberta ? 'rotate-180' : ''
-            }`}
-          />
-        </button>
-
-        {lojaAberta && (
-          <>
+      {/* Dados da loja — mesma mecânica das demais (era um recolhível próprio,
+          feito antes do componente existir). */}
+      <SecaoConfig
+        id="loja"
+        titulo="Dados da loja"
+        icone={<Store className="w-4 h-4" />}
+        resumo={loja?.nome || null}
+      >
+          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Nome, CNPJ e endereço que aparecem no cupom e no comprovante de devolução.
               A logo é opcional e pode ser exibida no topo dos cupons.
@@ -507,28 +529,41 @@ const Configuracoes: FC = () => {
             </div>
           </div>
             )}
-          </>
-        )}
-      </div>
+          </div>
+      </SecaoConfig>
 
-      <div className="space-y-4 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2">Vendedores</h3>
+      <SecaoConfig
+        id="vendedores"
+        titulo="Vendedores"
+        icone={<Users className="w-4 h-4" />}
+        resumo={resumoVendedores}
+      >
+        <div className="space-y-4">
         <p className="text-sm text-muted-foreground -mt-1">
           Cadastre os vendedores da loja. Cada venda registra o vendedor que a realizou,
           permitindo acompanhar produção individual no histórico.
         </p>
         <CadastroVendedores />
-      </div>
+        </div>
+      </SecaoConfig>
 
-      <div className="space-y-4 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2">Impressão</h3>
+      <SecaoConfig
+        id="impressao"
+        titulo="Impressão"
+        icone={<Printer className="w-4 h-4" />}
+        resumo={resumoImpressao}
+      >
+        <div className="space-y-4">
         <p className="text-sm text-muted-foreground -mt-1">
           Escolha a impressora de cada tipo de documento. Marque "imprimir direto" para o
           cupom sair na hora, sem abrir a janela de impressão.
         </p>
         <ConfigImpressao />
-      </div>
+        </div>
+      </SecaoConfig>
 
+      {/* Backup fica ABERTO: é o único que o lojista vem CONSULTAR ("rodou?"),
+          não configurar. Escondê-lo atrás de um clique pioraria a tela. */}
       <div className="space-y-6">
         <h3 className="text-lg font-semibold border-b pb-2">Backup de Dados</h3>
 

@@ -337,6 +337,10 @@ interface Window {
       aReceberDoMes: (mes: string) => Promise<RespostaIPC<{ a_vencer: number; vencido: number }>>
       cancelar: (id: number, motivo: string, pinDono?: string) => Promise<RespostaIPC<null>>
     }
+    config: {
+      obter: (chave: string) => Promise<RespostaIPC<string | null>>
+      salvar: (chave: string, valor: string) => Promise<RespostaIPC<null>>
+    }
     loja: {
       obter: () => Promise<RespostaIPC>
       salvar: (dados: unknown) => Promise<RespostaIPC>
