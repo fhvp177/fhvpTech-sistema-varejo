@@ -317,6 +317,13 @@ interface Window {
       }) => Promise<RespostaIPC<{ jaEmitida: boolean; nota: NotaFiscalVenda | null }>>
       statusNfce: (args: { vendaId: number }) => Promise<RespostaIPC<NotaFiscalVenda | null>>
       notasDasVendas: (ids: number[]) => Promise<RespostaIPC<Record<number, NotaFiscalVenda>>>
+      danfe: (args: {
+        vendaId: number
+      }) => Promise<RespostaIPC<{ pdfBase64: string; numero: number }>>
+      cancelarNfce: (args: {
+        vendaId: number
+        justificativa: string
+      }) => Promise<RespostaIPC<NotaFiscalVenda | null>>
     }
     novidades: {
       estado: () => Promise<RespostaIPC<{ ultimaVersaoVista: string; guiaVisto: boolean }>>
@@ -446,6 +453,11 @@ interface Window {
     }
     impressao: {
       imprimir: (html: string, nomeArquivo?: string, deviceName?: string) => Promise<RespostaIPC>
+      imprimirPdf: (
+        pdfBase64: string,
+        nomeArquivo?: string,
+        deviceName?: string
+      ) => Promise<RespostaIPC>
       listarImpressoras: () => Promise<
         RespostaIPC<Array<{ name: string; displayName: string; isDefault: boolean }>>
       >

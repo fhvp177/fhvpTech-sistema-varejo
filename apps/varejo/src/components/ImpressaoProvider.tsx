@@ -22,10 +22,17 @@ export type CategoriaImpressao = 'cupom' | 'documento'
 type ImprimirFn = (html: string, nomeBase: string, categoria: CategoriaImpressao) => Promise<boolean>
 // Variante que imprime a JANELA ATUAL (DOM + @media print) — usada pelas Etiquetas A4.
 type ImprimirJanelaFn = (nomeBase: string, categoria: CategoriaImpressao) => Promise<boolean>
+// Variante para um PDF já pronto — usada pelo DANFE da nota fiscal.
+type ImprimirPdfFn = (
+  pdfBase64: string,
+  nomeBase: string,
+  categoria: CategoriaImpressao
+) => Promise<boolean>
 
 type ImpressaoContextValue = {
   imprimir: ImprimirFn
   imprimirJanela: ImprimirJanelaFn
+  imprimirPdf: ImprimirPdfFn
 }
 
 const ImpressaoContext = createContext<ImpressaoContextValue | null>(null)
@@ -42,9 +49,19 @@ export function useImprimirJanela(): ImprimirJanelaFn {
   return ctx.imprimirJanela
 }
 
+export function useImprimirPdf(): ImprimirPdfFn {
+  const ctx = useContext(ImpressaoContext)
+  if (!ctx) throw new Error('useImprimirPdf deve ser usado dentro de ImpressaoProvider')
+  return ctx.imprimirPdf
+}
+
 type Spec =
   | { tipo: 'html'; html: string; nome: string; categoria: CategoriaImpressao }
   | { tipo: 'janela'; nome: string; categoria: CategoriaImpressao }
+  // PDF pronto — o DANFE da nota fiscal, que vem montado do provedor fiscal
+  // (o layout é definido em lei). Entra aqui pra herdar a mesma escolha de
+  // impressora, modo direto e diálogo dos outros documentos.
+  | { tipo: 'pdf'; pdfBase64: string; nome: string; categoria: CategoriaImpressao }
 
 type Pendente = Spec & { preferido: string }
 
@@ -59,9 +76,13 @@ export const ImpressaoProvider: FC<{ children: ReactNode }> = ({ children }) => 
 
   // Dispara a impressão de fato (HTML em janela oculta OU a janela atual).
   const executar = useCallback((spec: Spec, deviceName: string) => {
-    return spec.tipo === 'html'
-      ? window.api.impressao.imprimir(spec.html, spec.nome, deviceName)
-      : window.api.impressao.imprimirJanela(deviceName)
+    if (spec.tipo === 'html') {
+      return window.api.impressao.imprimir(spec.html, spec.nome, deviceName)
+    }
+    if (spec.tipo === 'pdf') {
+      return window.api.impressao.imprimirPdf(spec.pdfBase64, spec.nome, deviceName)
+    }
+    return window.api.impressao.imprimirJanela(deviceName)
   }, [])
 
   const iniciar = useCallback(
@@ -98,6 +119,11 @@ export const ImpressaoProvider: FC<{ children: ReactNode }> = ({ children }) => 
   )
   const imprimirJanela = useCallback<ImprimirJanelaFn>(
     (nomeBase, categoria) => iniciar({ tipo: 'janela', nome: nomeBase, categoria }),
+    [iniciar]
+  )
+  const imprimirPdf = useCallback<ImprimirPdfFn>(
+    (pdfBase64, nomeBase, categoria) =>
+      iniciar({ tipo: 'pdf', pdfBase64, nome: nomeBase, categoria }),
     [iniciar]
   )
 
@@ -142,7 +168,7 @@ export const ImpressaoProvider: FC<{ children: ReactNode }> = ({ children }) => 
   }, [pendente, selecionada, executar, showToast, fechar])
 
   return (
-    <ImpressaoContext.Provider value={{ imprimir, imprimirJanela }}>
+    <ImpressaoContext.Provider value={{ imprimir, imprimirJanela, imprimirPdf }}>
       {children}
       <Dialog open={pendente !== null} onOpenChange={(aberto) => { if (!aberto) fechar(false) }}>
         {pendente && (

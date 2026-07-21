@@ -180,6 +180,12 @@ const api = {
   impressao: {
     imprimir: (html: string, nomeArquivo?: string, deviceName?: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('impressao:imprimir', html, nomeArquivo, deviceName),
+    imprimirPdf: (
+      pdfBase64: string,
+      nomeArquivo?: string,
+      deviceName?: string
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:imprimirPdf', pdfBase64, nomeArquivo, deviceName),
     listarImpressoras: (): Promise<RespostaIPC> =>
       ipcRenderer.invoke('impressao:listarImpressoras'),
     imprimirJanela: (deviceName: string): Promise<RespostaIPC> =>
@@ -227,7 +233,11 @@ const api = {
     statusNfce: (args: { vendaId: number }): Promise<RespostaIPC> =>
       ipcRenderer.invoke('fiscal:statusNfce', args),
     notasDasVendas: (ids: number[]): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('fiscal:notasDasVendas', ids)
+      ipcRenderer.invoke('fiscal:notasDasVendas', ids),
+    danfe: (args: { vendaId: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:danfe', args),
+    cancelarNfce: (args: { vendaId: number; justificativa: string }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:cancelarNfce', args)
   },
 
   // Onboarding (tutorial de primeira abertura: guia + checklist)

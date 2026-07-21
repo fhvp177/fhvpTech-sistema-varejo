@@ -742,6 +742,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                         <BotaoNotaFiscal
                           vendaId={v.id}
                           aPrazo={v.status_pagamento !== 'pago'}
+                          ehDono={ehDono}
                           nota={notas[v.id] ?? null}
                           onMudou={(nota) =>
                             setNotas((m) => {

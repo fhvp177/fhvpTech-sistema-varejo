@@ -568,6 +568,54 @@ function registrarHandlersFiscalRemoto(): void {
     }
   })
 
+  // DANFE em PDF, no tamanho da bobina. É o documento que o cliente leva —
+  // equivale ao cupom, mas com valor fiscal. Baixar não custa crédito, então
+  // reimprimir é de graça.
+  ipcMain.handle('fiscal:danfe', async (_e, args: { vendaId: number }) => {
+    try {
+      requerSessao()
+      const nota = notaDaVenda(Number(args?.vendaId))
+      if (!nota) throw new Error('Esta venda não tem nota fiscal.')
+      if (nota.status !== 'autorizado') {
+        throw new Error('A nota ainda não foi autorizada pela SEFAZ.')
+      }
+      // Largura da bobina configurada pela loja (80mm é o padrão do mercado).
+      const largura = lerConfig('fiscal_largura_bobina') === '58' ? 58 : 80
+      const r = await chamarBackendFiscal(
+        `/fiscal/nfce/${nota.referencia}/danfe?largura=${largura}`
+      )
+      return { success: true, data: { pdfBase64: String(r.pdfBase64 ?? ''), numero: nota.numero } }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Cancelamento da nota. Prazo legal curto (na NFC-e costuma ser 30 minutos) e
+  // justificativa obrigatória de 15+ caracteres — a SEFAZ exige.
+  ipcMain.handle(
+    'fiscal:cancelarNfce',
+    async (_e, args: { vendaId: number; justificativa: string }) => {
+      try {
+        // Cancelar apaga um documento fiscal já emitido: é decisão do dono.
+        requerDono()
+        const nota = notaDaVenda(Number(args?.vendaId))
+        if (!nota) throw new Error('Esta venda não tem nota fiscal.')
+        const justificativa = (args?.justificativa ?? '').trim()
+        if (justificativa.length < 15) {
+          throw new Error('A justificativa precisa ter pelo menos 15 caracteres.')
+        }
+        await chamarBackendFiscal(`/fiscal/nfce/${nota.referencia}/cancelamento`, {
+          metodo: 'POST',
+          corpo: { justificativa }
+        })
+        atualizarStatusNotaLocal(nota.referencia, 'cancelado', null, justificativa)
+        return { success: true, data: notaDaVenda(Number(args.vendaId)) }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
   // Estado das notas de várias vendas — a lista de vendas pinta o status de
   // cada linha com uma consulta só, sem ir à rede.
   ipcMain.handle('fiscal:notasDasVendas', (_e, ids: number[]) => {

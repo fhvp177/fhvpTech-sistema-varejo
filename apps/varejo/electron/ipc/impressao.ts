@@ -39,6 +39,27 @@ async function carregarHtmlOculto(html: string, nomeBase: string): Promise<Brows
   return janela
 }
 
+// Mesma ideia, mas com um PDF pronto — o caso do DANFE da nota fiscal, que vem
+// montado do provedor fiscal (o layout do DANFE é definido em lei; gerar por
+// conta seria reinventar com risco de sair errado). O Chromium abre PDF
+// nativamente, então daqui pra frente o caminho de impressão é o mesmo do HTML.
+async function carregarPdfOculto(base64: string, nomeBase: string): Promise<BrowserWindow> {
+  const base = nomeBase.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const tmpPath = join(tmpdir(), `${base}-${Date.now()}.pdf`)
+  writeFileSync(tmpPath, Buffer.from(base64, 'base64'))
+
+  const janela = new BrowserWindow({
+    show: false,
+    autoHideMenuBar: true,
+    webPreferences: { sandbox: false, plugins: true } // plugins: viewer de PDF
+  })
+  await janela.loadFile(tmpPath)
+  // O viewer precisa de um instante pra renderizar antes de imprimir; sem isso
+  // sai página em branco em máquina lenta.
+  await new Promise((r) => setTimeout(r, 400))
+  return janela
+}
+
 export function registrarHandlersImpressao(): void {
   // Lista as impressoras instaladas — alimenta o diálogo de impressão no tema
   // do sistema (em vez da caixa nativa do Windows).
@@ -117,6 +138,38 @@ export function registrarHandlersImpressao(): void {
         })
         return { success: true, data: null }
       } catch (e) {
+        return { success: false, error: String(e) }
+      }
+    }
+  )
+
+  // Imprime um PDF já pronto (DANFE da nota fiscal). Mesmo comportamento do
+  // handler de HTML: com deviceName imprime silencioso; sem, abre o diálogo.
+  ipcMain.handle(
+    'impressao:imprimirPdf',
+    async (
+      _event,
+      pdfBase64: string,
+      nomeArquivo?: string,
+      deviceName?: string
+    ): Promise<RespostaIPC> => {
+      let janela: BrowserWindow | null = null
+      try {
+        janela = await carregarPdfOculto(pdfBase64, nomeArquivo || 'documento')
+        const alvo = janela
+        await new Promise<void>((resolve, reject) => {
+          const opcoes = deviceName
+            ? { silent: true, deviceName, printBackground: true }
+            : { silent: false, printBackground: true }
+          alvo.webContents.print(opcoes, (sucesso, motivo) => {
+            alvo.close()
+            if (deviceName && !sucesso) reject(new Error(motivo || 'Falha na impressão'))
+            else resolve()
+          })
+        })
+        return { success: true, data: null }
+      } catch (e) {
+        if (janela && !janela.isDestroyed()) janela.close()
         return { success: false, error: String(e) }
       }
     }

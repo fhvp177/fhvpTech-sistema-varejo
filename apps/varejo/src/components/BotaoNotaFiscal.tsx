@@ -1,12 +1,25 @@
 import { FC, useState } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
+import { Input } from '@fhvptech/core/ui/input'
+import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle
 } from '@fhvptech/core/ui/dialog'
-import { AlertTriangle, Banknote, Check, Clock, CreditCard, FileText, Smartphone } from 'lucide-react'
+import {
+  AlertTriangle,
+  Ban,
+  Banknote,
+  Check,
+  Clock,
+  CreditCard,
+  FileText,
+  Printer,
+  Smartphone
+} from 'lucide-react'
+import { useImprimirPdf } from '@/components/ImpressaoProvider'
 
 // Botão de nota fiscal de UMA venda, na lista de vendas. Encapsula tudo —
 // estado, modal de forma de pagamento e o acompanhamento do desfecho — pra não
@@ -34,12 +47,19 @@ type Props = {
   aPrazo: boolean
   nota: NotaFiscalVenda | null
   onMudou: (nota: NotaFiscalVenda | null) => void
+  /** Cancelar nota é decisão do dono — o vendedor emite, mas não desfaz. */
+  ehDono?: boolean
 }
 
-const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou }) => {
+const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou, ehDono = false }) => {
+  const imprimirPdf = useImprimirPdf()
   const [escolhendo, setEscolhendo] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [detalhe, setDetalhe] = useState<string | null>(null)
+  const [aberta, setAberta] = useState(false) // painel da nota autorizada
+  const [cancelando, setCancelando] = useState(false)
+  const [justificativa, setJustificativa] = useState('')
+  const [erroCancelar, setErroCancelar] = useState<string | null>(null)
 
   const emitir = async (forma: FormaPagamento) => {
     setEscolhendo(false)
@@ -71,9 +91,7 @@ const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou }) => {
       return
     }
     if (nota && nota.status === 'autorizado') {
-      setDetalhe(
-        `Nota nº ${nota.numero} autorizada.` + (nota.chave ? `\nChave: ${nota.chave}` : '')
-      )
+      setAberta(true)
       return
     }
     if (nota && nota.status === 'pendente') {
@@ -88,6 +106,40 @@ const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou }) => {
     // Sem nota ainda: a prazo já sabe a forma; à vista pergunta.
     if (aPrazo) emitir('crediario')
     else setEscolhendo(true)
+  }
+
+  // DANFE: o "cupom" com valor fiscal que o cliente leva. Sai na mesma
+  // impressora térmica do cupom comum, e baixar não custa crédito — reimprimir
+  // é de graça.
+  const imprimirDanfe = async () => {
+    setOcupado(true)
+    const r = await window.api.fiscal.danfe({ vendaId })
+    setOcupado(false)
+    if (!r.success) {
+      setDetalhe(r.error)
+      return
+    }
+    setAberta(false)
+    await imprimirPdf(r.data.pdfBase64, `danfe-${r.data.numero}`, 'cupom')
+  }
+
+  const cancelar = async () => {
+    setErroCancelar(null)
+    if (justificativa.trim().length < 15) {
+      setErroCancelar('A justificativa precisa ter pelo menos 15 caracteres.')
+      return
+    }
+    setOcupado(true)
+    const r = await window.api.fiscal.cancelarNfce({ vendaId, justificativa: justificativa.trim() })
+    setOcupado(false)
+    if (!r.success) {
+      setErroCancelar(r.error)
+      return
+    }
+    setCancelando(false)
+    setAberta(false)
+    setJustificativa('')
+    onMudou(r.data)
   }
 
   const aparencia = () => {
@@ -139,13 +191,97 @@ const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou }) => {
         </DialogContent>
       </Dialog>
 
+      {/* Nota autorizada: imprimir o DANFE e, pro dono, cancelar */}
+      <Dialog
+        open={aberta}
+        onOpenChange={(a) => {
+          if (!a) {
+            setAberta(false)
+            setCancelando(false)
+            setErroCancelar(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nota fiscal nº {nota?.numero}</DialogTitle>
+          </DialogHeader>
+
+          {nota?.chave && (
+            <div>
+              <p className="text-xs text-muted-foreground">Chave de acesso</p>
+              <p className="text-xs font-mono break-all">{nota.chave}</p>
+            </div>
+          )}
+
+          {!cancelando ? (
+            <div className="grid gap-2">
+              <Button onClick={imprimirDanfe} disabled={ocupado}>
+                <Printer className="w-4 h-4 mr-2" />
+                {ocupado ? 'Preparando…' : 'Imprimir nota'}
+              </Button>
+              {ehDono && (
+                <Button
+                  variant="outline"
+                  className="text-red-600 hover:text-red-700"
+                  onClick={() => setCancelando(true)}
+                  disabled={ocupado}
+                >
+                  <Ban className="w-4 h-4 mr-2" />
+                  Cancelar nota
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <p>
+                  O cancelamento só é aceito dentro do prazo legal (geralmente 30 minutos
+                  após a autorização) e fica registrado na SEFAZ.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="just">Por que está cancelando?</Label>
+                <Input
+                  id="just"
+                  value={justificativa}
+                  onChange={(e) => setJustificativa(e.target.value)}
+                  placeholder="Ex.: cliente desistiu da compra"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Mínimo de 15 caracteres — exigência da SEFAZ.{' '}
+                  <span className="tabular-nums">{justificativa.trim().length}/15</span>
+                </p>
+              </div>
+              {erroCancelar && (
+                <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2.5 text-xs text-red-800">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <p>{erroCancelar}</p>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setCancelando(false)} disabled={ocupado}>
+                  Voltar
+                </Button>
+                <Button
+                  onClick={cancelar}
+                  disabled={ocupado || justificativa.trim().length < 15}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {ocupado ? 'Cancelando…' : 'Confirmar cancelamento'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Resultado / motivo da recusa */}
       <Dialog open={detalhe !== null} onOpenChange={(a) => !a && setDetalhe(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>
-              {nota?.status === 'autorizado' ? 'Nota fiscal' : 'A nota não foi emitida'}
-            </DialogTitle>
+            <DialogTitle>A nota não foi emitida</DialogTitle>
           </DialogHeader>
           <p className="text-sm whitespace-pre-wrap break-words">{detalhe}</p>
           {nota && ['rejeitado', 'denegado', 'erro'].includes(nota.status) && (

@@ -316,6 +316,70 @@ export function registrarRotasFiscais(app: Hono): void {
     })
   })
 
+  // DANFE da NFC-e em PDF, no tamanho da bobina térmica — é o "cupom" que o
+  // cliente leva. Baixar o PDF NÃO consome crédito, então reimprimir é de
+  // graça. Volta em base64 porque o app precisa gravar o arquivo pra imprimir.
+  app.get('/fiscal/nfce/:referencia/danfe', async (c) => {
+    const lic = exigirLicenca(c.req.query('clienteId'))
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+
+    const emissao = obterEmissaoNfce(lic.cliente.clienteId, c.req.param('referencia'))
+    if (!emissao?.acbr_id) return c.json({ erro: 'emissão não encontrada' }, 404)
+    if (emissao.status !== 'autorizado') {
+      return c.json({ erro: 'A nota ainda não foi autorizada.' }, 409)
+    }
+
+    // 80mm é a bobina padrão; 58mm é a estreita. O app manda o que a loja usa.
+    const largura = Number(c.req.query('largura')) === 58 ? 58 : 80
+    try {
+      const pdf = await chamarAcbr<ArrayBuffer>(
+        `/nfce/${emissao.acbr_id}/pdf?largura=${largura}`,
+        { binario: true }
+      )
+      return c.json({ ok: true, pdfBase64: Buffer.from(pdf).toString('base64') })
+    } catch (e) {
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+  })
+
+  // Cancela uma NFC-e autorizada. A SEFAZ exige justificativa e só aceita
+  // dentro do prazo legal (curto na NFC-e — costuma ser 30 minutos). Consome
+  // 1 crédito, como uma emissão.
+  app.post('/fiscal/nfce/:referencia/cancelamento', async (c) => {
+    const body = await c.req.json<{ clienteId?: string; justificativa?: string }>()
+    const lic = exigirLicenca(body.clienteId)
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+
+    const emissao = obterEmissaoNfce(lic.cliente.clienteId, c.req.param('referencia'))
+    if (!emissao?.acbr_id) return c.json({ erro: 'emissão não encontrada' }, 404)
+    if (emissao.status !== 'autorizado') {
+      return c.json({ erro: 'Só é possível cancelar uma nota autorizada.' }, 409)
+    }
+
+    // Exigência da SEFAZ: no mínimo 15 caracteres. Barrar aqui evita gastar
+    // um crédito numa recusa certa.
+    const justificativa = (body.justificativa ?? '').trim()
+    if (justificativa.length < 15) {
+      return c.json(
+        { erro: 'A justificativa do cancelamento precisa ter pelo menos 15 caracteres.' },
+        400
+      )
+    }
+
+    try {
+      await chamarAcbr(`/nfce/${emissao.acbr_id}/cancelamento`, {
+        metodo: 'POST',
+        corpo: { justificativa }
+      })
+      gravarEmissaoNfce({ ...emissao, status: 'cancelado' })
+      return c.json({ ok: true, emissao: { ...emissao, status: 'cancelado' } })
+    } catch (e) {
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+  })
+
   // Consulta o status atual de uma emissão. Se ainda está "pendente" na SEFAZ,
   // pergunta à ACBr e atualiza — o polling do app cai aqui. Consultar status
   // na ACBr não custa crédito.
