@@ -2,6 +2,14 @@
 // Vive em memória do main process — some quando o app fecha e exige novo login.
 // Nunca persistir em disco: PIN é a única garantia de "quem está aí" e cada
 // abertura do app exige re-login.
+//
+// ── Vocabulário: 'dono' no código, "Gerente" na tela ──────────────────────────
+// O papel com acesso total se chama `'dono'` no banco e em todo o código
+// (`ehDono`, `requerDono`, `pinDono`). Na INTERFACE ele aparece como
+// "Gerente", que é o termo do dia a dia da loja — quem administra nem sempre é
+// o proprietário. Renomear no banco exigiria migration e mexeria nos dados de
+// todas as lojas, sem ganho nenhum para quem usa; então a tradução acontece só
+// no texto. Se for mexer aqui, lembre: o valor gravado continua sendo 'dono'.
 
 import { obterVendedor, type Vendedor } from './db/queries/vendedores'
 
@@ -35,13 +43,13 @@ export function ehDono(): boolean {
   return obterSessao()?.papel === 'dono'
 }
 
-// Garante que a operação só prossegue se quem está logado é dono.
+// Garante que a operação só prossegue se quem está logado é gerente.
 // Usado em handlers IPC sensíveis — chame antes da operação real.
 export function requerDono(): void {
   const v = obterSessao()
   if (!v) throw new Error('Sessão não autenticada. Faça login novamente.')
   if (v.papel !== 'dono') {
-    throw new Error('Esta ação requer permissão do dono da loja.')
+    throw new Error('Esta ação requer permissão do gerente da loja.')
   }
 }
 

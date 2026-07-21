@@ -131,7 +131,7 @@ const App: FC = () => {
   const [autoLockMinutos, setAutoLockMinutos] = useState(15)
   const [mostrarPagamento, setMostrarPagamento] = useState(false)
   const [vendedor, setVendedor] = useState<SessaoVendedor | null>(null)
-  // Dono adiou o cadastro de email de recuperação — esconde só nesta sessão.
+  // Gerente adiou o cadastro de email de recuperação — esconde só nesta sessão.
   const [pulouEmailDono, setPulouEmailDono] = useState(false)
   // Onboarding (tutorial de primeira abertura): estado do banco + guia aberto.
   const [onboarding, setOnboarding] = useState<EstadoOnboarding | null>(null)
@@ -212,7 +212,7 @@ const App: FC = () => {
     recarregarOnboarding()
   }, [estadoAuth, vendedor, recarregarOnboarding])
 
-  // Primeira abertura do dono → abre o guia antes de tudo.
+  // Primeira abertura do gerente → abre o guia antes de tudo.
   useEffect(() => {
     if (onboarding && vendedor?.papel === 'dono' && !onboarding.guiaVisto) {
       setGuiaAberto(true)
@@ -230,7 +230,7 @@ const App: FC = () => {
 
   const fecharGuia = useCallback(async () => {
     // Primeira abertura de verdade (não um replay)? Emenda o tour pelas telas
-    // logo depois do carrossel — o dono novo sai sabendo ONDE cada coisa mora.
+    // logo depois do carrossel — o gerente novo sai sabendo ONDE cada coisa mora.
     const primeiraVez = onboarding ? !onboarding.guiaVisto : false
     setGuiaAberto(false)
     await window.api.onboarding.marcarGuiaVisto()
@@ -625,7 +625,7 @@ const UserMenu: FC<{ vendedor: SessaoVendedor; onSair: () => void }> = ({
           <p className="text-[11px] text-slate-400 flex items-center gap-1">
             {ehDono ? (
               <>
-                <Crown className="w-3 h-3 text-amber-400" /> Dono
+                <Crown className="w-3 h-3 text-amber-400" /> Gerente
               </>
             ) : (
               'Vendedor'
@@ -689,7 +689,7 @@ const Sidebar: FC<{
                   key={to}
                   to={to}
                   end={to === '/'}
-                  title={bloqueado ? 'Restrito ao dono' : undefined}
+                  title={bloqueado ? 'Restrito ao gerente' : undefined}
                   className={({ isActive }) =>
                     `anim-gatilho flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
                       isActive

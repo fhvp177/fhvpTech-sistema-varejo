@@ -47,7 +47,7 @@ type Props = {
   aPrazo: boolean
   nota: NotaFiscalVenda | null
   onMudou: (nota: NotaFiscalVenda | null) => void
-  /** Cancelar nota é decisão do dono — o vendedor emite, mas não desfaz. */
+  /** Cancelar nota é decisão do gerente — o vendedor emite, mas não desfaz. */
   ehDono?: boolean
 }
 
@@ -199,7 +199,7 @@ const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou, ehDono = f
         </DialogContent>
       </Dialog>
 
-      {/* Nota autorizada: imprimir o DANFE e, pro dono, cancelar */}
+      {/* Nota autorizada: imprimir o DANFE e, pro gerente, cancelar */}
       <Dialog
         open={aberta}
         onOpenChange={(a) => {

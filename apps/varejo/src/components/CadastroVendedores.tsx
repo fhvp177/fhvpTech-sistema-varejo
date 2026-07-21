@@ -128,7 +128,7 @@ const CadastroVendedores: FC = () => {
     const novoPapel: 'dono' | 'vendedor' = v.papel === 'dono' ? 'vendedor' : 'dono'
     const confirmacao =
       novoPapel === 'dono'
-        ? `Promover "${v.nome}" a Dono? Ele terá acesso total ao sistema.`
+        ? `Promover "${v.nome}" a Gerente? Ele terá acesso total ao sistema.`
         : `Rebaixar "${v.nome}" a Vendedor? Ele perderá acesso a relatórios e cadastros sensíveis.`
     if (
       !(await confirmar({
@@ -316,7 +316,7 @@ const CadastroVendedores: FC = () => {
                       <span className="text-sm font-medium truncate">{v.nome}</span>
                       {ehDono && (
                         <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-700 text-[10px] font-semibold uppercase rounded px-1.5 py-0.5">
-                          <Crown className="w-3 h-3" /> Dono
+                          <Crown className="w-3 h-3" /> Gerente
                         </span>
                       )}
                       {v.ativo === 0 && (
@@ -355,7 +355,7 @@ const CadastroVendedores: FC = () => {
                           ? 'text-muted-foreground hover:text-slate-700'
                           : 'text-muted-foreground hover:text-amber-600'
                       }`}
-                      title={ehDono ? 'Rebaixar a Vendedor' : 'Promover a Dono'}
+                      title={ehDono ? 'Rebaixar a Vendedor' : 'Promover a Gerente'}
                     >
                       {ehDono ? (
                         <ArrowDownCircle className="w-3.5 h-3.5" />
@@ -398,12 +398,12 @@ const CadastroVendedores: FC = () => {
 
       <div className="text-xs text-muted-foreground space-y-1">
         <p>
-          <Crown className="w-3 h-3 inline text-amber-500 mr-0.5" /> <b>Dono:</b> acesso total —
+          <Crown className="w-3 h-3 inline text-amber-500 mr-0.5" /> <b>Gerente:</b> acesso total —
           relatórios, cadastros sensíveis, cancelamento de venda, descontos acima do teto.
         </p>
         <p>
           <span className="inline-block w-3 h-3 rounded-full bg-slate-500 mr-0.5 align-middle" />{' '}
-          <b>Vendedor:</b> opera o PDV. Para ações restritas, o sistema pede o PIN de um dono.
+          <b>Vendedor:</b> opera o PDV. Para ações restritas, o sistema pede o PIN de um gerente.
         </p>
       </div>
 

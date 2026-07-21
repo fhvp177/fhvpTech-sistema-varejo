@@ -58,7 +58,7 @@ export const NOVIDADES: ReleaseNovidades[] = [
         emoji: '🔦',
         titulo: 'Tour guiado pelas telas',
         descricao:
-          'O sistema agora se apresenta sozinho: um holofote destaca cada parte importante da tela, na ordem certa, com uma explicação curta do que ela faz. Pro dono, o tour começa logo depois do guia de boas-vindas; pro vendedor, no primeiro login dele — cada um vê só o que usa. Quer rever depois? É só clicar em "Fazer o tour" nas Configurações.'
+          'O sistema agora se apresenta sozinho: um holofote destaca cada parte importante da tela, na ordem certa, com uma explicação curta do que ela faz. Pro gerente, o tour começa logo depois do guia de boas-vindas; pro vendedor, no primeiro login dele — cada um vê só o que usa. Quer rever depois? É só clicar em "Fazer o tour" nas Configurações.'
       }
     ]
   },
@@ -144,7 +144,7 @@ export const NOVIDADES: ReleaseNovidades[] = [
         emoji: '↩️',
         titulo: 'Estornar um recebimento',
         descricao:
-          'Recebeu por engano? Agora o dono pode reverter um pagamento já registrado — uma parcela específica ou a venda inteira — direto no detalhe da venda. O valor sai do total recebido e a venda volta a ficar em aberto.'
+          'Recebeu por engano? Agora o gerente pode reverter um pagamento já registrado — uma parcela específica ou a venda inteira — direto no detalhe da venda. O valor sai do total recebido e a venda volta a ficar em aberto.'
       },
       {
         emoji: '🗂️',

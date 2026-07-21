@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 
 // Caixa de entrada do sino de notificações. O conteúdo é detectado "ao vivo"
 // (recalculado do banco a cada olhada), mas cada aviso novo é GRAVADO aqui uma
-// vez — assim o dono não perde nada que apareceu enquanto estava ausente.
+// vez — assim o gerente não perde nada que apareceu enquanto estava ausente.
 // Dedup por (chave, assinatura): o mesmo alerta com o mesmo valor não duplica;
 // quando o valor muda (ex.: de "2 vencem hoje" para "3"), entra uma linha nova.
 export function aplicar024Notificacoes(db: Database.Database): void {

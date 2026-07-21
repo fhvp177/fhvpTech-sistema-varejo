@@ -37,8 +37,8 @@ export type ItemDevolverEntrada = {
 export type DadosNovaDevolucao = {
   venda_id: number
   vendedor_id: number // quem registra (vendedor logado)
-  // Dono que autorizou — exigido pelo IPC quando tipo = 'dinheiro'. A query só
-  // grava o valor; a verificação de que é realmente dono fica na camada de IPC.
+  // Gerente que autorizou — exigido pelo IPC quando tipo = 'dinheiro'. A query só
+  // grava o valor; a verificação de que é realmente gerente fica na camada de IPC.
   autorizado_por_id?: number | null
   tipo: TipoDevolucao
   cliente_id?: number | null // obrigatório p/ crédito (crédito é de alguém)
@@ -124,7 +124,7 @@ export function registrarDevolucao(dados: DadosNovaDevolucao): Devolucao {
   if (venda.status_pagamento !== 'pago') {
     throw new Error(
       'No momento só dá pra devolver itens de vendas totalmente pagas. ' +
-        'Para vendas a prazo/parceladas, fale com o dono.'
+        'Para vendas a prazo/parceladas, fale com o gerente.'
     )
   }
   if (!dados.vendedor_id) throw new Error('Vendedor responsável não informado.')

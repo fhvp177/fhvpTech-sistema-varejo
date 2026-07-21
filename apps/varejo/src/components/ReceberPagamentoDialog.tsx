@@ -14,7 +14,7 @@ import { useToast } from '@fhvptech/core/ui/toast'
 // pagamento parcial (venda a prazo) e quitação de parcela (venda parcelada).
 // Reusa os mesmos canais IPC — só a tela é própria, para não mexer no modal
 // crítico da Vendas. O "Desfazer" não vive mais no toast (era efêmero): virou o
-// botão fixo "Desfazer último recebimento" no detalhe da venda (só o dono).
+// botão fixo "Desfazer último recebimento" no detalhe da venda (só o gerente).
 
 type ParcelaDetalhe = {
   id: number

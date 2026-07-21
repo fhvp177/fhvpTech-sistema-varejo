@@ -171,7 +171,7 @@ const ConfigSeguranca: FC = () => {
         <div className="flex items-center gap-2 mb-1.5">
           <Percent className="w-4 h-4 text-muted-foreground" />
           <Label className="text-sm font-medium">
-            Teto de desconto sem PIN do dono
+            Teto de desconto sem PIN do gerente
           </Label>
         </div>
         <div className="flex items-center gap-2 max-w-xs">
@@ -205,11 +205,11 @@ const ConfigSeguranca: FC = () => {
           <p className="text-destructive text-xs mt-1.5">{erroTeto}</p>
         )}
         <p className="text-xs text-muted-foreground mt-1">
-          Vendedor pode dar até este desconto. Acima disso, o sistema pedirá o PIN do dono.
+          Vendedor pode dar até este desconto. Acima disso, o sistema pedirá o PIN do gerente.
           {' '}<span className="italic">0% exige PIN pra qualquer desconto.</span>
           {!ehDono && (
             <span className="block mt-1 text-amber-600">
-              Somente o dono pode alterar este valor.
+              Somente o gerente pode alterar este valor.
             </span>
           )}
         </p>

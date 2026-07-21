@@ -25,7 +25,7 @@ export function registrarHandlersVendedores(): void {
     }
   })
 
-  // Operações de gestão exigem dono ─────────────────────────────────────
+  // Operações de gestão exigem gerente ─────────────────────────────────────
   ipcMain.handle(
     'vendedores:criar',
     (_event, dados: { nome: string; email?: string | null } | string) => {
@@ -99,7 +99,7 @@ export function registrarHandlersVendedores(): void {
     }
   })
 
-  // Dono redefine o PIN de um vendedor (ex.: vendedor esqueceu). Aceita PIN
+  // Gerente redefine o PIN de um vendedor (ex.: vendedor esqueceu). Aceita PIN
   // de 4 a 6 dígitos. O vendedor pode depois trocar pelo próprio.
   ipcMain.handle('vendedores:redefinirPin', async (_event, id: number, novoPin: string) => {
     try {

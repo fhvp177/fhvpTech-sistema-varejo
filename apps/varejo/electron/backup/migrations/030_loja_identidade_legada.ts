@@ -5,10 +5,10 @@ import type Database from 'better-sqlite3'
 // chumbados no código — solução da época em que ela era a única instalação.
 // Com outras lojas entrando, isso vazava a identidade dela pro cupom dos
 // outros (e a tela abria pré-preenchida com o endereço dela, convidando o novo
-// dono a salvar sem perceber).
+// gerente a salvar sem perceber).
 //
 // O fallback morreu em ipc/loja.ts (agora é neutro: campos em branco até o
-// dono preencher, e o checklist de boas-vindas já cobra isso). Pra não mudar o
+// gerente preencher, e o checklist de boas-vindas já cobra isso). Pra não mudar o
 // cupom de quem LEGITIMAMENTE imprimia esses dados, esta migration grava os
 // valores legados na config — mas só em banco que já existia ANTES de a
 // identidade virar configurável (2026-06-15). Naquela data havia uma única

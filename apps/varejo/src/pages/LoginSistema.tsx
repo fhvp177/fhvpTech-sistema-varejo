@@ -187,7 +187,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
                     <p className="text-xs text-slate-500 flex items-center gap-1">
                       {v.papel === 'dono' ? (
                         <>
-                          <Crown className="w-3 h-3" /> Dono da loja
+                          <Crown className="w-3 h-3" /> Gerente da loja
                         </>
                       ) : (
                         <>
@@ -220,7 +220,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate">{selecionado.nome}</p>
             <p className="text-xs text-slate-500">
-              {selecionado.papel === 'dono' ? 'Dono da loja' : 'Vendedor'}
+              {selecionado.papel === 'dono' ? 'Gerente da loja' : 'Vendedor'}
             </p>
           </div>
           {vendedores.length > 1 && (

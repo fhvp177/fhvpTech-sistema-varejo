@@ -43,8 +43,8 @@ type Props = {
 
 // Modal de devolução/troca (v1). Localiza os itens da venda, deixa escolher
 // quantidade + se volta ao estoque, e resolve em crédito na loja (precisa de
-// cliente) ou dinheiro de volta (saída de caixa → exige PIN do dono se quem
-// opera não é dono). O valor de cada item já vem proporcional ao desconto.
+// cliente) ou dinheiro de volta (saída de caixa → exige PIN do gerente se quem
+// opera não é gerente). O valor de cada item já vem proporcional ao desconto.
 const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) => {
   const { showToast } = useToast()
   const imprimir = useImprimir()
@@ -192,7 +192,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
       return
     }
     if (tipo === 'dinheiro' && !ehDono && !/^\d{4,6}$/.test(pinDono)) {
-      setErro('Devolução em dinheiro exige o PIN de um dono (4 a 6 dígitos).')
+      setErro('Devolução em dinheiro exige o PIN de um gerente (4 a 6 dígitos).')
       return
     }
     const itensEnviar = itens
@@ -291,7 +291,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
           ) : !statusOk ? (
             <p className="text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded px-3 py-2">
               Só é possível devolver itens de vendas <strong>totalmente pagas</strong>. Para vendas a
-              prazo ou parceladas, fale com o dono.
+              prazo ou parceladas, fale com o gerente.
             </p>
           ) : itens.every((it) => it.quantidade_disponivel <= 0) ? (
             <p className="text-sm bg-muted/40 text-muted-foreground rounded px-3 py-2">
@@ -423,12 +423,12 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
                 </div>
               )}
 
-              {/* Dinheiro + não-dono → PIN do dono */}
+              {/* Dinheiro + não-gerente → PIN do gerente */}
               {tipo === 'dinheiro' && !ehDono && (
                 <div className="space-y-1.5 bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <Label className="text-xs flex items-center gap-1.5 text-amber-700">
                     <ShieldAlert className="w-4 h-4" />
-                    Saída de dinheiro do caixa exige autorização do dono
+                    Saída de dinheiro do caixa exige autorização do gerente
                   </Label>
                   <input
                     type="password"
@@ -436,7 +436,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
                     autoComplete="off"
                     value={pinDono}
                     onChange={(e) => { setPinDono(e.target.value.replace(/\D/g, '').slice(0, 6)); setErro('') }}
-                    placeholder="PIN do dono"
+                    placeholder="PIN do gerente"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-center tracking-[0.3em] font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </div>

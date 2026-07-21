@@ -3,7 +3,7 @@ import type { PassoTour } from '@fhvptech/core/ui/TourGuiado'
 // Roteiro do tour guiado do varejo. O motor (holofote + balão) vive no core;
 // aqui é só a história: por onde passar e o que dizer em cada parada.
 //
-// Dono faz o tour completo; vendedor faz a versão enxuta (só o dia a dia dele,
+// Gerente faz o tour completo; vendedor faz a versão enxuta (só o dia a dia dele,
 // sem telas que o cadeado não deixa entrar). Features desligadas na edição
 // (dashboard) ficam de fora do roteiro.
 export function construirPassosTour(ehDono: boolean): PassoTour[] {
@@ -18,7 +18,7 @@ export function construirPassosTour(ehDono: boolean): PassoTour[] {
       alvo: 'menu',
       titulo: 'O menu lateral',
       descricao:
-        'Tudo mora aqui, organizado por assunto: cadastros, operação do dia a dia, financeiro e sistema. Os itens com cadeado são só do dono.'
+        'Tudo mora aqui, organizado por assunto: cadastros, operação do dia a dia, financeiro e sistema. Os itens com cadeado são só do gerente.'
     },
     {
       rota: '/produtos',
@@ -98,7 +98,7 @@ export function construirPassosTour(ehDono: boolean): PassoTour[] {
     if (__FEAT_DASHBOARD__) {
       passos.push({
         rota: '/',
-        titulo: 'O painel do dono',
+        titulo: 'O painel do gerente',
         descricao:
           'Faturamento, lucro, ticket médio, ranking de vendedores, o que entra e o que sai — a loja inteira num relance, pra decidir com dados.'
       })
@@ -126,7 +126,7 @@ export function construirPassosTour(ehDono: boolean): PassoTour[] {
     passos.push({
       titulo: 'Pronto! Bom trabalho 🚀',
       descricao:
-        'Esse é o seu dia a dia: caixa, produtos e clientes. Qualquer coisa além disso, chame o dono da loja. Boas vendas!'
+        'Esse é o seu dia a dia: caixa, produtos e clientes. Qualquer coisa além disso, chame o gerente da loja. Boas vendas!'
     })
   }
 

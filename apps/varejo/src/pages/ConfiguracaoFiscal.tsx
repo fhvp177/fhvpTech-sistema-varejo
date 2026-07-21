@@ -25,7 +25,7 @@ import {
 } from '@/utils/validacaoFiscal'
 
 // Tela de habilitação da nota fiscal (NFC-e e NF-e). Só existe no plano Pro
-// (__FEAT_NFE__) e só o dono entra.
+// (__FEAT_NFE__) e só o gerente entra.
 //
 // A ideia central: o lojista descobre o que falta SENTADO, com calma, e não com
 // o cliente esperando no balcão. Por isso a tela é um checklist do caminho

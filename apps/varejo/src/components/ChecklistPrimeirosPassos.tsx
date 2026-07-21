@@ -17,7 +17,7 @@ export type EstadoOnboarding = {
   progresso: ProgressoOnboarding
 }
 
-// Telas onde a checklist aparece: a inicial do dono (Dashboard, '/') e a de
+// Telas onde a checklist aparece: a inicial do gerente (Dashboard, '/') e a de
 // Produtos (que é a inicial na edição básica, sem dashboard). Fora delas fica
 // escondida pra não atrapalhar a operação.
 const ROTAS_VISIVEIS = ['/', '/produtos']

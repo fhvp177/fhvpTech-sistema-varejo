@@ -187,7 +187,7 @@ export function diasParaVencerCertificado(agora = new Date()): number | null {
 }
 
 export function registrarHandlersFiscal(): void {
-  // Configuração fiscal é assunto do dono: mexe em tributação e em credencial
+  // Configuração fiscal é assunto do gerente: mexe em tributação e em credencial
   // da empresa, não é coisa de balconista.
   ipcMain.handle('fiscal:obter', () => {
     try {
@@ -471,7 +471,7 @@ function registrarHandlersFiscalRemoto(): void {
     async (_e, args: { vendaId: number; formaPagamento?: string }) => {
       try {
         // Emitir é rotina de balcão: qualquer usuário logado pode. Só a
-        // CONFIGURAÇÃO fiscal (certificado, CSC, regime) é do dono.
+        // CONFIGURAÇÃO fiscal (certificado, CSC, regime) é do gerente.
         requerSessao()
         const vendaId = Number(args?.vendaId)
         if (!Number.isInteger(vendaId) || vendaId <= 0) throw new Error('Venda inválida.')
@@ -684,7 +684,7 @@ function registrarHandlersFiscalRemoto(): void {
     ) => {
       try {
         // Classificação fiscal em massa mexe no que vai declarado ao Fisco:
-        // decisão do dono.
+        // decisão do gerente.
         requerDono()
         const dados: Partial<FiscalProduto> = {}
         if (args?.dados?.ncm) dados.ncm = apenasDigitos(args.dados.ncm)
@@ -851,7 +851,7 @@ function registrarHandlersFiscalRemoto(): void {
     'fiscal:cancelarNfce',
     async (_e, args: { vendaId: number; justificativa: string }) => {
       try {
-        // Cancelar apaga um documento fiscal já emitido: é decisão do dono.
+        // Cancelar apaga um documento fiscal já emitido: é decisão do gerente.
         requerDono()
         const nota = notaDaVenda(Number(args?.vendaId))
         if (!nota) throw new Error('Esta venda não tem nota fiscal.')

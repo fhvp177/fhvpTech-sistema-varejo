@@ -6,7 +6,7 @@ type Props = {
   // Email salvo com sucesso — o pai deve recarregar a sessão (o modal some
   // sozinho quando a sessão passa a ter email).
   onSalvo: () => void
-  // Dono optou por adiar — escondemos nesta sessão, mas perguntamos de novo no
+  // Gerente optou por adiar — escondemos nesta sessão, mas perguntamos de novo no
   // próximo login (o email continua faltando).
   onPular: () => void
 }

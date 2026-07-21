@@ -20,7 +20,7 @@ const CHAVE_AUTO_LOCK = 'auto_lock_minutos'
 const CHAVE_TETO_DESCONTO = 'teto_desconto_vendedor_pct'
 const BCRYPT_ROUNDS = 12
 
-// Recuperação de PIN do dono por email.
+// Recuperação de PIN do gerente por email.
 const MINUTOS_VALIDADE_RECUPERACAO = 15
 const MAX_TENTATIVAS_RECUPERACAO = 3
 
@@ -71,8 +71,8 @@ export async function alterarPinVendedor(
   gravarPinHash(vendedorId, hash)
 }
 
-// Usado pelo modal "elevar privilégio": qualquer dono ativo cujo PIN bate libera.
-// Retorna o id do dono que autenticou (pra auditoria futura) ou null.
+// Usado pelo modal "elevar privilégio": qualquer gerente ativo cujo PIN bate libera.
+// Retorna o id do gerente que autenticou (pra auditoria futura) ou null.
 export async function verificarPinDono(pin: string): Promise<number | null> {
   for (const v of listarParaLogin()) {
     if (v.papel !== 'dono' || v.tem_pin !== 1) continue
@@ -83,8 +83,8 @@ export async function verificarPinDono(pin: string): Promise<number | null> {
   return null
 }
 
-// Indica se existe ao menos um dono ativo com PIN — usado pela tela de login
-// pra decidir se mostra o fluxo de "primeiro acesso" no dono.
+// Indica se existe ao menos um gerente ativo com PIN — usado pela tela de login
+// pra decidir se mostra o fluxo de "primeiro acesso" no gerente.
 export function temPinConfigurado(): boolean {
   return (
     contarDonosAtivos() > 0 &&
@@ -92,7 +92,7 @@ export function temPinConfigurado(): boolean {
   )
 }
 
-// ───── Recuperação de PIN do dono por email ───────────────────────────
+// ───── Recuperação de PIN do gerente por email ───────────────────────────
 
 export type CodigoGerado = {
   vendedorId: number
@@ -102,7 +102,7 @@ export type CodigoGerado = {
 }
 
 // Gera e PERSISTE (com hash bcrypt) um código de 6 dígitos pro usuário ativo
-// (dono ou vendedor) daquele email, válido por MINUTOS_VALIDADE_RECUPERACAO.
+// (gerente ou vendedor) daquele email, válido por MINUTOS_VALIDADE_RECUPERACAO.
 // Retorna o código em CLARO só pra quem chamou enviar por email — o código
 // nunca fica salvo em claro. Retorna null se nenhum usuário ativo tem esse
 // email (anti-vazamento fica a cargo do chamador; num app local de loja,
@@ -175,8 +175,8 @@ export function setarAutoLockMinutos(minutos: number): void {
 }
 
 // ───── Teto de desconto por vendedor ──────────────────────────────────
-// Limite máximo de desconto (em %) que um vendedor pode aplicar sem PIN do dono.
-// 0 = qualquer desconto exige PIN do dono. 100 = vendedor pode dar qualquer.
+// Limite máximo de desconto (em %) que um vendedor pode aplicar sem PIN do gerente.
+// 0 = qualquer desconto exige PIN do gerente. 100 = vendedor pode dar qualquer.
 
 export function lerTetoDescontoPct(): number {
   const raw = lerConfig(CHAVE_TETO_DESCONTO)

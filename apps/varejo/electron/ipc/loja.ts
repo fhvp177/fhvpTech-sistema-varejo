@@ -18,7 +18,7 @@ export type DadosLoja = {
   exibir_logo: boolean
 }
 
-// Enquanto o dono não preencher "Dados da loja", a identidade fica em BRANCO —
+// Enquanto o gerente não preencher "Dados da loja", a identidade fica em BRANCO —
 // nunca com dados de outra loja. Até a v1.28.0 este fallback trazia os dados da
 // 1ª loja do sistema (GN Modas) chumbados, o que vazava a identidade dela pro
 // cupom das lojas novas; o legado dela virou config de verdade na migration

@@ -74,8 +74,8 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  // Modal "elevar privilégio": valida PIN de qualquer dono ativo sem trocar
-  // o vendedor da sessão. Retorna o id do dono que autenticou (pra log futuro).
+  // Modal "elevar privilégio": valida PIN de qualquer gerente ativo sem trocar
+  // o vendedor da sessão. Retorna o id do gerente que autenticou (pra log futuro).
   ipcMain.handle('auth:elevar', async (_event, pin: string) => {
     try {
       const donoId = await verificarPinDono(pin)
@@ -109,7 +109,7 @@ export function registrarHandlersAuth(): void {
     }
   )
 
-  // ─── Recuperação de PIN por email (dono ou vendedor) ─────────────────
+  // ─── Recuperação de PIN por email (gerente ou vendedor) ─────────────────
   // Gera o código local (hash bcrypt, 6 dígitos, 15 min) e pede ao backend Fly
   // pra enviar por email. `enviado: false` = nenhum usuário ativo com esse email.
   ipcMain.handle('auth:solicitarRecuperacao', async (_event, email: string) => {
@@ -151,7 +151,7 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  // Valida o código e redefine o PIN. Em sucesso, já abre a sessão do dono
+  // Valida o código e redefine o PIN. Em sucesso, já abre a sessão do gerente
   // (login automático) — ele acabou de provar a identidade pelo email.
   ipcMain.handle(
     'auth:redefinirComCodigo',

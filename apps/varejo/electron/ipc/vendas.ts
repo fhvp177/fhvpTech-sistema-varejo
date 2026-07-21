@@ -102,15 +102,15 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  // Estornar (reverter) um recebimento. Ação corretiva do dono — coerente com a
-  // hierarquia: o vendedor registra o recebimento, mas só o dono reverte. A regra
+  // Estornar (reverter) um recebimento. Ação corretiva do gerente — coerente com a
+  // hierarquia: o vendedor registra o recebimento, mas só o gerente reverte. A regra
   // de "o que" reverter fica nas queries. Uma parcela (parcelada) ou o recebimento
   // inteiro (venda simples).
   ipcMain.handle('vendas:estornarParcela', (_event, parcelaId: number) => {
     try {
       requerSessao()
       if (!ehDono()) {
-        throw new Error('Estornar um recebimento requer a autorização do dono.')
+        throw new Error('Estornar um recebimento requer a autorização do gerente.')
       }
       estornarParcela(parcelaId)
       obterBackupManager().marcarAlteracao()
@@ -124,7 +124,7 @@ export function registrarHandlersVendas(): void {
     try {
       requerSessao()
       if (!ehDono()) {
-        throw new Error('Estornar um recebimento requer a autorização do dono.')
+        throw new Error('Estornar um recebimento requer a autorização do gerente.')
       }
       estornarRecebimento(id)
       obterBackupManager().marcarAlteracao()
@@ -161,7 +161,7 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  // Cancelar (arquivar) uma venda. Só o dono — ou um vendedor com o PIN do dono,
+  // Cancelar (arquivar) uma venda. Só o gerente — ou um vendedor com o PIN do gerente,
   // mesmo fluxo do cadastro/desconto. A regra de quais vendas podem ser canceladas
   // (virgem ou totalmente devolvida) fica na query `cancelarVenda`.
   ipcMain.handle('vendas:cancelar', async (_event, id: number, motivo: string, pinDono?: string) => {
@@ -171,7 +171,7 @@ export function registrarHandlersVendas(): void {
       if (!ehDono()) {
         const donoId = pinDono ? await verificarPinDono(pinDono) : null
         if (donoId === null) {
-          throw new Error('Cancelar uma venda requer a autorização de um dono.')
+          throw new Error('Cancelar uma venda requer a autorização de um gerente.')
         }
         autorId = donoId
       }

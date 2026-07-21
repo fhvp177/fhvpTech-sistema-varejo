@@ -29,8 +29,8 @@ export function registrarHandlersProdutos(): void {
     }
   })
 
-  // Cadastrar produto é ação de dono. Pra não travar o caixa quando um vendedor
-  // bipa um item ainda não cadastrado, aceitamos a autorização por PIN de um dono
+  // Cadastrar produto é ação de gerente. Pra não travar o caixa quando um vendedor
+  // bipa um item ainda não cadastrado, aceitamos a autorização por PIN de um gerente
   // (mesmo padrão do desconto acima do teto) — validada aqui no backend, não na
   // confiança do renderer.
   ipcMain.handle('produtos:criar', async (_event, dados: DadosProduto, pinDono?: string) => {
@@ -38,7 +38,7 @@ export function registrarHandlersProdutos(): void {
       if (!ehDono()) {
         const donoId = pinDono ? await verificarPinDono(pinDono) : null
         if (donoId === null) {
-          throw new Error('Cadastrar um produto requer a autorização de um dono.')
+          throw new Error('Cadastrar um produto requer a autorização de um gerente.')
         }
       }
       const resultado = criarProduto(dados)

@@ -290,7 +290,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   }
 
   // Estorna UMA parcela paga: reverte o recebimento dela, em qualquer venda e a
-  // qualquer momento. Só o dono — a trava também é reforçada no processo main.
+  // qualquer momento. Só o gerente — a trava também é reforçada no processo main.
   const estornarParcela = async (parcela: Parcela) => {
     if (
       !(await confirmar({
@@ -311,7 +311,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   }
 
   // Estorna o recebimento inteiro de uma venda simples (à vista ou a prazo sem
-  // parcelas): reabre a venda. Só o dono.
+  // parcelas): reabre a venda. Só o gerente.
   const estornarRecebimento = async (venda: VendaDetalhada) => {
     // À vista grava valor_pago = 0 (o status 'pago' é que a marca como paga), então
     // o valor recebido de fato, para exibir, é o total nesse caso.
@@ -1332,7 +1332,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const finalizarVendaRef = useRef<() => void>(() => {})
   const abrirClienteRapidoRef = useRef<() => void>(() => {})
   const abrirProdutoRapidoRef = useRef<() => void>(() => {})
-  // O que rodar quando um dono autoriza no modal de elevação — recebe o PIN
+  // O que rodar quando um gerente autoriza no modal de elevação — recebe o PIN
   // digitado pra revalidação no backend (ex.: cadastro de produto por vendedor).
   const aoElevarRef = useRef<(pin: string) => void>(() => {})
   const onSairRef = useRef(onSair)
@@ -1554,11 +1554,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       return
     }
 
-    // Vendedor (não-dono) só finaliza desconto acima do teto se um dono autorizar
+    // Vendedor (não-gerente) só finaliza desconto acima do teto se um gerente autorizar
     if (descontoAcimaDoTeto) {
       setErro('')
       setMotivoElevar(
-        `O desconto aplicado (${descontoPctReal.toFixed(1)}%) ultrapassa o teto de ${tetoDesconto}% sem PIN do dono. Peça pra um dono digitar o PIN dele pra autorizar esta venda.`
+        `O desconto aplicado (${descontoPctReal.toFixed(1)}%) ultrapassa o teto de ${tetoDesconto}% sem PIN do gerente. Peça pra um gerente digitar o PIN dele pra autorizar esta venda.`
       )
       aoElevarRef.current = () => persistirVenda()
       setModalElevarAberto(true)
@@ -1689,7 +1689,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   }
 
   // Cria o produto e já joga no carrinho. `pinDono` vai quando quem opera não é
-  // dono (revalidado no backend). Reaproveita o produto devolvido — sem reler o banco.
+  // gerente (revalidado no backend). Reaproveita o produto devolvido — sem reler o banco.
   const persistirProduto = async (pinDono?: string) => {
     setSalvandoProduto(true)
     setErroProduto('')
@@ -1727,11 +1727,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     const preco = parseFloat(precoProdutoRapido.replace(',', '.'))
     if (isNaN(preco) || preco <= 0) { setErroProduto('Informe um preço de venda válido.'); return }
 
-    // Dono cadastra direto; vendedor precisa do PIN de um dono (validado no backend).
+    // Gerente cadastra direto; vendedor precisa do PIN de um gerente (validado no backend).
     if (ehDono) {
       persistirProduto()
     } else {
-      setMotivoElevar('Cadastrar um produto novo precisa da autorização de um dono. Peça pra um dono digitar o PIN dele.')
+      setMotivoElevar('Cadastrar um produto novo precisa da autorização de um gerente. Peça pra um gerente digitar o PIN dele.')
       aoElevarRef.current = (pin) => persistirProduto(pin)
       setModalElevarAberto(true)
     }
@@ -1958,7 +1958,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </div>
           {!ehDono && (
             <p className={`text-[11px] mt-1 ${descontoAcimaDoTeto ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
-              Teto sem PIN do dono: {tetoDesconto}%
+              Teto sem PIN do gerente: {tetoDesconto}%
               {descontoAcimaDoTeto && ' — vai exigir autorização ao finalizar'}
             </p>
           )}
@@ -2468,7 +2468,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         produtos={produtos}
       />
 
-      {/* ── Autorização do dono pra desconto acima do teto ── */}
+      {/* ── Autorização do gerente pra desconto acima do teto ── */}
       <ModalElevarPrivilegio
         aberto={modalElevarAberto}
         onClose={() => setModalElevarAberto(false)}

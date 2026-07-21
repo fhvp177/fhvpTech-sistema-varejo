@@ -121,8 +121,8 @@ export function atualizarVendedor(
   )
 }
 
-// Troca o papel de um vendedor. Bloqueia rebaixar o último dono ativo
-// (sistema sempre precisa ter ao menos 1 dono ativo).
+// Troca o papel de um vendedor. Bloqueia rebaixar o último gerente ativo
+// (sistema sempre precisa ter ao menos 1 gerente ativo).
 export function alterarPapel(id: number, novoPapel: PapelVendedor): void {
   const db = obterBancoDeDados()
   const atual = db.prepare('SELECT papel, ativo FROM vendedores WHERE id = ?').get(id) as
@@ -139,7 +139,7 @@ export function alterarPapel(id: number, novoPapel: PapelVendedor): void {
       .get(id) as { c: number }
     if (outros.c === 0) {
       throw new Error(
-        'Não é possível rebaixar o último dono. Promova outro vendedor a dono antes.'
+        'Não é possível rebaixar o último gerente. Promova outro vendedor a gerente antes.'
       )
     }
   }
@@ -149,7 +149,7 @@ export function alterarPapel(id: number, novoPapel: PapelVendedor): void {
 
 // Marca como ativo/inativo. Inativos somem do seletor do PDV e do login,
 // mas continuam aparecendo nas vendas antigas. Bloqueia desativar o último
-// dono ativo.
+// gerente ativo.
 export function alternarAtivoVendedor(id: number, ativo: boolean): void {
   const db = obterBancoDeDados()
   if (!ativo) {
@@ -164,7 +164,7 @@ export function alternarAtivoVendedor(id: number, ativo: boolean): void {
         .get(id) as { c: number }
       if (outros.c === 0) {
         throw new Error(
-          'Não é possível desativar o último dono. Promova outro vendedor a dono antes.'
+          'Não é possível desativar o último gerente. Promova outro vendedor a gerente antes.'
         )
       }
     }
@@ -172,7 +172,7 @@ export function alternarAtivoVendedor(id: number, ativo: boolean): void {
   db.prepare('UPDATE vendedores SET ativo = ? WHERE id = ?').run(ativo ? 1 : 0, id)
 }
 
-// Bloqueia exclusão quando há vendas associadas ou é o último dono ativo —
+// Bloqueia exclusão quando há vendas associadas ou é o último gerente ativo —
 // nesses casos, só dá pra desativar.
 export function deletarVendedor(id: number): void {
   const db = obterBancoDeDados()
@@ -200,7 +200,7 @@ export function deletarVendedor(id: number): void {
       .get(id) as { c: number }
     if (outros.c === 0) {
       throw new Error(
-        'Não é possível excluir o último dono. Promova outro vendedor a dono antes.'
+        'Não é possível excluir o último gerente. Promova outro vendedor a gerente antes.'
       )
     }
   }

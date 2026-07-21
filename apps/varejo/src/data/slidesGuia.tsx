@@ -112,7 +112,7 @@ export function construirSlidesGuia(): SlideGuia[] {
       corIcone: 'bg-slate-100 text-slate-600',
       titulo: 'Seus dados seguros',
       descricao:
-        'Backup automático protege tudo, o acesso é trancado por PIN e cada vendedor tem o seu — com as telas do dono (dinheiro e configurações) reservadas ao dono. Precisou de ajuda? O suporte está a um clique no menu lateral. Bora começar!'
+        'Backup automático protege tudo, o acesso é trancado por PIN e cada vendedor tem o seu — com as telas do gerente (dinheiro e configurações) reservadas ao gerente. Precisou de ajuda? O suporte está a um clique no menu lateral. Bora começar!'
     }
   )
 

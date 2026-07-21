@@ -44,7 +44,7 @@ const ModalRecuperacaoPin: FC<Props> = ({ onCancelar, onSucesso }) => {
     }
     if (!resp.data.enviado) {
       setErro(
-        'Não encontramos um usuário ativo com esse email. Confira o endereço, ou peça ao dono para redefinir seu PIN nas Configurações.'
+        'Não encontramos um usuário ativo com esse email. Confira o endereço, ou peça ao gerente para redefinir seu PIN nas Configurações.'
       )
       return
     }

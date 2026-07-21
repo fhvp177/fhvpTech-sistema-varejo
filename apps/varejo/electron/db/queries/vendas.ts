@@ -312,7 +312,7 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   const creditoUsado = Math.max(0, +(dados.valor_credito_usado ?? 0).toFixed(2))
   if (creditoUsado > 0) {
     if (!dados.cliente_id) {
-      throw new Error('Para usar crédito, selecione o cliente dono do crédito.')
+      throw new Error('Para usar crédito, selecione o cliente gerente do crédito.')
     }
     if (dados.status_pagamento !== 'pago') {
       throw new Error('Crédito da loja só pode ser usado em venda à vista.')
@@ -525,7 +525,7 @@ export function pagarParcela(parcelaId: number): void {
 // Estorna (reverte) o recebimento de UMA parcela paga: devolve a parcela para
 // pendente ou inadimplente conforme já venceu, tira o valor do total recebido da
 // venda (valor_pago) e recalcula o status. É o inverso exato do pagarParcela e
-// funciona em qualquer parcela paga, a qualquer momento. Ação do dono — a trava
+// funciona em qualquer parcela paga, a qualquer momento. Ação do gerente — a trava
 // de permissão fica no IPC.
 export function estornarParcela(parcelaId: number): void {
   const db = obterBancoDeDados()
@@ -561,7 +561,7 @@ export function estornarParcela(parcelaId: number): void {
 // reabre a venda zerando o total recebido e voltando o status para pendente ou
 // inadimplente conforme o vencimento. Vendas simples não guardam os pagamentos
 // parciais individualmente, então o estorno é do recebimento inteiro — as
-// parceladas usam estornarParcela. Ação do dono (trava no IPC).
+// parceladas usam estornarParcela. Ação do gerente (trava no IPC).
 export function estornarRecebimento(vendaId: number): void {
   const db = obterBancoDeDados()
   const venda = db
