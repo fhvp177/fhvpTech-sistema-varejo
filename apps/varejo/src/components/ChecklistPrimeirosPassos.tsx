@@ -7,6 +7,8 @@ export type ProgressoOnboarding = {
   temCliente: boolean
   temVenda: boolean
   lojaConfigurada: boolean
+  /** Só no plano Pro: habilitação da nota fiscal concluída. */
+  fiscalConfigurado?: boolean
 }
 
 export type EstadoOnboarding = {
@@ -69,7 +71,18 @@ const ChecklistPrimeirosPassos: FC<Props> = ({
       rotulo: 'Fazer a sua primeira venda',
       concluido: progresso.temVenda,
       onIr: () => navigate('/vendas')
-    }
+    },
+    // Nota fiscal só existe no plano Pro — no Básico o passo nem aparece.
+    ...(__FEAT_NFE__
+      ? [
+          {
+            id: 'fiscal',
+            rotulo: 'Habilitar a nota fiscal',
+            concluido: Boolean(progresso.fiscalConfigurado),
+            onIr: () => navigate('/fiscal')
+          }
+        ]
+      : [])
   ]
 
   return (

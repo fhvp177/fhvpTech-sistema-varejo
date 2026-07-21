@@ -224,6 +224,55 @@ export function registrarNotaLocal(dados: {
   ).run(dados)
 }
 
+// Guarda o XML da nota. Vale ouro por dois motivos: é o documento que o
+// lojista é obrigado a manter por 5 anos, e a ACBr só dá o primeiro download
+// de graça (os seguintes custam crédito). Guardando aqui, nunca pedimos duas
+// vezes o mesmo arquivo.
+export function guardarXmlNota(referencia: string, xml: string): void {
+  const db = obterBancoDeDados()
+  db.prepare(
+    `UPDATE nfce_emitidas SET xml = ?, atualizada_em = datetime('now')
+     WHERE referencia = ? AND (xml IS NULL OR xml = '')`
+  ).run(xml, referencia)
+}
+
+export function obterXmlNota(referencia: string): string | null {
+  const db = obterBancoDeDados()
+  const r = db.prepare('SELECT xml FROM nfce_emitidas WHERE referencia = ?').get(referencia) as
+    | { xml: string | null }
+    | undefined
+  return r?.xml || null
+}
+
+// Notas de um mês, para o relatório e para entregar os XMLs ao contador.
+export type NotaDoMes = NotaDaVenda & { venda_total: number; venda_data: string; tem_xml: number }
+
+export function notasDoMes(mes: string): NotaDoMes[] {
+  const db = obterBancoDeDados()
+  return db
+    .prepare(
+      `SELECT n.*, v.total AS venda_total, v.data AS venda_data,
+              CASE WHEN n.xml IS NOT NULL AND n.xml <> '' THEN 1 ELSE 0 END AS tem_xml
+       FROM nfce_emitidas n
+       JOIN vendas v ON v.id = n.venda_id
+       WHERE substr(n.criada_em, 1, 7) = ?
+       ORDER BY n.criada_em DESC`
+    )
+    .all(mes) as NotaDoMes[]
+}
+
+// Meses que têm nota — alimenta o seletor do relatório.
+export function mesesComNotas(): string[] {
+  const db = obterBancoDeDados()
+  const linhas = db
+    .prepare(
+      `SELECT DISTINCT substr(criada_em, 1, 7) AS mes FROM nfce_emitidas
+       ORDER BY mes DESC`
+    )
+    .all() as Array<{ mes: string }>
+  return linhas.map((l) => l.mes).filter(Boolean)
+}
+
 export function atualizarStatusNotaLocal(
   referencia: string,
   status: string,
@@ -237,6 +286,158 @@ export function atualizarStatusNotaLocal(
          atualizada_em = datetime('now')
      WHERE referencia = ?`
   ).run(status, chave, motivo, referencia)
+}
+
+// ─── Classificação fiscal dos produtos ────────────────────────────────────────
+// NCM, CFOP, CST/CSOSN, origem e unidade. Sem NCM o produto não sai em nota
+// nenhuma, então isto é pré-requisito de tudo.
+//
+// Fica separado de criarProduto/atualizarProduto pelo mesmo motivo do cliente:
+// aqueles caminhos são usados no PDV, no cadastro rápido e na importação de XML,
+// e não quero acrescentar responsabilidade fiscal a eles.
+
+export type FiscalProduto = {
+  ncm: string
+  cfop: string
+  cst_csosn: string
+  origem: string
+  unidade: string
+}
+
+export type ProdutoClassificacao = {
+  id: number
+  nome: string
+  categoria: string | null
+  codigo_barras: string | null
+  ncm: string | null
+  cfop: string | null
+  cst_csosn: string | null
+  origem: string | null
+  unidade: string | null
+}
+
+export function obterFiscalProduto(id: number): FiscalProduto | null {
+  const db = obterBancoDeDados()
+  const r = db
+    .prepare('SELECT ncm, cfop, cst_csosn, origem, unidade FROM produtos WHERE id = ?')
+    .get(id) as Record<string, string | null> | undefined
+  if (!r) return null
+  return {
+    ncm: r.ncm ?? '',
+    cfop: r.cfop ?? '',
+    cst_csosn: r.cst_csosn ?? '',
+    origem: r.origem ?? '0',
+    unidade: r.unidade ?? 'UN'
+  }
+}
+
+export function salvarFiscalProduto(id: number, dados: FiscalProduto): void {
+  const db = obterBancoDeDados()
+  db.prepare(
+    `UPDATE produtos SET ncm = @ncm, cfop = @cfop, cst_csosn = @cst_csosn,
+       origem = @origem, unidade = @unidade
+     WHERE id = @id`
+  ).run({ ...dados, id })
+}
+
+// Lista para a tela de classificação. `apenasPendentes` mostra só quem ainda
+// não pode ser faturado — que é como o lojista trabalha: resolver o que falta.
+export function listarParaClassificar(opcoes: {
+  apenasPendentes?: boolean
+  categoria?: string | null
+  busca?: string
+  limite?: number
+}): ProdutoClassificacao[] {
+  const db = obterBancoDeDados()
+  const cond: string[] = []
+  const params: unknown[] = []
+
+  if (opcoes.apenasPendentes) cond.push(`(ncm IS NULL OR TRIM(ncm) = '')`)
+  if (opcoes.categoria) {
+    cond.push('categoria = ?')
+    params.push(opcoes.categoria)
+  }
+  const busca = (opcoes.busca ?? '').trim()
+  if (busca) {
+    cond.push('(nome LIKE ? OR codigo_barras LIKE ?)')
+    params.push(`%${busca}%`, `%${busca}%`)
+  }
+
+  const where = cond.length ? `WHERE ${cond.join(' AND ')}` : ''
+  params.push(opcoes.limite ?? 500)
+
+  return db
+    .prepare(
+      `SELECT id, nome, categoria, codigo_barras, ncm, cfop, cst_csosn, origem, unidade
+       FROM produtos ${where}
+       ORDER BY categoria IS NULL, categoria, nome
+       LIMIT ?`
+    )
+    .all(...params) as ProdutoClassificacao[]
+}
+
+// Aplica a mesma classificação a vários produtos de uma vez. É o que torna a
+// tarefa viável: uma loja de roupas tem dezenas de camisetas com o mesmo NCM, e
+// preencher uma a uma seria cruel.
+//
+// `somentePendentes` protege quem já foi classificado pelo contador — aplicar
+// em lote nunca deve sobrescrever um ajuste feito à mão sem querer.
+export function aplicarFiscalEmLote(args: {
+  ids?: number[]
+  categoria?: string | null
+  dados: Partial<FiscalProduto>
+  somentePendentes?: boolean
+}): number {
+  const db = obterBancoDeDados()
+
+  // Só mexe no que veio preenchido — campo em branco no formulário significa
+  // "não alterar", nunca "apagar o que já existe".
+  const campos: string[] = []
+  const valores: unknown[] = []
+  for (const campo of ['ncm', 'cfop', 'cst_csosn', 'origem', 'unidade'] as const) {
+    const bruto = args.dados[campo]
+    const v = bruto === undefined || bruto === null ? '' : String(bruto).trim()
+    if (v) {
+      campos.push(`${campo} = ?`)
+      valores.push(v)
+    }
+  }
+  if (!campos.length) return 0
+
+  // Tudo posicional (better-sqlite3 não mistura nomeado com posicional).
+  const cond: string[] = []
+  if (args.ids?.length) {
+    cond.push(`id IN (${args.ids.map(() => '?').join(',')})`)
+    valores.push(...args.ids)
+  } else if (args.categoria !== undefined) {
+    if (args.categoria === null) {
+      cond.push('categoria IS NULL')
+    } else {
+      cond.push('categoria = ?')
+      valores.push(args.categoria)
+    }
+  }
+  // Protege quem o contador já ajustou: aplicar em lote não sobrescreve.
+  if (args.somentePendentes) cond.push(`(ncm IS NULL OR TRIM(ncm) = '')`)
+  if (!cond.length) return 0
+
+  const r = db
+    .prepare(`UPDATE produtos SET ${campos.join(', ')} WHERE ${cond.join(' AND ')}`)
+    .run(...valores)
+  return Number(r.changes ?? 0)
+}
+
+// Categorias que ainda têm produto sem NCM — alimenta o "classifique por
+// categoria", que é o caminho rápido.
+export function categoriasPendentes(): Array<{ categoria: string | null; total: number }> {
+  const db = obterBancoDeDados()
+  return db
+    .prepare(
+      `SELECT categoria, COUNT(*) AS total FROM produtos
+       WHERE ncm IS NULL OR TRIM(ncm) = ''
+       GROUP BY categoria ORDER BY total DESC`
+    )
+    .all() as Array<{ categoria: string | null; total: number }>
 }
 
 // ─── Cadastro fiscal do cliente (destinatário da NF-e) ────────────────────────

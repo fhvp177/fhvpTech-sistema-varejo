@@ -351,6 +351,34 @@ export function registrarRotasFiscais(app: Hono): void {
     }
   })
 
+  // XML da nota autorizada. É o documento que vale legalmente — o lojista é
+  // obrigado a guardar por 5 ANOS e é o que o contador pede todo mês.
+  //
+  // ⚠️ A ACBr dá o PRIMEIRO download de graça e cobra 1 crédito nos seguintes.
+  // Por isso o app guarda o XML no banco assim que baixa, e nunca pede duas
+  // vezes o mesmo — ver `xml` em nfce_emitidas.
+  app.get('/fiscal/nfce/:referencia/xml', async (c) => {
+    const lic = exigirLicenca(c.req.query('clienteId'))
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+
+    const emissao = obterEmissaoNfce(lic.cliente.clienteId, c.req.param('referencia'))
+    if (!emissao?.acbr_id) return c.json({ erro: 'emissão não encontrada' }, 404)
+    if (emissao.status !== 'autorizado' && emissao.status !== 'cancelado') {
+      return c.json({ erro: 'A nota ainda não foi autorizada.' }, 409)
+    }
+
+    const modelo = c.req.query('modelo') === '55' ? 'nfe' : 'nfce'
+    try {
+      const xml = await chamarAcbr<ArrayBuffer>(`/${modelo}/${emissao.acbr_id}/xml`, {
+        binario: true
+      })
+      return c.json({ ok: true, xml: Buffer.from(xml).toString('utf-8') })
+    } catch (e) {
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+  })
+
   // Cancela uma NFC-e autorizada. A SEFAZ exige justificativa e só aceita
   // dentro do prazo legal (curto na NFC-e — costuma ser 30 minutos). Consome
   // 1 crédito, como uma emissão.

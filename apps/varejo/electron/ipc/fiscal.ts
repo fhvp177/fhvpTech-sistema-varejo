@@ -1,4 +1,6 @@
-import { ipcMain } from 'electron'
+import { ipcMain, dialog } from 'electron'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
 import {
@@ -12,7 +14,17 @@ import {
   gravarFormaPagamento,
   obterFiscalCliente,
   salvarFiscalCliente,
-  type FiscalCliente
+  obterFiscalProduto,
+  salvarFiscalProduto,
+  listarParaClassificar,
+  aplicarFiscalEmLote,
+  categoriasPendentes,
+  guardarXmlNota,
+  obterXmlNota,
+  notasDoMes,
+  mesesComNotas,
+  type FiscalCliente,
+  type FiscalProduto
 } from '../db/queries/fiscal'
 import { requerDono, requerSessao } from '../sessao'
 import { urlBackend } from '../backendUrl'
@@ -77,6 +89,8 @@ export type ConfigFiscal = {
   endereco_numero: string
   endereco_complemento: string
   endereco_bairro: string
+  /** Largura da bobina da impressora: 80mm (padrão) ou 58mm (estreita). */
+  largura_bobina: number
   // Derivados — preenchidos pelo sistema, não digitados.
   empresa_cadastrada: boolean // já registrada como emitente na ACBr
   csc_configurado: boolean
@@ -101,6 +115,7 @@ const FISCAL_EM_BRANCO: ConfigFiscal = {
   endereco_numero: '',
   endereco_complemento: '',
   endereco_bairro: '',
+  largura_bobina: 80,
   empresa_cadastrada: false,
   csc_configurado: false,
   certificado_titular: '',
@@ -152,6 +167,7 @@ function obterConfigFiscal(): ConfigFiscal {
     csc_id: lerConfig('fiscal_csc_id'),
     ambiente,
     ...lerEnderecoFiscal(),
+    largura_bobina: lerConfig('fiscal_largura_bobina') === '58' ? 58 : 80,
     empresa_cadastrada: lerConfig('fiscal_empresa_cadastrada') === '1',
     csc_configurado: lerConfig('fiscal_csc_configurado') === '1',
     certificado_titular: lerConfig('fiscal_certificado_titular'),
@@ -231,6 +247,7 @@ export function registrarHandlersFiscal(): void {
       gravarConfig('fiscal_endereco_numero', (dados.endereco_numero ?? '').trim())
       gravarConfig('fiscal_endereco_complemento', (dados.endereco_complemento ?? '').trim())
       gravarConfig('fiscal_endereco_bairro', (dados.endereco_bairro ?? '').trim())
+      gravarConfig('fiscal_largura_bobina', Number(dados.largura_bobina) === 58 ? '58' : '80')
       gravarConfig('fiscal_configurada', '1')
       return { success: true, data: null }
     } catch (error) {
@@ -599,6 +616,163 @@ function registrarHandlersFiscalRemoto(): void {
       return { success: false, error: (error as Error).message }
     }
   })
+
+  // ── Classificação fiscal dos produtos ───────────────────────────────────────
+  // Sem NCM o produto não sai em nota. Estes handlers são o que torna possível
+  // resolver isso — antes deles, o sistema apontava o problema e não deixava
+  // ninguém consertar.
+  ipcMain.handle('fiscal:obterProduto', (_e, id: number) => {
+    try {
+      requerSessao()
+      return { success: true, data: obterFiscalProduto(Number(id)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('fiscal:salvarProduto', (_e, id: number, dados: FiscalProduto) => {
+    try {
+      requerSessao()
+      salvarFiscalProduto(Number(id), {
+        ncm: apenasDigitos(dados?.ncm ?? ''),
+        cfop: apenasDigitos(dados?.cfop ?? ''),
+        cst_csosn: apenasDigitos(dados?.cst_csosn ?? ''),
+        origem: (dados?.origem ?? '0').trim() || '0',
+        unidade: (dados?.unidade ?? 'UN').trim().toUpperCase() || 'UN'
+      })
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle(
+    'fiscal:listarClassificacao',
+    (_e, filtro: { apenasPendentes?: boolean; categoria?: string | null; busca?: string }) => {
+      try {
+        requerSessao()
+        return { success: true, data: listarParaClassificar(filtro ?? {}) }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  ipcMain.handle('fiscal:categoriasPendentes', () => {
+    try {
+      requerSessao()
+      return { success: true, data: categoriasPendentes() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Aplica a mesma classificação a vários produtos — o que torna a tarefa
+  // viável numa loja com centenas de itens.
+  ipcMain.handle(
+    'fiscal:aplicarEmLote',
+    (
+      _e,
+      args: {
+        ids?: number[]
+        categoria?: string | null
+        dados: Partial<FiscalProduto>
+        somentePendentes?: boolean
+      }
+    ) => {
+      try {
+        // Classificação fiscal em massa mexe no que vai declarado ao Fisco:
+        // decisão do dono.
+        requerDono()
+        const dados: Partial<FiscalProduto> = {}
+        if (args?.dados?.ncm) dados.ncm = apenasDigitos(args.dados.ncm)
+        if (args?.dados?.cfop) dados.cfop = apenasDigitos(args.dados.cfop)
+        if (args?.dados?.cst_csosn) dados.cst_csosn = apenasDigitos(args.dados.cst_csosn)
+        if (args?.dados?.origem) dados.origem = String(args.dados.origem).trim()
+        if (args?.dados?.unidade) dados.unidade = String(args.dados.unidade).trim().toUpperCase()
+
+        const total = aplicarFiscalEmLote({
+          ids: args?.ids,
+          categoria: args?.categoria,
+          dados,
+          somentePendentes: args?.somentePendentes
+        })
+        return { success: true, data: { atualizados: total } }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  // ── XML e relatório ─────────────────────────────────────────────────────────
+  // O XML é o documento que vale legalmente. Guardamos no primeiro download
+  // porque a ACBr cobra crédito a partir do segundo.
+  ipcMain.handle('fiscal:xmlNota', async (_e, args: { vendaId: number }) => {
+    try {
+      requerSessao()
+      const nota = notaDaVenda(Number(args?.vendaId))
+      if (!nota) throw new Error('Esta venda não tem nota fiscal.')
+
+      const guardado = obterXmlNota(nota.referencia)
+      if (guardado) return { success: true, data: { xml: guardado, doCache: true } }
+
+      const r = await chamarBackendFiscal(`/fiscal/nfce/${nota.referencia}/xml`)
+      const xml = String(r.xml ?? '')
+      if (xml) guardarXmlNota(nota.referencia, xml)
+      return { success: true, data: { xml, doCache: false } }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('fiscal:notasDoMes', (_e, mes: string) => {
+    try {
+      requerDono()
+      return { success: true, data: notasDoMes(String(mes ?? '')) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('fiscal:mesesComNotas', () => {
+    try {
+      requerDono()
+      return { success: true, data: mesesComNotas() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Salva os XMLs do mês numa pasta escolhida pelo lojista — o pacote que ele
+  // entrega ao contador. Mesmo padrão da exportação das notas de entrada.
+  ipcMain.handle(
+    'fiscal:salvarXmls',
+    async (_e, mes: string, arquivos: Array<{ nome: string; conteudo: string }>) => {
+      try {
+        requerDono()
+        const lista = Array.isArray(arquivos) ? arquivos : []
+        if (!lista.length) throw new Error('Nenhum XML para salvar.')
+
+        const resultado = await dialog.showOpenDialog({
+          properties: ['openDirectory', 'createDirectory'],
+          title: `Escolher pasta pros XMLs de ${mes}`
+        })
+        if (resultado.canceled || resultado.filePaths.length === 0) {
+          return { success: true, data: null } // lojista desistiu — não é erro
+        }
+
+        const pasta = resultado.filePaths[0]
+        for (const a of lista) {
+          // Nome vem da chave de acesso; sanitiza pra não escapar da pasta.
+          const nome = String(a.nome).replace(/[^A-Za-z0-9._-]/g, '_')
+          writeFileSync(join(pasta, nome), String(a.conteudo), 'utf-8')
+        }
+        return { success: true, data: { pasta, quantidade: lista.length } }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
 
   // Cadastro fiscal do cliente (destinatário da NF-e). Liberado pra vendedor:
   // é dado de cadastro, não configuração da loja.

@@ -243,7 +243,28 @@ const api = {
       ipcRenderer.invoke('fiscal:obterCliente', id),
     salvarCliente: (id: number, dados: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('fiscal:salvarCliente', id, dados),
-    buscarCep: (cep: string): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:buscarCep', cep)
+    buscarCep: (cep: string): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:buscarCep', cep),
+    // Classificação fiscal dos produtos (NCM e afins).
+    obterProduto: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:obterProduto', id),
+    salvarProduto: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:salvarProduto', id, dados),
+    listarClassificacao: (filtro: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:listarClassificacao', filtro),
+    categoriasPendentes: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:categoriasPendentes'),
+    aplicarEmLote: (args: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:aplicarEmLote', args),
+    // XML (obrigação de guarda) e relatório mensal.
+    xmlNota: (args: { vendaId: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:xmlNota', args),
+    notasDoMes: (mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:notasDoMes', mes),
+    mesesComNotas: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:mesesComNotas'),
+    salvarXmls: (
+      mes: string,
+      arquivos: Array<{ nome: string; conteudo: string }>
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:salvarXmls', mes, arquivos)
   },
 
   // Onboarding (tutorial de primeira abertura: guia + checklist)

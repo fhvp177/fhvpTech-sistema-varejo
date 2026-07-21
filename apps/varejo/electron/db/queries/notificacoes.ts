@@ -221,6 +221,40 @@ export function alertasDoBanco(): AlertaVivo[] {
     })
   }
 
+  // ── Certificado digital vencendo ────────────────────────────────────────────
+  // O A1 vale 1 ano. Sem este aviso, o lojista descobre que venceu do pior
+  // jeito possível: a nota parando de sair numa manhã de movimento. Tirar um
+  // certificado novo leva dias (exige videoconferência de validação), então o
+  // aviso começa cedo — 30 dias.
+  const validadeCert = lerConfig('fiscal_certificado_validade')
+  if (validadeCert) {
+    const fim = new Date(validadeCert)
+    if (!Number.isNaN(fim.getTime())) {
+      const dias = Math.ceil((fim.getTime() - Date.now()) / 86_400_000)
+      if (dias <= 30) {
+        const venceu = dias < 0
+        alertas.push({
+          chave: 'certificado-fiscal',
+          // A assinatura muda a cada dia, então o aviso volta a aparecer
+          // conforme a data se aproxima.
+          assinatura: `${hoje}:${dias}`,
+          tipo: 'sistema',
+          severidade: venceu || dias <= 7 ? 'critico' : 'alerta',
+          titulo: venceu
+            ? 'Certificado digital VENCIDO'
+            : dias === 0
+              ? 'Certificado digital vence hoje'
+              : `Certificado digital vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}`,
+          descricao: venceu
+            ? 'Sua loja não consegue emitir nota fiscal até renovar o certificado.'
+            : 'Renove antes do vencimento para não parar de emitir nota fiscal. A emissão de um novo leva alguns dias.',
+          rota: '/fiscal',
+          acao: null
+        })
+      }
+    }
+  }
+
   return alertas
 }
 

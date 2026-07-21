@@ -41,7 +41,16 @@ const {
   proximaTentativa,
   registrarNotaLocal,
   gravarFormaPagamento,
-  diagnosticoFiscal
+  diagnosticoFiscal,
+  obterFiscalProduto,
+  salvarFiscalProduto,
+  listarParaClassificar,
+  aplicarFiscalEmLote,
+  categoriasPendentes,
+  guardarXmlNota,
+  obterXmlNota,
+  notasDoMes,
+  mesesComNotas
 } = await import('../fiscal')
 
 const SCHEMA = `
@@ -50,6 +59,7 @@ const SCHEMA = `
     nome TEXT NOT NULL,
     codigo_barras TEXT,
     referencia TEXT,
+    categoria TEXT,
     preco REAL NOT NULL DEFAULT 0,
     ncm TEXT, cfop TEXT, cst_csosn TEXT, origem TEXT DEFAULT '0', unidade TEXT DEFAULT 'UN'
   );
@@ -72,6 +82,7 @@ const SCHEMA = `
   CREATE TABLE vendas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     cliente_id INTEGER,
+    data DATETIME DEFAULT CURRENT_TIMESTAMP,
     total REAL NOT NULL DEFAULT 0,
     desconto REAL NOT NULL DEFAULT 0,
     cancelada INTEGER NOT NULL DEFAULT 0,
@@ -307,6 +318,94 @@ describe.runIf(sqlite)('registro local das notas', () => {
 
   it('lista vazia não quebra', () => {
     expect(notasDasVendas([])).toEqual({})
+  })
+})
+
+describe.runIf(sqlite)('classificação fiscal dos produtos', () => {
+  it('aplica em lote a uma lista de produtos', () => {
+    const n = aplicarFiscalEmLote({ ids: [2], dados: { ncm: '65050090', cfop: '5102' } })
+    expect(n).toBe(1)
+    const p = obterFiscalProduto(2)!
+    expect(p.ncm).toBe('65050090')
+    expect(p.cfop).toBe('5102')
+  })
+
+  it('campo em branco NÃO apaga o que já existe', () => {
+    // "Não alterar" e "apagar" são coisas diferentes — o formulário manda
+    // vazio no que não quer mexer.
+    aplicarFiscalEmLote({ ids: [2], dados: { unidade: 'PC' } })
+    const p = obterFiscalProduto(2)!
+    expect(p.unidade).toBe('PC')
+    expect(p.ncm).toBe('65050090') // continua lá
+  })
+
+  it('aplicar por categoria não sobrescreve quem já foi classificado', () => {
+    // O contador ajustou um produto à mão; aplicar em lote na categoria não
+    // pode desfazer esse trabalho.
+    salvarFiscalProduto(1, {
+      ncm: '99999999', cfop: '5102', cst_csosn: '102', origem: '0', unidade: 'UN'
+    })
+    banco!.prepare("UPDATE produtos SET categoria = 'Roupas' WHERE id IN (1,2)").run()
+    banco!.prepare("UPDATE produtos SET ncm = NULL WHERE id = 2").run()
+
+    const n = aplicarFiscalEmLote({
+      categoria: 'Roupas',
+      dados: { ncm: '61091000' },
+      somentePendentes: true
+    })
+    expect(n).toBe(1) // só o produto 2, que estava sem NCM
+    expect(obterFiscalProduto(1)!.ncm).toBe('99999999') // preservado
+    expect(obterFiscalProduto(2)!.ncm).toBe('61091000')
+  })
+
+  it('sem nenhum campo preenchido não altera nada', () => {
+    expect(aplicarFiscalEmLote({ ids: [1], dados: {} })).toBe(0)
+  })
+
+  it('lista só os pendentes quando pedido', () => {
+    banco!.prepare("UPDATE produtos SET ncm = NULL WHERE id = 2").run()
+    const pendentes = listarParaClassificar({ apenasPendentes: true })
+    expect(pendentes.every((p) => !p.ncm)).toBe(true)
+    expect(pendentes.some((p) => p.id === 2)).toBe(true)
+  })
+
+  it('categorias pendentes agrupam o que falta', () => {
+    const cats = categoriasPendentes()
+    expect(cats.some((c) => c.categoria === 'Roupas' && c.total >= 1)).toBe(true)
+  })
+})
+
+describe.runIf(sqlite)('XML e relatório mensal', () => {
+  it('guarda o XML e devolve do cache', () => {
+    registrarNotaLocal({
+      venda_id: 3, tentativa: 1, referencia: 'v3-t1', acbr_id: 'a3',
+      ambiente: 'homologacao', serie: 1, numero: 10, chave: 'CH3',
+      status: 'autorizado', motivo: null
+    })
+    guardarXmlNota('v3-t1', '<nfe>conteudo</nfe>')
+    expect(obterXmlNota('v3-t1')).toBe('<nfe>conteudo</nfe>')
+  })
+
+  it('não sobrescreve XML já guardado', () => {
+    // A ACBr cobra crédito no segundo download; guardar de novo seria sinal de
+    // que buscamos à toa.
+    guardarXmlNota('v3-t1', '<nfe>outro</nfe>')
+    expect(obterXmlNota('v3-t1')).toBe('<nfe>conteudo</nfe>')
+  })
+
+  it('lista as notas do mês com o valor da venda', () => {
+    const mes = new Date().toISOString().slice(0, 7)
+    const lista = notasDoMes(mes)
+    const nota = lista.find((n) => n.referencia === 'v3-t1')
+    expect(nota).toBeDefined()
+    expect(nota!.venda_total).toBe(250)
+    expect(nota!.tem_xml).toBe(1)
+  })
+
+  it('meses com notas vem do mais recente pro mais antigo', () => {
+    const meses = mesesComNotas()
+    expect(meses.length).toBeGreaterThan(0)
+    expect(meses).toEqual([...meses].sort().reverse())
   })
 })
 

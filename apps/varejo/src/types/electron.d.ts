@@ -32,6 +32,7 @@ type ConfigFiscal = {
   endereco_numero: string
   endereco_complemento: string
   endereco_bairro: string
+  largura_bobina: number
   empresa_cadastrada: boolean
   csc_configurado: boolean
   certificado_titular: string
@@ -56,6 +57,28 @@ type FiscalCliente = {
   indicador_ie: string
 }
 
+// Classificação fiscal de um produto. Sem NCM ele não sai em nota nenhuma.
+// `origem`: 0 = nacional (a esmagadora maioria). `cst_csosn`: CSOSN no Simples.
+type FiscalProduto = {
+  ncm: string
+  cfop: string
+  cst_csosn: string
+  origem: string
+  unidade: string
+}
+
+type ProdutoClassificacao = {
+  id: number
+  nome: string
+  categoria: string | null
+  codigo_barras: string | null
+  ncm: string | null
+  cfop: string | null
+  cst_csosn: string | null
+  origem: string | null
+  unidade: string | null
+}
+
 // Nota fiscal de uma venda, como o app guarda localmente. `status` segue o
 // vocabulário da SEFAZ/ACBr: pendente → autorizado | rejeitado | denegado, e
 // cancelado depois. Uma linha por TENTATIVA (rejeição faz parte do histórico).
@@ -72,6 +95,13 @@ type NotaFiscalVenda = {
   status: 'pendente' | 'autorizado' | 'rejeitado' | 'denegado' | 'cancelado' | 'erro'
   motivo: string | null
   criada_em: string
+}
+
+// Nota no relatório mensal (o que o contador pede).
+type NotaDoMes = NotaFiscalVenda & {
+  venda_total: number
+  venda_data: string
+  tem_xml: number
 }
 
 // Diagnóstico "a loja está pronta pra emitir?" — calculado no banco local,
@@ -352,6 +382,31 @@ interface Window {
           codigo_ibge: string
         }>
       >
+      obterProduto: (id: number) => Promise<RespostaIPC<FiscalProduto | null>>
+      salvarProduto: (id: number, dados: FiscalProduto) => Promise<RespostaIPC<null>>
+      listarClassificacao: (filtro: {
+        apenasPendentes?: boolean
+        categoria?: string | null
+        busca?: string
+      }) => Promise<RespostaIPC<ProdutoClassificacao[]>>
+      categoriasPendentes: () => Promise<
+        RespostaIPC<Array<{ categoria: string | null; total: number }>>
+      >
+      aplicarEmLote: (args: {
+        ids?: number[]
+        categoria?: string | null
+        dados: Partial<FiscalProduto>
+        somentePendentes?: boolean
+      }) => Promise<RespostaIPC<{ atualizados: number }>>
+      xmlNota: (args: {
+        vendaId: number
+      }) => Promise<RespostaIPC<{ xml: string; doCache: boolean }>>
+      notasDoMes: (mes: string) => Promise<RespostaIPC<NotaDoMes[]>>
+      mesesComNotas: () => Promise<RespostaIPC<string[]>>
+      salvarXmls: (
+        mes: string,
+        arquivos: Array<{ nome: string; conteudo: string }>
+      ) => Promise<RespostaIPC<{ pasta: string; quantidade: number } | null>>
     }
     novidades: {
       estado: () => Promise<RespostaIPC<{ ultimaVersaoVista: string; guiaVisto: boolean }>>
@@ -366,6 +421,7 @@ interface Window {
           temCliente: boolean
           temVenda: boolean
           lojaConfigurada: boolean
+          fiscalConfigurado?: boolean
         }
       }>>
       marcarGuiaVisto: () => Promise<RespostaIPC>

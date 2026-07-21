@@ -1,5 +1,5 @@
-import { FC, ReactNode, useEffect, useState } from 'react'
-import { FileDown, Printer, FolderDown, ShoppingCart, Package, BookOpen, FileText } from 'lucide-react'
+import { FC, ReactNode, Suspense, lazy, useEffect, useState } from 'react'
+import { FileDown, Printer, FolderDown, ShoppingCart, Package, BookOpen, FileText, Receipt } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Label } from '@fhvptech/core/ui/label'
 import { useImprimir } from '@/components/ImpressaoProvider'
@@ -26,6 +26,11 @@ import {
 // em PDF. Cada card também continua acessível na tela de origem (Vendas,
 // Produtos) — aqui é o atalho de quem pensa "quero um relatório" antes de
 // pensar em qual tela ele mora.
+
+// Relatório de notas fiscais — só no plano Pro; a flag tira o chunk do Básico.
+const RelatorioNotasFiscais = __FEAT_NFE__
+  ? lazy(() => import('@/components/RelatorioNotasFiscais'))
+  : null
 
 type Acao = 'pdf' | 'imprimir'
 
@@ -88,6 +93,7 @@ const BotoesGerar: FC<{
 const Relatorios: FC = () => {
   const imprimirDoc = useImprimir()
   const [gerando, setGerando] = useState(false)
+  const [notasFiscaisAberto, setNotasFiscaisAberto] = useState(false)
 
   // ── Vendas do mês ──
   const [mesVendas, setMesVendas] = useState(mesAtualLocal())
@@ -364,7 +370,29 @@ const Relatorios: FC = () => {
           />
           {erroProdutos && <p className="text-destructive text-xs">{erroProdutos}</p>}
         </CardRelatorio>
+
+        {/* Notas fiscais emitidas — e os XMLs que o contador pede todo mês. */}
+        {RelatorioNotasFiscais && (
+          <CardRelatorio
+            icone={<Receipt className="w-5 h-5" />}
+            titulo="Notas fiscais emitidas"
+            descricao="O que foi emitido no mês e os XMLs pro seu contador. Guarde-os por 5 anos."
+          >
+            <Button variant="outline" size="sm" onClick={() => setNotasFiscaisAberto(true)}>
+              <FolderDown className="w-3.5 h-3.5 mr-1.5" /> Ver notas e XMLs
+            </Button>
+          </CardRelatorio>
+        )}
       </div>
+
+      {RelatorioNotasFiscais && (
+        <Suspense fallback={null}>
+          <RelatorioNotasFiscais
+            aberta={notasFiscaisAberto}
+            onFechar={() => setNotasFiscaisAberto(false)}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

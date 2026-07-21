@@ -24,7 +24,13 @@ export function registrarHandlersOnboarding(): void {
             temProduto: contar('produtos') > 0,
             temCliente: contar('clientes') > 0,
             temVenda: contar('vendas') > 0,
-            lojaConfigurada: lerConfig('loja_configurada') === '1'
+            lojaConfigurada: lerConfig('loja_configurada') === '1',
+            // "Habilitada" = os três passos que dependem do lojista: dados da
+            // empresa salvos, certificado enviado e CSC configurado.
+            fiscalConfigurado:
+              lerConfig('fiscal_configurada') === '1' &&
+              Boolean(lerConfig('fiscal_certificado_validade')) &&
+              lerConfig('fiscal_csc_configurado') === '1'
           }
         }
       }

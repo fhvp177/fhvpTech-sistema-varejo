@@ -671,6 +671,32 @@ export function cancelarVenda(id: number, canceladaPorId: number, motivo: string
   const elegivel = avaliarCancelamento(estado)
   if (!elegivel.permitido) throw new Error(elegivel.motivo)
 
+  // Venda com nota fiscal VÁLIDA não pode ser cancelada por aqui: o documento
+  // continuaria valendo na SEFAZ, com mercadoria que não saiu. Cancelar a nota
+  // é ato fiscal próprio (prazo curto, justificativa, registro na SEFAZ), então
+  // exige ser feito antes — de propósito, na tela da nota.
+  //
+  // A tabela pode não existir em instalação que nunca teve o módulo fiscal.
+  const temTabelaNota = db
+    .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'nfce_emitidas'`)
+    .get()
+  if (temTabelaNota) {
+    const notaViva = db
+      .prepare(
+        `SELECT numero, status FROM nfce_emitidas
+         WHERE venda_id = ? AND status IN ('autorizado','pendente')
+         ORDER BY tentativa DESC LIMIT 1`
+      )
+      .get(id) as { numero: number; status: string } | undefined
+    if (notaViva) {
+      throw new Error(
+        notaViva.status === 'pendente'
+          ? 'Esta venda tem uma nota fiscal aguardando a SEFAZ. Verifique o resultado antes de cancelar.'
+          : `Esta venda tem a nota fiscal nº ${notaViva.numero} autorizada. Cancele a nota primeiro (na lista de vendas, no ícone da nota).`
+      )
+    }
+  }
+
   const itens = db
     .prepare('SELECT produto_id, variacao_id, quantidade FROM itens_venda WHERE venda_id = ?')
     .all(id) as Array<{ produto_id: number; variacao_id: number | null; quantidade: number }>

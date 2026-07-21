@@ -1,4 +1,4 @@
-import { FC, useCallback, useEffect, useRef, useState } from 'react'
+import { FC, Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
@@ -38,6 +38,8 @@ import {
 // preencher. Lojista não sabe o NCM de uma blusa; se puser um campo em branco
 // na frente dele, ele chuta — e nota com NCM errado é autorizada pela SEFAZ e
 // vira passivo dele numa fiscalização, meses depois.
+
+const ClassificacaoFiscal = lazy(() => import('@/components/ClassificacaoFiscal'))
 
 type Feedback = { tipo: 'ok' | 'erro'; msg: string }
 
@@ -84,6 +86,18 @@ const CompleteOPasso1: FC = () => (
   <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
     <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
     <p>Conclua o passo 1 (dados da empresa) antes desta etapa.</p>
+  </div>
+)
+
+// Linha do semáforo: verde quando resolvido, âmbar quando falta.
+const ItemCheck: FC<{ ok: boolean; texto: string }> = ({ ok, texto }) => (
+  <div className="flex items-center gap-2 text-sm">
+    {ok ? (
+      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+    ) : (
+      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+    )}
+    <span className={ok ? '' : 'text-amber-800'}>{texto}</span>
   </div>
 )
 
@@ -138,6 +152,13 @@ const ConfiguracaoFiscal: FC = () => {
   const [csc, setCsc] = useState('')
   const [idCsc, setIdCsc] = useState('')
   const [erroCsc, setErroCsc] = useState<string | null>(null)
+  const [classificando, setClassificando] = useState(false)
+  const [remoto, setRemoto] = useState<{
+    certificado: { existe: boolean; validade: string } | null
+    creditos: number | null
+  } | null>(null)
+  const [verificando, setVerificando] = useState(false)
+  const [verificadoEm, setVerificadoEm] = useState('')
   const inputCertRef = useRef<HTMLInputElement>(null)
 
   const tocar = (campo: string) => setTocados((t) => ({ ...t, [campo]: true }))
@@ -271,6 +292,21 @@ const ConfiguracaoFiscal: FC = () => {
     carregar()
   }
 
+  // Pergunta à ACBr o estado real (certificado e créditos). Nada aqui custa
+  // crédito, então dá pra conferir à vontade.
+  const verificar = async () => {
+    setVerificando(true)
+    const r = await window.api.fiscal.statusRemoto()
+    setVerificando(false)
+    if (r.success) {
+      setRemoto(r.data)
+      setVerificadoEm(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+      carregar()
+    } else {
+      setFeedback({ tipo: 'erro', msg: r.error })
+    }
+  }
+
   // Bloco de envio do certificado (dropzone + senha + botão), reusado no estado
   // inicial e no "trocar certificado".
   const renderEnvioCertificado = () => (
@@ -341,6 +377,15 @@ const ConfiguracaoFiscal: FC = () => {
   const passo1Feito = identidadeOk && config.configurada
   const certificadoOk = Boolean(config.certificado_validade)
   const cscOk = config.csc_configurado
+
+  // "Pronto" = todos os passos que dependem do lojista concluídos.
+  const semNcmTotal = diagnostico?.produtos_sem_ncm ?? 0
+  const tudoPronto =
+    Boolean(config.empresa_cadastrada) &&
+    Boolean(config.certificado_validade) &&
+    config.csc_configurado &&
+    (diagnostico?.total_produtos ?? 0) > 0 &&
+    semNcmTotal === 0
 
   const semNcm = diagnostico?.produtos_sem_ncm ?? 0
   const totalProdutos = diagnostico?.total_produtos ?? 0
@@ -594,6 +639,69 @@ const ConfiguracaoFiscal: FC = () => {
             <Erro mostrar={Boolean(tocados.serie)} texto={erros.serie} />
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="cfop">
+                CFOP padrão <span className="text-muted-foreground font-normal">(opcional)</span>
+              </Label>
+              <Input
+                id="cfop"
+                inputMode="numeric"
+                maxLength={4}
+                className="max-w-32"
+                value={config.cfop_padrao}
+                onChange={(e) => alterar('cfop_padrao', apenasDigitos(e.target.value).slice(0, 4))}
+                placeholder="5102"
+              />
+              <p className="text-xs text-muted-foreground">
+                Usado nos produtos sem CFOP próprio. Em branco, o sistema usa 5102 (venda dentro
+                do estado). <strong>Confirme com o contador.</strong>
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="bobina">Largura da bobina</Label>
+              <select
+                id="bobina"
+                className={CLASSE_SELECT}
+                value={String(config.largura_bobina)}
+                onChange={(e) => alterar('largura_bobina', Number(e.target.value))}
+              >
+                <option value="80">80mm (padrão)</option>
+                <option value="58">58mm (estreita)</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                O tamanho do papel da sua impressora térmica.
+              </p>
+            </div>
+          </div>
+
+          {/* Ambiente — o interruptor que separa teste de nota de verdade. */}
+          <div className="space-y-1.5 rounded-md border p-3 bg-muted/10">
+            <Label htmlFor="ambiente">Ambiente de emissão</Label>
+            <select
+              id="ambiente"
+              className={CLASSE_SELECT}
+              value={config.ambiente}
+              onChange={(e) =>
+                alterar('ambiente', e.target.value as ConfigFiscal['ambiente'])
+              }
+            >
+              <option value="homologacao">Teste (as notas não valem fiscalmente)</option>
+              <option value="producao">Produção (notas válidas de verdade)</option>
+            </select>
+            {config.ambiente === 'homologacao' ? (
+              <p className="text-xs text-amber-700">
+                Em teste, as notas emitidas <strong>não têm valor fiscal</strong> — servem só pra
+                conferir se está tudo certo. Passe para produção quando validar com o contador.
+              </p>
+            ) : (
+              <p className="text-xs text-emerald-700">
+                As notas emitidas <strong>valem de verdade</strong> e vão para a Receita.
+              </p>
+            )}
+          </div>
+
           <div className="flex items-center justify-end gap-3">
             {!podeSalvar && (
               <p className="text-xs text-muted-foreground">Preencha os campos acima pra salvar.</p>
@@ -747,6 +855,13 @@ const ConfiguracaoFiscal: FC = () => {
                     </div>
                   </div>
 
+                  <div className="flex justify-end">
+                    <Button onClick={() => setClassificando(true)}>
+                      <Package className="w-4 h-4 mr-1.5" />
+                      Classificar produtos
+                    </Button>
+                  </div>
+
                   {diagnostico && diagnostico.exemplos_sem_ncm.length > 0 && (
                     <div className="text-xs">
                       <p className="text-muted-foreground mb-1.5">Por exemplo:</p>
@@ -767,14 +882,97 @@ const ConfiguracaoFiscal: FC = () => {
                   )}
                 </>
               ) : (
-                <p className="text-sm text-emerald-700">
-                  Todos os produtos têm NCM. Vale conferir com o contador mesmo assim — o
-                  sistema aproveitou a classificação que os fornecedores usaram.
-                </p>
+                <div className="space-y-3">
+                  <p className="text-sm text-emerald-700">
+                    Todos os produtos têm NCM. Vale conferir com o contador mesmo assim — o
+                    sistema aproveitou a classificação que os fornecedores usaram.
+                  </p>
+                  <div className="flex justify-end">
+                    <Button variant="outline" onClick={() => setClassificando(true)}>
+                      <Package className="w-4 h-4 mr-1.5" />
+                      Revisar classificação
+                    </Button>
+                  </div>
+                </div>
               )}
             </>
           )}
         </Passo>
+
+        {/* ── 5. Conferência final ──
+            Pergunta à ACBr como as coisas estão de verdade, em vez de confiar
+            só no que está gravado aqui. Tudo o que consulta é de graça. */}
+        <Passo
+          numero={5}
+          titulo="Está tudo pronto?"
+          descricao="Confere com o provedor fiscal antes da primeira nota de verdade."
+          estado={tudoPronto ? 'ok' : passo1Feito ? 'pendente' : 'bloqueado'}
+          icone={ShieldCheck}
+        >
+          {!passo1Feito ? (
+            <CompleteOPasso1 />
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <ItemCheck ok={config.empresa_cadastrada} texto="Empresa registrada no provedor" />
+                <ItemCheck
+                  ok={certificadoOk}
+                  texto={
+                    certificadoOk
+                      ? `Certificado válido até ${formatarData(config.certificado_validade)}`
+                      : 'Certificado digital enviado'
+                  }
+                />
+                <ItemCheck ok={cscOk} texto="Código de segurança (CSC) configurado" />
+                <ItemCheck
+                  ok={totalProdutos > 0 && semNcm === 0}
+                  texto={
+                    semNcm > 0
+                      ? `${semNcm} ${semNcm === 1 ? 'produto sem' : 'produtos sem'} classificação fiscal`
+                      : 'Produtos classificados'
+                  }
+                />
+                {remoto?.creditos !== null && remoto !== null && (
+                  <ItemCheck
+                    ok={(remoto.creditos ?? 0) > 0}
+                    texto={
+                      (remoto.creditos ?? 0) > 0
+                        ? `${remoto.creditos} créditos disponíveis`
+                        : 'Sem créditos — fale com o suporte antes de emitir em produção'
+                    }
+                  />
+                )}
+              </div>
+
+              {config.ambiente === 'homologacao' && tudoPronto && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p>
+                    Está tudo certo, mas a loja ainda está em <strong>modo teste</strong>. Emita
+                    algumas notas para conferir e depois mude para produção no passo 1.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3">
+                {verificadoEm && (
+                  <p className="text-xs text-muted-foreground">Conferido às {verificadoEm}</p>
+                )}
+                <Button variant="outline" onClick={verificar} disabled={verificando}>
+                  {verificando ? 'Conferindo…' : 'Conferir agora'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </Passo>
+
+        <Suspense fallback={null}>
+          <ClassificacaoFiscal
+            aberta={classificando}
+            onFechar={() => setClassificando(false)}
+            onMudou={carregar}
+          />
+        </Suspense>
       </div>
     </div>
   )
