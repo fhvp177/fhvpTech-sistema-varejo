@@ -1,4 +1,4 @@
-import { FC, useEffect, useMemo, useState } from 'react'
+import { FC, Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { IMaskInput } from 'react-imask'
 import { Pencil, Trash2, Plus, Search, Wallet, User, Building2 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
@@ -72,6 +72,27 @@ type FormCliente = {
   observacao: string
 }
 
+// Dados fiscais do cliente (destinatário da NF-e) — só no plano Pro; no
+// Básico a flag remove o componente e o chunk do binário.
+const CadastroFiscalCliente = __FEAT_NFE__
+  ? lazy(() => import('@/components/CadastroFiscalCliente'))
+  : null
+
+// Definido AQUI, e não importado do componente, porque ele é carregado por
+// `lazy` — um import estático traria o módulo de volta pro binário do Básico.
+const FISCAL_VAZIO: FiscalCliente = {
+  endereco_logradouro: '',
+  endereco_numero: '',
+  endereco_complemento: '',
+  endereco_bairro: '',
+  cidade: '',
+  uf: '',
+  cep: '',
+  codigo_municipio: '',
+  inscricao_estadual: '',
+  indicador_ie: '9'
+}
+
 const FORM_VAZIO: FormCliente = {
   nome: '', telefone: '', endereco: '', cpf: '', data_nascimento: '',
   tipo_pessoa: 'fisica', cnpj: '', razao_social: '', observacao: ''
@@ -142,6 +163,9 @@ const Clientes: FC = () => {
   const [dialogAberto, setDialogAberto] = useState(false)
   const [editando, setEditando] = useState<Cliente | null>(null)
   const [form, setForm] = useState<FormCliente>(FORM_VAZIO)
+  // Dados fiscais do cliente (destinatário da NF-e). Vivem à parte do form
+  // porque são gravados por outro caminho — ver window.api.fiscal.salvarCliente.
+  const [fiscal, setFiscal] = useState<FiscalCliente>(FISCAL_VAZIO)
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [clienteDividas, setClienteDividas] = useState<Cliente | null>(null)
@@ -189,6 +213,7 @@ const Clientes: FC = () => {
   const abrirNovo = () => {
     setEditando(null)
     setForm(FORM_VAZIO)
+    setFiscal(FISCAL_VAZIO)
     setErro('')
     setDialogAberto(true)
   }
@@ -281,6 +306,12 @@ const Clientes: FC = () => {
       : await window.api.clientes.criar(dados)
 
     if (resp.success) {
+      // Dados fiscais vão por um caminho próprio (não fazem parte do cadastro
+      // básico). Só para empresa, e só quando a feature existe.
+      if (__FEAT_NFE__ && ehPj) {
+        const idCliente = editando?.id ?? (resp.data as { id?: number } | null)?.id
+        if (idCliente) await window.api.fiscal.salvarCliente(idCliente, fiscal)
+      }
       await carregarClientes()
       setDialogAberto(false)
     } else {
@@ -500,6 +531,17 @@ const Clientes: FC = () => {
                   placeholder="Razão social da empresa"
                 />
               </div>
+            )}
+
+            {/* Dados exigidos pela NF-e — só para empresa, só no plano Pro. */}
+            {form.tipo_pessoa === 'juridica' && CadastroFiscalCliente && (
+              <Suspense fallback={null}>
+                <CadastroFiscalCliente
+                  clienteId={editando?.id ?? null}
+                  valor={fiscal}
+                  onChange={setFiscal}
+                />
+              </Suspense>
             )}
 
             <div className="grid gap-1.5">

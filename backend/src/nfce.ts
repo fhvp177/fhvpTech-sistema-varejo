@@ -43,6 +43,30 @@ export type VendaParaNfce = {
   desconto?: number // desconto total da venda, rateado entre os itens
   pagamentos: PagamentoNfce[]
   consumidor?: { cpf?: string; nome?: string } // NFC-e pode ser sem identificação
+  // Destinatário completo — obrigatório na NF-e (venda para empresa). A NFC-e
+  // não usa: lá o consumidor é opcional e basta o CPF.
+  destinatario?: DestinatarioNfe
+}
+
+// Quem recebe a NF-e. A SEFAZ exige endereço completo aqui: sem logradouro,
+// número, bairro, município (nome e código IBGE) ou UF, a nota é rejeitada.
+export type DestinatarioNfe = {
+  cnpj?: string
+  cpf?: string
+  nome: string
+  logradouro: string
+  numero: string
+  complemento?: string
+  bairro: string
+  cidade: string
+  uf: string
+  cep?: string
+  codigo_municipio: string
+  inscricao_estadual?: string
+  // 1 = contribuinte de ICMS · 2 = isento · 9 = não contribuinte
+  indicador_ie?: '1' | '2' | '9'
+  email?: string
+  telefone?: string
 }
 
 export type EmitenteNfce = {
@@ -105,6 +129,57 @@ function impostoSimples(item: ItemVendaNfce) {
   }
 }
 
+// Monta o bloco `dest` da NF-e a partir do destinatário, validando o que a
+// SEFAZ exige. Barra aqui, com mensagem que diz o que falta, em vez de deixar
+// a nota ser rejeitada com um código genérico depois.
+function montarDestinatario(d: DestinatarioNfe): Record<string, unknown> {
+  const faltando: string[] = []
+  if (!d.nome?.trim()) faltando.push('razão social')
+  if (!d.logradouro?.trim()) faltando.push('logradouro')
+  if (!d.numero?.trim()) faltando.push('número')
+  if (!d.bairro?.trim()) faltando.push('bairro')
+  if (!d.cidade?.trim()) faltando.push('cidade')
+  if (!d.uf?.trim()) faltando.push('estado')
+  if (!soDigitos(d.codigo_municipio)) faltando.push('município (código IBGE)')
+  const doc = soDigitos(d.cnpj ?? '') || soDigitos(d.cpf ?? '')
+  if (!doc) faltando.push('CNPJ ou CPF')
+
+  if (faltando.length) {
+    throw new ErroMontagem(
+      `Complete o cadastro fiscal do cliente para emitir NF-e. Falta: ${faltando.join(', ')}.`
+    )
+  }
+
+  const indIEDest = Number(d.indicador_ie ?? '9')
+  const ie = soDigitos(d.inscricao_estadual ?? '')
+  // Contribuinte de ICMS sem IE é contradição — a SEFAZ rejeita.
+  if (indIEDest === 1 && !ie) {
+    throw new ErroMontagem(
+      'O cliente está marcado como contribuinte de ICMS, mas não tem Inscrição Estadual cadastrada.'
+    )
+  }
+
+  const cnpj = soDigitos(d.cnpj ?? '')
+  return {
+    ...(cnpj.length === 14 ? { CNPJ: cnpj } : { CPF: soDigitos(d.cpf ?? '') }),
+    xNome: d.nome.trim(),
+    enderDest: {
+      xLgr: d.logradouro.trim(),
+      nro: d.numero.trim(),
+      ...(d.complemento?.trim() ? { xCpl: d.complemento.trim() } : {}),
+      xBairro: d.bairro.trim(),
+      cMun: soDigitos(d.codigo_municipio),
+      xMun: d.cidade.trim(),
+      UF: d.uf.trim().toUpperCase(),
+      ...(soDigitos(d.cep ?? '') ? { CEP: soDigitos(d.cep!) } : {}),
+      ...(soDigitos(d.telefone ?? '') ? { fone: soDigitos(d.telefone!) } : {})
+    },
+    indIEDest,
+    ...(indIEDest === 1 && ie ? { IE: ie } : {}),
+    ...(d.email?.trim() ? { email: d.email.trim() } : {})
+  }
+}
+
 export function montarPedidoNfce(args: {
   venda: VendaParaNfce
   emitente: EmitenteNfce
@@ -112,8 +187,11 @@ export function montarPedidoNfce(args: {
   numero: number
   ambiente: 'homologacao' | 'producao'
   referencia: string
+  /** 65 = NFC-e (consumidor final) · 55 = NF-e (venda para empresa). */
+  modelo?: 55 | 65
 }): Record<string, unknown> {
   const { venda, emitente, serie, numero, ambiente, referencia } = args
+  const modelo = args.modelo ?? 65
 
   if (emitente.crt === 3) {
     throw new ErroMontagem(
@@ -177,6 +255,18 @@ export function montarPedidoNfce(args: {
       : [{ tPag: '01', valor: vNF }]
 
   const consumidorCpf = soDigitos(venda.consumidor?.cpf ?? '')
+  const ehNfe = modelo === 55
+
+  // NF-e exige destinatário identificado; NFC-e aceita venda anônima.
+  if (ehNfe && !venda.destinatario) {
+    throw new ErroMontagem('A NF-e precisa de um cliente identificado.')
+  }
+  const dest = ehNfe ? montarDestinatario(venda.destinatario!) : null
+
+  // Operação interestadual muda o idDest (e, no Regime Normal, o cálculo do
+  // ICMS — mais um motivo pro Simples ser o escopo por ora).
+  const ufDestino = ((venda.destinatario?.uf ?? emitente.uf) || '').toUpperCase()
+  const idDest = ehNfe && ufDestino !== emitente.uf.toUpperCase() ? 2 : 1
 
   return {
     ambiente,
@@ -186,19 +276,21 @@ export function montarPedidoNfce(args: {
       ide: {
         cUF,
         natOp: 'Venda',
-        mod: 65,
+        mod: modelo,
         serie,
         nNF: numero,
         dhEmi: new Date().toISOString(),
         tpNF: 1, // saída
-        idDest: 1, // operação interna
+        idDest,
         cMunFG: soDigitos(emitente.codigo_municipio),
-        tpImp: 4, // DANFE NFC-e
+        // 4 = DANFE NFC-e (bobina) · 1 = DANFE retrato (A4), da NF-e
+        tpImp: ehNfe ? 1 : 4,
         tpEmis: 1, // normal
         tpAmb: ambiente === 'producao' ? 1 : 2,
         finNFe: 1, // normal
-        indFinal: 1, // consumidor final
-        indPres: 1, // presencial
+        // Venda para empresa não é consumo final; venda no balcão é.
+        indFinal: ehNfe ? 0 : 1,
+        indPres: 1, // presencial nos dois casos (venda no balcão)
         procEmi: 0,
         verProc: VER_PROC
       },
@@ -236,15 +328,19 @@ export function montarPedidoNfce(args: {
       pag: {
         detPag: pagamentos.map((p) => ({ tPag: p.tPag, vPag: real2(p.valor) }))
       },
-      ...(consumidorCpf
-        ? {
-            dest: {
-              CPF: consumidorCpf,
-              ...(venda.consumidor?.nome ? { xNome: venda.consumidor.nome } : {}),
-              indIEDest: 9 // não contribuinte
+      // NF-e: destinatário completo (obrigatório). NFC-e: só o CPF, se o
+      // consumidor pediu na nota — e nada, se foi venda anônima.
+      ...(dest
+        ? { dest }
+        : consumidorCpf
+          ? {
+              dest: {
+                CPF: consumidorCpf,
+                ...(venda.consumidor?.nome ? { xNome: venda.consumidor.nome } : {}),
+                indIEDest: 9 // não contribuinte
+              }
             }
-          }
-        : {})
+          : {})
     }
   }
 }

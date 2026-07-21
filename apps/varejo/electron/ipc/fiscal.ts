@@ -9,7 +9,10 @@ import {
   proximaTentativa,
   registrarNotaLocal,
   atualizarStatusNotaLocal,
-  gravarFormaPagamento
+  gravarFormaPagamento,
+  obterFiscalCliente,
+  salvarFiscalCliente,
+  type FiscalCliente
 } from '../db/queries/fiscal'
 import { requerDono, requerSessao } from '../sessao'
 import { urlBackend } from '../backendUrl'
@@ -488,11 +491,19 @@ function registrarHandlersFiscalRemoto(): void {
         // (venda de mercadoria dentro do estado), que cobre o varejo comum.
         const cfopPadrao = apenasDigitos(cfg.cfop_padrao) || '5102'
 
+        // Qual documento sai: cliente pessoa jurídica recebe NF-e (modelo 55);
+        // consumidor comum — pessoa física ou venda sem cliente — recebe NFC-e
+        // (modelo 65). O lojista não precisa entender a diferença entre os
+        // dois; o sistema decide pelo cadastro.
+        const ehPJ = venda.cliente_tipo_pessoa === 'juridica'
+        const modelo: 55 | 65 = ehPJ ? 55 : 65
+
         const tentativa = proximaTentativa(vendaId)
         const referencia = `v${vendaId}-t${tentativa}`
 
         const corpo = {
           referencia,
+          modelo,
           serie: cfg.serie_nfce,
           emitente: { uf: uf.toUpperCase(), codigo_municipio: codigoMunicipio, crt },
           venda: {
@@ -513,7 +524,28 @@ function registrarHandlersFiscalRemoto(): void {
             // NFC-e pode sair sem identificação; com CPF, entra no documento.
             consumidor: venda.cliente_cpf
               ? { cpf: venda.cliente_cpf, nome: venda.cliente_nome ?? undefined }
-              : undefined
+              : undefined,
+            // NF-e exige o destinatário completo. Quem valida o que falta é o
+            // backend, que devolve a mensagem dizendo qual campo preencher.
+            destinatario:
+              modelo === 55 && venda.destinatario
+                ? {
+                    cnpj: venda.destinatario.cnpj ?? undefined,
+                    cpf: venda.destinatario.cpf ?? undefined,
+                    nome: venda.destinatario.nome,
+                    logradouro: venda.destinatario.logradouro ?? '',
+                    numero: venda.destinatario.numero ?? '',
+                    complemento: venda.destinatario.complemento ?? undefined,
+                    bairro: venda.destinatario.bairro ?? '',
+                    cidade: venda.destinatario.cidade ?? '',
+                    uf: venda.destinatario.uf ?? '',
+                    cep: venda.destinatario.cep ?? undefined,
+                    codigo_municipio: venda.destinatario.codigo_municipio ?? '',
+                    inscricao_estadual: venda.destinatario.inscricao_estadual ?? undefined,
+                    indicador_ie: (venda.destinatario.indicador_ie ?? '9') as '1' | '2' | '9',
+                    telefone: venda.destinatario.telefone ?? undefined
+                  }
+                : undefined
           }
         }
 
@@ -563,6 +595,53 @@ function registrarHandlersFiscalRemoto(): void {
         atualizarStatusNotaLocal(nota.referencia, e.status, e.chave ?? null, e.motivo ?? null)
       }
       return { success: true, data: notaDaVenda(Number(args.vendaId)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Cadastro fiscal do cliente (destinatário da NF-e). Liberado pra vendedor:
+  // é dado de cadastro, não configuração da loja.
+  ipcMain.handle('fiscal:obterCliente', (_e, id: number) => {
+    try {
+      requerSessao()
+      return { success: true, data: obterFiscalCliente(Number(id)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('fiscal:salvarCliente', (_e, id: number, dados: FiscalCliente) => {
+    try {
+      requerSessao()
+      salvarFiscalCliente(Number(id), {
+        endereco_logradouro: (dados?.endereco_logradouro ?? '').trim(),
+        endereco_numero: (dados?.endereco_numero ?? '').trim(),
+        endereco_complemento: (dados?.endereco_complemento ?? '').trim(),
+        endereco_bairro: (dados?.endereco_bairro ?? '').trim(),
+        cidade: (dados?.cidade ?? '').trim(),
+        uf: (dados?.uf ?? '').trim().toUpperCase(),
+        cep: apenasDigitos(dados?.cep ?? ''),
+        codigo_municipio: apenasDigitos(dados?.codigo_municipio ?? ''),
+        inscricao_estadual: apenasDigitos(dados?.inscricao_estadual ?? ''),
+        indicador_ie: ['1', '2', '9'].includes(dados?.indicador_ie) ? dados.indicador_ie : '9'
+      })
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Endereço a partir do CEP (traz o código IBGE do município, obrigatório na
+  // nota). Usado no cadastro fiscal do cliente pra não fazer ninguém procurar
+  // esse número.
+  ipcMain.handle('fiscal:buscarCep', async (_e, cep: string) => {
+    try {
+      requerSessao()
+      const limpo = apenasDigitos(cep ?? '')
+      if (limpo.length !== 8) throw new Error('CEP inválido.')
+      const r = await chamarBackendFiscal(`/fiscal/cep/${limpo}`)
+      return { success: true, data: r.endereco }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

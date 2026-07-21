@@ -61,7 +61,13 @@ const SCHEMA = `
   );
   CREATE TABLE clientes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT NOT NULL, cpf TEXT, cnpj TEXT
+    nome TEXT NOT NULL, cpf TEXT, cnpj TEXT,
+    tipo_pessoa TEXT NOT NULL DEFAULT 'fisica',
+    razao_social TEXT, telefone TEXT,
+    -- campos fiscais da migration 034 (destinatário da NF-e)
+    endereco_logradouro TEXT, endereco_numero TEXT, endereco_complemento TEXT,
+    endereco_bairro TEXT, cidade TEXT, uf TEXT, cep TEXT, codigo_municipio TEXT,
+    inscricao_estadual TEXT, indicador_ie TEXT DEFAULT '9'
   );
   CREATE TABLE vendas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,7 +112,14 @@ beforeAll(() => {
              (2, 'Sem classificacao', NULL, '11', 10, NULL, NULL, NULL, '0', 'UN');
     INSERT INTO produto_variacoes (id, produto_id, tamanho, codigo_barras)
       VALUES (1, 1, 'M', '7892222222222');
-    INSERT INTO clientes (id, nome, cpf) VALUES (1, 'Maria', '111.444.777-35');
+    INSERT INTO clientes (id, nome, cpf, tipo_pessoa) VALUES (1, 'Maria', '111.444.777-35', 'fisica');
+    -- cliente PJ com cadastro fiscal completo (recebe NF-e)
+    INSERT INTO clientes (id, nome, cnpj, tipo_pessoa, razao_social, telefone,
+      endereco_logradouro, endereco_numero, endereco_bairro, cidade, uf, cep,
+      codigo_municipio, inscricao_estadual, indicador_ie)
+      VALUES (2, 'Loja do Zé', '11.444.777/0001-61', 'juridica', 'ZE COMERCIO LTDA', '1133334444',
+        'Avenida Paulista', '1000', 'Bela Vista', 'São Paulo', 'SP', '01310300',
+        '3550308', '123456789', '1');
     -- venda 1: com cliente, variação e desconto
     INSERT INTO vendas (id, cliente_id, total, desconto) VALUES (1, 1, 74.8, 5);
     INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario)
@@ -114,6 +127,9 @@ beforeAll(() => {
     -- venda 2: sem cliente (consumidor não identificado)
     INSERT INTO vendas (id, total) VALUES (2, 10);
     INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES (2, 2, 1, 10);
+    -- venda 3: cliente PJ (deve virar NF-e)
+    INSERT INTO vendas (id, cliente_id, total) VALUES (3, 2, 250);
+    INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES (3, 1, 10, 25);
   `)
   let p = 0
   banco = {
@@ -198,6 +214,51 @@ describe.runIf(sqlite)('vendaParaNota', () => {
 
   it('venda inexistente devolve null', () => {
     expect(vendaParaNota(999)).toBeNull()
+  })
+})
+
+describe.runIf(sqlite)('destinatário — o que decide NF-e ou NFC-e', () => {
+  it('cliente PJ é marcado como jurídica (vira NF-e)', () => {
+    expect(vendaParaNota(3)!.cliente_tipo_pessoa).toBe('juridica')
+  })
+
+  it('cliente PF e venda sem cliente não viram NF-e', () => {
+    expect(vendaParaNota(1)!.cliente_tipo_pessoa).toBe('fisica')
+    expect(vendaParaNota(2)!.cliente_tipo_pessoa).toBeNull()
+  })
+
+  it('destinatário traz o endereço completo que a NF-e exige', () => {
+    const d = vendaParaNota(3)!.destinatario!
+    expect(d.logradouro).toBe('Avenida Paulista')
+    expect(d.numero).toBe('1000')
+    expect(d.bairro).toBe('Bela Vista')
+    expect(d.cidade).toBe('São Paulo')
+    expect(d.uf).toBe('SP')
+    expect(d.codigo_municipio).toBe('3550308')
+  })
+
+  it('na nota vale a RAZÃO SOCIAL, não o apelido do cadastro', () => {
+    // O lojista cadastra "Loja do Zé"; a nota tem que sair com o nome legal.
+    const d = vendaParaNota(3)!.destinatario!
+    expect(d.nome).toBe('ZE COMERCIO LTDA')
+  })
+
+  it('traz IE e indicador de contribuinte', () => {
+    const d = vendaParaNota(3)!.destinatario!
+    expect(d.inscricao_estadual).toBe('123456789')
+    expect(d.indicador_ie).toBe('1') // contribuinte de ICMS
+  })
+
+  it('venda sem cliente não tem destinatário', () => {
+    expect(vendaParaNota(2)!.destinatario).toBeNull()
+  })
+
+  it('cliente PF sem cadastro fiscal tem destinatário com campos vazios', () => {
+    // Existe (tem nome), mas sem endereço — o que é normal: PF recebe NFC-e,
+    // que não exige nada disso.
+    const d = vendaParaNota(1)!.destinatario!
+    expect(d.nome).toBe('Maria')
+    expect(d.logradouro).toBeNull()
   })
 })
 

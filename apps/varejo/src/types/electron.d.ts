@@ -39,6 +39,23 @@ type ConfigFiscal = {
   configurada: boolean
 }
 
+// Cadastro fiscal do cliente — o que a NF-e exige do destinatário. Só importa
+// para cliente pessoa jurídica; consumidor comum recebe NFC-e, que não pede
+// nada disso. `indicador_ie`: 1 = contribuinte de ICMS · 2 = isento ·
+// 9 = não contribuinte.
+type FiscalCliente = {
+  endereco_logradouro: string
+  endereco_numero: string
+  endereco_complemento: string
+  endereco_bairro: string
+  cidade: string
+  uf: string
+  cep: string
+  codigo_municipio: string
+  inscricao_estadual: string
+  indicador_ie: string
+}
+
 // Nota fiscal de uma venda, como o app guarda localmente. `status` segue o
 // vocabulário da SEFAZ/ACBr: pendente → autorizado | rejeitado | denegado, e
 // cancelado depois. Uma linha por TENTATIVA (rejeição faz parte do histórico).
@@ -324,6 +341,17 @@ interface Window {
         vendaId: number
         justificativa: string
       }) => Promise<RespostaIPC<NotaFiscalVenda | null>>
+      obterCliente: (id: number) => Promise<RespostaIPC<FiscalCliente | null>>
+      salvarCliente: (id: number, dados: FiscalCliente) => Promise<RespostaIPC<null>>
+      buscarCep: (cep: string) => Promise<
+        RespostaIPC<{
+          logradouro: string
+          bairro: string
+          municipio: string
+          uf: string
+          codigo_ibge: string
+        }>
+      >
     }
     novidades: {
       estado: () => Promise<RespostaIPC<{ ultimaVersaoVista: string; guiaVisto: boolean }>>

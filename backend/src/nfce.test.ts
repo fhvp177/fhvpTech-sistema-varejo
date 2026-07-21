@@ -137,3 +137,101 @@ test('campos-chave do ide para NFC-e presencial', () => {
   assert.equal(ide.indPres, 1) // presencial
   assert.equal(ide.cUF, 35) // SP
 })
+
+// ─── NF-e (modelo 55): venda para outra empresa ───────────────────────────────
+
+const destinatario = {
+  cnpj: '11444777000161',
+  nome: 'CLIENTE EMPRESA LTDA',
+  logradouro: 'Avenida Paulista',
+  numero: '1000',
+  bairro: 'Bela Vista',
+  cidade: 'São Paulo',
+  uf: 'SP',
+  cep: '01310300',
+  codigo_municipio: '3550308',
+  indicador_ie: '9' as const
+}
+
+test('NF-e muda o que precisa mudar em relação à NFC-e', () => {
+  const p = montarPedidoNfce({
+    ...base,
+    modelo: 55,
+    venda: { itens: [item()], pagamentos: [], destinatario }
+  })
+  const ide = inf(p).ide
+  assert.equal(ide.mod, 55) // NF-e
+  assert.equal(ide.tpImp, 1) // DANFE retrato (A4), não bobina
+  assert.equal(ide.indFinal, 0) // venda para empresa não é consumo final
+  assert.equal(inf(p).dest.xNome, 'CLIENTE EMPRESA LTDA')
+  assert.equal(inf(p).dest.enderDest.cMun, '3550308')
+})
+
+test('NF-e sem destinatário é barrada', () => {
+  assert.throws(
+    () => montarPedidoNfce({ ...base, modelo: 55, venda: { itens: [item()], pagamentos: [] } }),
+    ErroMontagem
+  )
+})
+
+test('destinatário incompleto diz exatamente o que falta', () => {
+  assert.throws(
+    () =>
+      montarPedidoNfce({
+        ...base,
+        modelo: 55,
+        venda: {
+          itens: [item()],
+          pagamentos: [],
+          destinatario: { ...destinatario, bairro: '', codigo_municipio: '' }
+        }
+      }),
+    (e: unknown) =>
+      e instanceof ErroMontagem &&
+      /bairro/.test((e as Error).message) &&
+      /IBGE/.test((e as Error).message)
+  )
+})
+
+test('contribuinte de ICMS sem Inscrição Estadual é contradição barrada', () => {
+  // A SEFAZ rejeitaria; melhor explicar antes de gastar a tentativa.
+  assert.throws(
+    () =>
+      montarPedidoNfce({
+        ...base,
+        modelo: 55,
+        venda: {
+          itens: [item()],
+          pagamentos: [],
+          destinatario: { ...destinatario, indicador_ie: '1', inscricao_estadual: '' }
+        }
+      }),
+    (e: unknown) => e instanceof ErroMontagem && /Inscrição Estadual/.test((e as Error).message)
+  )
+})
+
+test('venda para fora do estado é marcada como interestadual', () => {
+  const p = montarPedidoNfce({
+    ...base,
+    modelo: 55,
+    venda: {
+      itens: [item()],
+      pagamentos: [],
+      destinatario: { ...destinatario, uf: 'RJ', cidade: 'Rio de Janeiro', codigo_municipio: '3304557' }
+    }
+  })
+  assert.equal(inf(p).ide.idDest, 2) // 2 = interestadual
+})
+
+test('CNPJ do destinatário vai limpo, sem máscara', () => {
+  const p = montarPedidoNfce({
+    ...base,
+    modelo: 55,
+    venda: {
+      itens: [item()],
+      pagamentos: [],
+      destinatario: { ...destinatario, cnpj: '11.444.777/0001-61' }
+    }
+  })
+  assert.equal(inf(p).dest.CNPJ, '11444777000161')
+})

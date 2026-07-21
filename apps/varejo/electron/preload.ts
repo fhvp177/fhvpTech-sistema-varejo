@@ -237,7 +237,13 @@ const api = {
     danfe: (args: { vendaId: number }): Promise<RespostaIPC> =>
       ipcRenderer.invoke('fiscal:danfe', args),
     cancelarNfce: (args: { vendaId: number; justificativa: string }): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('fiscal:cancelarNfce', args)
+      ipcRenderer.invoke('fiscal:cancelarNfce', args),
+    // Cadastro fiscal do cliente (destinatário da NF-e).
+    obterCliente: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:obterCliente', id),
+    salvarCliente: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:salvarCliente', id, dados),
+    buscarCep: (cep: string): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:buscarCep', cep)
   },
 
   // Onboarding (tutorial de primeira abertura: guia + checklist)

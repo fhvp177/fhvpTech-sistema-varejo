@@ -35,6 +35,25 @@ export type ItemFiscalVenda = {
   codigo_barras: string | null
 }
 
+// Dados fiscais do cliente — só usados na NF-e (venda para empresa), onde a
+// SEFAZ exige o destinatário completo.
+export type DestinatarioFiscal = {
+  nome: string
+  cnpj: string | null
+  cpf: string | null
+  logradouro: string | null
+  numero: string | null
+  complemento: string | null
+  bairro: string | null
+  cidade: string | null
+  uf: string | null
+  cep: string | null
+  codigo_municipio: string | null
+  inscricao_estadual: string | null
+  indicador_ie: string | null
+  telefone: string | null
+}
+
 export type VendaFiscal = {
   id: number
   total: number
@@ -44,6 +63,9 @@ export type VendaFiscal = {
   cliente_nome: string | null
   cliente_cpf: string | null
   cliente_cnpj: string | null
+  /** 'juridica' decide o documento: PJ → NF-e, PF/sem cliente → NFC-e. */
+  cliente_tipo_pessoa: string | null
+  destinatario: DestinatarioFiscal | null
   itens: ItemFiscalVenda[]
 }
 
@@ -53,16 +75,47 @@ export type VendaFiscal = {
 export function vendaParaNota(vendaId: number): VendaFiscal | null {
   const db = obterBancoDeDados()
 
-  const venda = db
+  const linha = db
     .prepare(
       `SELECT v.id, v.total, v.desconto, v.cancelada, v.forma_pagamento,
-              c.nome AS cliente_nome, c.cpf AS cliente_cpf, c.cnpj AS cliente_cnpj
+              c.nome AS cliente_nome, c.cpf AS cliente_cpf, c.cnpj AS cliente_cnpj,
+              c.tipo_pessoa AS cliente_tipo_pessoa, c.razao_social, c.telefone,
+              c.endereco_logradouro, c.endereco_numero, c.endereco_complemento,
+              c.endereco_bairro, c.cidade, c.uf, c.cep, c.codigo_municipio,
+              c.inscricao_estadual, c.indicador_ie
        FROM vendas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
        WHERE v.id = ?`
     )
-    .get(vendaId) as Omit<VendaFiscal, 'itens'> | undefined
-  if (!venda) return null
+    .get(vendaId) as
+    | (Omit<VendaFiscal, 'itens' | 'destinatario'> & Record<string, string | null>)
+    | undefined
+  if (!linha) return null
+
+  // Destinatário só existe quando há cliente com nome — a NF-e precisa dele,
+  // a NFC-e ignora.
+  const destinatario: DestinatarioFiscal | null = linha.cliente_nome
+    ? {
+        // Na nota vale a razão social; o "nome" do cadastro costuma ser o
+        // apelido pelo qual a loja conhece o cliente.
+        nome: linha.razao_social || linha.cliente_nome,
+        cnpj: linha.cliente_cnpj,
+        cpf: linha.cliente_cpf,
+        logradouro: linha.endereco_logradouro,
+        numero: linha.endereco_numero,
+        complemento: linha.endereco_complemento,
+        bairro: linha.endereco_bairro,
+        cidade: linha.cidade,
+        uf: linha.uf,
+        cep: linha.cep,
+        codigo_municipio: linha.codigo_municipio,
+        inscricao_estadual: linha.inscricao_estadual,
+        indicador_ie: linha.indicador_ie,
+        telefone: linha.telefone
+      }
+    : null
+
+  const venda = { ...linha, destinatario }
 
   const itens = db
     .prepare(
@@ -184,6 +237,65 @@ export function atualizarStatusNotaLocal(
          atualizada_em = datetime('now')
      WHERE referencia = ?`
   ).run(status, chave, motivo, referencia)
+}
+
+// ─── Cadastro fiscal do cliente (destinatário da NF-e) ────────────────────────
+// Fica separado de criarCliente/atualizarCliente de propósito: aquelas funções
+// são usadas no PDV e no cadastro rápido, e não quero acrescentar campos
+// obrigatórios a um caminho que já funciona. Aqui só o que a NF-e precisa.
+
+export type FiscalCliente = {
+  endereco_logradouro: string
+  endereco_numero: string
+  endereco_complemento: string
+  endereco_bairro: string
+  cidade: string
+  uf: string
+  cep: string
+  codigo_municipio: string
+  inscricao_estadual: string
+  indicador_ie: string
+}
+
+export function obterFiscalCliente(id: number): FiscalCliente | null {
+  const db = obterBancoDeDados()
+  const r = db
+    .prepare(
+      `SELECT endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro,
+              cidade, uf, cep, codigo_municipio, inscricao_estadual, indicador_ie
+       FROM clientes WHERE id = ?`
+    )
+    .get(id) as Record<string, string | null> | undefined
+  if (!r) return null
+  // Normaliza nulos em string vazia — a tela trabalha com campos controlados.
+  return {
+    endereco_logradouro: r.endereco_logradouro ?? '',
+    endereco_numero: r.endereco_numero ?? '',
+    endereco_complemento: r.endereco_complemento ?? '',
+    endereco_bairro: r.endereco_bairro ?? '',
+    cidade: r.cidade ?? '',
+    uf: r.uf ?? '',
+    cep: r.cep ?? '',
+    codigo_municipio: r.codigo_municipio ?? '',
+    inscricao_estadual: r.inscricao_estadual ?? '',
+    indicador_ie: r.indicador_ie ?? '9'
+  }
+}
+
+export function salvarFiscalCliente(id: number, dados: FiscalCliente): void {
+  const db = obterBancoDeDados()
+  db.prepare(
+    `UPDATE clientes SET
+       endereco_logradouro = @endereco_logradouro,
+       endereco_numero = @endereco_numero,
+       endereco_complemento = @endereco_complemento,
+       endereco_bairro = @endereco_bairro,
+       cidade = @cidade, uf = @uf, cep = @cep,
+       codigo_municipio = @codigo_municipio,
+       inscricao_estadual = @inscricao_estadual,
+       indicador_ie = @indicador_ie
+     WHERE id = @id`
+  ).run({ ...dados, id })
 }
 
 // Grava como o cliente pagou. Hoje vem do modal ao emitir a nota; quando o TEF

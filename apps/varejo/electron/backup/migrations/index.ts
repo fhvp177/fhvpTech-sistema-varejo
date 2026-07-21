@@ -32,6 +32,7 @@ import { aplicar030LojaIdentidadeLegada } from './030_loja_identidade_legada'
 import { aplicar031FiscalNfce } from './031_fiscal_nfce'
 import { aplicar032FiscalEndereco } from './032_fiscal_endereco'
 import { aplicar033VendaFormaPagamento } from './033_venda_forma_pagamento'
+import { aplicar034ClienteFiscal } from './034_cliente_fiscal'
 
 // Lista de migrations do varejo, na ordem de aplicação. O runner genérico
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
@@ -70,4 +71,5 @@ export const MIGRATIONS: Migration[] = [
   { nome: '031_fiscal_nfce', aplicar: aplicar031FiscalNfce },
   { nome: '032_fiscal_endereco', aplicar: aplicar032FiscalEndereco },
   { nome: '033_venda_forma_pagamento', aplicar: aplicar033VendaFormaPagamento },
+  { nome: '034_cliente_fiscal', aplicar: aplicar034ClienteFiscal },
 ]

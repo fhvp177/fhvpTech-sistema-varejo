@@ -236,6 +236,8 @@ export function registrarRotasFiscais(app: Hono): void {
       serie?: number
       emitente?: Omit<EmitenteNfce, 'cnpj'>
       venda?: VendaParaNfce
+      /** 65 = NFC-e (consumidor) · 55 = NF-e (empresa). Padrão: 65. */
+      modelo?: 55 | 65
     }>()
     const lic = exigirLicenca(body.clienteId)
     if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
@@ -254,9 +256,12 @@ export function registrarRotasFiscais(app: Hono): void {
       return c.json({ ok: true, jaEmitida: true, emissao: existente })
     }
 
+    const modelo = body.modelo === 55 ? 55 : 65
     const serie = Number.isInteger(body.serie) ? (body.serie as number) : 1
     // 2) Reserva o número ANTES de montar/enviar.
-    const numero = reservarNumeroNfce(clienteId, serie)
+    //    NF-e e NFC-e têm sequências INDEPENDENTES (são documentos distintos
+    //    para a SEFAZ), por isso o modelo entra na chave da numeração.
+    const numero = reservarNumeroNfce(`${clienteId}|${modelo}`, serie)
 
     let pedido: Record<string, unknown>
     try {
@@ -266,12 +271,13 @@ export function registrarRotasFiscais(app: Hono): void {
         serie,
         numero,
         ambiente: c.req.query('ambiente') === 'producao' ? 'producao' : 'homologacao',
-        referencia: body.referencia
+        referencia: body.referencia,
+        modelo
       })
     } catch (e) {
       // Erro de montagem (ex.: produto sem NCM): a nota nem foi transmitida —
       // devolve o número pra não abrir buraco na sequência.
-      devolverNumeroNfce(clienteId, serie, numero)
+      devolverNumeroNfce(`${clienteId}|${modelo}`, serie, numero)
       if (e instanceof ErroMontagem) return c.json({ erro: e.message, codigo: 'validacao' }, 400)
       throw e
     }
@@ -280,9 +286,11 @@ export function registrarRotasFiscais(app: Hono): void {
     //    transmitida (mesmo se rejeitada) → número consumido, registra.
     let dfe: RespostaDfe
     try {
-      dfe = await chamarAcbr<RespostaDfe>('/nfce', { metodo: 'POST', corpo: pedido })
+      // Endpoints distintos: /nfe (modelo 55) e /nfce (modelo 65).
+      const rota = modelo === 55 ? '/nfe' : '/nfce'
+      dfe = await chamarAcbr<RespostaDfe>(rota, { metodo: 'POST', corpo: pedido })
     } catch (e) {
-      devolverNumeroNfce(clienteId, serie, numero)
+      devolverNumeroNfce(`${clienteId}|${modelo}`, serie, numero)
       const { status, corpo } = responderErro(e)
       return c.json(corpo, status as 400)
     }
