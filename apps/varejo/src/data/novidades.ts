@@ -7,6 +7,48 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.29.0',
+    itens: [
+      // A nota fiscal só existe no plano Pro. Anunciá-la a quem não a tem seria
+      // prometer o que a tela não entrega — a flag tira o item (e o texto) do
+      // binário do Básico.
+      ...(__FEAT_NFE__
+        ? [
+            {
+              emoji: '🧾',
+              titulo: 'Emissão de nota fiscal',
+              descricao:
+                'O sistema passa a emitir nota fiscal eletrônica diretamente pela tela de Vendas. Para venda ao consumidor é emitida a NFC-e, que sai na mesma impressora térmica dos cupons; para venda a empresa, a NF-e em folha A4 — o sistema escolhe o documento conforme o cliente da venda. A habilitação é feita na nova tela "Nota fiscal", que reúne os dados da empresa, o certificado digital, o código de segurança e a classificação fiscal dos produtos. As notas emitidas e os arquivos XML para o contador ficam disponíveis em Relatórios.'
+            }
+          ]
+        : []),
+      {
+        emoji: '🧮',
+        titulo: 'Calculadora dentro do sistema',
+        descricao:
+          'Uma calculadora passa a ficar disponível na barra lateral. Ela abre em uma janela flutuante que pode ser posicionada em qualquer lugar da tela, permitindo fazer contas sem sair do sistema. Também aceita o teclado do computador.'
+      },
+      {
+        emoji: '⚙️',
+        titulo: 'Configurações mais organizadas',
+        descricao:
+          'As seções de Configurações agora podem ser recolhidas, e cada uma exibe um resumo do que está configurado quando está fechada. O sistema lembra quais seções ficaram abertas. A seção de Backup permanece sempre visível.'
+      },
+      {
+        emoji: '👤',
+        titulo: 'O perfil "Dono" passa a se chamar "Gerente"',
+        descricao:
+          'O perfil com acesso total ao sistema passa a ser identificado como "Gerente" em todas as telas. Nada muda no funcionamento nem nas permissões: é apenas o nome exibido.'
+      },
+      {
+        emoji: '📋',
+        titulo: 'Tabela de referências em ordem numérica',
+        descricao:
+          'A tabela de referências para impressão passa a ser ordenada pelo número da referência, em ordem crescente, facilitando a consulta no balcão.'
+      }
+    ]
+  },
+  {
     versao: '1.28.1',
     itens: [
       {
