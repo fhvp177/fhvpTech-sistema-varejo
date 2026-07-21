@@ -1,4 +1,4 @@
-import { FC, useEffect, useRef, useState } from 'react'
+import { FC, Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2 } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
 import { IMaskInput } from 'react-imask'
@@ -28,6 +28,12 @@ import { usePdvMode, useSessao } from '@/App'
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
 import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancelarVenda'
+
+// Nota fiscal só existe no plano Pro. Com a flag falsa, o `lazy` vira null e o
+// bundler tira o componente (e o chunk) do binário do Básico.
+const BotaoNotaFiscal = __FEAT_NFE__
+  ? lazy(() => import('@/components/BotaoNotaFiscal'))
+  : null
 
 const ITENS_POR_PAGINA = 20
 
@@ -243,6 +249,8 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [devolverVendaId, setDevolverVendaId] = useState<number | null>(null)
   const [vendaCancelar, setVendaCancelar] = useState<VendaCancelar | null>(null)
   const [menuImprimir, setMenuImprimir] = useState<{ vendaId: number; devolucoes: DevolucaoComItens[] } | null>(null)
+  // Nota fiscal de cada venda (só plano Pro). Mapa venda_id → nota.
+  const [notas, setNotas] = useState<Record<number, NotaFiscalVenda>>({})
   const [relatorioAberto, setRelatorioAberto] = useState(false)
   const [relMes, setRelMes] = useState('') // mês escolhido dentro do diálogo de relatório
   const [relIncluiProdutos, setRelIncluiProdutos] = useState(false)
@@ -258,7 +266,16 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
       window.api.vendas.listar(mes || undefined),
       window.api.vendas.listarCanceladas(mes || undefined)
     ])
-    if (resp.success) setLista(resp.data as Venda[])
+    if (resp.success) {
+      const vendas = resp.data as Venda[]
+      setLista(vendas)
+      // Estado fiscal de todas as vendas numa consulta só (local, sem rede) —
+      // uma por linha deixaria a lista lenta.
+      if (__FEAT_NFE__ && vendas.length) {
+        const rn = await window.api.fiscal.notasDasVendas(vendas.map((v) => v.id))
+        if (rn.success) setNotas(rn.data)
+      }
+    }
     if (respCanc.success) setListaCanceladas(respCanc.data as Venda[])
   }
 
@@ -720,6 +737,24 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     >
                       <Printer className="w-4 h-4" />
                     </Button>
+                    {BotaoNotaFiscal && (
+                      <Suspense fallback={null}>
+                        <BotaoNotaFiscal
+                          vendaId={v.id}
+                          aPrazo={v.status_pagamento !== 'pago'}
+                          nota={notas[v.id] ?? null}
+                          onMudou={(nota) =>
+                            setNotas((m) => {
+                              if (!nota) {
+                                const { [v.id]: _, ...resto } = m
+                                return resto
+                              }
+                              return { ...m, [v.id]: nota }
+                            })
+                          }
+                        />
+                      </Suspense>
+                    )}
                     {v.status_pagamento === 'pago' && seloDevolucao(v)?.label !== 'Totalmente devolvida' && (
                       <Button
                         variant="ghost"

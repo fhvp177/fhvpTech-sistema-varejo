@@ -39,6 +39,24 @@ type ConfigFiscal = {
   configurada: boolean
 }
 
+// Nota fiscal de uma venda, como o app guarda localmente. `status` segue o
+// vocabulário da SEFAZ/ACBr: pendente → autorizado | rejeitado | denegado, e
+// cancelado depois. Uma linha por TENTATIVA (rejeição faz parte do histórico).
+type NotaFiscalVenda = {
+  id: number
+  venda_id: number
+  tentativa: number
+  referencia: string
+  acbr_id: string | null
+  ambiente: string
+  serie: number
+  numero: number
+  chave: string | null
+  status: 'pendente' | 'autorizado' | 'rejeitado' | 'denegado' | 'cancelado' | 'erro'
+  motivo: string | null
+  criada_em: string
+}
+
 // Diagnóstico "a loja está pronta pra emitir?" — calculado no banco local,
 // sem chamar a API e sem gastar crédito.
 type DiagnosticoFiscal = {
@@ -293,6 +311,12 @@ interface Window {
           creditos: number | null
         }>
       >
+      emitirNfce: (args: {
+        vendaId: number
+        formaPagamento?: string
+      }) => Promise<RespostaIPC<{ jaEmitida: boolean; nota: NotaFiscalVenda | null }>>
+      statusNfce: (args: { vendaId: number }) => Promise<RespostaIPC<NotaFiscalVenda | null>>
+      notasDasVendas: (ids: number[]) => Promise<RespostaIPC<Record<number, NotaFiscalVenda>>>
     }
     novidades: {
       estado: () => Promise<RespostaIPC<{ ultimaVersaoVista: string; guiaVisto: boolean }>>

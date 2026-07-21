@@ -1,8 +1,17 @@
 import { ipcMain } from 'electron'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
-import { diagnosticoFiscal } from '../db/queries/fiscal'
-import { requerDono } from '../sessao'
+import {
+  diagnosticoFiscal,
+  vendaParaNota,
+  notaDaVenda,
+  notasDasVendas,
+  proximaTentativa,
+  registrarNotaLocal,
+  atualizarStatusNotaLocal,
+  gravarFormaPagamento
+} from '../db/queries/fiscal'
+import { requerDono, requerSessao } from '../sessao'
 import { urlBackend } from '../backendUrl'
 
 // Configuração fiscal da loja (NFC-e). Mora na tabela `config` (key-value),
@@ -31,6 +40,23 @@ export type RegimeTributario = '' | '1' | '2' | '3'
 // é SCAN). Mesmos números que a tela usa — ver src/utils/validacaoFiscal.ts.
 const SERIE_MIN = 0
 const SERIE_MAX = 889
+
+// Como a loja chama a forma de pagamento → código que a SEFAZ entende (tPag).
+// Quando o TEF entrar, a transação do cartão já devolve débito/crédito e cai
+// direto neste mesmo mapa.
+const TPAG_POR_FORMA: Record<string, string> = {
+  dinheiro: '01',
+  cheque: '02',
+  credito: '03', // cartão de crédito
+  debito: '04', // cartão de débito
+  crediario: '05', // fiado / crédito da própria loja
+  pix: '17',
+  outro: '99'
+}
+
+function tPagDaForma(forma: string): string {
+  return TPAG_POR_FORMA[(forma ?? '').toLowerCase()] ?? '99'
+}
 
 export type ConfigFiscal = {
   inscricao_estadual: string
@@ -412,6 +438,146 @@ function registrarHandlersFiscalRemoto(): void {
       }
     }
   )
+
+  // ── Emissão da NFC-e de uma venda ───────────────────────────────────────────
+  // REGRA DE OURO: isto roda SEMPRE depois da venda gravada, nunca durante.
+  // Se a SEFAZ estiver fora do ar, ou faltar crédito, ou o certificado vencer,
+  // a venda continua existindo e o caixa continua vendendo — a nota fica
+  // pendente e pode ser reenviada. Nota fiscal segurando a fila do caixa é
+  // inaceitável numa loja.
+  ipcMain.handle(
+    'fiscal:emitirNfce',
+    async (_e, args: { vendaId: number; formaPagamento?: string }) => {
+      try {
+        // Emitir é rotina de balcão: qualquer usuário logado pode. Só a
+        // CONFIGURAÇÃO fiscal (certificado, CSC, regime) é do dono.
+        requerSessao()
+        const vendaId = Number(args?.vendaId)
+        if (!Number.isInteger(vendaId) || vendaId <= 0) throw new Error('Venda inválida.')
+
+        const venda = vendaParaNota(vendaId)
+        if (!venda) throw new Error('Venda não encontrada.')
+        if (venda.cancelada) throw new Error('Esta venda foi cancelada — não pode gerar nota.')
+        if (!venda.itens.length) throw new Error('Esta venda não tem itens.')
+
+        // Já existe nota vigente? Não emite outra (a trava definitiva é o índice
+        // único no banco e a idempotência do backend; aqui é só cortesia, pra
+        // dar uma mensagem clara em vez de erro de banco).
+        const atual = notaDaVenda(vendaId)
+        if (atual && ['autorizado', 'pendente'].includes(atual.status)) {
+          return { success: true, data: { jaEmitida: true, nota: atual } }
+        }
+
+        // Forma de pagamento: grava na venda (o TEF preencherá este mesmo campo
+        // no futuro). Venda a prazo não pergunta — é crediário por definição.
+        const forma = (args?.formaPagamento ?? '').trim() || venda.forma_pagamento || ''
+        if (!forma) throw new Error('Informe a forma de pagamento.')
+        if (forma !== venda.forma_pagamento) gravarFormaPagamento(vendaId, forma)
+
+        const cfg = obterConfigFiscal()
+        if (!cfg.configurada) throw new Error('Configure a nota fiscal antes de emitir.')
+        const crt = Number(cfg.regime_tributario)
+        if (![1, 2, 3].includes(crt)) throw new Error('Defina o regime tributário.')
+
+        const uf = lerConfig('loja_uf')
+        const codigoMunicipio = apenasDigitos(lerConfig('fiscal_codigo_municipio'))
+        if (!uf) throw new Error('Preencha o estado da loja em Dados da loja.')
+        if (!codigoMunicipio) throw new Error('Município da loja não resolvido — abra a tela de Nota fiscal.')
+
+        // CFOP: o do produto manda; sem ele, o padrão da loja; sem nada, 5102
+        // (venda de mercadoria dentro do estado), que cobre o varejo comum.
+        const cfopPadrao = apenasDigitos(cfg.cfop_padrao) || '5102'
+
+        const tentativa = proximaTentativa(vendaId)
+        const referencia = `v${vendaId}-t${tentativa}`
+
+        const corpo = {
+          referencia,
+          serie: cfg.serie_nfce,
+          emitente: { uf: uf.toUpperCase(), codigo_municipio: codigoMunicipio, crt },
+          venda: {
+            itens: venda.itens.map((i) => ({
+              nome: i.nome,
+              ncm: apenasDigitos(i.ncm ?? ''),
+              cfop: apenasDigitos(i.cfop ?? '') || cfopPadrao,
+              cst_csosn: (i.cst_csosn ?? '').trim(),
+              origem: (i.origem ?? '0').trim(),
+              unidade: (i.unidade ?? 'UN').trim(),
+              quantidade: i.quantidade,
+              valor_unitario: i.valor_unitario,
+              codigo: i.codigo ?? undefined,
+              codigo_barras: i.codigo_barras ?? undefined
+            })),
+            desconto: venda.desconto || 0,
+            pagamentos: [{ tPag: tPagDaForma(forma), valor: venda.total }],
+            // NFC-e pode sair sem identificação; com CPF, entra no documento.
+            consumidor: venda.cliente_cpf
+              ? { cpf: venda.cliente_cpf, nome: venda.cliente_nome ?? undefined }
+              : undefined
+          }
+        }
+
+        const r = await chamarBackendFiscal('/fiscal/nfce', { metodo: 'POST', corpo })
+        const emissao = (r.emissao ?? {}) as {
+          serie?: number
+          numero?: number
+          acbr_id?: string | null
+          status?: string
+          chave?: string | null
+          motivo?: string | null
+        }
+
+        registrarNotaLocal({
+          venda_id: vendaId,
+          tentativa,
+          referencia,
+          acbr_id: emissao.acbr_id ?? null,
+          ambiente: cfg.ambiente,
+          serie: emissao.serie ?? cfg.serie_nfce,
+          numero: emissao.numero ?? 0,
+          chave: emissao.chave ?? null,
+          status: emissao.status ?? 'pendente',
+          motivo: emissao.motivo ?? null
+        })
+
+        return { success: true, data: { jaEmitida: Boolean(r.jaEmitida), nota: notaDaVenda(vendaId) } }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  // Consulta o desfecho de uma nota que ficou pendente (a emissão é assíncrona:
+  // a SEFAZ responde em segundos, mas não na mesma requisição). Consultar
+  // status não custa crédito.
+  ipcMain.handle('fiscal:statusNfce', async (_e, args: { vendaId: number }) => {
+    try {
+      requerSessao()
+      const nota = notaDaVenda(Number(args?.vendaId))
+      if (!nota) return { success: true, data: null }
+      if (nota.status !== 'pendente') return { success: true, data: nota }
+
+      const r = await chamarBackendFiscal(`/fiscal/nfce/${nota.referencia}`)
+      const e = (r.emissao ?? {}) as { status?: string; chave?: string | null; motivo?: string | null }
+      if (e.status && e.status !== nota.status) {
+        atualizarStatusNotaLocal(nota.referencia, e.status, e.chave ?? null, e.motivo ?? null)
+      }
+      return { success: true, data: notaDaVenda(Number(args.vendaId)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Estado das notas de várias vendas — a lista de vendas pinta o status de
+  // cada linha com uma consulta só, sem ir à rede.
+  ipcMain.handle('fiscal:notasDasVendas', (_e, ids: number[]) => {
+    try {
+      const lista = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isInteger)
+      return { success: true, data: notasDasVendas(lista) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
 
   // Estado remoto pro semáforo: saldo de créditos e certificado na ACBr.
   ipcMain.handle('fiscal:statusRemoto', async () => {
