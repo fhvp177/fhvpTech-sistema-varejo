@@ -120,7 +120,15 @@ const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou, ehDono = f
       return
     }
     setAberta(false)
-    await imprimirPdf(r.data.pdfBase64, `danfe-${r.data.numero}`, 'cupom')
+    // A NFC-e sai na térmica (bobina), como o cupom. A NF-e é A4 e vai pra
+    // impressora de documentos — mandar as duas pro mesmo lugar faria a NF-e
+    // sair cortada na bobina.
+    const ehNfe = nota?.modelo === 55
+    await imprimirPdf(
+      r.data.pdfBase64,
+      `${ehNfe ? 'nfe' : 'danfe'}-${r.data.numero}`,
+      ehNfe ? 'documento' : 'cupom'
+    )
   }
 
   const cancelar = async () => {

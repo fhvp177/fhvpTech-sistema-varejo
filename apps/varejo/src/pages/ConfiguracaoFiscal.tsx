@@ -296,6 +296,10 @@ const ConfiguracaoFiscal: FC = () => {
   // crédito, então dá pra conferir à vontade.
   const verificar = async () => {
     setVerificando(true)
+    // Resolve o município pelo CEP agora, se ainda faltar. A emissão faria isso
+    // sozinha, mas descobrir um CEP errado aqui — com calma — é melhor do que
+    // no balcão, com o cliente esperando a nota.
+    if (!config?.codigo_municipio) await window.api.fiscal.resolverMunicipio()
     const r = await window.api.fiscal.statusRemoto()
     setVerificando(false)
     if (r.success) {

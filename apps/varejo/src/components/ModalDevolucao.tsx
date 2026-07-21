@@ -1,5 +1,5 @@
 import { FC, useEffect, useMemo, useState } from 'react'
-import { Wallet, Banknote, UserPlus, ShieldAlert } from 'lucide-react'
+import { Wallet, Banknote, UserPlus, ShieldAlert, AlertTriangle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,9 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
   const { showToast } = useToast()
   const imprimir = useImprimir()
   const aberto = vendaId !== null
+  // Nota fiscal da venda: devolver mercadoria com nota emitida tem implicação
+  // fiscal que o sistema NÃO resolve sozinho — mas também não pode ficar mudo.
+  const [notaDaVenda, setNotaDaVenda] = useState<NotaFiscalVenda | null>(null)
 
   const [carregando, setCarregando] = useState(false)
   const [statusOk, setStatusOk] = useState(true)
@@ -100,6 +103,12 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
       if (rClientes.success) setClientes(rClientes.data as Cliente[])
       setCarregando(false)
     })
+
+    if (__FEAT_NFE__) {
+      window.api.fiscal.notasDasVendas([vendaId!]).then((r) => {
+        setNotaDaVenda(r.success ? (r.data[vendaId!] ?? null) : null)
+      })
+    }
   }, [aberto, vendaId])
 
   // Saldo de crédito do cliente que vai receber (mostra atual + novo).
@@ -257,6 +266,25 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
           <DialogHeader>
             <DialogTitle>Devolução — Venda #{vendaId}</DialogTitle>
           </DialogHeader>
+
+          {/* Devolver com nota emitida exige um documento fiscal de entrada,
+              que o sistema ainda não emite. Avisar é o mínimo honesto: o
+              lojista precisa saber que há uma pendência com o contador. */}
+          {notaDaVenda?.status === 'autorizado' && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p>
+                  Esta venda tem a <strong>nota fiscal nº {notaDaVenda.numero}</strong> autorizada.
+                </p>
+                <p>
+                  A devolução aqui acerta o seu estoque e o dinheiro, mas{' '}
+                  <strong>não desfaz a nota</strong>. Combine com o seu contador como registrar
+                  esta devolução — normalmente é preciso um documento fiscal de entrada.
+                </p>
+              </div>
+            </div>
+          )}
 
           {carregando ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Carregando itens…</p>

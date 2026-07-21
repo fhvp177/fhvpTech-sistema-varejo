@@ -257,6 +257,7 @@ export function registrarHandlersFiscal(): void {
 
   ipcMain.handle('fiscal:diasParaVencerCertificado', () => {
     try {
+      requerSessao()
       return { success: true, data: diasParaVencerCertificado() }
     } catch (error) {
       return { success: false, error: (error as Error).message }
@@ -874,6 +875,7 @@ function registrarHandlersFiscalRemoto(): void {
   // cada linha com uma consulta só, sem ir à rede.
   ipcMain.handle('fiscal:notasDasVendas', (_e, ids: number[]) => {
     try {
+      requerSessao()
       const lista = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isInteger)
       return { success: true, data: notasDasVendas(lista) }
     } catch (error) {

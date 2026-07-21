@@ -1,4 +1,4 @@
-import { FC, Fragment, useEffect, useRef, useState } from 'react'
+import { FC, Fragment, Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, FileUp, FileText, ChevronRight, ChevronDown, Layers, Info } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
@@ -83,6 +83,21 @@ const construirGrade = (vs: Variacao[]): FormVariacao[] => {
   return [...base, ...extras]
 }
 
+// Campos fiscais do produto — só no plano Pro; a flag tira o chunk do Básico.
+const FiscalProdutoCampos = __FEAT_NFE__
+  ? lazy(() => import('@/components/FiscalProdutoCampos'))
+  : null
+
+// Definido aqui, não importado do componente lazy (senão o módulo volta pro
+// binário do Básico).
+const FISCAL_PRODUTO_VAZIO: FiscalProduto = {
+  ncm: '',
+  cfop: '',
+  cst_csosn: '',
+  origem: '0',
+  unidade: 'UN'
+}
+
 const FORM_VAZIO: FormProduto = {
   codigo_barras: '',
   referencia: '',
@@ -108,6 +123,8 @@ const Produtos: FC = () => {
   const [dialogAberto, setDialogAberto] = useState(false)
   const [editando, setEditando] = useState<Produto | null>(null)
   const [form, setForm] = useState<FormProduto>(FORM_VAZIO)
+  // Classificação fiscal, gravada por caminho próprio (ver salvar()).
+  const [fiscalProduto, setFiscalProduto] = useState<FiscalProduto>(FISCAL_PRODUTO_VAZIO)
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [paginaAtual, setPaginaAtual] = useState(1)
@@ -205,6 +222,7 @@ const Produtos: FC = () => {
   const listaPaginada = listaFiltrada.slice(inicioPagina, inicioPagina + ITENS_POR_PAGINA)
 
   const abrirNovo = () => {
+    setFiscalProduto(FISCAL_PRODUTO_VAZIO)
     setEditando(null)
     setForm(FORM_VAZIO)
     setErro('')
@@ -300,6 +318,12 @@ const Produtos: FC = () => {
       : await window.api.produtos.criar(dados)
 
     if (resp.success) {
+      // Dados fiscais seguem por caminho próprio — não fazem parte do cadastro
+      // básico, que é usado também no PDV e na importação de XML.
+      if (__FEAT_NFE__) {
+        const idProduto = editando?.id ?? (resp.data as { id?: number } | null)?.id
+        if (idProduto) await window.api.fiscal.salvarProduto(idProduto, fiscalProduto)
+      }
       await carregar()
       setDialogAberto(false)
     } else {
@@ -867,6 +891,16 @@ const Produtos: FC = () => {
               </p>
             )}
           </div>
+          {FiscalProdutoCampos && (
+            <Suspense fallback={null}>
+              <FiscalProdutoCampos
+                produtoId={editando?.id ?? null}
+                valor={fiscalProduto}
+                onChange={setFiscalProduto}
+              />
+            </Suspense>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalFornecedorAberto(false)}>
               Cancelar
