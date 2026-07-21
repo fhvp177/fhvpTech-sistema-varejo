@@ -87,6 +87,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS nfce_emissao (
     cliente_id TEXT NOT NULL,
     referencia TEXT NOT NULL,
+    -- 65 = NFC-e (consumidor) · 55 = NF-e (empresa). A ACBr tem endereços
+    -- separados pros dois, então sem isto não dá pra imprimir nem cancelar.
+    modelo INTEGER NOT NULL DEFAULT 65,
     serie INTEGER NOT NULL,
     numero INTEGER NOT NULL,
     acbr_id TEXT,
@@ -105,6 +108,18 @@ db.exec(`
     PRIMARY KEY (cliente_id, mes)
   );
 `)
+
+// A tabela pode ter nascido antes da NF-e existir; acrescenta a coluna quando
+// faltar. O backend não tem runner de migrations — esta é a forma de evoluir
+// o schema sem quebrar quem já está rodando.
+try {
+  const colunas = db.prepare('PRAGMA table_info(nfce_emissao)').all() as Array<{ name: string }>
+  if (colunas.length && !colunas.some((c) => c.name === 'modelo')) {
+    db.exec('ALTER TABLE nfce_emissao ADD COLUMN modelo INTEGER NOT NULL DEFAULT 65')
+  }
+} catch {
+  // tabela ainda não existe — o CREATE acima já a cria com a coluna
+}
 
 const stmts = {
   getCliente: db.prepare('SELECT data FROM clientes WHERE clienteId = ?'),
@@ -163,8 +178,8 @@ const stmts = {
     'SELECT * FROM nfce_emissao WHERE cliente_id = ? AND referencia = ?'
   ),
   setEmissao: db.prepare(
-    `INSERT INTO nfce_emissao (cliente_id, referencia, serie, numero, acbr_id, status, chave, criada_em)
-     VALUES (@cliente_id, @referencia, @serie, @numero, @acbr_id, @status, @chave, @criada_em)
+    `INSERT INTO nfce_emissao (cliente_id, referencia, modelo, serie, numero, acbr_id, status, chave, criada_em)
+     VALUES (@cliente_id, @referencia, @modelo, @serie, @numero, @acbr_id, @status, @chave, @criada_em)
      ON CONFLICT(cliente_id, referencia) DO UPDATE SET
        acbr_id = excluded.acbr_id, status = excluded.status, chave = excluded.chave`
   ),
@@ -193,6 +208,7 @@ export function devolverNumeroNfce(clienteId: string, serie: number, numero: num
 export type EmissaoNfce = {
   cliente_id: string
   referencia: string
+  modelo: number
   serie: number
   numero: number
   acbr_id: string | null

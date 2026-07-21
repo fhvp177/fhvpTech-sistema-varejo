@@ -89,6 +89,7 @@ type NotaFiscalVenda = {
   referencia: string
   acbr_id: string | null
   ambiente: string
+  modelo: number
   serie: number
   numero: number
   chave: string | null

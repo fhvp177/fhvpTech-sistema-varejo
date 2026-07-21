@@ -51,6 +51,10 @@ const TRANSMITIDA = new Set(['autorizado', 'rejeitado', 'denegado', 'pendente', 
 
 const soDigitos = (v: string) => (v ?? '').replace(/\D/g, '')
 
+// A ACBr tem endereços separados por documento. Sem escolher o certo, a NF-e
+// bateria na rota da NFC-e e "não existiria".
+const rotaDoModelo = (modelo: number) => (modelo === 55 ? 'nfe' : 'nfce')
+
 // Traduz o erro do cliente ACBr no status HTTP que o app entende. Erros de
 // credencial/config são NOSSOS (502/500), não do lojista — não faz sentido
 // devolver 401 ao app, que o interpretaria como licença.
@@ -299,6 +303,7 @@ export function registrarRotasFiscais(app: Hono): void {
     gravarEmissaoNfce({
       cliente_id: clienteId,
       referencia: body.referencia,
+      modelo,
       serie,
       numero,
       acbr_id: dfe.id ?? null,
@@ -337,11 +342,14 @@ export function registrarRotasFiscais(app: Hono): void {
       return c.json({ erro: 'A nota ainda não foi autorizada.' }, 409)
     }
 
-    // 80mm é a bobina padrão; 58mm é a estreita. O app manda o que a loja usa.
+    // A NFC-e sai em bobina (80mm padrão, 58mm estreita); a NF-e é A4 e não
+    // aceita largura — mandar o parâmetro ali seria pedir um papel que não existe.
     const largura = Number(c.req.query('largura')) === 58 ? 58 : 80
+    const rota = rotaDoModelo(emissao.modelo)
+    const query = emissao.modelo === 55 ? '' : `?largura=${largura}`
     try {
       const pdf = await chamarAcbr<ArrayBuffer>(
-        `/nfce/${emissao.acbr_id}/pdf?largura=${largura}`,
+        `/${rota}/${emissao.acbr_id}/pdf${query}`,
         { binario: true }
       )
       return c.json({ ok: true, pdfBase64: Buffer.from(pdf).toString('base64') })
@@ -367,11 +375,11 @@ export function registrarRotasFiscais(app: Hono): void {
       return c.json({ erro: 'A nota ainda não foi autorizada.' }, 409)
     }
 
-    const modelo = c.req.query('modelo') === '55' ? 'nfe' : 'nfce'
     try {
-      const xml = await chamarAcbr<ArrayBuffer>(`/${modelo}/${emissao.acbr_id}/xml`, {
-        binario: true
-      })
+      const xml = await chamarAcbr<ArrayBuffer>(
+        `/${rotaDoModelo(emissao.modelo)}/${emissao.acbr_id}/xml`,
+        { binario: true }
+      )
       return c.json({ ok: true, xml: Buffer.from(xml).toString('utf-8') })
     } catch (e) {
       const { status, corpo } = responderErro(e)
@@ -404,7 +412,7 @@ export function registrarRotasFiscais(app: Hono): void {
     }
 
     try {
-      await chamarAcbr(`/nfce/${emissao.acbr_id}/cancelamento`, {
+      await chamarAcbr(`/${rotaDoModelo(emissao.modelo)}/${emissao.acbr_id}/cancelamento`, {
         metodo: 'POST',
         corpo: { justificativa }
       })
@@ -432,7 +440,9 @@ export function registrarRotasFiscais(app: Hono): void {
     }
 
     try {
-      const dfe = await chamarAcbr<RespostaDfe>(`/nfce/${emissao.acbr_id}`)
+      const dfe = await chamarAcbr<RespostaDfe>(
+        `/${rotaDoModelo(emissao.modelo)}/${emissao.acbr_id}`
+      )
       if (dfe.status && dfe.status !== emissao.status) {
         gravarEmissaoNfce({
           ...emissao,

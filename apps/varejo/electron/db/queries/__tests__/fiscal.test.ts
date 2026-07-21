@@ -103,6 +103,7 @@ const SCHEMA = `
     referencia TEXT NOT NULL UNIQUE,
     acbr_id TEXT,
     ambiente TEXT NOT NULL,
+    modelo INTEGER NOT NULL DEFAULT 65,
     serie INTEGER NOT NULL,
     numero INTEGER NOT NULL,
     chave TEXT,
@@ -278,7 +279,7 @@ describe.runIf(sqlite)('registro local das notas', () => {
     expect(proximaTentativa(1)).toBe(1)
     registrarNotaLocal({
       venda_id: 1, tentativa: 1, referencia: 'v1-t1', acbr_id: 'a1',
-      ambiente: 'homologacao', serie: 1, numero: 5, chave: null,
+      ambiente: 'homologacao', modelo: 65, serie: 1, numero: 5, chave: null,
       status: 'rejeitado', motivo: 'NCM inválido'
     })
     // Reenvio depois de rejeição precisa de referência nova.
@@ -288,7 +289,7 @@ describe.runIf(sqlite)('registro local das notas', () => {
   it('notaDaVenda devolve a tentativa mais recente', () => {
     registrarNotaLocal({
       venda_id: 1, tentativa: 2, referencia: 'v1-t2', acbr_id: 'a2',
-      ambiente: 'homologacao', serie: 1, numero: 6, chave: 'CHAVE123',
+      ambiente: 'homologacao', modelo: 65, serie: 1, numero: 6, chave: 'CHAVE123',
       status: 'autorizado', motivo: null
     })
     const n = notaDaVenda(1)!
@@ -301,13 +302,25 @@ describe.runIf(sqlite)('registro local das notas', () => {
     const antes = banco!.prepare('SELECT COUNT(*) AS n FROM nfce_emitidas WHERE venda_id = 1').get() as { n: number }
     registrarNotaLocal({
       venda_id: 1, tentativa: 2, referencia: 'v1-t2', acbr_id: 'a2',
-      ambiente: 'homologacao', serie: 1, numero: 6, chave: 'CHAVE123',
+      ambiente: 'homologacao', modelo: 65, serie: 1, numero: 6, chave: 'CHAVE123',
       status: 'cancelado', motivo: null
     })
     const depois = banco!.prepare('SELECT COUNT(*) AS n FROM nfce_emitidas WHERE venda_id = 1').get() as { n: number }
     // Mesma referência = mesma linha, com o status novo.
     expect(depois.n).toBe(antes.n)
     expect(notaDaVenda(1)!.status).toBe('cancelado')
+  })
+
+  it('guarda QUAL documento a nota é (NFC-e ou NF-e)', () => {
+    // Sem isto, imprimir/cancelar uma NF-e bateria no endereço da NFC-e na
+    // ACBr e o documento "não existiria" — erro confuso, no pior momento.
+    registrarNotaLocal({
+      venda_id: 3, tentativa: 9, referencia: 'v3-nfe', acbr_id: 'a9',
+      ambiente: 'homologacao', modelo: 55, serie: 1, numero: 77, chave: 'CH9',
+      status: 'autorizado', motivo: null
+    })
+    expect(notaDaVenda(3)!.modelo).toBe(55)
+    expect(notaDaVenda(1)!.modelo).toBe(65) // as da venda 1 são NFC-e
   })
 
   it('notasDasVendas devolve a nota corrente de cada venda de uma vez', () => {
@@ -379,7 +392,7 @@ describe.runIf(sqlite)('XML e relatório mensal', () => {
   it('guarda o XML e devolve do cache', () => {
     registrarNotaLocal({
       venda_id: 3, tentativa: 1, referencia: 'v3-t1', acbr_id: 'a3',
-      ambiente: 'homologacao', serie: 1, numero: 10, chave: 'CH3',
+      ambiente: 'homologacao', modelo: 65, serie: 1, numero: 10, chave: 'CH3',
       status: 'autorizado', motivo: null
     })
     guardarXmlNota('v3-t1', '<nfe>conteudo</nfe>')

@@ -582,6 +582,7 @@ function registrarHandlersFiscalRemoto(): void {
           referencia,
           acbr_id: emissao.acbr_id ?? null,
           ambiente: cfg.ambiente,
+          modelo,
           serie: emissao.serie ?? cfg.serie_nfce,
           numero: emissao.numero ?? 0,
           chave: emissao.chave ?? null,
@@ -832,7 +833,7 @@ function registrarHandlersFiscalRemoto(): void {
       if (nota.status !== 'autorizado') {
         throw new Error('A nota ainda não foi autorizada pela SEFAZ.')
       }
-      // Largura da bobina configurada pela loja (80mm é o padrão do mercado).
+      // Largura vale só pra NFC-e (bobina). A NF-e é A4 e o backend ignora.
       const largura = lerConfig('fiscal_largura_bobina') === '58' ? 58 : 80
       const r = await chamarBackendFiscal(
         `/fiscal/nfce/${nota.referencia}/danfe?largura=${largura}`

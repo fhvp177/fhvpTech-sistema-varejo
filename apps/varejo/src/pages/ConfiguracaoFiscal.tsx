@@ -24,7 +24,7 @@ import {
   validarSerie
 } from '@/utils/validacaoFiscal'
 
-// Tela de habilitação da nota fiscal (NFC-e). Só existe no plano Pro
+// Tela de habilitação da nota fiscal (NFC-e e NF-e). Só existe no plano Pro
 // (__FEAT_NFE__) e só o dono entra.
 //
 // A ideia central: o lojista descobre o que falta SENTADO, com calma, e não com
@@ -395,8 +395,9 @@ const ConfiguracaoFiscal: FC = () => {
     <div className="p-8 max-w-3xl">
       <h2 className="text-2xl font-bold mb-1">Nota fiscal</h2>
       <p className="text-sm text-muted-foreground mb-6">
-        Habilitação da NFC-e — a nota do consumidor, que substitui o cupom fiscal. Ela sai na
-        mesma impressora térmica que já imprime seus cupons hoje.
+        O sistema emite os dois documentos, escolhendo sozinho pelo cliente da venda: quem
+        compra como consumidor recebe a <strong>NFC-e</strong>, que sai na mesma impressora
+        térmica dos seus cupons; empresa recebe a <strong>NF-e</strong>, em folha A4.
       </p>
 
       <div className="rounded-lg border bg-blue-50/50 border-blue-200 p-4 mb-6 flex items-start gap-3">
@@ -671,7 +672,7 @@ const ConfiguracaoFiscal: FC = () => {
                 <option value="58">58mm (estreita)</option>
               </select>
               <p className="text-xs text-muted-foreground">
-                O tamanho do papel da sua impressora térmica.
+                Papel da sua impressora térmica — vale para a NFC-e. A NF-e sai em A4.
               </p>
             </div>
           </div>
@@ -761,7 +762,7 @@ const ConfiguracaoFiscal: FC = () => {
         <Passo
           numero={3}
           titulo="Código de Segurança do Contribuinte (CSC)"
-          descricao="O código que autentica o QR Code impresso na nota do consumidor."
+          descricao="Autentica o QR Code da NFC-e (a nota do consumidor). A NF-e não usa."
           estado={cscOk ? 'ok' : passo1Feito ? 'pendente' : 'bloqueado'}
           icone={KeyRound}
         >

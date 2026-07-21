@@ -147,6 +147,8 @@ export type NotaDaVenda = {
   referencia: string
   acbr_id: string | null
   ambiente: string
+  /** 65 = NFC-e (bobina) · 55 = NF-e (A4). Decide rota e formato de impressão. */
+  modelo: number
   serie: number
   numero: number
   chave: string | null
@@ -207,6 +209,7 @@ export function registrarNotaLocal(dados: {
   referencia: string
   acbr_id: string | null
   ambiente: string
+  modelo: number
   serie: number
   numero: number
   chave: string | null
@@ -216,8 +219,8 @@ export function registrarNotaLocal(dados: {
   const db = obterBancoDeDados()
   db.prepare(
     `INSERT INTO nfce_emitidas
-       (venda_id, tentativa, referencia, acbr_id, ambiente, serie, numero, chave, status, motivo, atualizada_em)
-     VALUES (@venda_id, @tentativa, @referencia, @acbr_id, @ambiente, @serie, @numero, @chave, @status, @motivo, datetime('now'))
+       (venda_id, tentativa, referencia, acbr_id, ambiente, modelo, serie, numero, chave, status, motivo, atualizada_em)
+     VALUES (@venda_id, @tentativa, @referencia, @acbr_id, @ambiente, @modelo, @serie, @numero, @chave, @status, @motivo, datetime('now'))
      ON CONFLICT(referencia) DO UPDATE SET
        status = excluded.status, chave = excluded.chave, motivo = excluded.motivo,
        acbr_id = excluded.acbr_id, atualizada_em = datetime('now')`
