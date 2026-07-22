@@ -75,7 +75,7 @@ const DividasClienteDialog: FC<Props> = ({ clienteNome, vendas, totalEmAberto, o
                 <span className="text-amber-900 font-bold text-xl">{fmtMoeda(totalEmAberto)}</span>
               </div>
 
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>

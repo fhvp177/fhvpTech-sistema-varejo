@@ -486,7 +486,7 @@ const Produtos: FC = () => {
       </div>
 
       {/* Tabela */}
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -534,15 +534,15 @@ const Produtos: FC = () => {
                       {p.variacoes.length} tam.
                     </button>
                   ) : (
-                    <div className="truncate max-w-[150px]" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
+                    <div className="truncate max-w-[95px] 2xl:max-w-[130px]" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
                   )}
                 </td>
                 <td className="px-4 py-3 font-medium">
-                  <div className="truncate max-w-[280px]" title={p.nome}>{p.nome}</div>
+                  <div className="truncate max-w-[205px] 2xl:max-w-[280px]" title={p.nome}>{p.nome}</div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {p.categoria
-                    ? <div className="truncate max-w-[160px]" title={p.categoria}>{p.categoria}</div>
+                    ? <div className="truncate max-w-[95px] 2xl:max-w-[140px]" title={p.categoria}>{p.categoria}</div>
                     : '—'}
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -553,7 +553,7 @@ const Produtos: FC = () => {
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {p.fornecedor_nome
-                    ? <div className="truncate max-w-[180px]" title={p.fornecedor_nome}>{p.fornecedor_nome}</div>
+                    ? <div className="truncate max-w-[95px] 2xl:max-w-[160px]" title={p.fornecedor_nome}>{p.fornecedor_nome}</div>
                     : '—'}
                 </td>
                 <td className="px-4 py-3">

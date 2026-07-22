@@ -28,6 +28,37 @@ import {
   apagarCodigosRecuperacao
 } from './db/queries/recuperacao'
 
+// O menu padrão do Electron registra o "aumentar zoom" como "Ctrl +", que não
+// dispara em teclado ABNT2 (onde o "+" só existe com Shift). Resultado: dava pra
+// diminuir a tela com Ctrl+- e não dava pra voltar. Aqui as teclas são tratadas
+// na mão, aceitando todas as variações do teclado brasileiro. O preventDefault
+// também neutraliza o atalho do menu, então não aplica o zoom duas vezes.
+const ZOOM_MINIMO = -3
+const ZOOM_MAXIMO = 3
+const PASSO_ZOOM = 0.5
+
+function registrarZoomPorTeclado(janela: BrowserWindow): void {
+  janela.webContents.on('before-input-event', (evento, entrada) => {
+    if (entrada.type !== 'keyDown') return
+    if (!entrada.control || entrada.alt) return
+
+    const conteudo = janela.webContents
+    const { key, code } = entrada
+
+    if (key === '+' || key === '=' || code === 'NumpadAdd') {
+      conteudo.setZoomLevel(Math.min(ZOOM_MAXIMO, conteudo.getZoomLevel() + PASSO_ZOOM))
+    } else if (key === '-' || key === '_' || code === 'NumpadSubtract') {
+      conteudo.setZoomLevel(Math.max(ZOOM_MINIMO, conteudo.getZoomLevel() - PASSO_ZOOM))
+    } else if (key === '0' || code === 'Numpad0') {
+      conteudo.setZoomLevel(0)
+    } else {
+      return
+    }
+
+    evento.preventDefault()
+  })
+}
+
 function criarJanela(): void {
   const janela = new BrowserWindow({
     width: 1280,
@@ -53,6 +84,8 @@ function criarJanela(): void {
     shell.openExternal(url)
     return { action: 'deny' }
   })
+
+  registrarZoomPorTeclado(janela)
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     janela.loadURL(process.env['ELECTRON_RENDERER_URL'])

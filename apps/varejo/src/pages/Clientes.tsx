@@ -359,7 +359,7 @@ const Clientes: FC = () => {
         />
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -401,10 +401,10 @@ const Clientes: FC = () => {
                       {iniciaisDoNome(c.nome)}
                     </span>
                     <div className="min-w-0">
-                      <div className="truncate max-w-[260px]" title={c.nome}>{c.nome}</div>
+                      <div className="truncate max-w-[190px] 2xl:max-w-[260px]" title={c.nome}>{c.nome}</div>
                       {c.tipo_pessoa === 'juridica' && c.razao_social && (
                         <div
-                          className="text-xs text-muted-foreground font-normal truncate max-w-[260px]"
+                          className="text-xs text-muted-foreground font-normal truncate max-w-[190px] 2xl:max-w-[260px]"
                           title={c.razao_social}
                         >
                           {c.razao_social}
@@ -412,7 +412,7 @@ const Clientes: FC = () => {
                       )}
                       {c.observacao && (
                         <div
-                          className="text-xs text-muted-foreground font-normal italic truncate max-w-[260px]"
+                          className="text-xs text-muted-foreground font-normal italic truncate max-w-[190px] 2xl:max-w-[260px]"
                           title={c.observacao}
                         >
                           {c.observacao}
@@ -427,7 +427,7 @@ const Clientes: FC = () => {
                 <td className="px-4 py-3 text-muted-foreground">{c.telefone}</td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {c.endereco
-                    ? <div className="truncate max-w-[220px]" title={c.endereco}>{c.endereco}</div>
+                    ? <div className="truncate max-w-[130px] 2xl:max-w-[220px]" title={c.endereco}>{c.endereco}</div>
                     : '—'}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{formatarData(c.data_cadastro)}</td>

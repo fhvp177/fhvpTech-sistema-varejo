@@ -7,6 +7,23 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.29.1',
+    itens: [
+      {
+        emoji: '🛠️',
+        titulo: 'Correção na exibição das tabelas',
+        descricao:
+          'Em computadores com tela menor, os botões de editar e excluir podiam não aparecer nas telas de Produtos e de Clientes, e alguns textos ficavam cortados. A exibição foi corrigida: as colunas passam a se ajustar ao tamanho da tela e as ações ficam sempre acessíveis.'
+      },
+      {
+        emoji: '🔍',
+        titulo: 'Ajuste do tamanho da tela pelo teclado',
+        descricao:
+          'Os atalhos Ctrl e + para aumentar e Ctrl e - para diminuir o tamanho da tela passam a funcionar corretamente. O atalho Ctrl e 0 retorna ao tamanho padrão a qualquer momento.'
+      }
+    ]
+  },
+  {
     versao: '1.29.0',
     itens: [
       // A nota fiscal só existe no plano Pro. Anunciá-la a quem não a tem seria

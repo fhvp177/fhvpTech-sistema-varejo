@@ -300,7 +300,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
           ) : (
             <div className="space-y-4 text-sm">
               {/* Itens devolvíveis */}
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-muted/50 text-xs text-muted-foreground">
                     <tr>
