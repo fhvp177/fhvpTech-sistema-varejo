@@ -145,6 +145,19 @@ export function consultarConfigNfce(cpfCnpj: string): Promise<ConfigNfce> {
   return chamarAcbr<ConfigNfce>(`/empresas/${exigirCnpj(cpfCnpj)}/nfce`)
 }
 
+// Configura a NF-e da empresa: só regime tributário e ambiente. A NF-e NÃO usa
+// CSC (isso é exclusivo da NFC-e), então não há passo próprio na tela — a
+// emissão garante esta config antes de transmitir. PUT é idempotente e não
+// consome crédito.
+export type ConfigNfe = {
+  CRT?: 1 | 2 | 3 | 4
+  ambiente: 'homologacao' | 'producao'
+}
+
+export function configurarNfe(cpfCnpj: string, config: ConfigNfe): Promise<unknown> {
+  return chamarAcbr(`/empresas/${exigirCnpj(cpfCnpj)}/nfe`, { metodo: 'PUT', corpo: config })
+}
+
 // Endereço a partir do CEP — devolve inclusive o código IBGE do município, que
 // é obrigatório no cadastro e que nenhum lojista sabe de cabeça.
 export type EnderecoPorCep = {

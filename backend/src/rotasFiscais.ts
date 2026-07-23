@@ -28,9 +28,11 @@ import {
   enviarCertificado,
   consultarCertificado,
   configurarNfce,
+  configurarNfe,
   consultarCep,
   type DadosEmpresa,
-  type ConfigNfce
+  type ConfigNfce,
+  type ConfigNfe
 } from './fiscal.ts'
 import { consultarCreditos, chamarAcbr, ErroAcbr, type CodigoErroAcbr } from './acbr.ts'
 
@@ -262,6 +264,7 @@ export function registrarRotasFiscais(app: Hono): void {
 
     const modelo = body.modelo === 55 ? 55 : 65
     const serie = Number.isInteger(body.serie) ? (body.serie as number) : 1
+    const ambiente = c.req.query('ambiente') === 'producao' ? 'producao' : 'homologacao'
     // 2) Reserva o número ANTES de montar/enviar.
     //    NF-e e NFC-e têm sequências INDEPENDENTES (são documentos distintos
     //    para a SEFAZ), por isso o modelo entra na chave da numeração.
@@ -274,7 +277,7 @@ export function registrarRotasFiscais(app: Hono): void {
         emitente: { ...body.emitente, cnpj: lic.cliente.cnpjEmitente },
         serie,
         numero,
-        ambiente: c.req.query('ambiente') === 'producao' ? 'producao' : 'homologacao',
+        ambiente,
         referencia: body.referencia,
         modelo
       })
@@ -292,6 +295,18 @@ export function registrarRotasFiscais(app: Hono): void {
     try {
       // Endpoints distintos: /nfe (modelo 55) e /nfce (modelo 65).
       const rota = modelo === 55 ? '/nfe' : '/nfce'
+      // A NF-e exige a config de NF-e cadastrada na empresa (regime + ambiente).
+      // Diferente da NFC-e, ela não tem passo próprio na tela (não usa CSC),
+      // então é garantida aqui — idempotente, sem custo, e sempre no ambiente
+      // desta emissão. Sem isto a ACBr recusa com "configuração de NF-e não
+      // encontrada".
+      if (modelo === 55) {
+        const crt = Number((body.emitente as { crt?: number } | undefined)?.crt)
+        await configurarNfe(lic.cliente.cnpjEmitente, {
+          CRT: ([1, 2, 3, 4].includes(crt) ? crt : undefined) as ConfigNfe['CRT'],
+          ambiente
+        })
+      }
       dfe = await chamarAcbr<RespostaDfe>(rota, { metodo: 'POST', corpo: pedido })
     } catch (e) {
       devolverNumeroNfce(`${clienteId}|${modelo}`, serie, numero)
