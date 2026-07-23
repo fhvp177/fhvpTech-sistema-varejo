@@ -67,6 +67,38 @@ test('sem desconto, nenhum item carrega vDesc', () => {
   assert.equal(inf(p).total.ICMSTot.vDesc, 0)
 })
 
+test('CSOSN 102 usa o grupo ICMSSN102', () => {
+  const p = montarPedidoNfce({
+    ...base,
+    venda: { itens: [item({ cst_csosn: '102' })], pagamentos: [{ tPag: '01', valor: 10 }] }
+  })
+  const icms = inf(p).det[0].imposto.ICMS
+  assert.ok(icms.ICMSSN102, 'esperava grupo ICMSSN102')
+  assert.equal(icms.ICMSSN102.CSOSN, '102')
+})
+
+test('CSOSN 500 usa o grupo ICMSSN500 (ICMS já retido por ST), não ICMSSN102', () => {
+  const p = montarPedidoNfce({
+    ...base,
+    venda: { itens: [item({ cst_csosn: '500' })], pagamentos: [{ tPag: '01', valor: 10 }] }
+  })
+  const icms = inf(p).det[0].imposto.ICMS
+  assert.ok(icms.ICMSSN500, 'esperava grupo ICMSSN500')
+  assert.equal(icms.ICMSSN500.CSOSN, '500')
+  assert.equal(icms.ICMSSN102, undefined)
+})
+
+test('CSOSN sem grupo suportado (ex.: 900) é recusado com mensagem clara', () => {
+  assert.throws(
+    () =>
+      montarPedidoNfce({
+        ...base,
+        venda: { itens: [item({ cst_csosn: '900' })], pagamentos: [{ tPag: '01', valor: 10 }] }
+      }),
+    (e: unknown) => e instanceof ErroMontagem && /CSOSN 900/.test((e as Error).message)
+  )
+})
+
 test('pagamento omitido vira dinheiro à vista pelo total', () => {
   const p = montarPedidoNfce({
     ...base,
@@ -90,6 +122,37 @@ test('produto sem CFOP é barrado', () => {
   assert.throws(
     () => montarPedidoNfce({ ...base, venda: { itens: [item({ cfop: '' })], pagamentos: [] } }),
     ErroMontagem
+  )
+})
+
+test('NCM com comprimento errado (nem 8 nem 2 dígitos) é barrado nomeando o produto', () => {
+  assert.throws(
+    () =>
+      montarPedidoNfce({
+        ...base,
+        venda: { itens: [item({ nome: 'Caneta Azul', ncm: '9608100' })], pagamentos: [] }
+      }),
+    (e: unknown) =>
+      e instanceof ErroMontagem && /Caneta Azul/.test((e as Error).message) && /8 dígitos/.test((e as Error).message)
+  )
+})
+
+test('NCM de 8 dígitos passa (formato válido)', () => {
+  const p = montarPedidoNfce({
+    ...base,
+    venda: { itens: [item({ ncm: '96081000' })], pagamentos: [{ tPag: '01', valor: 10 }] }
+  })
+  assert.equal(inf(p).det[0].prod.NCM, '96081000')
+})
+
+test('CFOP com comprimento errado é barrado', () => {
+  assert.throws(
+    () =>
+      montarPedidoNfce({
+        ...base,
+        venda: { itens: [item({ nome: 'Caneta', cfop: '510' })], pagamentos: [] }
+      }),
+    (e: unknown) => e instanceof ErroMontagem && /CFOP inválido/.test((e as Error).message)
   )
 })
 

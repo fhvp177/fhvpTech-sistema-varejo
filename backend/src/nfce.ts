@@ -117,13 +117,44 @@ function ratearDesconto(valoresItem: number[], descontoTotal: number): number[] 
   return rateado
 }
 
+// Cada CSOSN do Simples Nacional mora num grupo de ICMS com nome PRÓPRIO no XML
+// (ICMSSN102, ICMSSN500, ...). Mandar o CSOSN dentro do grupo errado é rejeição
+// na hora — a SEFAZ valida quais CSOSN cada grupo aceita. Aqui roteamos pelo
+// valor do CSOSN, cobrindo o que aparece no varejo Simples:
+//  · 102/103/300/400 → ICMSSN102 (sem crédito / isenção / imune / não tributada)
+//  · 500             → ICMSSN500 (ICMS já recolhido antes por ST/antecipação —
+//                      bebidas etc. compradas com ST paga na origem)
+// Os demais (101 com crédito, 201-203/900 com ST a recolher) precisam de dados
+// que não coletamos hoje (alíquota de crédito, base de ST); recusa com mensagem
+// clara em vez de emitir uma nota que a SEFAZ derruba.
+function montarIcmsSimples(orig: number, csosn: string): Record<string, unknown> {
+  switch (csosn) {
+    case '102':
+    case '103':
+    case '300':
+    case '400':
+      return { ICMSSN102: { orig, CSOSN: csosn } }
+    case '500':
+      // Valores de ST retido (vBCSTRet, vICMSSTRet, ...) são opcionais no
+      // layout — omitidos aqui; o ICMS não é recalculado, só declarado como
+      // já recolhido.
+      return { ICMSSN500: { orig, CSOSN: csosn } }
+    default:
+      throw new ErroMontagem(
+        `O produto está com CSOSN ${csosn}, que ainda não é suportado na emissão. ` +
+          'Ajuste a classificação fiscal do produto para 102, 103, 300, 400 ou 500 ' +
+          '(confira com o contador qual se aplica).'
+      )
+  }
+}
+
 // Bloco de imposto do item para o Simples Nacional: ICMS via CSOSN + PIS/COFINS
 // não tributados (recolhidos no DAS).
 function impostoSimples(item: ItemVendaNfce) {
   const orig = Number(item.origem || '0')
   const csosn = soDigitos(item.cst_csosn) || '102'
   return {
-    ICMS: { ICMSSN102: { orig, CSOSN: csosn } },
+    ICMS: montarIcmsSimples(orig, csosn),
     PIS: { PISNT: { CST: '07' } }, // 07 = isenta
     COFINS: { COFINSNT: { CST: '07' } }
   }
@@ -206,11 +237,28 @@ export function montarPedidoNfce(args: {
   // Item sem NCM não pode ser emitido — a nota inteira seria rejeitada, e o
   // erro genérico da SEFAZ não diria qual produto. Barra aqui, específico.
   for (const it of venda.itens) {
-    if (!soDigitos(it.ncm)) {
+    const ncm = soDigitos(it.ncm)
+    if (!ncm) {
       throw new ErroMontagem(`O produto "${it.nome}" está sem NCM e não pode sair em nota.`)
     }
-    if (!soDigitos(it.cfop)) {
+    // A SEFAZ exige NCM com exatamente 8 dígitos (o "2 dígitos" do layout é caso
+    // especial que produto de prateleira não usa). Comprimento errado só seria
+    // pego lá na SEFAZ, com um erro de regex ilegível — barra aqui, nomeando o
+    // produto e dizendo o que corrigir.
+    if (ncm.length !== 8 && ncm.length !== 2) {
+      throw new ErroMontagem(
+        `O produto "${it.nome}" está com NCM inválido ("${it.ncm}"): precisa ter 8 dígitos. ` +
+          'Corrija a classificação fiscal do produto.'
+      )
+    }
+    const cfop = soDigitos(it.cfop)
+    if (!cfop) {
       throw new ErroMontagem(`O produto "${it.nome}" está sem CFOP.`)
+    }
+    if (cfop.length !== 4) {
+      throw new ErroMontagem(
+        `O produto "${it.nome}" está com CFOP inválido ("${it.cfop}"): precisa ter 4 dígitos.`
+      )
     }
   }
 
