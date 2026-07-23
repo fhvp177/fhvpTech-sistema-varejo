@@ -579,7 +579,13 @@ function registrarHandlersFiscalRemoto(): void {
           }
         }
 
-        const r = await chamarBackendFiscal('/fiscal/nfce', { metodo: 'POST', corpo })
+        // O ambiente (teste × produção) é do seletor da tela e SÓ é conhecido
+        // aqui — o backend lê da query e, sem ela, assume homologação. Sem este
+        // parâmetro, escolher "Produção" não tinha efeito: tudo saía como teste.
+        const r = await chamarBackendFiscal(`/fiscal/nfce?ambiente=${cfg.ambiente}`, {
+          metodo: 'POST',
+          corpo
+        })
         const emissao = (r.emissao ?? {}) as {
           serie?: number
           numero?: number
