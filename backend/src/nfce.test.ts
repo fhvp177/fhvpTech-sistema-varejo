@@ -225,9 +225,35 @@ test('NF-e muda o que precisa mudar em relação à NFC-e', () => {
   const ide = inf(p).ide
   assert.equal(ide.mod, 55) // NF-e
   assert.equal(ide.tpImp, 1) // DANFE retrato (A4), não bobina
-  assert.equal(ide.indFinal, 0) // venda para empresa não é consumo final
+  assert.equal(ide.indFinal, 1) // destinatário não contribuinte (IE=9) = consumo final
   assert.equal(inf(p).dest.xNome, 'CLIENTE EMPRESA LTDA')
   assert.equal(inf(p).dest.enderDest.cMun, '3550308')
+})
+
+test('NF-e para contribuinte de ICMS (revenda) NÃO é consumo final (indFinal=0)', () => {
+  const p = montarPedidoNfce({
+    ...base,
+    modelo: 55,
+    venda: {
+      itens: [item()],
+      pagamentos: [],
+      destinatario: { ...destinatario, indicador_ie: '1', inscricao_estadual: '123456789' }
+    }
+  })
+  assert.equal(inf(p).ide.indFinal, 0)
+})
+
+test('NF-e para pessoa física (não contribuinte) é consumo final (indFinal=1)', () => {
+  const p = montarPedidoNfce({
+    ...base,
+    modelo: 55,
+    venda: {
+      itens: [item()],
+      pagamentos: [],
+      destinatario: { ...destinatario, cnpj: undefined, cpf: '11144477735' }
+    }
+  })
+  assert.equal(inf(p).ide.indFinal, 1)
 })
 
 test('NF-e sem destinatário é barrada', () => {

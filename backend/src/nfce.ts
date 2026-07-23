@@ -316,6 +316,12 @@ export function montarPedidoNfce(args: {
   const ufDestino = ((venda.destinatario?.uf ?? emitente.uf) || '').toUpperCase()
   const idDest = ehNfe && ufDestino !== emitente.uf.toUpperCase() ? 2 : 1
 
+  // Consumo final: NFC-e é sempre (venda ao consumidor). Na NF-e depende de QUEM
+  // compra — agora que PF também recebe NF-e, não dá pra assumir "empresa que
+  // revende": só NÃO é consumo final quando o destinatário é contribuinte de
+  // ICMS (indicador_ie = 1, compra pra revenda). SEFAZ confere essa coerência.
+  const indFinal = ehNfe && venda.destinatario?.indicador_ie === '1' ? 0 : 1
+
   return {
     ambiente,
     referencia,
@@ -336,8 +342,7 @@ export function montarPedidoNfce(args: {
         tpEmis: 1, // normal
         tpAmb: ambiente === 'producao' ? 1 : 2,
         finNFe: 1, // normal
-        // Venda para empresa não é consumo final; venda no balcão é.
-        indFinal: ehNfe ? 0 : 1,
+        indFinal,
         indPres: 1, // presencial nos dois casos (venda no balcão)
         procEmi: 0,
         verProc: VER_PROC
