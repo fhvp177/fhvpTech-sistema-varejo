@@ -135,6 +135,7 @@ export function listarVendas(mes?: string): Venda[] {
   return db
     .prepare(
       `SELECT v.*, c.nome AS cliente_nome,
+              c.tipo_pessoa AS cliente_tipo_pessoa,
               vd.nome AS vendedor_nome,
               COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente,
               COALESCE(dev.valor_devolvido, 0) AS valor_devolvido
