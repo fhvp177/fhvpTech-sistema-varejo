@@ -366,6 +366,8 @@ interface Window {
       emitirNfce: (args: {
         vendaId: number
         formaPagamento?: string
+        /** 55 = NF-e · 65 = NFC-e. Escolhido na emissão; ausente = padrão pelo cadastro. */
+        modelo?: 55 | 65
       }) => Promise<RespostaIPC<{ jaEmitida: boolean; nota: NotaFiscalVenda | null }>>
       statusNfce: (args: { vendaId: number }) => Promise<RespostaIPC<NotaFiscalVenda | null>>
       notasDasVendas: (ids: number[]) => Promise<RespostaIPC<Record<number, NotaFiscalVenda>>>

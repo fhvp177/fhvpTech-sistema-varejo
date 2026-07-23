@@ -236,8 +236,11 @@ const api = {
       ipcRenderer.invoke('fiscal:configurarCsc', args),
     statusRemoto: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:statusRemoto'),
     // Emissão da nota de uma venda (sempre pós-venda; nunca trava o caixa).
-    emitirNfce: (args: { vendaId: number; formaPagamento?: string }): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('fiscal:emitirNfce', args),
+    emitirNfce: (args: {
+      vendaId: number
+      formaPagamento?: string
+      modelo?: 55 | 65
+    }): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:emitirNfce', args),
     statusNfce: (args: { vendaId: number }): Promise<RespostaIPC> =>
       ipcRenderer.invoke('fiscal:statusNfce', args),
     notasDasVendas: (ids: number[]): Promise<RespostaIPC> =>

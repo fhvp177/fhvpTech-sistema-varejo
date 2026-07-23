@@ -2,7 +2,7 @@ import { FC, useEffect, useState } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { Search } from 'lucide-react'
+import { ChevronDown, Search } from 'lucide-react'
 import { UFS } from '@/data/ufs'
 
 // Endereço e inscrição do cliente PESSOA JURÍDICA — o que a NF-e exige do
@@ -31,6 +31,9 @@ type Props = {
 const CadastroFiscalCliente: FC<Props> = ({ clienteId, valor, onChange }) => {
   const [buscandoCep, setBuscandoCep] = useState(false)
   const [aviso, setAviso] = useState<string | null>(null)
+  // Recolhido por padrão pra não esticar o modal do cliente. Quem for emitir
+  // NF-e abre e preenche; pro resto (NFC-e) isso nem é necessário.
+  const [aberta, setAberta] = useState(false)
 
   // Ao abrir um cliente já existente, traz o que estiver salvo.
   useEffect(() => {
@@ -74,17 +77,37 @@ const CadastroFiscalCliente: FC<Props> = ({ clienteId, valor, onChange }) => {
     })
   }
 
-  return (
-    <div className="space-y-3 rounded-md border p-3 bg-muted/10">
-      <div>
-        <p className="text-sm font-medium">Dados para nota fiscal</p>
-        <p className="text-xs text-muted-foreground">
-          A NF-e exige o endereço completo do cliente. Preencha quando for emitir nota para
-          esta empresa — o CEP preenche o resto.
-        </p>
-      </div>
+  // "Preenchido" = tem ao menos o município — vira o resumo do cabeçalho fechado.
+  const preenchido = Boolean(valor.cidade || valor.endereco_logradouro || valor.codigo_municipio)
 
-      <div className="flex gap-2 items-end">
+  return (
+    <div className="rounded-md border bg-muted/10">
+      <button
+        type="button"
+        onClick={() => setAberta((a) => !a)}
+        className="flex w-full items-center justify-between p-3 text-left"
+      >
+        <span className="text-sm font-medium flex items-center gap-2">
+          Dados para nota fiscal (NF-e)
+          <span className="text-xs font-normal text-muted-foreground">
+            — {preenchido ? 'preenchido' : 'opcional'}
+          </span>
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 text-muted-foreground transition-transform ${
+            aberta ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {aberta && (
+        <div className="space-y-3 px-3 pb-3">
+          <p className="text-xs text-muted-foreground">
+            A NF-e exige o endereço completo do cliente. Preencha quando for emitir NF-e para
+            este cliente — o CEP preenche cidade, estado e o código do município.
+          </p>
+
+          <div className="flex gap-2 items-end">
         <div className="space-y-1.5 w-40">
           <Label htmlFor="cepCli">CEP</Label>
           <Input
@@ -217,6 +240,8 @@ const CadastroFiscalCliente: FC<Props> = ({ clienteId, valor, onChange }) => {
           )}
         </div>
       </div>
+        </div>
+      )}
     </div>
   )
 }

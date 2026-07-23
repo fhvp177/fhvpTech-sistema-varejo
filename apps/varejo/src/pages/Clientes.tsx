@@ -166,6 +166,10 @@ const Clientes: FC = () => {
   // Dados fiscais do cliente (destinatário da NF-e). Vivem à parte do form
   // porque são gravados por outro caminho — ver window.api.fiscal.salvarCliente.
   const [fiscal, setFiscal] = useState<FiscalCliente>(FISCAL_VAZIO)
+  // Cidade/UF/IBGE da própria loja: viram sugestão no cadastro fiscal de um
+  // cliente NOVO, porque a maioria do consumidor de balcão é da mesma cidade.
+  // Só a cidade — CEP e rua são do comprador e ficam por conta dele.
+  const [padraoFiscalLoja, setPadraoFiscalLoja] = useState<Partial<FiscalCliente>>({})
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [clienteDividas, setClienteDividas] = useState<Cliente | null>(null)
@@ -207,19 +211,40 @@ const Clientes: FC = () => {
     setPaginaAtual(1)
   }, [busca])
 
+  // Carrega uma vez a localização da loja para sugerir no cadastro fiscal de
+  // clientes novos. Só no Pro — o Básico não tem nota fiscal.
+  useEffect(() => {
+    if (!__FEAT_NFE__) return
+    Promise.all([
+      window.api.config.obter('loja_cidade'),
+      window.api.config.obter('loja_uf'),
+      window.api.config.obter('fiscal_codigo_municipio')
+    ]).then(([cidade, uf, ibge]) => {
+      setPadraoFiscalLoja({
+        cidade: (cidade.success && cidade.data) || '',
+        uf: (uf.success && uf.data) || '',
+        codigo_municipio: (ibge.success && ibge.data) || ''
+      })
+    })
+  }, [])
+
   const inicioPagina = (paginaAtual - 1) * ITENS_POR_PAGINA
   const listaPaginada = listaFiltrada.slice(inicioPagina, inicioPagina + ITENS_POR_PAGINA)
 
   const abrirNovo = () => {
     setEditando(null)
     setForm(FORM_VAZIO)
-    setFiscal(FISCAL_VAZIO)
+    // Cliente novo já nasce com a cidade da loja sugerida (editável).
+    setFiscal({ ...FISCAL_VAZIO, ...padraoFiscalLoja })
     setErro('')
     setDialogAberto(true)
   }
 
   const abrirEdicao = (c: Cliente) => {
     setEditando(c)
+    // Começa limpo; o CadastroFiscalCliente carrega o que estiver salvo deste
+    // cliente (senão o fiscal do cliente anterior vazaria pra este).
+    setFiscal(FISCAL_VAZIO)
     setForm({
       nome: c.nome,
       telefone: c.telefone,
@@ -307,8 +332,9 @@ const Clientes: FC = () => {
 
     if (resp.success) {
       // Dados fiscais vão por um caminho próprio (não fazem parte do cadastro
-      // básico). Só para empresa, e só quando a feature existe.
-      if (__FEAT_NFE__ && ehPj) {
+      // básico). Valem para qualquer cliente — PF também pode receber NF-e —,
+      // só dependem da feature existir.
+      if (__FEAT_NFE__) {
         const idCliente = editando?.id ?? (resp.data as { id?: number } | null)?.id
         if (idCliente) await window.api.fiscal.salvarCliente(idCliente, fiscal)
       }
@@ -475,7 +501,7 @@ const Clientes: FC = () => {
       />
 
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
-        <DialogContent className="max-w-[560px]">
+        <DialogContent className="max-w-[560px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editando ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
           </DialogHeader>
@@ -533,8 +559,9 @@ const Clientes: FC = () => {
               </div>
             )}
 
-            {/* Dados exigidos pela NF-e — só para empresa, só no plano Pro. */}
-            {form.tipo_pessoa === 'juridica' && CadastroFiscalCliente && (
+            {/* Dados exigidos pela NF-e — qualquer cliente (PF também pode
+                receber NF-e), só no plano Pro. Retrátil pra não pesar a tela. */}
+            {CadastroFiscalCliente && (
               <Suspense fallback={null}>
                 <CadastroFiscalCliente
                   clienteId={editando?.id ?? null}

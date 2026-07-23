@@ -7,6 +7,23 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.30.0',
+    itens: [
+      // Toda a novidade desta versão é da nota fiscal (Pro). No Básico o array
+      // fica vazio e o aviso simplesmente não aparece.
+      ...(__FEAT_NFE__
+        ? [
+            {
+              emoji: '🧾',
+              titulo: 'Escolha do tipo de nota na hora de emitir',
+              descricao:
+                'Ao emitir a nota fiscal, passa a ser possível escolher entre NF-e e NFC-e a cada venda. O tipo mais comum já vem sugerido conforme o cliente — empresa recebe NF-e, consumidor recebe NFC-e —, e é possível trocar quando necessário. A NF-e também pode ser emitida para clientes pessoa física: os dados fiscais do cliente, antes disponíveis apenas para empresas, agora podem ser preenchidos em qualquer cadastro, com a cidade sugerida automaticamente a partir da loja.'
+            }
+          ]
+        : [])
+    ]
+  },
+  {
     versao: '1.29.1',
     itens: [
       {

@@ -45,15 +45,33 @@ type Props = {
   vendaId: number
   /** Vendas a prazo não perguntam a forma: é crediário por definição. */
   aPrazo: boolean
+  /** Tipo de pessoa do cliente da venda; null quando é venda sem cliente. Decide
+      a SUGESTÃO de documento (PJ → NF-e, consumidor → NFC-e) e se a NF-e é
+      possível (venda de balcão sem cliente só emite NFC-e). */
+  clienteTipoPessoa?: 'fisica' | 'juridica' | null
   nota: NotaFiscalVenda | null
   onMudou: (nota: NotaFiscalVenda | null) => void
   /** Cancelar nota é decisão do gerente — o vendedor emite, mas não desfaz. */
   ehDono?: boolean
 }
 
-const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou, ehDono = false }) => {
+const BotaoNotaFiscal: FC<Props> = ({
+  vendaId,
+  aPrazo,
+  clienteTipoPessoa,
+  nota,
+  onMudou,
+  ehDono = false
+}) => {
   const imprimirPdf = useImprimirPdf()
+  // NF-e precisa de um destinatário; venda sem cliente só pode NFC-e. E o
+  // documento mais provável já vem marcado: empresa → NF-e, consumidor → NFC-e.
+  const temCliente = clienteTipoPessoa === 'fisica' || clienteTipoPessoa === 'juridica'
+  const sugestaoModelo: 55 | 65 = clienteTipoPessoa === 'juridica' ? 55 : 65
+
   const [escolhendo, setEscolhendo] = useState(false)
+  const [modeloEscolhido, setModeloEscolhido] = useState<55 | 65>(sugestaoModelo)
+  const [formaEscolhida, setFormaEscolhida] = useState<FormaPagamento | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [detalhe, setDetalhe] = useState<string | null>(null)
   const [aberta, setAberta] = useState(false) // painel da nota autorizada
@@ -61,10 +79,23 @@ const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou, ehDono = f
   const [justificativa, setJustificativa] = useState('')
   const [erroCancelar, setErroCancelar] = useState<string | null>(null)
 
-  const emitir = async (forma: FormaPagamento) => {
+  // Abre a escolha de documento + forma, sempre pré-marcada no mais provável.
+  const abrirEscolha = () => {
+    setModeloEscolhido(sugestaoModelo)
+    setFormaEscolhida(null)
+    setEscolhendo(true)
+  }
+
+  const confirmarEmissao = () => {
+    // A prazo não pergunta forma — é crediário por definição. À vista usa a
+    // que o lojista marcou (o botão só habilita depois de marcar).
+    emitir(modeloEscolhido, aPrazo ? 'crediario' : (formaEscolhida as FormaPagamento))
+  }
+
+  const emitir = async (modelo: 55 | 65, forma: FormaPagamento) => {
     setEscolhendo(false)
     setOcupado(true)
-    const r = await window.api.fiscal.emitirNfce({ vendaId, formaPagamento: forma })
+    const r = await window.api.fiscal.emitirNfce({ vendaId, formaPagamento: forma, modelo })
     if (!r.success) {
       setOcupado(false)
       setDetalhe(r.error)
@@ -103,9 +134,8 @@ const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou, ehDono = f
       })
       return
     }
-    // Sem nota ainda: a prazo já sabe a forma; à vista pergunta.
-    if (aPrazo) emitir('crediario')
-    else setEscolhendo(true)
+    // Sem nota ainda: escolhe o documento (e a forma de pagamento, se à vista).
+    abrirEscolha()
   }
 
   // DANFE: o "cupom" com valor fiscal que o cliente leva. Sai na mesma
@@ -173,28 +203,90 @@ const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou, ehDono = f
         <Icone className="w-4 h-4" />
       </Button>
 
-      {/* Forma de pagamento — o dado que a nota exige e que a venda ainda não
-          guardava. Quando o TEF for integrado, virá da própria maquininha. */}
+      {/* Escolha do documento (NF-e × NFC-e) e, à vista, da forma de pagamento —
+          o dado que a nota exige e que a venda ainda não guardava. Quando o TEF
+          for integrado, a forma virá da própria maquininha. */}
       <Dialog open={escolhendo} onOpenChange={(a) => !a && setEscolhendo(false)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Como o cliente pagou?</DialogTitle>
+            <DialogTitle>Emitir documento fiscal</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground -mt-2">
-            A nota fiscal precisa informar a forma de pagamento.
-          </p>
-          <div className="grid gap-2">
-            {FORMAS.map((f) => (
-              <Button
-                key={f.valor}
-                variant="outline"
-                className="justify-start"
-                onClick={() => emitir(f.valor)}
-              >
-                <f.icone className="w-4 h-4 mr-2 text-muted-foreground" />
-                {f.rotulo}
-              </Button>
-            ))}
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Que documento emitir?</p>
+            {temCliente ? (
+              <div className="grid gap-2">
+                {([65, 55] as const).map((m) => {
+                  const marcado = modeloEscolhido === m
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setModeloEscolhido(m)}
+                      className={`flex items-start gap-2.5 rounded-md border p-2.5 text-left text-sm transition-colors ${
+                        marcado ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                      }`}
+                    >
+                      <span
+                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                          marcado ? 'border-primary' : 'border-muted-foreground'
+                        }`}
+                      >
+                        {marcado && <span className="h-2 w-2 rounded-full bg-primary" />}
+                      </span>
+                      <span>
+                        <span className="font-medium">
+                          {m === 65 ? 'NFC-e — cupom' : 'NF-e — nota A4'}
+                          {m === sugestaoModelo && (
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                              sugerido
+                            </span>
+                          )}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {m === 65
+                            ? 'Consumidor — sai na impressora térmica.'
+                            : 'Empresa — em folha A4.'}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Venda sem cliente sai como <strong>NFC-e</strong> (cupom). Para emitir NF-e, a
+                venda precisa ter um cliente identificado.
+              </p>
+            )}
+          </div>
+
+          {!aPrazo && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Como o cliente pagou?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {FORMAS.map((f) => (
+                  <Button
+                    key={f.valor}
+                    variant={formaEscolhida === f.valor ? 'default' : 'outline'}
+                    className="justify-start"
+                    onClick={() => setFormaEscolhida(f.valor)}
+                  >
+                    <f.icone className="w-4 h-4 mr-2" />
+                    {f.rotulo}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEscolhendo(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarEmissao} disabled={!aPrazo && !formaEscolhida}>
+              Emitir
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -297,8 +389,7 @@ const BotaoNotaFiscal: FC<Props> = ({ vendaId, aPrazo, nota, onMudou, ehDono = f
               <Button
                 onClick={() => {
                   setDetalhe(null)
-                  if (aPrazo) emitir('crediario')
-                  else setEscolhendo(true)
+                  abrirEscolha()
                 }}
               >
                 Tentar novamente

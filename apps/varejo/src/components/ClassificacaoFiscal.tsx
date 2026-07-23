@@ -98,7 +98,7 @@ const ClassificacaoFiscal: FC<Props> = ({ aberta, onFechar, onMudou }) => {
 
   return (
     <Dialog open={aberta} onOpenChange={(a) => !a && onFechar()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Classificação fiscal dos produtos</DialogTitle>
         </DialogHeader>

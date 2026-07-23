@@ -468,7 +468,7 @@ function registrarHandlersFiscalRemoto(): void {
   // inaceitável numa loja.
   ipcMain.handle(
     'fiscal:emitirNfce',
-    async (_e, args: { vendaId: number; formaPagamento?: string }) => {
+    async (_e, args: { vendaId: number; formaPagamento?: string; modelo?: 55 | 65 }) => {
       try {
         // Emitir é rotina de balcão: qualquer usuário logado pode. Só a
         // CONFIGURAÇÃO fiscal (certificado, CSC, regime) é do gerente.
@@ -509,12 +509,24 @@ function registrarHandlersFiscalRemoto(): void {
         // (venda de mercadoria dentro do estado), que cobre o varejo comum.
         const cfopPadrao = apenasDigitos(cfg.cfop_padrao) || '5102'
 
-        // Qual documento sai: cliente pessoa jurídica recebe NF-e (modelo 55);
-        // consumidor comum — pessoa física ou venda sem cliente — recebe NFC-e
-        // (modelo 65). O lojista não precisa entender a diferença entre os
-        // dois; o sistema decide pelo cadastro.
-        const ehPJ = venda.cliente_tipo_pessoa === 'juridica'
-        const modelo: 55 | 65 = ehPJ ? 55 : 65
+        // Qual documento sai é escolha do lojista na hora de emitir. Se a tela
+        // não mandar (versão antiga), cai no padrão: PJ → NF-e (modelo 55),
+        // consumidor — pessoa física ou venda sem cliente — → NFC-e (modelo 65).
+        const escolhido = args?.modelo
+        const modelo: 55 | 65 =
+          escolhido === 55 || escolhido === 65
+            ? escolhido
+            : venda.cliente_tipo_pessoa === 'juridica'
+              ? 55
+              : 65
+        // NF-e exige um destinatário identificado. Venda de balcão sem cliente
+        // só pode NFC-e — barra aqui com mensagem clara em vez de deixar a
+        // montagem estourar no backend.
+        if (modelo === 55 && !venda.destinatario) {
+          throw new Error(
+            'A NF-e precisa de um cliente identificado na venda. Venda no balcão sem cliente só emite cupom (NFC-e).'
+          )
+        }
 
         const tentativa = proximaTentativa(vendaId)
         const referencia = `v${vendaId}-t${tentativa}`
