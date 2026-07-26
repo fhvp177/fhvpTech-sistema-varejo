@@ -3,6 +3,10 @@ import { Search, X, User, Building2, ChevronDown } from 'lucide-react'
 
 export type ClienteSeletorHandle = {
   abrir: () => void
+  // Lido no momento da tecla (não é estado do React): quem hospeda o seletor
+  // precisa saber se a busca está aberta pra não tratar o Esc como se fosse
+  // dele. Ver o Esc do PDV em Vendas.tsx.
+  estaAberto: () => boolean
 }
 
 export type ClienteSelecionavel = {
@@ -33,6 +37,10 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [indiceFoco, setIndiceFoco] = useState(0)
+  // Espelho do `aberto` pra consulta síncrona via ref (o estado do React já pode
+  // ter sido atualizado quando quem hospeda o seletor vai olhar).
+  const abertoRef = useRef(false)
+  abertoRef.current = aberto
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listaRef = useRef<HTMLUListElement>(null)
@@ -83,7 +91,7 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
     setTimeout(() => inputRef.current?.focus(), 0)
   }
 
-  useImperativeHandle(ref, () => ({ abrir }), [])
+  useImperativeHandle(ref, () => ({ abrir, estaAberto: () => abertoRef.current }), [])
 
   const selecionar = (id: string) => {
     onChange(id)

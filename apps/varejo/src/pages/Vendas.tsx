@@ -24,7 +24,7 @@ import { obterDadosLoja } from '@/utils/dadosLoja'
 import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido, type VencimentosMes } from '@/utils/relatorioVendas'
-import { usePdvMode, useSessao } from '@/App'
+import { useCalculadora, usePdvMode, useSessao } from '@/App'
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
 import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancelarVenda'
@@ -1247,6 +1247,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
 const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { setAtivo: setPdvAtivo } = usePdvMode()
+  const { aberta: calculadoraAberta } = useCalculadora()
   const { ehDono } = useSessao()
   const { showToast } = useToast()
   const imprimir = useImprimir()
@@ -1611,18 +1612,40 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           e.preventDefault()
           finalizarVendaRef.current()
           break
-        case 'Escape':
-          // Se algum modal estiver aberto, deixa o Radix fechá-lo (não previne).
-          // Só sai do PDV se nada estiver aberto.
-          if (consultaPrecoAberta || buscaProdutos || modalClienteAberto || modalProdutoAberto || modalElevarAberto) return
+        case 'Escape': {
+          // Esc é sempre "fecha o que está por cima" — só é "sai do caixa"
+          // quando não há nada por cima. A busca de cliente (F4) tem estado
+          // próprio dentro do componente, por isso é consultada pela ref.
+          const algoAberto =
+            consultaPrecoAberta ||
+            buscaProdutos ||
+            modalClienteAberto ||
+            modalProdutoAberto ||
+            modalElevarAberto ||
+            calculadoraAberta ||
+            (clienteSeletorRef.current?.estaAberto() ?? false) ||
+            // Rede de segurança: qualquer diálogo aberto na tela, inclusive os
+            // que não são desta página (aviso de atualização, por exemplo) e os
+            // que alguém adicionar aqui amanhã sem lembrar desta lista. Na fase
+            // de captura ele ainda está montado, então dá pra perguntar ao DOM.
+            document.querySelector('[role="dialog"][data-state="open"]') !== null
+          // Não previne: quem está aberto se fecha sozinho.
+          if (algoAberto) return
           e.preventDefault()
           onSairRef.current()
           break
+        }
       }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [consultaPrecoAberta, buscaProdutos, modalClienteAberto, modalProdutoAberto, modalElevarAberto])
+    // Fase de CAPTURA (o `true` no fim), não de bolha — e isso é o coração do
+    // conserto. O Radix fecha os diálogos num listener de captura no document, e
+    // o React aplica esse fechamento ainda DENTRO do mesmo evento de tecla. Na
+    // bolha, este handler rodava depois disso: o efeito já havia se re-registrado
+    // com o estado zerado, lia "nenhuma janela aberta" e derrubava o PDV inteiro
+    // junto com o diálogo. Na captura, quem decide é o estado de antes da tecla.
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [consultaPrecoAberta, buscaProdutos, modalClienteAberto, modalProdutoAberto, modalElevarAberto, calculadoraAberta])
 
   const abrirClienteRapido = () => {
     setTipoPessoaRapido('fisica')
@@ -2483,13 +2506,16 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     </div>
 
       {/* ── Barra de dicas com atalhos (estilo PDV antigo) ── */}
-      <div className="shrink-0 bg-slate-900 text-slate-300 text-xs px-4 py-1.5 flex items-center justify-center gap-5 flex-wrap select-none">
+      {/* Fonte grande e em caixa alta de propósito: o caixa lê esta barra de pé,
+          de relance e à distância do monitor — não é texto pra ser estudado. */}
+      <div className="shrink-0 bg-slate-900 text-slate-300 text-sm uppercase tracking-wide px-4 py-2 flex items-center justify-center gap-5 flex-wrap select-none">
         <DicaTecla tecla="F2" acao="Consulta preço" />
         <DicaTecla tecla="F3" acao="Buscar produto" />
         <DicaTecla tecla="F4" acao="Cliente" />
         <DicaTecla tecla="F5" acao="+ Cliente" />
         <DicaTecla tecla="F6" acao="+ Produto" />
         <DicaTecla tecla="F9" acao="Finalizar" />
+        <DicaTecla tecla="F10" acao="Calculadora" />
         <DicaTecla tecla="ESC" acao="Sair" />
       </div>
     </div>
@@ -2498,7 +2524,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
 
 const DicaTecla: FC<{ tecla: string; acao: string }> = ({ tecla, acao }) => (
   <span className="flex items-center gap-1.5">
-    <kbd className="px-1.5 py-0.5 bg-slate-700 border border-slate-600 rounded text-[10px] font-mono text-slate-100">
+    <kbd className="px-1.5 py-0.5 bg-slate-700 border border-slate-600 rounded text-[11px] font-mono text-slate-100">
       {tecla}
     </kbd>
     <span>{acao}</span>

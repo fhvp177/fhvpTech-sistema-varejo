@@ -122,6 +122,14 @@ const NovidadesContext = createContext<NovidadesCtx>({ abrirNovidades: () => {} 
 type TourCtx = { abrirTour: () => void }
 const TourContext = createContext<TourCtx>({ abrirTour: () => {} })
 export const useTour = () => useContext(TourContext)
+
+// Calculadora do balcão. O estado vive aqui porque a janela é global — flutua
+// por cima de qualquer tela, inclusive do PDV. O PDV precisa poder LER se ela
+// está aberta: lá o Esc sai do caixa, e quem aperta Esc pra limpar o visor da
+// calculadora não quer perder a venda.
+type CalculadoraCtx = { aberta: boolean; alternar: () => void }
+const CalculadoraContext = createContext<CalculadoraCtx>({ aberta: false, alternar: () => {} })
+export const useCalculadora = () => useContext(CalculadoraContext)
 export const useNovidades = () => useContext(NovidadesContext)
 
 // MemoryRouter é necessário no Electron: não existe servidor HTTP nem hash routing
@@ -320,6 +328,20 @@ const App: FC = () => {
     return () => window.removeEventListener('keydown', handler)
   }, [estadoAuth, bloquear])
 
+  // Atalho global F10 abre/fecha a calculadora. Fica aqui, e não no PDV, porque
+  // a calculadora serve a tela toda — mas é no PDV que ele faz mais falta: lá a
+  // barra lateral (e com ela o botão da calculadora) some.
+  useEffect(() => {
+    if (estadoAuth !== 'desbloqueado') return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'F10' || e.ctrlKey || e.altKey || e.metaKey) return
+      e.preventDefault()
+      setCalculadoraAberta((v) => !v)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [estadoAuth])
+
   // Auto-lock por inatividade — só roda quando desbloqueado e tempo > 0
   useAutoLock(estadoAuth === 'desbloqueado' ? autoLockMinutos : 0, bloquear)
 
@@ -370,6 +392,9 @@ const App: FC = () => {
         <TourContext.Provider value={{ abrirTour }}>
         <LockContext.Provider value={{ bloquear, autoLockMinutos, setAutoLockMinutos }}>
           <PdvModeContext.Provider value={{ ativo: pdvAtivo, setAtivo: setPdvAtivo }}>
+           <CalculadoraContext.Provider
+             value={{ aberta: calculadoraAberta, alternar: () => setCalculadoraAberta((v) => !v) }}
+           >
             <MemoryRouter>
               <div className="flex h-screen bg-background">
                 {!pdvAtivo && (
@@ -502,6 +527,7 @@ const App: FC = () => {
                 onLicencaRenovada={aoRenovar}
               />
             </MemoryRouter>
+           </CalculadoraContext.Provider>
           </PdvModeContext.Provider>
         </LockContext.Provider>
         </TourContext.Provider>

@@ -7,6 +7,29 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.31.0',
+    itens: [
+      {
+        emoji: '🧮',
+        titulo: 'Calculadora mais completa',
+        descricao:
+          'A calculadora passa a aceitar a conta inteira de uma vez, como "89,90-10%", respeitando a ordem correta das operações e permitindo parênteses. O resultado provável aparece enquanto a conta é digitada, e as últimas contas ficam guardadas em um histórico — basta tocar em uma delas para reaproveitar o resultado. Os números passam a ser exibidos com separador de milhar, o ponto e a vírgula funcionam igualmente como separador decimal, e o tamanho da janela pode ser aumentado ou reduzido pelos botões do cabeçalho.'
+      },
+      {
+        emoji: '⌨️',
+        titulo: 'Calculadora e atalhos no caixa',
+        descricao:
+          'A tecla F10 abre e fecha a calculadora em qualquer tela, inclusive dentro do caixa, onde a barra lateral não fica visível. A barra de atalhos exibida no rodapé do caixa passa a usar letras maiores e em caixa alta, para leitura à distância durante o atendimento.'
+      },
+      {
+        emoji: '🛠️',
+        titulo: 'Correção na tecla Esc dentro do caixa',
+        descricao:
+          'Ao fechar com a tecla Esc uma janela aberta no caixa — como a busca de produto, o cadastro rápido ou a consulta de preço —, o caixa inteiro também era encerrado. A situação foi corrigida: a tecla Esc passa a fechar apenas a janela em uso, e encerra o caixa somente quando não há nenhuma janela aberta.'
+      }
+    ]
+  },
+  {
     versao: '1.30.0',
     itens: [
       // Toda a novidade desta versão é da nota fiscal (Pro). No Básico o array
