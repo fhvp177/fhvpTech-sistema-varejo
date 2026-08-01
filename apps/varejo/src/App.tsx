@@ -387,7 +387,7 @@ const App: FC = () => {
 
   // Vem ANTES do "verificando": é exatamente o estado em que o caixa adicional
   // ficava preso, e agora ele explica o motivo e oferece saída.
-  if (falhaCaixaPrincipal !== null) {
+  if (__FEAT_MULTICAIXA__ && falhaCaixaPrincipal !== null) {
     return (
       <TelaSemCaixaPrincipal
         motivo={falhaCaixaPrincipal}

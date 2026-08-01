@@ -46,10 +46,20 @@ const SEGREDOS = lerSegredosLicenca()
 // hoje; 'pro' = basico + nota fiscal (nfe) + TEF. NF-e e TEF ainda não foram
 // construídos — as flags só reservam o lugar, e o Pro nasce idêntico ao Básico.
 // Default 'pro' = tudo ligado (dev e build padrão, sem regressão).
-type Features = Record<'dashboard' | 'chatbot' | 'etiquetas' | 'tef' | 'nfe', boolean>
+type Features = Record<
+  'dashboard' | 'chatbot' | 'etiquetas' | 'tef' | 'nfe' | 'multicaixa',
+  boolean
+>
 const FEATURES_POR_EDICAO: Record<string, Features> = {
-  basico: { dashboard: true, chatbot: true, etiquetas: true, tef: false, nfe: false },
-  pro: { dashboard: true, chatbot: true, etiquetas: true, tef: true, nfe: true }
+  basico: {
+    dashboard: true,
+    chatbot: true,
+    etiquetas: true,
+    tef: false,
+    nfe: false,
+    multicaixa: false
+  },
+  pro: { dashboard: true, chatbot: true, etiquetas: true, tef: true, nfe: true, multicaixa: true }
 }
 const EDICAO = process.env.EDICAO ?? 'pro'
 const FEATURES = FEATURES_POR_EDICAO[EDICAO]
@@ -69,7 +79,11 @@ export default defineConfig({
     define: {
       __CHAVE_HMAC__: JSON.stringify(SEGREDOS.CHAVE_HMAC),
       __CHAVE_AES__: JSON.stringify(SEGREDOS.CHAVE_AES),
-      __SALT_AES__: JSON.stringify(SEGREDOS.SALT_AES)
+      __SALT_AES__: JSON.stringify(SEGREDOS.SALT_AES),
+      // O multicaixa precisa da flag também no processo principal: é lá que o
+      // servidor sobe e que o boot decide se esta máquina é um caixa adicional.
+      // Sem isso, o Básico ainda carregaria o mecanismo, só sem a tela.
+      __FEAT_MULTICAIXA__: JSON.stringify(FEATURES.multicaixa)
     },
     build: {
       rollupOptions: {
@@ -110,7 +124,8 @@ export default defineConfig({
       __FEAT_CHATBOT__: JSON.stringify(FEATURES.chatbot),
       __FEAT_ETIQUETAS__: JSON.stringify(FEATURES.etiquetas),
       __FEAT_TEF__: JSON.stringify(FEATURES.tef),
-      __FEAT_NFE__: JSON.stringify(FEATURES.nfe)
+      __FEAT_NFE__: JSON.stringify(FEATURES.nfe),
+      __FEAT_MULTICAIXA__: JSON.stringify(FEATURES.multicaixa)
     },
     plugins: [react()]
   }

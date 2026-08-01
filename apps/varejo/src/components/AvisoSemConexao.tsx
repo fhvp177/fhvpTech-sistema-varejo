@@ -14,6 +14,10 @@ export function useSituacaoMulticaixa(): { ehCaixaAdicional: boolean; conectado:
   const [conectado, setConectado] = useState(true)
 
   useEffect(() => {
+    // No Básico o multicaixa não existe e os canais nem são registrados —
+    // perguntar daria erro sem handler. A flag é constante no build, então este
+    // trecho some do binário daquela edição.
+    if (!__FEAT_MULTICAIXA__) return
     window.api.multicaixa.situacao().then((r) => {
       if (!r.success) return
       setModo(r.data.modo)

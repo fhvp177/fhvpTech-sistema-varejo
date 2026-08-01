@@ -157,9 +157,13 @@ app.whenReady().then(() => {
   // O aviso de conexão vai por evento, e não por consulta repetida: a tela
   // precisa saber no instante em que cai, não meio segundo depois. A janela é
   // buscada na hora porque neste ponto ela ainda não existe.
-  const ehTerminal = ligarModoTerminal((conectado) => {
-    janelaAtual?.webContents.send('multicaixa:conexao', conectado)
-  })
+  // No Básico o multicaixa não existe: a flag é constante no build, então o
+  // mecanismo inteiro sai do binário em vez de ficar apenas escondido.
+  const ehTerminal =
+    __FEAT_MULTICAIXA__ &&
+    ligarModoTerminal((conectado) => {
+      janelaAtual?.webContents.send('multicaixa:conexao', conectado)
+    })
 
   configurarNucleo({ criarTabelas, migrations: MIGRATIONS, validarLicenca })
   if (!ehTerminal) {
@@ -197,7 +201,7 @@ app.whenReady().then(() => {
   registrarHandlersNotificacoes()
   registrarHandlersNovidades()
   registrarHandlersNotasEntrada()
-  registrarHandlersMulticaixa()
+  if (__FEAT_MULTICAIXA__) registrarHandlersMulticaixa()
 
   // Liga os canais registrados acima ao ipcMain. Os handlers agora vivem num
   // Map no core (`registrarCanal`) em vez de irem direto no `ipcMain.handle` —
@@ -220,7 +224,7 @@ app.whenReady().then(() => {
   // Se o lojista deixou o modo servidor ligado, volta a atender o segundo caixa.
   // Depois da janela porque falhar aqui (porta ocupada) não pode atrasar nem
   // impedir a abertura do caixa principal. No terminal não há o que retomar.
-  if (!ehTerminal) void retomarServidorSeConfigurado()
+  if (__FEAT_MULTICAIXA__ && !ehTerminal) void retomarServidorSeConfigurado()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

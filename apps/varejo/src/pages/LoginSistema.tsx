@@ -361,7 +361,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
             vendedores para listar, então ninguém consegue entrar nele para
             chegar às Configurações. Discreto de propósito — a loja com um caixa
             só nunca vai precisar disto. */}
-        {!selecionado && (
+        {__FEAT_MULTICAIXA__ && !selecionado && (
           <p className="text-center text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
             <button
               onClick={() => setMostrarConfigurarMaquina(true)}
@@ -380,7 +380,10 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
         />
       )}
 
-      {mostrarConfigurarMaquina && (
+      {/* A flag precisa estar AQUI também, e não só no botão: enquanto houver
+          uma referência ao componente, o bundler não consegue removê-lo do
+          binário do Básico — ele ficaria escondido em vez de ausente. */}
+      {__FEAT_MULTICAIXA__ && mostrarConfigurarMaquina && (
         <ModalConfigurarMaquina onFechar={() => setMostrarConfigurarMaquina(false)} />
       )}
     </div>

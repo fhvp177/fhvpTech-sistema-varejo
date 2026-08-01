@@ -113,10 +113,12 @@ const Configuracoes: FC = () => {
       if (r.success) setTotalVendedores((r.data as unknown[]).length)
     })
     // Só para o resumo da seção recolhida — o componente de dentro recarrega
-    // por conta própria quando o lojista mexe.
-    window.api.multicaixa.estado().then((r) => {
-      if (r.success) setEstadoMulticaixa(r.data)
-    })
+    // por conta própria quando o lojista mexe. No Básico o canal não existe.
+    if (__FEAT_MULTICAIXA__) {
+      window.api.multicaixa.estado().then((r) => {
+        if (r.success) setEstadoMulticaixa(r.data)
+      })
+    }
     window.api.impressao.obterPreferencias().then((r) => {
       if (r.success) setPrefsImpressao(r.data)
     })
@@ -578,6 +580,7 @@ const Configuracoes: FC = () => {
         </div>
       </SecaoConfig>
 
+      {__FEAT_MULTICAIXA__ && (
       <SecaoConfig
         id="multicaixa"
         titulo="Multicaixa"
@@ -592,6 +595,7 @@ const Configuracoes: FC = () => {
         <ConfigMulticaixa />
         </div>
       </SecaoConfig>
+      )}
 
       {/* Backup fica ABERTO: é o único que o lojista vem CONSULTAR ("rodou?"),
           não configurar. Escondê-lo atrás de um clique pioraria a tela.

@@ -12,6 +12,7 @@ declare const __FEAT_CHATBOT__: boolean
 declare const __FEAT_ETIQUETAS__: boolean
 declare const __FEAT_TEF__: boolean
 declare const __FEAT_NFE__: boolean
+declare const __FEAT_MULTICAIXA__: boolean
 
 type RespostaIPC<T = unknown> = { success: true; data: T } | { success: false; error: string }
 
