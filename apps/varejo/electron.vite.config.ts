@@ -83,7 +83,10 @@ export default defineConfig({
       // O multicaixa precisa da flag também no processo principal: é lá que o
       // servidor sobe e que o boot decide se esta máquina é um caixa adicional.
       // Sem isso, o Básico ainda carregaria o mecanismo, só sem a tela.
-      __FEAT_MULTICAIXA__: JSON.stringify(FEATURES.multicaixa)
+      __FEAT_MULTICAIXA__: JSON.stringify(FEATURES.multicaixa),
+      // A edição também no principal, para o atualizador saber sozinho em qual
+      // canal ele deve procurar versão nova — ver electron/atualizador.ts.
+      __EDICAO__: JSON.stringify(EDICAO)
     },
     build: {
       rollupOptions: {

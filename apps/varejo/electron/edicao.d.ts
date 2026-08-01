@@ -5,3 +5,6 @@
 // em vez de apenas escondê-lo: no Básico, o multicaixa não existe no binário.
 
 declare const __FEAT_MULTICAIXA__: boolean
+
+/** 'basico' | 'pro' — a edição com que este binário foi gerado. */
+declare const __EDICAO__: string

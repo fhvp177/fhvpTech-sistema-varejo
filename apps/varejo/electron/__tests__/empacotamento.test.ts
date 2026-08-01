@@ -58,3 +58,25 @@ describe('empacotamento', () => {
     expect(fonte).toContain('https://updates.fhvptech.com/${edicao}')
   })
 })
+
+describe('canal de atualização em tempo de execução', () => {
+  const atualizador = ler('electron/atualizador.ts')
+
+  it('o app define o próprio canal a partir da edição do build', () => {
+    // Cinto e suspensório do app-update.yml. Os dois podiam discordar — e
+    // discordaram: binário com recursos do Pro e endereço apontando pro
+    // GitHub. Mandando a mesma constante que liga os recursos decidir também
+    // onde procurar versão nova, não há como divergir, e instalador gerado
+    // torto se conserta sozinho ao abrir.
+    expect(atualizador).toContain('setFeedURL')
+    expect(atualizador).toContain('https://updates.fhvptech.com/${__EDICAO__}')
+  })
+
+  it('a edição chega ao processo principal', () => {
+    // `__EDICAO__` vivia só no define do renderer; o atualizador roda no
+    // principal e leria `undefined`, virando o canal ".../undefined".
+    const config = ler('electron.vite.config.ts')
+    const blocoMain = config.slice(config.indexOf('main:'), config.indexOf('preload:'))
+    expect(blocoMain).toContain('__EDICAO__')
+  })
+})

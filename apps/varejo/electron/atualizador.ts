@@ -41,6 +41,24 @@ export function inicializarAtualizador(obterJanela: () => BrowserWindow | null):
   autoUpdater.autoDownload = true            // baixa em background assim que detecta update
   autoUpdater.autoInstallOnAppQuit = false   // instalação é controlada pelo usuário via modal
 
+  // O canal vem da EDIÇÃO do build, não do app-update.yml que o instalador
+  // gravou. Parece redundante e não é: o yml e as features podiam discordar, e
+  // discordaram — dois notebooks rodaram com os recursos do Pro e um endereço
+  // de atualização apontando pro GitHub, que não recebe mais release. O sistema
+  // dizia "você já está na versão mais recente" e estava certo: perguntava no
+  // lugar errado. Nenhum botão de verificar resolve isso, porque não há nada
+  // errado a resolver do ponto de vista dele.
+  //
+  // A mesma constante que decide quais recursos existem passa a decidir onde
+  // procurar versão nova. Sendo uma fonte só, elas não têm como divergir — e um
+  // instalador gerado torto se conserta sozinho na primeira execução.
+  if (app.isPackaged) {
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url: `https://updates.fhvptech.com/${__EDICAO__}`
+    })
+  }
+
   // Em dev o autoUpdater não tem `app-update.yml` ainda — desabilita silenciosamente
   if (!app.isPackaged) {
     console.log('[atualizador] App em modo dev — checagem de update desativada.')
