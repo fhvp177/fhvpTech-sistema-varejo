@@ -13,31 +13,81 @@ REM  (app-update.yml) que diz ONDE o sistema procura por atualizacao. Alguns
 REM  computadores foram instalados com esse arquivo apontando para um endereco
 REM  antigo, que nao recebe mais versao nova. O sistema entao pergunta no lugar
 REM  errado, nao encontra nada mais novo e responde que esta atualizado - e,
-REM  do ponto de vista dele, esta certo.
+REM  do ponto de vista dele, esta certo. Verificar de novo nao resolve.
 REM
 REM  Este script apenas reescreve esse arquivo apontando para o endereco atual.
-REM  Nao mexe em dados, licenca, backup nem em nada mais. O arquivo antigo e
-REM  guardado ao lado, com a extensao .bak, caso precise voltar.
+REM  Nao mexe em dados, licenca nem backup. O arquivo antigo e guardado ao lado
+REM  com a extensao .bak, caso precise voltar.
+REM
+REM  A pasta de instalacao NAO e fixa: muda conforme a versao em que o sistema
+REM  foi instalado pela primeira vez (o nome do produto mudou ao longo do tempo)
+REM  e conforme a instalacao ter sido so para este usuario ou para todos. Por
+REM  isso o script procura em vez de adivinhar.
 REM
 REM  IMPORTANTE: FECHE O SISTEMA antes de rodar.
 REM ============================================================================
 
-set "DESTINO=%LOCALAPPDATA%\Programs\FHVP Tech Varejo\resources\app-update.yml"
+set "N=0"
 
-if not exist "%DESTINO%" (
+for %%R in ("%LOCALAPPDATA%\Programs" "%ProgramFiles%" "%ProgramFiles(x86)%") do (
+  if exist "%%~R\" (
+    for /d %%D in ("%%~R\*") do (
+      if exist "%%~D\resources\app-update.yml" (
+        REM Confirma pelo executavel que a pasta e do nosso sistema - outros
+        REM aplicativos Electron instalados na maquina tambem tem esse arquivo,
+        REM e reescrever o deles quebraria a atualizacao de um programa alheio.
+        dir /b "%%~D\*.exe" 2>nul | findstr /i "FHVP Sistema" >nul && (
+          set /a N+=1
+          set "CAND!N!=%%~D"
+        )
+      )
+    )
+  )
+)
+
+if "%N%"=="0" (
   echo.
-  echo  Nao encontrei a instalacao do FHVP Tech Varejo neste computador.
-  echo  Procurei em:
-  echo    %DESTINO%
+  echo  Nao encontrei o FHVP Tech Varejo instalado neste computador.
+  echo.
+  echo  Procurei nestas pastas:
+  echo    %LOCALAPPDATA%\Programs
+  echo    %ProgramFiles%
+  echo    %ProgramFiles(x86^)%
+  echo.
+  echo  Se o sistema estiver instalado em outro lugar, abra a pasta dele,
+  echo  entre em "resources", e edite o arquivo app-update.yml no Bloco de
+  echo  Notas deixando exatamente estas tres linhas:
+  echo.
+  echo    provider: generic
+  echo    url: https://updates.fhvptech.com/pro
+  echo    updaterCacheDirName: sistema-rt-updater
+  echo.
+  echo  ^(troque "pro" por "basico" se este computador for do plano Basico^)
   echo.
   pause
   exit /b 1
 )
 
+set "ALVO=!CAND1!"
+
+if not "%N%"=="1" (
+  echo.
+  echo  Encontrei mais de uma instalacao:
+  echo.
+  for /l %%I in (1,1,%N%) do echo    [%%I] !CAND%%I!
+  echo.
+  set /p "ESCOLHA=  Digite o numero da que voce quer corrigir: "
+  for /l %%I in (1,1,%N%) do if "!ESCOLHA!"=="%%I" set "ALVO=!CAND%%I!"
+)
+
+set "DESTINO=!ALVO!\resources\app-update.yml"
+
+echo.
+echo  Instalacao: !ALVO!
 echo.
 echo  Endereco de atualizacao atual:
 echo.
-type "%DESTINO%"
+type "!DESTINO!"
 echo.
 echo  ---------------------------------------------------------------------
 echo.
@@ -57,22 +107,20 @@ echo.
 echo  Canal escolhido: %CANAL%
 echo.
 
-REM Guarda o original antes de mexer.
-if not exist "%DESTINO%.bak" copy /y "%DESTINO%" "%DESTINO%.bak" >nul
+if not exist "!DESTINO!.bak" copy /y "!DESTINO!" "!DESTINO!.bak" >nul
 
-> "%DESTINO%" echo provider: generic
->>"%DESTINO%" echo url: https://updates.fhvptech.com/%CANAL%
->>"%DESTINO%" echo updaterCacheDirName: sistema-rt-updater
+> "!DESTINO!" echo provider: generic
+>>"!DESTINO!" echo url: https://updates.fhvptech.com/%CANAL%
+>>"!DESTINO!" echo updaterCacheDirName: sistema-rt-updater
 
 echo  Pronto. Novo endereco:
 echo.
-type "%DESTINO%"
+type "!DESTINO!"
 echo.
 echo  ---------------------------------------------------------------------
 echo.
 echo  Abra o sistema normalmente. Em alguns segundos ele encontra a versao
-echo  nova e comeca a baixar sozinho. Se preferir, va em Configuracoes e use
-echo  o botao de verificar atualizacao.
+echo  nova e comeca a baixar sozinho.
 echo.
 echo  Depois desta atualizacao o problema nao volta: a versao nova ja vem com
 echo  o endereco certo gravado.
