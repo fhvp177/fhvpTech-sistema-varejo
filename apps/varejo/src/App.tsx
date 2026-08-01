@@ -34,6 +34,8 @@ import LoginSistema from './pages/LoginSistema'
 import ModalCadastrarEmailDono from './components/ModalCadastrarEmailDono'
 import IndicadorBackupAtivo from './components/backup/IndicadorBackupAtivo'
 import AlertaBackupFalhando from './components/backup/AlertaBackupFalhando'
+import AvisoSemConexao from './components/AvisoSemConexao'
+import TelaSemCaixaPrincipal from './components/TelaSemCaixaPrincipal'
 import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
 import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
 import ModalPagamentoPix from '@fhvptech/core/ui/ModalPagamentoPix'
@@ -140,6 +142,9 @@ const App: FC = () => {
   const [avisoLicenca, setAvisoLicenca] = useState<string | null>(null)
   const [pdvAtivo, setPdvAtivo] = useState(false)
   const [estadoAuth, setEstadoAuth] = useState<EstadoAuth>('verificando')
+  // Caixa adicional que não conseguiu falar com o computador principal ao abrir.
+  const [falhaCaixaPrincipal, setFalhaCaixaPrincipal] = useState<string | null>(null)
+  const [tentativaCaixaPrincipal, setTentativaCaixaPrincipal] = useState(0)
   const [autoLockMinutos, setAutoLockMinutos] = useState(15)
   const [mostrarPagamento, setMostrarPagamento] = useState(false)
   const [vendedor, setVendedor] = useState<SessaoVendedor | null>(null)
@@ -191,14 +196,23 @@ const App: FC = () => {
   useEffect(() => {
     if (estadoLicenca !== 'valida') return
     ;(async () => {
-      const respStatus = await window.api.auth.obterStatus()
-      if (respStatus.success) {
-        setAutoLockMinutos(respStatus.data.autoLockMinutos)
+      try {
+        const respStatus = await window.api.auth.obterStatus()
+        if (respStatus.success) {
+          setAutoLockMinutos(respStatus.data.autoLockMinutos)
+        }
+        const sessao = await recarregarSessao()
+        setFalhaCaixaPrincipal(null)
+        setEstadoAuth(sessao ? 'desbloqueado' : 'bloqueado')
+      } catch (erro) {
+        // Num caixa adicional estas duas perguntas vão pela rede até o
+        // computador principal. Sem ele, elas LANÇAM — e sem este catch o
+        // estado nunca saía de "verificando", deixando a tela presa sem dizer
+        // por quê e, se o caixa tivesse sido removido, sem nenhuma saída.
+        setFalhaCaixaPrincipal((erro as Error).message || 'Sem conexão com o caixa principal.')
       }
-      const sessao = await recarregarSessao()
-      setEstadoAuth(sessao ? 'desbloqueado' : 'bloqueado')
     })()
-  }, [estadoLicenca, recarregarSessao])
+  }, [estadoLicenca, recarregarSessao, tentativaCaixaPrincipal])
 
   // ── Onboarding ──────────────────────────────────────────────────────────────
   // Relê o estado do tutorial. Em caso de falha, assume "tudo visto" (fail-safe:
@@ -371,6 +385,17 @@ const App: FC = () => {
     )
   }
 
+  // Vem ANTES do "verificando": é exatamente o estado em que o caixa adicional
+  // ficava preso, e agora ele explica o motivo e oferece saída.
+  if (falhaCaixaPrincipal !== null) {
+    return (
+      <TelaSemCaixaPrincipal
+        motivo={falhaCaixaPrincipal}
+        onTentarNovamente={() => setTentativaCaixaPrincipal((n) => n + 1)}
+      />
+    )
+  }
+
   if (estadoAuth === 'verificando') {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -407,6 +432,10 @@ const App: FC = () => {
                   />
                 )}
                 <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Aparece inclusive com o PDV aberto, ao contrário dos
+                      demais avisos: é justamente durante a venda que perder o
+                      caixa principal precisa ficar visível. */}
+                  <AvisoSemConexao />
                   {!pdvAtivo && <AlertaBackupFalhando />}
                   {!pdvAtivo && vendedor?.papel === 'dono' && (
                     <div className="h-12 shrink-0 border-b bg-background flex items-center justify-end px-6">

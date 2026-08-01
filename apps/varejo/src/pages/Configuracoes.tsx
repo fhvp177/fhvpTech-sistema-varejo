@@ -2,15 +2,18 @@ import { FC, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
 import ConfigImpressao from '@/components/ConfigImpressao'
+import ConfigMulticaixa from '@/components/ConfigMulticaixa'
 import CidadeSeletor from '@/components/CidadeSeletor'
 import SecaoConfig from '@/components/SecaoConfig'
 import { useOnboarding, useNovidades, useTour, useLock } from '@/App'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
+import type { EstadoMulticaixa } from '@/types/multicaixa'
+import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { UFS } from '@/data/ufs'
 
 // Mesmo visual do <Input> do core — usado nos campos com máscara (IMaskInput
@@ -76,6 +79,8 @@ const Configuracoes: FC = () => {
   // Resumos das seções fechadas — é o que permite ler a tela sem abrir nada.
   const { autoLockMinutos } = useLock()
   const [totalVendedores, setTotalVendedores] = useState<number | null>(null)
+  const [estadoMulticaixa, setEstadoMulticaixa] = useState<EstadoMulticaixa | null>(null)
+  const { ehCaixaAdicional } = useSituacaoMulticaixa()
   const [prefsImpressao, setPrefsImpressao] = useState<{
     cupom: { printer: string }
     documento: { printer: string }
@@ -106,6 +111,11 @@ const Configuracoes: FC = () => {
   useEffect(() => {
     window.api.vendedores.listar().then((r) => {
       if (r.success) setTotalVendedores((r.data as unknown[]).length)
+    })
+    // Só para o resumo da seção recolhida — o componente de dentro recarrega
+    // por conta própria quando o lojista mexe.
+    window.api.multicaixa.estado().then((r) => {
+      if (r.success) setEstadoMulticaixa(r.data)
     })
     window.api.impressao.obterPreferencias().then((r) => {
       if (r.success) setPrefsImpressao(r.data)
@@ -242,6 +252,12 @@ const Configuracoes: FC = () => {
       : `${totalVendedores} ${totalVendedores === 1 ? 'cadastrado' : 'cadastrados'}`
   const impressoraCupom = prefsImpressao?.cupom?.printer
   const resumoImpressao = impressoraCupom || 'nenhuma escolhida'
+  const resumoMulticaixa =
+    estadoMulticaixa === null
+      ? null
+      : estadoMulticaixa.modo !== 'servidor'
+        ? 'desligado'
+        : `${estadoMulticaixa.terminais.length} ${estadoMulticaixa.terminais.length === 1 ? 'caixa conectado' : 'caixas conectados'}`
 
   return (
     <div className="p-8 max-w-2xl">
@@ -562,8 +578,29 @@ const Configuracoes: FC = () => {
         </div>
       </SecaoConfig>
 
+      <SecaoConfig
+        id="multicaixa"
+        titulo="Multicaixa"
+        icone={<MonitorSmartphone className="w-4 h-4" />}
+        resumo={resumoMulticaixa}
+      >
+        <div className="space-y-4">
+        <p className="text-sm text-muted-foreground -mt-1">
+          Permite que outro computador trabalhe nos mesmos dados desta loja, na rede local ou
+          pela internet. Os dados continuam guardados apenas aqui.
+        </p>
+        <ConfigMulticaixa />
+        </div>
+      </SecaoConfig>
+
       {/* Backup fica ABERTO: é o único que o lojista vem CONSULTAR ("rodou?"),
-          não configurar. Escondê-lo atrás de um clique pioraria a tela. */}
+          não configurar. Escondê-lo atrás de um clique pioraria a tela.
+
+          Some por completo no caixa adicional: lá não existe banco para copiar,
+          e os canais de backup já recusam. Mostrar botões que só respondem
+          "indisponível" seria pior que não mostrar nada — quem é dono dos dados
+          é o computador principal, e é lá que o backup se configura. */}
+      {!ehCaixaAdicional && (
       <div className="space-y-6">
         <h3 className="text-lg font-semibold border-b pb-2">Backup de Dados</h3>
 
@@ -748,6 +785,7 @@ const Configuracoes: FC = () => {
           )}
         </div>
       </div>
+      )}
     </div>
   )
 }

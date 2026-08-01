@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { BrowserWindow, dialog } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -60,12 +61,30 @@ async function carregarPdfOculto(base64: string, nomeBase: string): Promise<Brow
   return janela
 }
 
-export function registrarHandlersImpressao(): void {
+/**
+ * Os dois handlers que precisavam do `event` do IPC (listar impressoras e
+ * imprimir a janela atual) agora recebem a janela principal por aqui — mesmo
+ * padrão do `inicializarAtualizador`. O getter é necessário porque os handlers
+ * se registram ANTES de a janela existir.
+ *
+ * Vale como decisão de produto, não só técnica: impressora é da máquina onde o
+ * app está aberto. Quando o segundo caixa entrar em cena, é isso que garante
+ * que ele imprima na impressora DELE, e não na do PC da loja.
+ */
+export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | null): void {
+  function janelaPrincipal(): BrowserWindow {
+    const janela = obterJanela()
+    if (!janela || janela.isDestroyed()) {
+      throw new Error('A janela principal não está disponível.')
+    }
+    return janela
+  }
+
   // Lista as impressoras instaladas — alimenta o diálogo de impressão no tema
   // do sistema (em vez da caixa nativa do Windows).
-  ipcMain.handle('impressao:listarImpressoras', async (event): Promise<RespostaIPC> => {
+  registrarCanal('impressao:listarImpressoras', async (): Promise<RespostaIPC> => {
     try {
-      const printers = await event.sender.getPrintersAsync()
+      const printers = await janelaPrincipal().webContents.getPrintersAsync()
       const lista = printers.map((p) => ({
         name: p.name,
         displayName: p.displayName || p.name,
@@ -78,7 +97,7 @@ export function registrarHandlersImpressao(): void {
   })
 
   // Lê as preferências de impressora das duas categorias (cupom e documento).
-  ipcMain.handle('impressao:obterPreferencias', async (): Promise<RespostaIPC> => {
+  registrarCanal('impressao:obterPreferencias', async (): Promise<RespostaIPC> => {
     try {
       return {
         success: true,
@@ -91,11 +110,9 @@ export function registrarHandlersImpressao(): void {
 
   // Salva preferências (parcial): grava só os campos presentes, pra não apagar o
   // que não veio (ex.: o diálogo lembra a impressora sem mexer no flag `direto`).
-  ipcMain.handle(
+  registrarCanal(
     'impressao:salvarPreferencias',
-    async (
-      _event,
-      prefs: Partial<Record<CategoriaImpressao, { printer?: string; direto?: boolean }>>
+    async (prefs: Partial<Record<CategoriaImpressao, { printer?: string; direto?: boolean }>>
     ): Promise<RespostaIPC> => {
       try {
         for (const cat of ['cupom', 'documento'] as CategoriaImpressao[]) {
@@ -114,11 +131,9 @@ export function registrarHandlersImpressao(): void {
   // Impressão física. Com `deviceName`, imprime SILENCIOSO na impressora escolhida
   // (sem a caixa nativa do Windows) — usado pelo diálogo de impressão do sistema.
   // Sem `deviceName`, mantém o diálogo nativo (retrocompatível, ex.: cupom).
-  ipcMain.handle(
+  registrarCanal(
     'impressao:imprimir',
-    async (
-      _event,
-      html: string,
+    async (html: string,
       nomeArquivo?: string,
       deviceName?: string
     ): Promise<RespostaIPC> => {
@@ -145,11 +160,9 @@ export function registrarHandlersImpressao(): void {
 
   // Imprime um PDF já pronto (DANFE da nota fiscal). Mesmo comportamento do
   // handler de HTML: com deviceName imprime silencioso; sem, abre o diálogo.
-  ipcMain.handle(
+  registrarCanal(
     'impressao:imprimirPdf',
-    async (
-      _event,
-      pdfBase64: string,
+    async (pdfBase64: string,
       nomeArquivo?: string,
       deviceName?: string
     ): Promise<RespostaIPC> => {
@@ -178,12 +191,13 @@ export function registrarHandlersImpressao(): void {
   // Impressão da JANELA ATUAL (o renderer que chamou), silenciosa, na impressora
   // escolhida. Usada pelas Etiquetas A4, que renderizam a folha calibrada na
   // própria tela (via @media print). A4 + margem 'none' pra casar o @page do CSS.
-  ipcMain.handle(
+  registrarCanal(
     'impressao:imprimirJanela',
-    async (event, deviceName: string): Promise<RespostaIPC> => {
+    async (deviceName: string): Promise<RespostaIPC> => {
       try {
+        const alvo = janelaPrincipal()
         await new Promise<void>((resolve, reject) => {
-          event.sender.print(
+          alvo.webContents.print(
             {
               silent: true,
               deviceName,
@@ -208,9 +222,9 @@ export function registrarHandlersImpressao(): void {
   // com o nome definido. NÃO passa pelo "Microsoft Print to PDF" do Windows —
   // que ignora o nome do documento por esse caminho —, então o nome sempre
   // vem certo.
-  ipcMain.handle(
+  registrarCanal(
     'impressao:salvarPdf',
-    async (_event, html: string, nomeArquivo?: string): Promise<RespostaIPC> => {
+    async (html: string, nomeArquivo?: string): Promise<RespostaIPC> => {
       let janela: BrowserWindow | null = null
       try {
         const nome = nomeSeguro(nomeArquivo || 'documento')

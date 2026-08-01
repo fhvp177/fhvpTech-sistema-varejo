@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   listarClientes,
   criarCliente,
@@ -12,7 +12,7 @@ import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager
 import { requerDono } from '../sessao'
 
 export function registrarHandlersClientes(): void {
-  ipcMain.handle('clientes:listar', () => {
+  registrarCanal('clientes:listar', () => {
     try {
       return { success: true, data: listarClientes() }
     } catch (error) {
@@ -21,7 +21,7 @@ export function registrarHandlersClientes(): void {
   })
 
   // criar é liberado pro vendedor — frequente no PDV (cadastra cliente novo na hora)
-  ipcMain.handle('clientes:criar', (_event, dados: DadosCliente) => {
+  registrarCanal('clientes:criar', (dados: DadosCliente) => {
     try {
       const resultado = criarCliente(dados)
       obterBackupManager().marcarAlteracao()
@@ -31,7 +31,7 @@ export function registrarHandlersClientes(): void {
     }
   })
 
-  ipcMain.handle('clientes:atualizar', (_event, id: number, dados: DadosCliente) => {
+  registrarCanal('clientes:atualizar', (id: number, dados: DadosCliente) => {
     try {
       requerDono()
       atualizarCliente(id, dados)
@@ -42,7 +42,7 @@ export function registrarHandlersClientes(): void {
     }
   })
 
-  ipcMain.handle('clientes:deletar', (_event, id: number) => {
+  registrarCanal('clientes:deletar', (id: number) => {
     try {
       requerDono()
       deletarCliente(id)
@@ -53,7 +53,7 @@ export function registrarHandlersClientes(): void {
     }
   })
 
-  ipcMain.handle('clientes:listarInadimplentes', () => {
+  registrarCanal('clientes:listarInadimplentes', () => {
     try {
       return { success: true, data: listarInadimplentes() }
     } catch (error) {
@@ -61,7 +61,7 @@ export function registrarHandlersClientes(): void {
     }
   })
 
-  ipcMain.handle('clientes:listarVencendoHoje', () => {
+  registrarCanal('clientes:listarVencendoHoje', () => {
     try {
       return { success: true, data: listarVencendoHoje() }
     } catch (error) {

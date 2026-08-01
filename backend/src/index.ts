@@ -35,6 +35,7 @@ import {
   gerarChaveLicenca
 } from './licenca.ts'
 import { licencaAtiva } from './licencaGuard.ts'
+import { registrarRotasRelay } from './relay.ts'
 import { registrarRotasFiscais } from './rotasFiscais.ts'
 function obrigatoria(chave: string): string {
   const v = process.env[chave]
@@ -60,6 +61,11 @@ const app = new Hono()
 app.use('*', cors())
 
 app.get('/', (c) => c.text('FHVP Tech — licenca API ok'))
+
+// Ponto de encontro do multicaixa: liga o computador principal de uma loja a um
+// caixa adicional que está fora dela. O conteúdo passa cifrado ponta a ponta —
+// este servidor encaminha bytes que não consegue interpretar. Ver relay.ts.
+registrarRotasRelay(app, config.CHAVE_HMAC)
 
 // Rotas da nota fiscal (NFC-e via ACBr). Protegidas por licença lá dentro.
 registrarRotasFiscais(app)

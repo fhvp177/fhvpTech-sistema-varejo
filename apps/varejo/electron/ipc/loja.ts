@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 
 // Identidade da loja exibida nos cupons/comprovantes. Fica no banco (tabela
@@ -58,7 +58,7 @@ function obterDadosLoja(): DadosLoja {
 }
 
 export function registrarHandlersLoja(): void {
-  ipcMain.handle('loja:obter', () => {
+  registrarCanal('loja:obter', () => {
     try {
       return { success: true, data: obterDadosLoja() }
     } catch (error) {
@@ -66,7 +66,7 @@ export function registrarHandlersLoja(): void {
     }
   })
 
-  ipcMain.handle('loja:salvar', (_event, dados: DadosLoja) => {
+  registrarCanal('loja:salvar', (dados: DadosLoja) => {
     try {
       gravarConfig('loja_nome', dados.nome ?? '')
       gravarConfig('loja_razao_social', dados.razao_social ?? '')

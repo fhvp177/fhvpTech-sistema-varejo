@@ -6,7 +6,7 @@
 // devolvemos os resultados; repetimos até o modelo dar a resposta final.
 // Ver electron/chat/ferramentas.ts (tools) e backend/src/chat.ts (proxy).
 
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
 import { TOOLS, executarTool } from '../chat/ferramentas'
 
@@ -130,7 +130,7 @@ async function conversar(historico: MensagemChat[]): Promise<string> {
 }
 
 export function registrarHandlersChat(): void {
-  ipcMain.handle('chat:enviar', async (_event, historico: MensagemChat[]) => {
+  registrarCanal('chat:enviar', async (historico: MensagemChat[]) => {
     try {
       if (!Array.isArray(historico) || historico.length === 0) {
         return { success: false, error: 'Nenhuma mensagem para enviar.' }

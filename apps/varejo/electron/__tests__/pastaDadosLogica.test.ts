@@ -43,9 +43,26 @@ afterEach(() => {
 
 // Gêmeo node:sqlite do contarRegistros de produção: mesma query, e qualquer
 // erro (arquivo ausente/ilegível/sem as tabelas) conta como 0.
+/**
+ * O `node:sqlite` aceita opções no construtor desde o Node 22 — que é o Node
+ * usado aqui —, mas o `@types/node` do monorepo ainda está na linha 20, anterior
+ * a esse módulo. Os tipos é que estão atrasados, não o código: no backend, que
+ * usa `@types/node` 22, a assinatura já vem com os dois parâmetros.
+ *
+ * A afirmação abaixo é sobre a DECLARAÇÃO, não sobre comportamento. Tirar o
+ * `readOnly` faria o gêmeo CRIAR o arquivo quando ele não existe, e é
+ * justamente o caso "banco ausente conta como zero" que estes testes cobrem.
+ *
+ * Some sozinha quando o `@types/node` da raiz subir para a linha 22.
+ */
+const AbrirBancoSomenteLeitura = DatabaseSync as unknown as new (
+  caminho: string,
+  opcoes?: { readOnly?: boolean }
+) => DatabaseSync
+
 const contar: ContadorRegistros = (caminhoBanco) => {
   try {
-    const db = new DatabaseSync(caminhoBanco, { readOnly: true })
+    const db = new AbrirBancoSomenteLeitura(caminhoBanco, { readOnly: true })
     try {
       const r = db
         .prepare(

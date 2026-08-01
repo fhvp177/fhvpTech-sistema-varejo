@@ -657,5 +657,48 @@ interface Window {
       onNotificacao: (cb: (data: { tipo: string; sucesso: boolean }) => void) => () => void
       onCarregando: (cb: (visivel: boolean) => void) => () => void
     }
+    // ⚠️ Os tipos vêm por `import(...)` inline, e não por um `import` no topo:
+    // este arquivo não pode ter import/export de módulo, senão deixa de ser
+    // script global e derruba `window.api`, `__APP_VERSION__` e as flags de
+    // build junto. Ver o comentário em types/multicaixa.ts.
+    multicaixa: {
+      estado: () => Promise<RespostaIPC<import('./multicaixa').EstadoMulticaixa>>
+      ligarServidor: () => Promise<RespostaIPC<import('./multicaixa').EstadoMulticaixa>>
+      desligarServidor: () => Promise<RespostaIPC<import('./multicaixa').EstadoMulticaixa>>
+      abrirPareamento: () => Promise<RespostaIPC<{ codigo: string; expiraEm: number }>>
+      liberarFirewall: () => Promise<RespostaIPC<import('./multicaixa').EstadoMulticaixa>>
+      fecharPareamento: () => Promise<RespostaIPC<null>>
+      revogarTerminal: (id: string) => Promise<RespostaIPC<import('./multicaixa').EstadoMulticaixa>>
+      abrirClonagem: () => Promise<
+        RespostaIPC<{ codigo: string; expiraEm: number; porta: number }>
+      >
+      fecharClonagem: () => Promise<RespostaIPC<null>>
+      exigeSenhaParaReceber: () => Promise<RespostaIPC<boolean>>
+      receberBanco: (
+        endereco: string,
+        codigo: string,
+        senha: string
+      ) => Promise<RespostaIPC<{ copiaDeSeguranca?: string }>>
+      conectarComoTerminal: (
+        endereco: string,
+        codigo: string,
+        nome: string
+      ) => Promise<RespostaIPC<null>>
+      sairDoModoTerminal: () => Promise<RespostaIPC<null>>
+      reiniciarApp: () => Promise<RespostaIPC<null>>
+      situacao: () => Promise<
+        RespostaIPC<{
+          modo: 'normal' | 'servidor' | 'terminal'
+          conectado: boolean
+          quedas: {
+            total: number
+            ultimaQueda: string | null
+            tempoForaMs: number
+            foraDoArAgora: boolean
+          } | null
+        }>
+      >
+      onConexao: (cb: (conectado: boolean) => void) => () => void
+    }
   }
 }

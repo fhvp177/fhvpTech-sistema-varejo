@@ -1,4 +1,5 @@
-import { ipcMain, dialog } from 'electron'
+import { dialog } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -163,9 +164,9 @@ function validarImportacao(payload: unknown): DadosImportacao {
 }
 
 export function registrarHandlersNotasEntrada(): void {
-  ipcMain.handle(
+  registrarCanal(
     'notasEntrada:analisar',
-    (_event, chave: string, fornecedorCnpj: string | null, itens: ItemParaAnalise[]) => {
+    (chave: string, fornecedorCnpj: string | null, itens: ItemParaAnalise[]) => {
       try {
         requerDono()
         const c = String(chave ?? '').trim()
@@ -182,7 +183,7 @@ export function registrarHandlersNotasEntrada(): void {
     }
   )
 
-  ipcMain.handle('notasEntrada:importar', (_event, payload: unknown) => {
+  registrarCanal('notasEntrada:importar', (payload: unknown) => {
     try {
       requerDono()
       const resultado = importarNotaEntrada(validarImportacao(payload))
@@ -193,7 +194,7 @@ export function registrarHandlersNotasEntrada(): void {
     }
   })
 
-  ipcMain.handle('notasEntrada:listar', (_event, mes?: string) => {
+  registrarCanal('notasEntrada:listar', (mes?: string) => {
     try {
       requerDono()
       const m = mes && MES.test(mes) ? mes : undefined
@@ -203,7 +204,7 @@ export function registrarHandlersNotasEntrada(): void {
     }
   })
 
-  ipcMain.handle('notasEntrada:meses', () => {
+  registrarCanal('notasEntrada:meses', () => {
     try {
       requerDono()
       return { success: true, data: mesesComNotas() }
@@ -214,7 +215,7 @@ export function registrarHandlersNotasEntrada(): void {
 
   // Salva os XMLs originais do mês numa pasta que o lojista escolhe — é o que
   // o contador pede: o arquivo fiscal oficial, não um relatório nosso.
-  ipcMain.handle('notasEntrada:exportarXmls', async (_event, mes: string) => {
+  registrarCanal('notasEntrada:exportarXmls', async (mes: string) => {
     try {
       requerDono()
       if (!MES.test(String(mes ?? ''))) throw new Error('Mês inválido.')

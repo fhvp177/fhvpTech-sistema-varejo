@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { obterMetricasDashboard, type IntervaloDashboard, CHAVE_META_MENSAL } from '../db/queries/dashboard'
 import { gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 
@@ -30,7 +30,7 @@ function validar(payload: unknown): IntervaloDashboard {
 }
 
 export function registrarHandlersDashboard(): void {
-  ipcMain.handle('dashboard:metricas', (_event, payload: unknown) => {
+  registrarCanal('dashboard:metricas', (payload: unknown) => {
     try {
       const intervalo = validar(payload)
       return { success: true, data: obterMetricasDashboard(intervalo) }
@@ -39,7 +39,7 @@ export function registrarHandlersDashboard(): void {
     }
   })
 
-  ipcMain.handle('dashboard:salvarMeta', (_event, valor: unknown) => {
+  registrarCanal('dashboard:salvarMeta', (valor: unknown) => {
     try {
       const meta = Number(valor)
       if (!Number.isFinite(meta) || meta < 0) throw new Error('Meta inválida.')

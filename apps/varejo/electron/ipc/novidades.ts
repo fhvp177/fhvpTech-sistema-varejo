@@ -1,10 +1,10 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 
 // "O que há de novo": guarda em `config` a última versão cujas novidades já
 // foram exibidas. O renderer compara com a versão atual pra decidir se mostra.
 export function registrarHandlersNovidades(): void {
-  ipcMain.handle('novidades:estado', () => {
+  registrarCanal('novidades:estado', () => {
     try {
       return {
         success: true,
@@ -21,7 +21,7 @@ export function registrarHandlersNovidades(): void {
     }
   })
 
-  ipcMain.handle('novidades:marcar', (_event, versao: string) => {
+  registrarCanal('novidades:marcar', (versao: string) => {
     try {
       gravarConfig('ultima_versao_vista', String(versao))
       return { success: true, data: null }

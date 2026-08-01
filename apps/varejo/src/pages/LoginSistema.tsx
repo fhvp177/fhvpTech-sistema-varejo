@@ -2,6 +2,7 @@ import { FC, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Lock, ShieldCheck, Crown, User as UserIcon } from 'lucide-react'
 import logoEmpresa from '@/assets/logo.png'
 import ModalRecuperacaoPin from '@/components/ModalRecuperacaoPin'
+import ModalConfigurarMaquina from '@/components/ModalConfigurarMaquina'
 
 type VendedorLogin = {
   id: number
@@ -29,6 +30,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
   const [tentativas, setTentativas] = useState(0)
   const [segundosTravado, setSegundosTravado] = useState(0)
   const [mostrarRecuperacao, setMostrarRecuperacao] = useState(false)
+  const [mostrarConfigurarMaquina, setMostrarConfigurarMaquina] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -354,6 +356,21 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
             </span>
           </p>
         )}
+
+        {/* Precisa estar ANTES do login: um computador recém-instalado não tem
+            vendedores para listar, então ninguém consegue entrar nele para
+            chegar às Configurações. Discreto de propósito — a loja com um caixa
+            só nunca vai precisar disto. */}
+        {!selecionado && (
+          <p className="text-center text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
+            <button
+              onClick={() => setMostrarConfigurarMaquina(true)}
+              className="hover:text-slate-600 hover:underline"
+            >
+              Configurar este computador
+            </button>
+          </p>
+        )}
       </div>
 
       {mostrarRecuperacao && (
@@ -361,6 +378,10 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
           onCancelar={() => setMostrarRecuperacao(false)}
           onSucesso={onDesbloquear}
         />
+      )}
+
+      {mostrarConfigurarMaquina && (
+        <ModalConfigurarMaquina onFechar={() => setMostrarConfigurarMaquina(false)} />
       )}
     </div>
   )

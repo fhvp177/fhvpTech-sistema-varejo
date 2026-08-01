@@ -1,6 +1,7 @@
 import { FC, Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2 } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
+import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
@@ -237,6 +238,8 @@ const Vendas: FC = () => {
 // ─── Histórico de Vendas ──────────────────────────────────────────────────────
 
 const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
+  const { ehCaixaAdicional, conectado } = useSituacaoMulticaixa()
+  const semCaixaPrincipal = ehCaixaAdicional && !conectado
   const [lista, setLista] = useState<Venda[]>([])
   const [listaCanceladas, setListaCanceladas] = useState<Venda[]>([])
   const [filtroStatus, setFiltroStatus] = useState<StatusPagamento | 'todos' | 'cancelada'>('todos')
@@ -577,7 +580,15 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
             <FileText className="w-4 h-4 mr-2" />
             Relatório do mês
           </Button>
-          <Button onClick={onNova} data-tour="vendas-nova">
+          {/* Sem contato com o caixa principal, abrir o PDV só levaria o
+              operador a montar uma venda inteira para descobrir no fim que ela
+              não pode ser registrada. Melhor barrar na entrada e dizer por quê. */}
+          <Button
+            onClick={onNova}
+            data-tour="vendas-nova"
+            disabled={semCaixaPrincipal}
+            title={semCaixaPrincipal ? 'Sem conexão com o caixa principal.' : undefined}
+          >
             <Plus className="w-4 h-4 mr-2" />
             Nova Venda (PDV)
           </Button>

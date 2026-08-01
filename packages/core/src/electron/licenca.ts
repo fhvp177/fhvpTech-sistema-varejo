@@ -245,6 +245,24 @@ export function extrairClienteIdLocal(): string | null {
   }
 }
 
+/**
+ * Chave de licença salva, como está no disco.
+ *
+ * O relay do multicaixa a usa para provar ao servidor que é mesmo esta loja —
+ * só o clienteId não bastaria, porque ele circula em pedidos comuns e quem o
+ * conhecesse poderia se pendurar no lugar da loja e receber as chamadas dela.
+ */
+export function chaveLicencaLocal(): string | null {
+  const caminho = caminhoLicenca()
+  if (!existsSync(caminho)) return null
+  try {
+    const chave = descriptografar(readFileSync(caminho, 'utf8').trim())
+    return chave.split(':').length === 3 ? chave : null
+  } catch {
+    return null
+  }
+}
+
 export function ativarLicenca(chave: string): StatusLicenca {
   const status = validarChave(chave)
   if (!status.valida) return status

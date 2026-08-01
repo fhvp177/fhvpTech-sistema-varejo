@@ -1,4 +1,5 @@
-import { ipcMain, dialog } from 'electron'
+import { dialog } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
@@ -189,7 +190,7 @@ export function diasParaVencerCertificado(agora = new Date()): number | null {
 export function registrarHandlersFiscal(): void {
   // Configuração fiscal é assunto do gerente: mexe em tributação e em credencial
   // da empresa, não é coisa de balconista.
-  ipcMain.handle('fiscal:obter', () => {
+  registrarCanal('fiscal:obter', () => {
     try {
       requerDono()
       return { success: true, data: obterConfigFiscal() }
@@ -200,7 +201,7 @@ export function registrarHandlersFiscal(): void {
 
   // Diagnóstico do "está tudo pronto?". Roda 100% local e de graça — nenhuma
   // chamada à API, nenhum crédito gasto.
-  ipcMain.handle('fiscal:diagnostico', () => {
+  registrarCanal('fiscal:diagnostico', () => {
     try {
       requerDono()
       return { success: true, data: diagnosticoFiscal() }
@@ -211,7 +212,7 @@ export function registrarHandlersFiscal(): void {
 
   // Salva só o que o lojista digita. Certificado e CSC entram por caminhos
   // próprios (Fase 2), justamente pra não trafegarem junto com dados comuns.
-  ipcMain.handle('fiscal:salvar', (_event, dados: Partial<ConfigFiscal>) => {
+  registrarCanal('fiscal:salvar', (dados: Partial<ConfigFiscal>) => {
     try {
       requerDono()
 
@@ -255,7 +256,7 @@ export function registrarHandlersFiscal(): void {
     }
   })
 
-  ipcMain.handle('fiscal:diasParaVencerCertificado', () => {
+  registrarCanal('fiscal:diasParaVencerCertificado', () => {
     try {
       requerSessao()
       return { success: true, data: diasParaVencerCertificado() }
@@ -355,7 +356,7 @@ function montarDadosEmpresa(): Record<string, unknown> {
 function registrarHandlersFiscalRemoto(): void {
   // Resolve o código IBGE do município pelo CEP da loja (a nota exige, e
   // ninguém sabe de cabeça). Grava pra não consultar de novo.
-  ipcMain.handle('fiscal:resolverMunicipio', async () => {
+  registrarCanal('fiscal:resolverMunicipio', async () => {
     try {
       requerDono()
       const jaTem = lerConfig('fiscal_codigo_municipio')
@@ -377,7 +378,7 @@ function registrarHandlersFiscalRemoto(): void {
   })
 
   // Cadastra/atualiza a empresa emitente na ACBr (passo que antecede tudo).
-  ipcMain.handle('fiscal:cadastrarEmpresa', async () => {
+  registrarCanal('fiscal:cadastrarEmpresa', async () => {
     try {
       requerDono()
       const empresa = montarDadosEmpresa() as { endereco: { codigo_municipio?: string } }
@@ -400,9 +401,9 @@ function registrarHandlersFiscalRemoto(): void {
 
   // Sobe o certificado A1. Recebe o arquivo já em base64 e a senha do renderer;
   // repassa e guarda só a validade/titular que a ACBr devolve.
-  ipcMain.handle(
+  registrarCanal(
     'fiscal:enviarCertificado',
-    async (_e, args: { certificadoBase64: string; senha: string }) => {
+    async (args: { certificadoBase64: string; senha: string }) => {
       try {
         requerDono()
         const cnpj = apenasDigitos(lerConfig('loja_cnpj'))
@@ -426,9 +427,9 @@ function registrarHandlersFiscalRemoto(): void {
 
   // Configura o CSC (autentica o QR Code da NFC-e). O CSC em si vai pro backend
   // e não fica aqui; só o id (que não é segredo) e a flag "configurado".
-  ipcMain.handle(
+  registrarCanal(
     'fiscal:configurarCsc',
-    async (_e, args: { csc: string; idCsc: string }) => {
+    async (args: { csc: string; idCsc: string }) => {
       try {
         requerDono()
         const cnpj = apenasDigitos(lerConfig('loja_cnpj'))
@@ -466,9 +467,9 @@ function registrarHandlersFiscalRemoto(): void {
   // a venda continua existindo e o caixa continua vendendo — a nota fica
   // pendente e pode ser reenviada. Nota fiscal segurando a fila do caixa é
   // inaceitável numa loja.
-  ipcMain.handle(
+  registrarCanal(
     'fiscal:emitirNfce',
-    async (_e, args: { vendaId: number; formaPagamento?: string; modelo?: 55 | 65 }) => {
+    async (args: { vendaId: number; formaPagamento?: string; modelo?: 55 | 65 }) => {
       try {
         // Emitir é rotina de balcão: qualquer usuário logado pode. Só a
         // CONFIGURAÇÃO fiscal (certificado, CSC, regime) é do gerente.
@@ -619,7 +620,7 @@ function registrarHandlersFiscalRemoto(): void {
   // Consulta o desfecho de uma nota que ficou pendente (a emissão é assíncrona:
   // a SEFAZ responde em segundos, mas não na mesma requisição). Consultar
   // status não custa crédito.
-  ipcMain.handle('fiscal:statusNfce', async (_e, args: { vendaId: number }) => {
+  registrarCanal('fiscal:statusNfce', async (args: { vendaId: number }) => {
     try {
       requerSessao()
       const nota = notaDaVenda(Number(args?.vendaId))
@@ -641,7 +642,7 @@ function registrarHandlersFiscalRemoto(): void {
   // Sem NCM o produto não sai em nota. Estes handlers são o que torna possível
   // resolver isso — antes deles, o sistema apontava o problema e não deixava
   // ninguém consertar.
-  ipcMain.handle('fiscal:obterProduto', (_e, id: number) => {
+  registrarCanal('fiscal:obterProduto', (id: number) => {
     try {
       requerSessao()
       return { success: true, data: obterFiscalProduto(Number(id)) }
@@ -650,7 +651,7 @@ function registrarHandlersFiscalRemoto(): void {
     }
   })
 
-  ipcMain.handle('fiscal:salvarProduto', (_e, id: number, dados: FiscalProduto) => {
+  registrarCanal('fiscal:salvarProduto', (id: number, dados: FiscalProduto) => {
     try {
       requerSessao()
       salvarFiscalProduto(Number(id), {
@@ -666,9 +667,9 @@ function registrarHandlersFiscalRemoto(): void {
     }
   })
 
-  ipcMain.handle(
+  registrarCanal(
     'fiscal:listarClassificacao',
-    (_e, filtro: { apenasPendentes?: boolean; categoria?: string | null; busca?: string }) => {
+    (filtro: { apenasPendentes?: boolean; categoria?: string | null; busca?: string }) => {
       try {
         requerSessao()
         return { success: true, data: listarParaClassificar(filtro ?? {}) }
@@ -678,7 +679,7 @@ function registrarHandlersFiscalRemoto(): void {
     }
   )
 
-  ipcMain.handle('fiscal:categoriasPendentes', () => {
+  registrarCanal('fiscal:categoriasPendentes', () => {
     try {
       requerSessao()
       return { success: true, data: categoriasPendentes() }
@@ -689,11 +690,9 @@ function registrarHandlersFiscalRemoto(): void {
 
   // Aplica a mesma classificação a vários produtos — o que torna a tarefa
   // viável numa loja com centenas de itens.
-  ipcMain.handle(
+  registrarCanal(
     'fiscal:aplicarEmLote',
-    (
-      _e,
-      args: {
+    (args: {
         ids?: number[]
         categoria?: string | null
         dados: Partial<FiscalProduto>
@@ -727,7 +726,7 @@ function registrarHandlersFiscalRemoto(): void {
   // ── XML e relatório ─────────────────────────────────────────────────────────
   // O XML é o documento que vale legalmente. Guardamos no primeiro download
   // porque a ACBr cobra crédito a partir do segundo.
-  ipcMain.handle('fiscal:xmlNota', async (_e, args: { vendaId: number }) => {
+  registrarCanal('fiscal:xmlNota', async (args: { vendaId: number }) => {
     try {
       requerSessao()
       const nota = notaDaVenda(Number(args?.vendaId))
@@ -745,7 +744,7 @@ function registrarHandlersFiscalRemoto(): void {
     }
   })
 
-  ipcMain.handle('fiscal:notasDoMes', (_e, mes: string) => {
+  registrarCanal('fiscal:notasDoMes', (mes: string) => {
     try {
       requerDono()
       return { success: true, data: notasDoMes(String(mes ?? '')) }
@@ -754,7 +753,7 @@ function registrarHandlersFiscalRemoto(): void {
     }
   })
 
-  ipcMain.handle('fiscal:mesesComNotas', () => {
+  registrarCanal('fiscal:mesesComNotas', () => {
     try {
       requerDono()
       return { success: true, data: mesesComNotas() }
@@ -765,9 +764,9 @@ function registrarHandlersFiscalRemoto(): void {
 
   // Salva os XMLs do mês numa pasta escolhida pelo lojista — o pacote que ele
   // entrega ao contador. Mesmo padrão da exportação das notas de entrada.
-  ipcMain.handle(
+  registrarCanal(
     'fiscal:salvarXmls',
-    async (_e, mes: string, arquivos: Array<{ nome: string; conteudo: string }>) => {
+    async (mes: string, arquivos: Array<{ nome: string; conteudo: string }>) => {
       try {
         requerDono()
         const lista = Array.isArray(arquivos) ? arquivos : []
@@ -796,7 +795,7 @@ function registrarHandlersFiscalRemoto(): void {
 
   // Cadastro fiscal do cliente (destinatário da NF-e). Liberado pra vendedor:
   // é dado de cadastro, não configuração da loja.
-  ipcMain.handle('fiscal:obterCliente', (_e, id: number) => {
+  registrarCanal('fiscal:obterCliente', (id: number) => {
     try {
       requerSessao()
       return { success: true, data: obterFiscalCliente(Number(id)) }
@@ -805,7 +804,7 @@ function registrarHandlersFiscalRemoto(): void {
     }
   })
 
-  ipcMain.handle('fiscal:salvarCliente', (_e, id: number, dados: FiscalCliente) => {
+  registrarCanal('fiscal:salvarCliente', (id: number, dados: FiscalCliente) => {
     try {
       requerSessao()
       salvarFiscalCliente(Number(id), {
@@ -829,7 +828,7 @@ function registrarHandlersFiscalRemoto(): void {
   // Endereço a partir do CEP (traz o código IBGE do município, obrigatório na
   // nota). Usado no cadastro fiscal do cliente pra não fazer ninguém procurar
   // esse número.
-  ipcMain.handle('fiscal:buscarCep', async (_e, cep: string) => {
+  registrarCanal('fiscal:buscarCep', async (cep: string) => {
     try {
       requerSessao()
       const limpo = apenasDigitos(cep ?? '')
@@ -844,7 +843,7 @@ function registrarHandlersFiscalRemoto(): void {
   // DANFE em PDF, no tamanho da bobina. É o documento que o cliente leva —
   // equivale ao cupom, mas com valor fiscal. Baixar não custa crédito, então
   // reimprimir é de graça.
-  ipcMain.handle('fiscal:danfe', async (_e, args: { vendaId: number }) => {
+  registrarCanal('fiscal:danfe', async (args: { vendaId: number }) => {
     try {
       requerSessao()
       const nota = notaDaVenda(Number(args?.vendaId))
@@ -865,9 +864,9 @@ function registrarHandlersFiscalRemoto(): void {
 
   // Cancelamento da nota. Prazo legal curto (na NFC-e costuma ser 30 minutos) e
   // justificativa obrigatória de 15+ caracteres — a SEFAZ exige.
-  ipcMain.handle(
+  registrarCanal(
     'fiscal:cancelarNfce',
-    async (_e, args: { vendaId: number; justificativa: string }) => {
+    async (args: { vendaId: number; justificativa: string }) => {
       try {
         // Cancelar apaga um documento fiscal já emitido: é decisão do gerente.
         requerDono()
@@ -891,7 +890,7 @@ function registrarHandlersFiscalRemoto(): void {
 
   // Estado das notas de várias vendas — a lista de vendas pinta o status de
   // cada linha com uma consulta só, sem ir à rede.
-  ipcMain.handle('fiscal:notasDasVendas', (_e, ids: number[]) => {
+  registrarCanal('fiscal:notasDasVendas', (ids: number[]) => {
     try {
       requerSessao()
       const lista = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isInteger)
@@ -902,7 +901,7 @@ function registrarHandlersFiscalRemoto(): void {
   })
 
   // Estado remoto pro semáforo: saldo de créditos e certificado na ACBr.
-  ipcMain.handle('fiscal:statusRemoto', async () => {
+  registrarCanal('fiscal:statusRemoto', async () => {
     try {
       requerDono()
       const [cert, cred] = await Promise.allSettled([

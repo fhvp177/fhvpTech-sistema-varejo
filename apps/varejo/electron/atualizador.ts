@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, app } from 'electron'
+import { BrowserWindow, app } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { autoUpdater } from 'electron-updater'
 import { executarBackupPreUpdate } from '@fhvptech/core/electron/backup/BackupPreUpdate'
 
@@ -91,11 +92,11 @@ export function inicializarAtualizador(obterJanela: () => BrowserWindow | null):
   })
 
   // ─── Handlers IPC chamados pelo renderer ─────────────────────────────────
-  ipcMain.handle('atualizacao:obterInfo', (): RespostaIPC<EstadoAtualizacao> => {
+  registrarCanal('atualizacao:obterInfo', (): RespostaIPC<EstadoAtualizacao> => {
     return { success: true, data: { ...estado } }
   })
 
-  ipcMain.handle('atualizacao:verificar', async (): Promise<RespostaIPC> => {
+  registrarCanal('atualizacao:verificar', async (): Promise<RespostaIPC> => {
     if (!app.isPackaged) {
       return { success: false, error: 'Verificação indisponível em modo de desenvolvimento.' }
     }
@@ -107,7 +108,7 @@ export function inicializarAtualizador(obterJanela: () => BrowserWindow | null):
     }
   })
 
-  ipcMain.handle('atualizacao:instalar', async (): Promise<RespostaIPC> => {
+  registrarCanal('atualizacao:instalar', async (): Promise<RespostaIPC> => {
     if (!estado.versaoBaixada) {
       return { success: false, error: 'Nenhuma atualização baixada disponível.' }
     }

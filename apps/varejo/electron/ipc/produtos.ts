@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   listarProdutos,
   buscarProdutoPorCodigoBarras,
@@ -12,7 +12,7 @@ import { requerDono, ehDono } from '../sessao'
 import { verificarPinDono } from '../auth'
 
 export function registrarHandlersProdutos(): void {
-  ipcMain.handle('produtos:listar', () => {
+  registrarCanal('produtos:listar', () => {
     try {
       return { success: true, data: listarProdutos() }
     } catch (error) {
@@ -20,7 +20,7 @@ export function registrarHandlersProdutos(): void {
     }
   })
 
-  ipcMain.handle('produtos:buscarPorCodigoBarras', (_event, codigo: string) => {
+  registrarCanal('produtos:buscarPorCodigoBarras', (codigo: string) => {
     try {
       const produto = buscarProdutoPorCodigoBarras(codigo)
       return { success: true, data: produto ?? null }
@@ -33,7 +33,7 @@ export function registrarHandlersProdutos(): void {
   // bipa um item ainda não cadastrado, aceitamos a autorização por PIN de um gerente
   // (mesmo padrão do desconto acima do teto) — validada aqui no backend, não na
   // confiança do renderer.
-  ipcMain.handle('produtos:criar', async (_event, dados: DadosProduto, pinDono?: string) => {
+  registrarCanal('produtos:criar', async (dados: DadosProduto, pinDono?: string) => {
     try {
       if (!ehDono()) {
         const donoId = pinDono ? await verificarPinDono(pinDono) : null
@@ -49,7 +49,7 @@ export function registrarHandlersProdutos(): void {
     }
   })
 
-  ipcMain.handle('produtos:atualizar', (_event, id: number, dados: DadosProduto) => {
+  registrarCanal('produtos:atualizar', (id: number, dados: DadosProduto) => {
     try {
       requerDono()
       atualizarProduto(id, dados)
@@ -60,7 +60,7 @@ export function registrarHandlersProdutos(): void {
     }
   })
 
-  ipcMain.handle('produtos:deletar', (_event, id: number) => {
+  registrarCanal('produtos:deletar', (id: number) => {
     try {
       requerDono()
       deletarProduto(id)

@@ -7,6 +7,23 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.32.0',
+    itens: [
+      {
+        emoji: '🖥️',
+        titulo: 'Multicaixa: mais de um computador na mesma loja',
+        descricao:
+          'Outro computador com o sistema instalado passa a trabalhar nos mesmos dados desta loja — mesmos produtos, mesmo estoque, mesmas vendas, atualizados na hora. Funciona na rede da loja e também fora dela, pela internet. Os dados continuam guardados apenas no computador principal, que precisa ficar ligado enquanto os demais estiverem em uso; sem conexão com ele, os outros avisam e não registram vendas. Para ativar, acesse Configurações e abra a seção Multicaixa.'
+      },
+      {
+        emoji: '📋',
+        titulo: 'Copiar os dados para outro computador',
+        descricao:
+          'Passa a ser possível levar produtos, clientes, vendas e configurações para outro computador pela própria rede, sem gerar backup, copiar arquivo e restaurar manualmente. Serve para instalar o sistema em uma máquina nova ou trocar o computador da loja. A operação substitui integralmente os dados do computador de destino e guarda uma cópia do que havia nele antes. A opção fica em "Configurar este computador", na tela de entrada.'
+      }
+    ]
+  },
+  {
     versao: '1.31.0',
     itens: [
       {

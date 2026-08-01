@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   listarContasPagar,
   criarContaPagar,
@@ -59,7 +59,7 @@ function validar(payload: unknown): DadosContaPagar {
 }
 
 export function registrarHandlersContasPagar(): void {
-  ipcMain.handle('contasPagar:listar', (_event, filtro?: string) => {
+  registrarCanal('contasPagar:listar', (filtro?: string) => {
     try {
       const f: FiltroContas =
         filtro === 'aberto' || filtro === 'pago' ? filtro : 'todas'
@@ -69,7 +69,7 @@ export function registrarHandlersContasPagar(): void {
     }
   })
 
-  ipcMain.handle('contasPagar:resumo', () => {
+  registrarCanal('contasPagar:resumo', () => {
     try {
       return { success: true, data: resumoContasPagar() }
     } catch (error) {
@@ -77,7 +77,7 @@ export function registrarHandlersContasPagar(): void {
     }
   })
 
-  ipcMain.handle('contasPagar:criar', (_event, dados: unknown) => {
+  registrarCanal('contasPagar:criar', (dados: unknown) => {
     try {
       requerDono()
       const resultado = criarContaPagar(validar(dados))
@@ -88,7 +88,7 @@ export function registrarHandlersContasPagar(): void {
     }
   })
 
-  ipcMain.handle('contasPagar:atualizar', (_event, id: number, dados: unknown) => {
+  registrarCanal('contasPagar:atualizar', (id: number, dados: unknown) => {
     try {
       requerDono()
       atualizarContaPagar(Number(id), validar(dados))
@@ -99,7 +99,7 @@ export function registrarHandlersContasPagar(): void {
     }
   })
 
-  ipcMain.handle('contasPagar:deletar', (_event, id: number) => {
+  registrarCanal('contasPagar:deletar', (id: number) => {
     try {
       requerDono()
       deletarContaPagar(Number(id))
@@ -110,7 +110,7 @@ export function registrarHandlersContasPagar(): void {
     }
   })
 
-  ipcMain.handle('contasPagar:registrarPagamento', (_event, id: number, valor: number) => {
+  registrarCanal('contasPagar:registrarPagamento', (id: number, valor: number) => {
     try {
       requerDono()
       registrarPagamentoConta(Number(id), Number(valor))
@@ -121,7 +121,7 @@ export function registrarHandlersContasPagar(): void {
     }
   })
 
-  ipcMain.handle('contasPagar:estornarPagamento', (_event, id: number) => {
+  registrarCanal('contasPagar:estornarPagamento', (id: number) => {
     try {
       requerDono()
       estornarPagamentoConta(Number(id))

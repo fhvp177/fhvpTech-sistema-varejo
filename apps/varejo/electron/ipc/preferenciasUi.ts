@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 
 // Preferências de INTERFACE — coisas como "esta seção das Configurações fica
@@ -20,7 +20,7 @@ function validar(chave: string): string {
 }
 
 export function registrarHandlersPreferenciasUi(): void {
-  ipcMain.handle('config:obter', (_e, chave: string) => {
+  registrarCanal('config:obter', (chave: string) => {
     try {
       return { success: true, data: lerConfig(validar(chave)) || null }
     } catch (error) {
@@ -28,7 +28,7 @@ export function registrarHandlersPreferenciasUi(): void {
     }
   })
 
-  ipcMain.handle('config:salvar', (_e, chave: string, valor: string) => {
+  registrarCanal('config:salvar', (chave: string, valor: string) => {
     try {
       // Só '0' ou '1' — é um interruptor, não um campo livre.
       gravarConfig(validar(chave), valor === '1' ? '1' : '0')

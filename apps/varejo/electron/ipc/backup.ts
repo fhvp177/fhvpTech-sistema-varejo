@@ -1,4 +1,5 @@
-import { ipcMain, dialog } from 'electron'
+import { dialog } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { fazerBackupManual } from '@fhvptech/core/electron/backup/BackupManual'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { obterBackupAutomatico } from '@fhvptech/core/electron/backup/BackupAutomatico'
@@ -6,7 +7,7 @@ import { verificarSenha, temSenhaConfigurada } from '@fhvptech/core/electron/bac
 import { listarBackupsDisponiveis, restaurarBackup } from '@fhvptech/core/electron/backup/Restaurador'
 
 export function registrarHandlersBackup(): void {
-  ipcMain.handle('backup:fazerManual', async () => {
+  registrarCanal('backup:fazerManual', async () => {
     try {
       const resultado = await fazerBackupManual()
       if (resultado.sucesso) {
@@ -18,7 +19,7 @@ export function registrarHandlersBackup(): void {
     }
   })
 
-  ipcMain.handle('backup:obterStatus', () => {
+  registrarCanal('backup:obterStatus', () => {
     try {
       return {
         success: true,
@@ -41,7 +42,7 @@ export function registrarHandlersBackup(): void {
     }
   })
 
-  ipcMain.handle('backup:gravarConfig', (_event, chave: string, valor: string) => {
+  registrarCanal('backup:gravarConfig', (chave: string, valor: string) => {
     try {
       gravarConfig(chave, valor)
       if (chave === 'backup_frequencia_horas' || chave === 'backup_ativo') {
@@ -53,7 +54,7 @@ export function registrarHandlersBackup(): void {
     }
   })
 
-  ipcMain.handle('backup:verificarSenha', async (_event, senha: string) => {
+  registrarCanal('backup:verificarSenha', async (senha: string) => {
     try {
       const ok = await verificarSenha(senha)
       return { success: true, data: ok }
@@ -62,7 +63,7 @@ export function registrarHandlersBackup(): void {
     }
   })
 
-  ipcMain.handle('backup:listarBackups', () => {
+  registrarCanal('backup:listarBackups', () => {
     try {
       return { success: true, data: listarBackupsDisponiveis() }
     } catch (error) {
@@ -70,7 +71,7 @@ export function registrarHandlersBackup(): void {
     }
   })
 
-  ipcMain.handle('backup:restaurar', async (_event, caminhoZip: string) => {
+  registrarCanal('backup:restaurar', async (caminhoZip: string) => {
     try {
       const resultado = await restaurarBackup(caminhoZip)
       if (resultado.sucesso) {
@@ -82,7 +83,7 @@ export function registrarHandlersBackup(): void {
     }
   })
 
-  ipcMain.handle('backup:selecionarPasta', async () => {
+  registrarCanal('backup:selecionarPasta', async () => {
     try {
       const resultado = await dialog.showOpenDialog({
         properties: ['openDirectory'],

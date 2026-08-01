@@ -1,4 +1,5 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { montarPonteIpc } from '@fhvptech/core/electron/roteador'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { inicializarBancoDeDados, obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
@@ -33,6 +34,9 @@ import { registrarHandlersOnboarding } from './ipc/onboarding'
 import { registrarHandlersNotificacoes } from './ipc/notificacoes'
 import { registrarHandlersNovidades } from './ipc/novidades'
 import { registrarHandlersNotasEntrada } from './ipc/notasEntrada'
+import { registrarHandlersMulticaixa } from './ipc/multicaixa'
+import { retomarServidorSeConfigurado } from './multicaixa/servico'
+import { ligarModoTerminal } from './multicaixa/terminal'
 import { inicializarAtualizador } from './atualizador'
 import { corrigirCaminhosBackupLegados, resolverPastaDados } from './pastaDados'
 
@@ -141,17 +145,33 @@ app.whenReady().then(() => {
   // janela — o quit() acima já está a caminho.
   if (!instanciaUnica) return
 
-  // Injeta os ganchos de domínio no núcleo (schema, migrations, licença) antes
-  // de inicializar banco e backup, que dependem deles.
+  // ── Segundo caixa: esta máquina não tem banco ──────────────────────────────
+  // Quando o app está configurado como terminal, ele NÃO abre banco, não roda
+  // migration e não faz backup. Essa ausência é a garantia central do desenho:
+  // sem um segundo conjunto de dados, não existe divergência possível entre as
+  // duas máquinas. O pior caso vira "sem conexão".
+  //
+  // A decisão precisa vir antes de tudo, porque abrir o banco criaria o arquivo
+  // vazio no terminal — e um banco vazio ao lado do banco de verdade é
+  // exatamente o tipo de confusão que custa caro depois.
+  // O aviso de conexão vai por evento, e não por consulta repetida: a tela
+  // precisa saber no instante em que cai, não meio segundo depois. A janela é
+  // buscada na hora porque neste ponto ela ainda não existe.
+  const ehTerminal = ligarModoTerminal((conectado) => {
+    janelaAtual?.webContents.send('multicaixa:conexao', conectado)
+  })
+
   configurarNucleo({ criarTabelas, migrations: MIGRATIONS, validarLicenca })
-  inicializarBancoDeDados(criarTabelas)
-  executarMigrations(obterBancoDeDados(), MIGRATIONS)
-  // Depois do rename da pasta de dados (ou de um restore de outra máquina), a
-  // config pode apontar pra pasta de backups que não existe mais — conserta
-  // antes do BackupManager/Restaurador lerem.
-  corrigirCaminhosBackupLegados()
-  inicializarBackupManager()
-  inicializarBackupAutomatico()
+  if (!ehTerminal) {
+    inicializarBancoDeDados(criarTabelas)
+    executarMigrations(obterBancoDeDados(), MIGRATIONS)
+    // Depois do rename da pasta de dados (ou de um restore de outra máquina), a
+    // config pode apontar pra pasta de backups que não existe mais — conserta
+    // antes do BackupManager/Restaurador lerem.
+    corrigirCaminhosBackupLegados()
+    inicializarBackupManager()
+    inicializarBackupAutomatico()
+  }
 
   // Registra todos os handlers IPC antes de criar a janela
   registrarHandlersLicenca()
@@ -165,7 +185,7 @@ app.whenReady().then(() => {
   registrarHandlersVendedores()
   registrarHandlersEtiquetas()
   registrarHandlersBackup()
-  registrarHandlersImpressao()
+  registrarHandlersImpressao(() => janelaAtual)
   registrarHandlersDashboard()
   registrarHandlersAuth()
   registrarHandlersChat()
@@ -177,12 +197,30 @@ app.whenReady().then(() => {
   registrarHandlersNotificacoes()
   registrarHandlersNovidades()
   registrarHandlersNotasEntrada()
+  registrarHandlersMulticaixa()
+
+  // Liga os canais registrados acima ao ipcMain. Os handlers agora vivem num
+  // Map no core (`registrarCanal`) em vez de irem direto no `ipcMain.handle` —
+  // é o que vai permitir, mais adiante, atender a mesma chamada vinda do
+  // segundo caixa pela rede sem duplicar lógica nenhuma.
+  //
+  // Os 3 canais do atualizador se registram depois daqui, porque dependem da
+  // janela; o roteador liga cada retardatário na hora.
+  //
+  // Os canais de licença do core seguem no `ipcMain` direto: a veterinária e a
+  // assistência usam os mesmos handlers e ainda não têm roteador.
+  montarPonteIpc(ipcMain)
 
   criarJanelaPrincipal()
 
   // Inicializa o autoUpdater + IPC + backup pré-atualização.
   // Precisa rodar depois de criarJanelaPrincipal pra ter a janela como alvo dos eventos.
   inicializarAtualizador(() => janelaAtual)
+
+  // Se o lojista deixou o modo servidor ligado, volta a atender o segundo caixa.
+  // Depois da janela porque falhar aqui (porta ocupada) não pode atrasar nem
+  // impedir a abertura do caixa principal. No terminal não há o que retomar.
+  if (!ehTerminal) void retomarServidorSeConfigurado()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -11,29 +11,57 @@
 // todas as lojas, sem ganho nenhum para quem usa; então a tradução acontece só
 // no texto. Se for mexer aqui, lembre: o valor gravado continua sendo 'dono'.
 
+import { origemAtual } from '@fhvptech/core/electron/roteador'
 import { obterVendedor, type Vendedor } from './db/queries/vendedores'
 
-let sessaoVendedorId: number | null = null
+// ── Uma sessão POR MÁQUINA, não uma por processo ─────────────────────────────
+// Enquanto existia só o PC da loja, guardar o vendedor logado numa variável
+// solta funcionava: uma máquina, uma pessoa, uma sessão.
+//
+// Com o segundo caixa isso vira um bug sério, e silencioso. As duas máquinas
+// falam com o MESMO processo — o do PC. Se a sessão fosse uma só, o login feito
+// no notebook substituiria o de quem está no caixa da loja. E como
+// `vendas:criar` atribui a venda a `requerSessao().id`, a venda do caixa da
+// loja passaria a sair no nome de quem está no notebook: comissão errada,
+// relatório errado, e ninguém percebe.
+//
+// Então a sessão é guardada por ORIGEM — quem chamou. O roteador do core já
+// carrega essa identidade em cada despacho: `'local'` para a janela desta
+// máquina, ou o id do terminal pareado. Fora de qualquer despacho (backup
+// automático, timer, código de boot) a origem é `'local'`, que é o padrão
+// seguro e mantém o comportamento de sempre em quem só tem um caixa.
+const sessaoPorOrigem = new Map<string, number>()
 
 export function definirSessao(vendedorId: number): void {
-  sessaoVendedorId = vendedorId
+  sessaoPorOrigem.set(origemAtual(), vendedorId)
 }
 
 export function limparSessao(): void {
-  sessaoVendedorId = null
+  sessaoPorOrigem.delete(origemAtual())
+}
+
+/**
+ * Encerra a sessão de uma origem específica, sem depender de quem está
+ * chamando. É o que o PC usa ao revogar um terminal pareado — o acesso tem que
+ * cair na hora, mesmo com o terminal desconectado.
+ */
+export function limparSessaoDaOrigem(origem: string): void {
+  sessaoPorOrigem.delete(origem)
 }
 
 export function obterSessaoId(): number | null {
-  return sessaoVendedorId
+  return sessaoPorOrigem.get(origemAtual()) ?? null
 }
 
 export function obterSessao(): Vendedor | null {
-  if (sessaoVendedorId === null) return null
-  const v = obterVendedor(sessaoVendedorId)
+  const vendedorId = obterSessaoId()
+  if (vendedorId === null) return null
+  const v = obterVendedor(vendedorId)
   // Se o vendedor logado foi removido/desativado por outro processo, a sessão
-  // perde a validade. Limpa pra forçar novo login.
+  // perde a validade. Limpa pra forçar novo login — só a de quem chamou, que as
+  // outras máquinas podem estar com gente diferente logada.
   if (!v || v.ativo === 0) {
-    sessaoVendedorId = null
+    limparSessao()
     return null
   }
   return v

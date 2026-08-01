@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   itensDevolviveis,
   saldoCredito,
@@ -26,7 +26,7 @@ type EntradaDevolucao = {
 }
 
 export function registrarHandlersDevolucoes(): void {
-  ipcMain.handle('devolucoes:itensDevolviveis', (_event, vendaId: number) => {
+  registrarCanal('devolucoes:itensDevolviveis', (vendaId: number) => {
     try {
       return { success: true, data: itensDevolviveis(vendaId) }
     } catch (error) {
@@ -34,7 +34,7 @@ export function registrarHandlersDevolucoes(): void {
     }
   })
 
-  ipcMain.handle('devolucoes:saldoCredito', (_event, clienteId: number) => {
+  registrarCanal('devolucoes:saldoCredito', (clienteId: number) => {
     try {
       return { success: true, data: saldoCredito(clienteId) }
     } catch (error) {
@@ -42,7 +42,7 @@ export function registrarHandlersDevolucoes(): void {
     }
   })
 
-  ipcMain.handle('devolucoes:porVenda', (_event, vendaId: number) => {
+  registrarCanal('devolucoes:porVenda', (vendaId: number) => {
     try {
       return { success: true, data: listarDevolucoesPorVenda(vendaId) }
     } catch (error) {
@@ -50,7 +50,7 @@ export function registrarHandlersDevolucoes(): void {
     }
   })
 
-  ipcMain.handle('devolucoes:registrar', async (_event, entrada: EntradaDevolucao) => {
+  registrarCanal('devolucoes:registrar', async (entrada: EntradaDevolucao) => {
     try {
       const sessao = requerSessao()
 

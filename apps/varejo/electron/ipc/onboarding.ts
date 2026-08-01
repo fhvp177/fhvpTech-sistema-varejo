@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 
@@ -13,7 +13,7 @@ function contar(tabela: 'produtos' | 'clientes' | 'vendas'): number {
 }
 
 export function registrarHandlersOnboarding(): void {
-  ipcMain.handle('onboarding:estado', () => {
+  registrarCanal('onboarding:estado', () => {
     try {
       return {
         success: true,
@@ -39,7 +39,7 @@ export function registrarHandlersOnboarding(): void {
     }
   })
 
-  ipcMain.handle('onboarding:marcarGuiaVisto', () => {
+  registrarCanal('onboarding:marcarGuiaVisto', () => {
     try {
       gravarConfig('onboarding_guia_visto', '1')
       return { success: true, data: null }
@@ -48,7 +48,7 @@ export function registrarHandlersOnboarding(): void {
     }
   })
 
-  ipcMain.handle('onboarding:dispensarChecklist', () => {
+  registrarCanal('onboarding:dispensarChecklist', () => {
     try {
       gravarConfig('onboarding_checklist_dispensada', '1')
       return { success: true, data: null }

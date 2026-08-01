@@ -370,6 +370,38 @@ const api = {
       ipcRenderer.on('backup:carregando', handler)
       return () => ipcRenderer.removeListener('backup:carregando', handler)
     }
+  },
+
+  // Multi-caixa — o PC da loja servindo um segundo caixa
+  multicaixa: {
+    estado: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:estado'),
+    ligarServidor: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:ligarServidor'),
+    desligarServidor: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:desligarServidor'),
+    abrirPareamento: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:abrirPareamento'),
+    liberarFirewall: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:liberarFirewall'),
+    fecharPareamento: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:fecharPareamento'),
+    revogarTerminal: (id: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:revogarTerminal', id),
+    // Clonagem: trazer o banco de outro computador
+    abrirClonagem: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:abrirClonagem'),
+    fecharClonagem: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:fecharClonagem'),
+    exigeSenhaParaReceber: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:exigeSenhaParaReceber'),
+    receberBanco: (endereco: string, codigo: string, senha: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:receberBanco', endereco, codigo, senha),
+    conectarComoTerminal: (endereco: string, codigo: string, nome: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:conectarComoTerminal', endereco, codigo, nome),
+    sairDoModoTerminal: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:sairDoModoTerminal'),
+    reiniciarApp: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:reiniciarApp'),
+    situacao: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:situacao'),
+    onConexao: (cb: (conectado: boolean) => void): (() => void) => {
+      const handler = (_: IpcRendererEvent, conectado: boolean) => cb(conectado)
+      ipcRenderer.on('multicaixa:conexao', handler)
+      return () => ipcRenderer.removeListener('multicaixa:conexao', handler)
+    }
   }
 }
 
