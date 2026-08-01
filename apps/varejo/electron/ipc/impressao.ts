@@ -218,20 +218,36 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
     }
   )
 
+  // Tamanho da página do PDF por categoria. Relatório e etiqueta são folha A4;
+  // cupom e comprovante são bobina, e precisam de uma página do tamanho dela —
+  // o CSS do cupom encosta o conteúdo à esquerda (é o que a térmica exige), e
+  // numa folha A4 isso viraria uma tirinha no canto de uma página quase vazia.
+  // Aqui a medida é em POLEGADAS (printToPDF), diferente do print(), que usa
+  // micrômetros. 3.15in = 80mm de largura; 11.69in de altura pra um cupom
+  // comum caber numa página só.
+  const PAGINA_PDF = {
+    documento: 'A4' as const,
+    cupom: { width: 3.15, height: 11.69 }
+  }
+
   // Salvar em PDF: gera o PDF internamente (printToPDF) e grava o arquivo já
   // com o nome definido. NÃO passa pelo "Microsoft Print to PDF" do Windows —
   // que ignora o nome do documento por esse caminho —, então o nome sempre
   // vem certo.
   registrarCanal(
     'impressao:salvarPdf',
-    async (html: string, nomeArquivo?: string): Promise<RespostaIPC> => {
+    async (
+      html: string,
+      nomeArquivo?: string,
+      categoria: CategoriaImpressao = 'documento'
+    ): Promise<RespostaIPC> => {
       let janela: BrowserWindow | null = null
       try {
         const nome = nomeSeguro(nomeArquivo || 'documento')
         janela = await carregarHtmlOculto(html, nome)
 
         const pdf = await janela.webContents.printToPDF({
-          pageSize: 'A4',
+          pageSize: PAGINA_PDF[categoria] ?? PAGINA_PDF.documento,
           printBackground: false
         })
         janela.close()

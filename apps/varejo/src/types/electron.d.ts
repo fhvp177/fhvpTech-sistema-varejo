@@ -564,7 +564,11 @@ interface Window {
         cupom?: { printer?: string; direto?: boolean }
         documento?: { printer?: string; direto?: boolean }
       }) => Promise<RespostaIPC>
-      salvarPdf: (html: string, nomeArquivo?: string) => Promise<RespostaIPC>
+      salvarPdf: (
+        html: string,
+        nomeArquivo?: string,
+        categoria?: 'cupom' | 'documento'
+      ) => Promise<RespostaIPC>
     }
     chat: {
       enviar: (

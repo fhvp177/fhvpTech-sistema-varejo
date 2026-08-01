@@ -320,7 +320,11 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
                           className={`${i % 2 ? 'bg-muted/20' : ''} ${indisponivel ? 'opacity-50' : ''}`}
                         >
                           <td className="px-3 py-2">
-                            <div className="font-medium truncate max-w-[320px]" title={it.produto_nome}>{it.produto_nome}</div>
+                            {/* Nome inteiro, quebrando linha. Antes era `truncate max-w-[320px]`, e
+                                aquele mínimo de 320px era o que empurrava a tabela pra fora do
+                                modal. Truncar também era ruim por si: numa devolução o operador
+                                precisa distinguir dois produtos de nome parecido. */}
+                            <div className="font-medium break-words">{it.produto_nome}</div>
                             <div className="text-xs text-muted-foreground">
                               Comprou {it.quantidade_vendida}
                               {it.quantidade_devolvida > 0 && ` · já devolveu ${it.quantidade_devolvida}`}

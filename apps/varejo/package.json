@@ -1,6 +1,6 @@
 {
   "name": "sistema-rt",
-  "version": "1.32.0",
+  "version": "1.32.1",
   "description": "Sistema de gestão para pequenas lojas de varejo",
   "main": "out/main/index.js",
   "author": "",
@@ -19,6 +19,7 @@
     "dist:linux": "npm run build && electron-builder --linux",
     "senha:gerar": "tsx scripts/gerar-senha-restauracao.ts",
     "hash:gerar": "tsx scripts/gerar-hash-migration.ts",
+    "medir:cupom": "tsx scripts/medir-cupom/gerar.ts && electron scripts/medir-cupom/medir.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

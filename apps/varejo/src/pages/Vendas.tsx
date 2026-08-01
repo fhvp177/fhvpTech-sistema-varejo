@@ -463,7 +463,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const salvarPdfCupom = async (id: number) => {
     const doc = await gerarCupom(id)
     if (!doc) return
-    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome)
+    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome, 'cupom')
     if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
   }
 
@@ -507,7 +507,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
   const salvarPdfComprovanteDevolucao = async (dev: DevolucaoComItens) => {
     const doc = await gerarComprovanteDevolucao(dev)
-    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome)
+    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome, 'cupom')
     if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
   }
 

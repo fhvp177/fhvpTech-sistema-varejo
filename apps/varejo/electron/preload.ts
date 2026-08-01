@@ -194,8 +194,12 @@ const api = {
       ipcRenderer.invoke('impressao:obterPreferencias'),
     salvarPreferencias: (prefs: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('impressao:salvarPreferencias', prefs),
-    salvarPdf: (html: string, nomeArquivo?: string): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('impressao:salvarPdf', html, nomeArquivo)
+    salvarPdf: (
+      html: string,
+      nomeArquivo?: string,
+      categoria?: 'cupom' | 'documento'
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:salvarPdf', html, nomeArquivo, categoria)
   },
 
   // Chatbot (assistente de IA)

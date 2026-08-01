@@ -31,8 +31,19 @@ const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      // `[&>*]:min-w-0` — este diálogo é um GRID, e item de grid nasce com
+      // `min-width: auto`, que significa "não encolha abaixo do seu conteúdo".
+      // Uma tabela larga (ou qualquer texto que não quebre) empurrava o filho
+      // além do `max-w-lg` e o conteúdo era pintado FORA da caixa branca, por
+      // cima da tela de trás. Zerando o mínimo, o filho encolhe até a largura do
+      // diálogo e quem tem que se virar é o conteúdo dele — quebrando linha ou
+      // rolando, se tiver um `overflow-x-auto` por perto.
+      //
+      // Não dá pra resolver com `overflow: hidden` aqui: os seletores de cliente
+      // e afins abrem lista pra fora do diálogo de propósito, e cortar isso
+      // trocaria um bug visual por outro.
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
+        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 [&>*]:min-w-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
         className
       )}
       {...props}

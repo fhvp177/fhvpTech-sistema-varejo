@@ -7,20 +7,44 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
-    versao: '1.32.0',
+    versao: '1.32.1',
     itens: [
       {
-        emoji: '🖥️',
-        titulo: 'Multicaixa: mais de um computador na mesma loja',
+        emoji: '🧾',
+        titulo: 'Impressão do cupom não fiscal',
         descricao:
-          'Outro computador com o sistema instalado passa a trabalhar nos mesmos dados desta loja — mesmos produtos, mesmo estoque, mesmas vendas, atualizados na hora. Funciona na rede da loja e também fora dela, pela internet. Os dados continuam guardados apenas no computador principal, que precisa ficar ligado enquanto os demais estiverem em uso; sem conexão com ele, os outros avisam e não registram vendas. Para ativar, acesse Configurações e abra a seção Multicaixa.'
+          'Em impressora térmica de 80mm, o cupom saía com informações faltando — número do pedido, quantidades, valores, total e rodapé — e com nomes de produto cortados. A impressão foi corrigida e o cupom passa a sair completo. O texto ganhou traço mais encorpado, para melhor leitura no papel térmico; as colunas de quantidade, valor unitário e total ficaram mais espaçadas entre si; e as divisórias entre as seções passaram a ser tracejadas. As mesmas correções valem para o comprovante de devolução. O cupom salvo em PDF passa a ser gerado no formato da bobina, e não mais em folha A4.'
       },
       {
-        emoji: '📋',
-        titulo: 'Copiar os dados para outro computador',
+        emoji: '🛠️',
+        titulo: 'Correção na tela de devolução',
         descricao:
-          'Passa a ser possível levar produtos, clientes, vendas e configurações para outro computador pela própria rede, sem gerar backup, copiar arquivo e restaurar manualmente. Serve para instalar o sistema em uma máquina nova ou trocar o computador da loja. A operação substitui integralmente os dados do computador de destino e guarda uma cópia do que havia nele antes. A opção fica em "Configurar este computador", na tela de entrada.'
+          'Em vendas com produtos de nome extenso, a tabela de itens da tela de devolução ultrapassava os limites da janela e parte das informações ficava sobreposta ao restante da tela. A situação foi corrigida, e o nome do produto passa a ser exibido por completo.'
       }
+    ]
+  },
+  {
+    versao: '1.32.0',
+    itens: [
+      // Multicaixa e clonagem só existem no plano Pro — mesmo tratamento que a
+      // nota fiscal recebe abaixo. Sem o portão, a loja do Básico que pula da
+      // 1.31.0 pra cá leria o anúncio de um recurso que o pacote dela nem tem.
+      ...(__FEAT_MULTICAIXA__
+        ? [
+            {
+              emoji: '🖥️',
+              titulo: 'Multicaixa: mais de um computador na mesma loja',
+              descricao:
+                'Outro computador com o sistema instalado passa a trabalhar nos mesmos dados desta loja — mesmos produtos, mesmo estoque, mesmas vendas, atualizados na hora. Funciona na rede da loja e também fora dela, pela internet. Os dados continuam guardados apenas no computador principal, que precisa ficar ligado enquanto os demais estiverem em uso; sem conexão com ele, os outros avisam e não registram vendas. Para ativar, acesse Configurações e abra a seção Multicaixa.'
+            },
+            {
+              emoji: '📋',
+              titulo: 'Copiar os dados para outro computador',
+              descricao:
+                'Passa a ser possível levar produtos, clientes, vendas e configurações para outro computador pela própria rede, sem gerar backup, copiar arquivo e restaurar manualmente. Serve para instalar o sistema em uma máquina nova ou trocar o computador da loja. A operação substitui integralmente os dados do computador de destino e guarda uma cópia do que havia nele antes. A opção fica em "Configurar este computador", na tela de entrada.'
+            }
+          ]
+        : [])
     ]
   },
   {
