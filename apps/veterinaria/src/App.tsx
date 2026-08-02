@@ -22,6 +22,8 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import LicencaBloqueada from '@fhvptech/core/ui/LicencaBloqueada'
+import RelogioIncorreto from '@fhvptech/core/ui/RelogioIncorreto'
+import { bloqueioDeRelogio, type BloqueioRelogio } from '@fhvptech/core/lib/relogioBloqueio'
 import ModalPagamentoPix from '@fhvptech/core/ui/ModalPagamentoPix'
 import LoginSistema from '@fhvptech/core/ui/LoginSistema'
 import { useAutoLock } from '@fhvptech/core/lib/useAutoLock'
@@ -30,7 +32,7 @@ import Tutores from './pages/Tutores'
 import Servicos from './pages/Servicos'
 import Produtos from './pages/Produtos'
 
-type EstadoLicenca = 'verificando' | 'valida' | 'invalida'
+type EstadoLicenca = 'verificando' | 'valida' | 'invalida' | 'relogio'
 type EstadoAuth = 'verificando' | 'bloqueado' | 'desbloqueado'
 
 export type Sessao = {
@@ -81,6 +83,8 @@ const URL_SUPORTE_WHATSAPP = `https://wa.me/5585921871975?text=${encodeURICompon
 export default function App() {
   const [estadoLicenca, setEstadoLicenca] = useState<EstadoLicenca>('verificando')
   const [mensagemLicenca, setMensagemLicenca] = useState('')
+  // Bloqueio por data errada — tela própria, não é problema de licença.
+  const [relogio, setRelogio] = useState<BloqueioRelogio | null>(null)
   const [mostrarPagamento, setMostrarPagamento] = useState(false)
 
   const [estadoAuth, setEstadoAuth] = useState<EstadoAuth>('verificando')
@@ -90,8 +94,10 @@ export default function App() {
   const validarLicenca = useCallback(async (): Promise<void> => {
     const resp = await window.api.licenca.validar()
     if (resp.success) {
+      const bloqueio = bloqueioDeRelogio(resp.data)
       setMensagemLicenca(resp.data.mensagem)
-      setEstadoLicenca(resp.data.valida ? 'valida' : 'invalida')
+      setRelogio(bloqueio)
+      setEstadoLicenca(resp.data.valida ? 'valida' : bloqueio ? 'relogio' : 'invalida')
     } else {
       setMensagemLicenca(resp.error)
       setEstadoLicenca('invalida')
@@ -156,7 +162,20 @@ export default function App() {
     )
   }
 
-  if (estadoLicenca === 'invalida') {
+  if (estadoLicenca === 'relogio' && relogio) {
+    return (
+      <RelogioIncorreto
+        {...relogio}
+        subtitulo="Sistema de Gestão Veterinária"
+        onTentarNovamente={validarLicenca}
+      />
+    )
+  }
+
+  // Qualquer estado que não seja 'valida' cai aqui — 'verificando' e 'relogio'
+  // já retornaram acima. Testar por diferença, e não por igualdade a
+  // 'invalida', garante que um estado novo nunca escorra para dentro do app.
+  if (estadoLicenca !== 'valida') {
     return (
       <>
         <LicencaBloqueada

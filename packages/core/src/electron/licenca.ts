@@ -18,6 +18,15 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import {
+  avaliarRelogio,
+  calcularAncora,
+  decidirTratamento,
+  interpretarHeartbeat,
+  lerHoraDoCabecalho,
+  type Heartbeat,
+  type Tratamento
+} from '@fhvptech/core/electron/relogioLogica'
 
 // Substituídas por literais em build-time via `define` no electron.vite.config.ts.
 declare const __CHAVE_HMAC__: string
@@ -28,9 +37,12 @@ const CHAVE_HMAC = __CHAVE_HMAC__
 const CHAVE_AES = __CHAVE_AES__
 const SALT_AES = __SALT_AES__
 
-// Tolerância para o guard de relógio. Ajustes menores que isso (correções de
-// timezone, fuso, drift) não disparam o bloqueio.
-const TOLERANCIA_RELOGIO_MS = 48 * 60 * 60 * 1000
+// Mesmo backend da renovação/chat (ipc/licenca-pagamento.ts). Aqui ele serve
+// só como relógio de fora: o cabeçalho `Date` da resposta HTTPS. Falsificar
+// exigiria um certificado válido para este domínio; bloquear a rede, não —
+// e é por isso que o caminho offline existe (ver decidirTratamento).
+const URL_BACKEND = 'https://licenca-gnmodas.fly.dev'
+const TIMEOUT_HORA_SERVIDOR_MS = 6000
 
 function derivarChaveAES(): Buffer {
   return scryptSync(CHAVE_AES, SALT_AES, 32)
@@ -73,25 +85,23 @@ function caminhoHeartbeat(): string {
   return join(app.getPath('userData'), 'licenca.heartbeat')
 }
 
-// Lê o último timestamp registrado pelo heartbeat. Retorna null em qualquer falha
-// (arquivo ausente, corrompido, descriptografia falhando) — o chamador trata como
-// "sem histórico" e usa apenas o anchor do SQLite.
-function lerHeartbeat(): number | null {
+// Lê o heartbeat. Retorna null em qualquer falha (arquivo ausente, corrompido,
+// descriptografia falhando) — o chamador trata como "sem histórico" e usa
+// apenas o anchor do SQLite. O formato antigo (só `ts`) continua sendo lido:
+// ver interpretarHeartbeat em relogioLogica.ts.
+function lerHeartbeat(): Heartbeat | null {
   try {
     const caminho = caminhoHeartbeat()
     if (!existsSync(caminho)) return null
-    const cifrado = readFileSync(caminho, 'utf8').trim()
-    const obj = JSON.parse(descriptografar(cifrado)) as { ts?: number }
-    return typeof obj.ts === 'number' ? obj.ts : null
+    return interpretarHeartbeat(JSON.parse(descriptografar(readFileSync(caminho, 'utf8').trim())))
   } catch {
     return null
   }
 }
 
-function escreverHeartbeat(ts: number): void {
+function escreverHeartbeat(dados: Heartbeat): void {
   try {
-    const conteudo = criptografar(JSON.stringify({ ts }))
-    writeFileSync(caminhoHeartbeat(), conteudo, 'utf8')
+    writeFileSync(caminhoHeartbeat(), criptografar(JSON.stringify(dados)), 'utf8')
   } catch {
     // Falha silenciosa — sem heartbeat o sistema só fica menos seguro, não trava.
   }
@@ -115,7 +125,7 @@ function obterMaxDataVendaMs(): number | null {
 
 type ResultadoGuard =
   | { ok: true; aviso?: string }
-  | { ok: false; mensagem: string }
+  | { ok: false; mensagem: string; ancora: number }
 
 // Detecta se o relógio do SO foi adulterado pra trás. Combina dois anchors:
 // heartbeat criptografado + MAX(vendas.data). Em qualquer falha (sem DB,
@@ -125,44 +135,143 @@ type ResultadoGuard =
 //  - ok: false  → relógio voltou além da tolerância → bloqueia
 //  - ok: true, aviso definido → voltou dentro da tolerância → permite mas avisa
 //  - ok: true sem aviso → tudo certo
+//
+// Bloquear aqui NÃO é a palavra final: quem chama pela IPC passa por
+// `validarLicencaComRelogio()`, que ainda confere a hora com o servidor antes
+// de mandar o lojista para uma tela de erro.
 function verificarRelogio(): ResultadoGuard {
   try {
     const agora = Date.now()
-    const heartbeatMs = lerHeartbeat()
-    const maxVendaMs = obterMaxDataVendaMs()
-    const ancora = Math.max(heartbeatMs ?? 0, maxVendaMs ?? 0)
+    const hb = lerHeartbeat()
+    const ignorarAte = hb?.ignorarAte ?? 0
+    const ancora = calcularAncora({
+      heartbeatMs: hb?.ts ?? null,
+      maxVendaMs: obterMaxDataVendaMs(),
+      ignorarAte
+    })
 
-    if (ancora === 0) {
-      // Sem referência (primeira execução pós-feature ou banco vazio).
-      escreverHeartbeat(agora)
-      return { ok: true }
+    switch (avaliarRelogio(agora, ancora)) {
+      case 'sem-ancora':
+        // Sem referência (primeira execução pós-feature ou banco vazio).
+        escreverHeartbeat({ ts: agora, ignorarAte, destravadoEm: hb?.destravadoEm })
+        return { ok: true }
+
+      case 'bloqueia':
+        return {
+          ok: false,
+          ancora,
+          mensagem:
+            'Relógio do sistema parece incorreto. Ajuste a data/hora do Windows e tente novamente. ' +
+            'Se o problema persistir, contate o suporte.'
+        }
+
+      case 'voltou-pouco':
+        // Heartbeat só avança — nunca regride, mesmo dentro da tolerância.
+        escreverHeartbeat({ ts: ancora, ignorarAte, destravadoEm: hb?.destravadoEm })
+        return {
+          ok: true,
+          aviso:
+            'Atenção: detectamos que o relógio do sistema foi alterado para trás. ' +
+            'Verifique se a data/hora do Windows está correta — alterações maiores podem bloquear o sistema.'
+        }
+
+      default:
+        escreverHeartbeat({ ts: agora, ignorarAte, destravadoEm: hb?.destravadoEm })
+        return { ok: true }
     }
-
-    if (agora < ancora - TOLERANCIA_RELOGIO_MS) {
-      return {
-        ok: false,
-        mensagem:
-          'Relógio do sistema parece incorreto. Ajuste a data/hora do Windows e tente novamente. ' +
-          'Se o problema persistir, contate o suporte.'
-      }
-    }
-
-    // Heartbeat só avança — nunca regride, mesmo dentro da tolerância.
-    escreverHeartbeat(Math.max(ancora, agora))
-
-    if (agora < ancora) {
-      // Voltou pouco (dentro da tolerância). Não bloqueia, mas avisa.
-      return {
-        ok: true,
-        aviso:
-          'Atenção: detectamos que o relógio do sistema foi alterado para trás. ' +
-          'Verifique se a data/hora do Windows está correta — alterações maiores podem bloquear o sistema.'
-      }
-    }
-    return { ok: true }
   } catch {
     return { ok: true }
   }
+}
+
+/**
+ * Marca como desmentidas todas as datas até `ancora` e recomeça o heartbeat de
+ * agora. É o conserto — o mesmo efeito de renomear o licenca.heartbeat na mão,
+ * mas alcançando também a venda com data no futuro, que o rename não resolve.
+ */
+function neutralizarAncora(ancora: number, manual: boolean): void {
+  const hb = lerHeartbeat()
+  escreverHeartbeat({
+    ts: Date.now(),
+    ignorarAte: Math.max(ancora, hb?.ignorarAte ?? 0),
+    destravadoEm: manual ? Date.now() : hb?.destravadoEm
+  })
+}
+
+/**
+ * Pergunta a hora ao servidor pelo cabeçalho `Date` da resposta. Não existe
+ * endpoint dedicado nem precisa: todo HTTP traz esse cabeçalho, então o custo
+ * no backend é zero. Devolve null quando não deu para saber (sem internet,
+ * servidor fora, resposta sem cabeçalho) — e "não deu para saber" nunca é
+ * tratado como "o relógio está certo".
+ */
+export async function obterHoraDoServidor(): Promise<number | null> {
+  try {
+    const controle = new AbortController()
+    const alarme = setTimeout(() => controle.abort(), TIMEOUT_HORA_SERVIDOR_MS)
+    try {
+      const resposta = await fetch(URL_BACKEND + '/', {
+        method: 'HEAD',
+        cache: 'no-store',
+        signal: controle.signal
+      })
+      return lerHoraDoCabecalho(resposta.headers.get('date'))
+    } finally {
+      clearTimeout(alarme)
+    }
+  } catch {
+    return null
+  }
+}
+
+export type StatusRelogio = {
+  tratamento: Tratamento
+  /** Data que o servidor diz ser a correta (ISO), quando houve conferência. */
+  horaServidorISO?: string
+  /** O que a máquina acha que é agora (ISO). */
+  horaLocalISO: string
+}
+
+/**
+ * Versão da validação que trata o bloqueio de relógio em vez de só reportá-lo.
+ *
+ * É a que a IPC usa. `validarLicenca()` continua síncrona e inalterada para
+ * quem só quer o clienteId (BackupManager, notificações).
+ */
+export async function validarLicencaComRelogio(): Promise<StatusLicenca> {
+  const status = validarLicenca()
+  if (status.motivo !== 'relogio') return status
+
+  const agora = Date.now()
+  const horaServidor = await obterHoraDoServidor()
+  const tratamento = decidirTratamento(agora, horaServidor)
+
+  if (tratamento === 'consertar') {
+    // Relógio conferido e honesto ⇒ a âncora é que está furada. Conserta e
+    // revalida: o lojista não vê tela de erro nenhuma.
+    neutralizarAncora(status.ancoraRelogio ?? agora, false)
+    return validarLicenca()
+  }
+
+  return {
+    ...status,
+    relogio: {
+      tratamento,
+      horaLocalISO: new Date(agora).toISOString(),
+      horaServidorISO: horaServidor !== null ? new Date(horaServidor).toISOString() : undefined
+    }
+  }
+}
+
+/**
+ * Destravamento manual, oferecido só quando não deu para conferir a hora com o
+ * servidor. Substitui a visita do suporte ao %APPDATA% do cliente.
+ */
+export function destravarRelogio(): { destravado: boolean } {
+  const guard = verificarRelogio()
+  if (guard.ok) return { destravado: true }
+  neutralizarAncora(guard.ancora, true)
+  return { destravado: verificarRelogio().ok }
 }
 
 export type StatusLicenca = {
@@ -171,6 +280,16 @@ export type StatusLicenca = {
   mensagem: string
   clienteId?: string
   aviso?: string
+  /**
+   * Por que não vale. Só 'relogio' tem tratamento próprio — os demais caem na
+   * tela de ativação de sempre. Campo novo e opcional: quem não olha continua
+   * funcionando igual.
+   */
+  motivo?: 'relogio'
+  /** Âncora que causou o bloqueio, em ms. Interno, para o conserto. */
+  ancoraRelogio?: number
+  /** Preenchido por validarLicencaComRelogio() quando a trava de relógio pega. */
+  relogio?: StatusRelogio
 }
 
 export function validarChave(chave: string): StatusLicenca {
@@ -216,7 +335,7 @@ export function validarLicenca(): StatusLicenca {
 
   const guard = verificarRelogio()
   if (!guard.ok) {
-    return { valida: false, mensagem: guard.mensagem }
+    return { valida: false, mensagem: guard.mensagem, motivo: 'relogio', ancoraRelogio: guard.ancora }
   }
 
   try {
@@ -268,9 +387,9 @@ export function ativarLicenca(chave: string): StatusLicenca {
   if (!status.valida) return status
   const guard = verificarRelogio()
   if (!guard.ok) {
-    return { valida: false, mensagem: guard.mensagem }
+    return { valida: false, mensagem: guard.mensagem, motivo: 'relogio', ancoraRelogio: guard.ancora }
   }
   writeFileSync(caminhoLicenca(), criptografar(chave.trim()), 'utf8')
-  escreverHeartbeat(Date.now())
+  escreverHeartbeat({ ts: Date.now(), ignorarAte: lerHeartbeat()?.ignorarAte ?? 0 })
   return guard.aviso ? { ...status, aviso: guard.aviso } : status
 }

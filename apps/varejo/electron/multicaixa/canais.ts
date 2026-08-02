@@ -78,10 +78,12 @@ export const CANAIS_LOCAIS = [
   'multicaixa:revogarTerminal',
   'multicaixa:sairDoModoTerminal',
   'multicaixa:situacao',
-  // Licença — cada máquina ativa a própria.
+  // Licença — cada máquina ativa a própria. O destravamento de relógio também
+  // é de cada máquina: quem tem a data errada é o PC onde a tela apareceu.
   'licenca:ativar',
   'licenca:consultarCobranca',
   'licenca:criarCobranca',
+  'licenca:destravarRelogio',
   'licenca:obterClienteId',
   'licenca:validar'
 ] as const

@@ -30,6 +30,8 @@ import Configuracoes from './pages/Configuracoes'
 import Relatorios from './pages/Relatorios'
 import TelaRestauracao from './pages/TelaRestauracao'
 import LicencaBloqueada from '@fhvptech/core/ui/LicencaBloqueada'
+import RelogioIncorreto from '@fhvptech/core/ui/RelogioIncorreto'
+import { bloqueioDeRelogio, type BloqueioRelogio } from '@fhvptech/core/lib/relogioBloqueio'
 import LoginSistema from './pages/LoginSistema'
 import ModalCadastrarEmailDono from './components/ModalCadastrarEmailDono'
 import IndicadorBackupAtivo from './components/backup/IndicadorBackupAtivo'
@@ -72,7 +74,7 @@ const FallbackCarregando: FC = () => (
   </div>
 )
 
-type EstadoLicenca = 'verificando' | 'valida' | 'invalida'
+type EstadoLicenca = 'verificando' | 'valida' | 'invalida' | 'relogio'
 type EstadoAuth = 'verificando' | 'bloqueado' | 'desbloqueado'
 
 export type SessaoVendedor = {
@@ -138,6 +140,8 @@ export const useNovidades = () => useContext(NovidadesContext)
 const App: FC = () => {
   const [estadoLicenca, setEstadoLicenca] = useState<EstadoLicenca>('verificando')
   const [mensagemLicenca, setMensagemLicenca] = useState('')
+  // Bloqueio por data errada — tela própria, não é problema de licença.
+  const [relogio, setRelogio] = useState<BloqueioRelogio | null>(null)
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
   const [avisoLicenca, setAvisoLicenca] = useState<string | null>(null)
   const [pdvAtivo, setPdvAtivo] = useState(false)
@@ -163,8 +167,10 @@ const App: FC = () => {
     const resp = await window.api.licenca.validar()
     if (resp.success) {
       const status = resp.data
+      const bloqueio = bloqueioDeRelogio(status)
       setMensagemLicenca(status.mensagem)
-      setEstadoLicenca(status.valida ? 'valida' : 'invalida')
+      setRelogio(bloqueio)
+      setEstadoLicenca(status.valida ? 'valida' : bloqueio ? 'relogio' : 'invalida')
       setDiasRestantes(
         status.valida && status.diasRestantes !== undefined ? status.diasRestantes : null
       )
@@ -367,7 +373,20 @@ const App: FC = () => {
     )
   }
 
-  if (estadoLicenca === 'invalida') {
+  if (estadoLicenca === 'relogio' && relogio) {
+    return (
+      <RelogioIncorreto
+        {...relogio}
+        subtitulo="Sistema de Gestão de Varejo"
+        onTentarNovamente={validarLicenca}
+      />
+    )
+  }
+
+  // Qualquer estado que não seja 'valida' cai aqui — 'verificando' e 'relogio'
+  // já retornaram acima. Testar por diferença, e não por igualdade a
+  // 'invalida', garante que um estado novo nunca escorra para dentro do app.
+  if (estadoLicenca !== 'valida') {
     return (
       <>
         <LicencaBloqueada

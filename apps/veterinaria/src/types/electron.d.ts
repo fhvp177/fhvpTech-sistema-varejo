@@ -7,12 +7,22 @@ declare const __APP_VERSION__: string
 
 type RespostaIPC<T = unknown> = { success: true; data: T } | { success: false; error: string }
 
+type StatusRelogio = {
+  // 'relogio-errado-mesmo': o servidor desmentiu a data da maquina.
+  // 'sem-conferencia': sem internet, nao deu para conferir com ninguem.
+  tratamento: 'consertar' | 'relogio-errado-mesmo' | 'sem-conferencia'
+  horaServidorISO?: string
+  horaLocalISO: string
+}
+
 type StatusLicenca = {
   valida: boolean
   diasRestantes?: number
   mensagem: string
   clienteId?: string
   aviso?: string
+  motivo?: 'relogio'
+  relogio?: StatusRelogio
 }
 
 type CobrancaPix = {
@@ -74,6 +84,7 @@ interface Window {
       validar: () => Promise<RespostaIPC<StatusLicenca>>
       ativar: (chave: string) => Promise<RespostaIPC<StatusLicenca>>
       obterClienteId: () => Promise<RespostaIPC<string | null>>
+      destravarRelogio: () => Promise<RespostaIPC<{ destravado: boolean }>>
       criarCobranca: (dados: {
         diasContratados?: number
         valorCentavos?: number

@@ -7,6 +7,17 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.33.0',
+    itens: [
+      {
+        emoji: '🕐',
+        titulo: 'Aviso de data e hora incorretas',
+        descricao:
+          'Quando a data do computador não confere com a data real, o sistema passa a exibir uma tela própria, que informa a data correta e orienta o ajuste, em lugar da tela de ativação de licença. Nas situações em que a data do computador está correta, o sistema se restabelece sozinho e abre normalmente. Os dados da loja permanecem preservados em qualquer um desses casos.'
+      }
+    ]
+  },
+  {
     versao: '1.32.2',
     itens: [
       {
