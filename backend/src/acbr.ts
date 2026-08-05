@@ -16,6 +16,8 @@
 //    sandbox usado contra produção devolve 401 "Audience [aud] claim", que não
 //    parece problema de ambiente. Por isso o cache é POR AMBIENTE.
 
+import { createHash } from 'node:crypto'
+
 import {
   apagarTokenAcbr,
   gravarTokenAcbr,
@@ -25,9 +27,22 @@ import {
 
 const URL_TOKEN = 'https://auth.acbr.api.br/realms/ACBrAPI/protocol/openid-connect/token'
 
-// Escopos que a credencial concede. Pedimos todos que temos; a API recorta pelo
-// que a credencial realmente permite.
-const ESCOPOS = 'empresa nfce nfe conta cep debug'
+// Escopos pedidos ao servidor de token.
+//
+// ⚠️ Esta lista é o TETO do que o sistema consegue fazer, e é fácil esquecer
+// dela. O token sai com a INTERSEÇÃO entre o que se pede aqui e o que a
+// credencial permite no console da ACBr — então dar a permissão no console não
+// basta: se o escopo não estiver nesta linha, ele não entra no token e a API
+// responde 403 "Acesso negado", sem dizer qual escopo falta.
+//
+// Foi exatamente o que aconteceu com `cnpj` (busca de dados do cliente, que
+// chegou a ser publicada quebrada na v1.34.0) e com `nfse`: o recurso inteiro
+// pronto, credencial em ordem, e o token sem a permissão.
+//
+// ✅ Ao adicionar um tipo de documento ou uma consulta nova, acrescente o
+// escopo AQUI e crie uma credencial nova no console com ele — a ACBr não deixa
+// editar credencial existente.
+const ESCOPOS = 'empresa nfce nfe nfse conta cep cnpj debug'
 
 // Renova com folga em vez de esperar vencer. Se a renovação falhar no dia do
 // vencimento, a loja fica sem emitir; com 2 dias de antecedência sobra margem
@@ -132,25 +147,42 @@ export async function buscarTokenRemoto(
   return JSON.parse(texto)
 }
 
+/**
+ * Chave do token guardado: AMBIENTE + CREDENCIAL.
+ *
+ * Só o ambiente não bastava. Trocar a credencial no console — que é o ÚNICO
+ * jeito de mudar escopos, porque a ACBr não deixa editar credencial existente —
+ * deixava o token antigo no banco, válido pelo relógio por até 30 dias. O
+ * sistema seguia usando a credencial velha, sem os escopos novos, e o sintoma
+ * era um 403 silencioso que nada explicava. Com a credencial na chave, trocar o
+ * segredo invalida o cache sozinho.
+ *
+ * Vai como hash curto para não deixar credencial legível no banco.
+ */
+export function chaveToken(base: string, clientId: string): string {
+  return `${base}#${createHash('sha256').update(clientId).digest('hex').slice(0, 12)}`
+}
+
 // Token válido, do cache ou novo. `forcar` ignora o cache (usado quando a API
 // devolve 401 com um token que, pelo relógio, ainda valeria).
 export async function obterToken(forcar = false): Promise<string> {
   const { clientId, clientSecret, base } = config()
+  const chave = chaveToken(base, clientId)
   const agora = new Date()
 
   if (!forcar) {
-    const guardado = obterTokenAcbr(base)
+    const guardado = obterTokenAcbr(chave)
     if (guardado && venceEm(guardado.expira_em, agora) > DIAS_RENOVACAO_ANTECIPADA) {
       return guardado.access_token
     }
   }
 
   // Trava local: recusa antes de levar 429, e o erro diz o que fazer.
-  const tentativa = registrarTentativaToken(base, MAX_PEDIDOS_TOKEN_HORA)
+  const tentativa = registrarTentativaToken(chave, MAX_PEDIDOS_TOKEN_HORA)
   if (!tentativa.permitido) {
     // Token ainda utilizável mesmo que perto de vencer é melhor que nada:
     // continuar emitindo com ele é preferível a parar a loja.
-    const guardado = obterTokenAcbr(base)
+    const guardado = obterTokenAcbr(chave)
     if (guardado && venceEm(guardado.expira_em, agora) > 0) return guardado.access_token
     throw new ErroAcbr(
       'limite',
@@ -160,7 +192,7 @@ export async function obterToken(forcar = false): Promise<string> {
   }
 
   const novo = await buscarTokenRemoto(clientId, clientSecret)
-  gravarTokenAcbr(base, {
+  gravarTokenAcbr(chave, {
     access_token: novo.access_token,
     escopos: novo.scope ?? ESCOPOS,
     obtido_em: agora.toISOString(),
@@ -222,7 +254,7 @@ export async function chamarAcbr<T = unknown>(
   rota: string,
   opcoes: OpcoesChamada = {}
 ): Promise<T> {
-  const { base } = config()
+  const { base, clientId } = config()
   const { metodo = 'GET', corpo, binario = false } = opcoes
 
   const executar = async (token: string): Promise<Response> => {
@@ -242,9 +274,16 @@ export async function chamarAcbr<T = unknown>(
   let resposta = await executar(await obterToken())
 
   if (resposta.status === 401) {
-    // Token guardado não vale mais (credencial trocada/revogada). Descarta e
-    // tenta uma vez com um novo antes de desistir.
-    apagarTokenAcbr(base)
+    // Token guardado não vale mais (credencial revogada). Descarta e tenta uma
+    // vez com um novo antes de desistir.
+    //
+    // 403 de propósito NÃO entra aqui: ele significa "o token é válido mas não
+    // tem esse escopo", e renovar traria o mesmo token sem o escopo. Pior,
+    // gastaria um dos 4 pedidos de token por hora a cada chamada barrada —
+    // uma tela repetindo a operação derrubaria a emissão da loja inteira.
+    // Quem conserta 403 é acrescentar o escopo em ESCOPOS lá em cima e trocar
+    // a credencial no console.
+    apagarTokenAcbr(chaveToken(base, clientId))
     resposta = await executar(await obterToken(true))
   }
 
