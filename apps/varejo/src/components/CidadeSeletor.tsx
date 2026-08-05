@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Search } from 'lucide-react'
 
 // Combobox de cidade com busca, alimentado pela lista oficial do IBGE embutida
@@ -28,6 +29,43 @@ export default function CidadeSeletor({ cidade, uf, onSelecionar, onDigitar }: P
   const [aberto, setAberto] = useState(false)
   const [indiceFoco, setIndiceFoco] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * Onde desenhar a lista. Ela vai num PORTAL, e não como `absolute` filha
+   * daqui: um elemento posicionado dentro de um container que rola é recortado
+   * na borda dele, e o DialogContent do core agora rola (`max-h-[90vh]`). Como
+   * a lista é posicionada, ela não entra no `scrollHeight` — nem rolando
+   * apareceria. Presa à janela, nunca é cortada.
+   *
+   * Hoje este seletor só vive em página, onde nada o recortaria. Está assim
+   * mesmo assim pra que ele possa entrar num diálogo amanhã sem trazer o bug de
+   * volta — foi essa reincidência que motivou a mudança.
+   */
+  const [posicaoLista, setPosicaoLista] = useState<{
+    left: number
+    top: number
+    width: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!aberto) {
+      setPosicaoLista(null)
+      return
+    }
+    const medir = () => {
+      const el = containerRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setPosicaoLista({ left: r.left, top: r.bottom, width: r.width })
+    }
+    medir()
+    window.addEventListener('resize', medir)
+    window.addEventListener('scroll', medir, true)
+    return () => {
+      window.removeEventListener('resize', medir)
+      window.removeEventListener('scroll', medir, true)
+    }
+  }, [aberto])
   const listaRef = useRef<HTMLUListElement>(null)
 
   // Carrega a lista de cidades sob demanda (lazy) ao montar.
@@ -120,8 +158,18 @@ export default function CidadeSeletor({ cidade, uf, onSelecionar, onDigitar }: P
         />
       </div>
 
-      {aberto && municipios && (
-        <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-lg overflow-hidden">
+      {aberto &&
+        municipios &&
+        posicaoLista &&
+        createPortal(
+          <div
+            className="fixed z-[60] mt-1 bg-popover border rounded-md shadow-lg overflow-hidden"
+            style={{
+              left: posicaoLista.left,
+              top: posicaoLista.top,
+              width: posicaoLista.width
+            }}
+          >
           <ul ref={listaRef} className="max-h-72 overflow-y-auto py-1">
             {sugestoes.length === 0 ? (
               <li className="px-3 py-3 text-sm text-center text-muted-foreground">
@@ -146,8 +194,9 @@ export default function CidadeSeletor({ cidade, uf, onSelecionar, onDigitar }: P
               ))
             )}
           </ul>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

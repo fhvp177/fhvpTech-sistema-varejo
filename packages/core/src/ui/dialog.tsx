@@ -41,9 +41,22 @@ const DialogContent = React.forwardRef<
       //
       // Não dá pra resolver com `overflow: hidden` aqui: os seletores de cliente
       // e afins abrem lista pra fora do diálogo de propósito, e cortar isso
-      // trocaria um bug visual por outro.
+      // trocaria um bug visual por outro. (Por isso esses seletores desenham a
+      // lista em PORTAL — ver ClienteSeletor/CidadeSeletor: assim ela não é
+      // recortada pela rolagem que este diálogo agora tem.)
+      //
+      // `max-h-[90vh] overflow-y-auto` — o diálogo é centralizado com
+      // `translate-y-[-50%]`, então um conteúdo mais alto que a janela cresce
+      // pros DOIS lados: some o cabeçalho em cima e o rodapé com os botões
+      // embaixo, sem rolagem que alcance nenhum dos dois. Aconteceu toda vez que
+      // uma seção retrátil foi aberta dentro de um formulário já comprido.
+      //
+      // Fica AQUI, e não em cada diálogo, porque essa era exatamente a causa da
+      // reincidência: cada tela nova nascia desprotegida e só ganhava
+      // `max-h`/`overflow` depois que alguém via o defeito na tela. Com o teto
+      // no componente base, todo diálogo do monorepo já nasce se contendo.
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 [&>*]:min-w-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
+        'fixed left-[50%] top-[50%] z-50 grid max-h-[90vh] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-background p-6 shadow-lg duration-200 [&>*]:min-w-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
         className
       )}
       {...props}
@@ -58,6 +71,11 @@ const DialogContent = React.forwardRef<
 ))
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
+// ⚠️ NÃO tornar cabeçalho/rodapé `sticky` sem antes trocar o DialogContent de
+// `grid` para `flex flex-col`. Foi tentado: dentro de um container grid, o bloco
+// que gruda se prende à ÁREA DA CÉLULA dele, não à janela de rolagem — o rodapé
+// foi parar no meio do formulário, com campos aparecendo por baixo dos botões.
+// Enquanto o diálogo for grid, o certo é rolar o conteúdo inteiro.
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)} {...props} />
 )

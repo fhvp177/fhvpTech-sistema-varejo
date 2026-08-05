@@ -9,7 +9,7 @@
 // remover a proteção sem saber pra que ela servia.
 
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'fs'
+import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 
 const raiz = join(__dirname, '..', '..', '..', '..', '..')
@@ -49,11 +49,30 @@ describe('DialogContent do core', () => {
     expect(classes).toContain('[&>*]:min-w-0')
   })
 
-  it('não corta o que passar da borda', () => {
-    // A tentação é resolver com overflow hidden/auto no próprio diálogo. Não
-    // dá: o seletor de cliente e outros combos abrem lista PRA FORA do diálogo
-    // de propósito, e cortar isso trocaria um bug visual por outro.
-    expect(classes).not.toMatch(/\boverflow-(hidden|x-auto|y-auto|auto)\b/)
+  it('tem TETO DE ALTURA — senão some o título em cima e os botões embaixo', () => {
+    // O diálogo é centralizado por `translate-y-[-50%]`: sem teto, conteúdo
+    // mais alto que a janela cresce pros dois lados e leva junto o cabeçalho e
+    // o rodapé, que ficam inalcançáveis. Foi o que aconteceu ao abrir a seção
+    // fiscal (NCM) dentro do cadastro de produto.
+    expect(
+      classes,
+      'DialogContent sem max-h: um formulário comprido corta o título e os botões'
+    ).toMatch(/max-h-\[\d+vh\]/)
+  })
+
+  it('ROLA quando o conteúdo passa do teto', () => {
+    // Teto sem rolagem só troca "vaza pra fora" por "não dá pra ver o resto".
+    expect(
+      classes,
+      'DialogContent com max-h e sem overflow-y-auto: o excedente fica inacessível'
+    ).toMatch(/overflow-y-auto/)
+  })
+
+  it('não corta na horizontal', () => {
+    // A rolagem é só vertical de propósito. Conteúdo largo se resolve com
+    // `min-w-0` aqui + `overflow-x-auto` no próprio conteúdo (ver a tabela da
+    // devolução, mais abaixo).
+    expect(classes).not.toMatch(/overflow-(hidden|x-auto)/)
   })
 })
 
@@ -74,5 +93,44 @@ describe('tabela de itens da devolução', () => {
     // Rede de segurança pro dia em que as colunas crescerem de novo: rolar
     // dentro do modal é ruim, vazar pra fora dele é pior.
     expect(fonte).toMatch(/border rounded-lg overflow-x-auto/)
+  })
+})
+
+// ── A regra que SUSTENTA a rolagem do diálogo ───────────────────────────────
+// Enquanto os combos desenhavam a lista como `absolute` DENTRO do diálogo, dar
+// rolagem a ele as recortaria. E, por serem posicionadas, elas não entram no
+// `scrollHeight` — nem rolando apareceriam. Foi por isso que a versão anterior
+// deste arquivo PROIBIA overflow no diálogo. A proibição só pôde sair porque os
+// combos passaram a desenhar em portal; se algum voltar atrás, o teto de altura
+// vira um bug novo, e é isto que os testes abaixo vigiam.
+describe('listas flutuantes (combos) desenham em PORTAL', () => {
+  for (const nome of ['ClienteSeletor', 'CidadeSeletor']) {
+    it(nome + ' usa createPortal, não position absolute', () => {
+      const fonte = ler('apps/varejo/src/components/' + nome + '.tsx')
+      expect(fonte, nome + ' precisa desenhar a lista em portal').toContain('createPortal')
+      expect(
+        fonte,
+        nome + ' voltou a posicionar a lista com "absolute" — dentro de um ' +
+          'diálogo com rolagem ela seria recortada e não apareceria nem rolando.'
+      ).not.toMatch(/className="absolute z-\d/)
+    })
+  }
+
+  it('nenhum combo novo passou despercebido', () => {
+    // Varre a pasta atrás do padrão perigoso: lista sobreposta com `absolute`.
+    // Componente novo que caia nisso reprova aqui, e não na tela do cliente.
+    const dir = join(raiz, 'apps/varejo/src/components')
+    const suspeitos = readdirSync(dir)
+      .filter((f) => f.endsWith('.tsx'))
+      .filter((f) => {
+        const src = readFileSync(join(dir, f), 'utf-8')
+        return /className="absolute z-\d/.test(src) && /bg-popover/.test(src)
+      })
+    expect(
+      suspeitos,
+      'Estes componentes abrem lista sobreposta com "absolute". Dentro de um ' +
+        'diálogo (que agora rola) ela é recortada. Use createPortal com a posição ' +
+        'medida do container, como em ClienteSeletor.'
+    ).toEqual([])
   })
 })

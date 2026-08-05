@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, X, User, Building2, ChevronDown } from 'lucide-react'
 
 export type ClienteSeletorHandle = {
@@ -124,6 +125,44 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
     }
   }
 
+  /**
+   * Onde desenhar a lista. Ela vai num PORTAL (fora da árvore do diálogo), e
+   * não mais como `absolute` filha deste componente.
+   *
+   * Motivo: o DialogContent do core limita a altura e rola (`max-h-[90vh]
+   * overflow-y-auto`). Um elemento posicionado dentro de um container que rola
+   * é RECORTADO na borda dele — e, por ser `absolute`, a lista não entra no
+   * `scrollHeight`, então nem rolando ela apareceria. No portal ela fica presa
+   * à janela e nunca é cortada, esteja o seletor dentro de um diálogo ou não.
+   */
+  const [posicaoLista, setPosicaoLista] = useState<{
+    left: number
+    top: number
+    width: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!aberto) {
+      setPosicaoLista(null)
+      return
+    }
+    const medir = () => {
+      const el = containerRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setPosicaoLista({ left: r.left, top: r.bottom, width: r.width })
+    }
+    medir()
+    // O diálogo pode rolar por baixo da lista aberta; remedir mantém as duas
+    // juntas. `true` no capture pega a rolagem de qualquer ancestral.
+    window.addEventListener('resize', medir)
+    window.addEventListener('scroll', medir, true)
+    return () => {
+      window.removeEventListener('resize', medir)
+      window.removeEventListener('scroll', medir, true)
+    }
+  }, [aberto])
+
   // Scroll do item focado pra dentro da viewport do dropdown
   useEffect(() => {
     if (!aberto || !listaRef.current) return
@@ -177,8 +216,17 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
         </button>
       )}
 
-      {aberto && (
-        <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-lg overflow-hidden">
+      {aberto &&
+        posicaoLista &&
+        createPortal(
+          <div
+            className="fixed z-[60] mt-1 bg-popover border rounded-md shadow-lg overflow-hidden"
+            style={{
+              left: posicaoLista.left,
+              top: posicaoLista.top,
+              width: posicaoLista.width
+            }}
+          >
           <ul ref={listaRef} className="max-h-72 overflow-y-auto py-1">
             {/* Opção "venda avulsa" sempre disponível no topo */}
             <li
@@ -217,8 +265,9 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
               Mostrando até {MAX_RESULTADOS} resultados — refine a busca se necessário.
             </div>
           )}
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 })
