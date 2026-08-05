@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   alterarPinVendedor,
   definirPinVendedor,
@@ -22,7 +22,7 @@ const URL_BACKEND = 'https://licenca-gnmodas.fly.dev'
 export function registrarHandlersAuth(): void {
   // Status geral usado pelo App pra ler auto-lock e saber se há PIN configurado
   // (instalação fresca pode não ter — a tela de login lida com 1º cadastro).
-  ipcMain.handle('auth:obterStatus', () => {
+  registrarCanal('auth:obterStatus', () => {
     try {
       return {
         success: true,
@@ -37,7 +37,7 @@ export function registrarHandlersAuth(): void {
   })
 
   // ─── Sessão e login por vendedor ─────────────────────────────────────
-  ipcMain.handle('auth:listarVendedoresParaLogin', () => {
+  registrarCanal('auth:listarVendedoresParaLogin', () => {
     try {
       return { success: true, data: listarParaLogin() }
     } catch (error) {
@@ -45,7 +45,7 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  ipcMain.handle('auth:login', async (_event, vendedorId: number, pin: string) => {
+  registrarCanal('auth:login', async (vendedorId: number, pin: string) => {
     try {
       const ok = await verificarPinVendedor(vendedorId, pin)
       if (!ok) return { success: true, data: { ok: false } }
@@ -57,7 +57,7 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  ipcMain.handle('auth:logout', () => {
+  registrarCanal('auth:logout', () => {
     try {
       limparSessao()
       return { success: true, data: null }
@@ -66,7 +66,7 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  ipcMain.handle('auth:sessaoAtual', () => {
+  registrarCanal('auth:sessaoAtual', () => {
     try {
       return { success: true, data: obterSessao() }
     } catch (error) {
@@ -74,9 +74,9 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  // Modal "elevar privilégio": valida PIN de qualquer dono ativo sem trocar
-  // o vendedor da sessão. Retorna o id do dono que autenticou (pra log futuro).
-  ipcMain.handle('auth:elevar', async (_event, pin: string) => {
+  // Modal "elevar privilégio": valida PIN de qualquer gerente ativo sem trocar
+  // o vendedor da sessão. Retorna o id do gerente que autenticou (pra log futuro).
+  registrarCanal('auth:elevar', async (pin: string) => {
     try {
       const donoId = await verificarPinDono(pin)
       return { success: true, data: { ok: donoId !== null, donoId } }
@@ -85,9 +85,9 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  ipcMain.handle(
+  registrarCanal(
     'auth:cadastrarPinPrimeiroUso',
-    async (_event, vendedorId: number, pin: string) => {
+    async (vendedorId: number, pin: string) => {
       try {
         await definirPinVendedor(vendedorId, pin)
         return { success: true, data: null }
@@ -97,9 +97,9 @@ export function registrarHandlersAuth(): void {
     }
   )
 
-  ipcMain.handle(
+  registrarCanal(
     'auth:alterarPinVendedor',
-    async (_event, vendedorId: number, pinAtual: string, pinNovo: string) => {
+    async (vendedorId: number, pinAtual: string, pinNovo: string) => {
       try {
         await alterarPinVendedor(vendedorId, pinAtual, pinNovo)
         return { success: true, data: null }
@@ -109,10 +109,10 @@ export function registrarHandlersAuth(): void {
     }
   )
 
-  // ─── Recuperação de PIN por email (dono ou vendedor) ─────────────────
+  // ─── Recuperação de PIN por email (gerente ou vendedor) ─────────────────
   // Gera o código local (hash bcrypt, 6 dígitos, 15 min) e pede ao backend Fly
   // pra enviar por email. `enviado: false` = nenhum usuário ativo com esse email.
-  ipcMain.handle('auth:solicitarRecuperacao', async (_event, email: string) => {
+  registrarCanal('auth:solicitarRecuperacao', async (email: string) => {
     try {
       const gerado = await gerarCodigoRecuperacao(email)
       if (!gerado) {
@@ -151,11 +151,11 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  // Valida o código e redefine o PIN. Em sucesso, já abre a sessão do dono
+  // Valida o código e redefine o PIN. Em sucesso, já abre a sessão do gerente
   // (login automático) — ele acabou de provar a identidade pelo email.
-  ipcMain.handle(
+  registrarCanal(
     'auth:redefinirComCodigo',
-    async (_event, email: string, codigo: string, novoPin: string) => {
+    async (email: string, codigo: string, novoPin: string) => {
       try {
         const vendedorId = await redefinirComCodigo(email, codigo, novoPin)
         definirSessao(vendedorId)
@@ -167,7 +167,7 @@ export function registrarHandlersAuth(): void {
   )
 
   // ─── Auto-lock ───────────────────────────────────────────────────────
-  ipcMain.handle('auth:setarAutoLock', (_event, minutos: number) => {
+  registrarCanal('auth:setarAutoLock', (minutos: number) => {
     try {
       setarAutoLockMinutos(minutos)
       return { success: true, data: null }
@@ -177,7 +177,7 @@ export function registrarHandlersAuth(): void {
   })
 
   // ─── Teto de desconto ────────────────────────────────────────────────
-  ipcMain.handle('auth:lerTetoDesconto', () => {
+  registrarCanal('auth:lerTetoDesconto', () => {
     try {
       return { success: true, data: lerTetoDescontoPct() }
     } catch (error) {
@@ -185,7 +185,7 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  ipcMain.handle('auth:setarTetoDesconto', (_event, pct: number) => {
+  registrarCanal('auth:setarTetoDesconto', (pct: number) => {
     try {
       requerDono()
       setarTetoDescontoPct(pct)

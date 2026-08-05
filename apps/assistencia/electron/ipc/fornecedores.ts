@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   listarFornecedores,
   criarFornecedor,
@@ -10,7 +10,7 @@ import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager
 import { requerDono } from '../sessao'
 
 export function registrarHandlersFornecedores(): void {
-  ipcMain.handle('fornecedores:listar', () => {
+  registrarCanal('fornecedores:listar', () => {
     try {
       return { success: true, data: listarFornecedores() }
     } catch (error) {
@@ -18,7 +18,7 @@ export function registrarHandlersFornecedores(): void {
     }
   })
 
-  ipcMain.handle('fornecedores:criar', (_event, dados: DadosFornecedor) => {
+  registrarCanal('fornecedores:criar', (dados: DadosFornecedor) => {
     try {
       requerDono()
       const resultado = criarFornecedor(dados)
@@ -29,7 +29,7 @@ export function registrarHandlersFornecedores(): void {
     }
   })
 
-  ipcMain.handle('fornecedores:atualizar', (_event, id: number, dados: DadosFornecedor) => {
+  registrarCanal('fornecedores:atualizar', (id: number, dados: DadosFornecedor) => {
     try {
       requerDono()
       atualizarFornecedor(id, dados)
@@ -40,7 +40,7 @@ export function registrarHandlersFornecedores(): void {
     }
   })
 
-  ipcMain.handle('fornecedores:deletar', (_event, id: number) => {
+  registrarCanal('fornecedores:deletar', (id: number) => {
     try {
       requerDono()
       deletarFornecedor(id)

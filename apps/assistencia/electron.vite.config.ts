@@ -40,16 +40,28 @@ const SEGREDOS = lerSegredosLicenca()
 // Edição do build — controla quais features entram no bundle. As flags viram
 // constantes literais (`define`), então o bundler faz dead-code elimination das
 // features desligadas: o código E suas libs exclusivas somem do binário daquela
-// edição (não ficam só escondidos). Default 'completa' = tudo ligado (dev e build
-// padrão, sem regressão). Cada edição é gerada com a env EDICAO: ex. EDICAO=basico.
-type Features = Record<'dashboard' | 'chatbot' | 'etiquetas' | 'tef', boolean>
+// edição (não ficam só escondidos). Cada edição é gerada com a env EDICAO.
+//
+// Planos comerciais (definidos 2026-07-17): 'basico' = tudo que o sistema tem
+// hoje; 'pro' = basico + nota fiscal (nfe) + TEF. NF-e e TEF ainda não foram
+// construídos — as flags só reservam o lugar, e o Pro nasce idêntico ao Básico.
+// Default 'pro' = tudo ligado (dev e build padrão, sem regressão).
+type Features = Record<
+  'dashboard' | 'chatbot' | 'etiquetas' | 'tef' | 'nfe' | 'multicaixa',
+  boolean
+>
 const FEATURES_POR_EDICAO: Record<string, Features> = {
-  basico: { dashboard: false, chatbot: false, etiquetas: true, tef: false },
-  pro: { dashboard: true, chatbot: true, etiquetas: true, tef: false },
-  'pro-tef': { dashboard: true, chatbot: true, etiquetas: true, tef: true },
-  completa: { dashboard: true, chatbot: true, etiquetas: true, tef: true }
+  basico: {
+    dashboard: true,
+    chatbot: true,
+    etiquetas: true,
+    tef: false,
+    nfe: false,
+    multicaixa: false
+  },
+  pro: { dashboard: true, chatbot: true, etiquetas: true, tef: true, nfe: true, multicaixa: true }
 }
-const EDICAO = process.env.EDICAO ?? 'completa'
+const EDICAO = process.env.EDICAO ?? 'pro'
 const FEATURES = FEATURES_POR_EDICAO[EDICAO]
 if (!FEATURES) {
   throw new Error(
@@ -67,7 +79,14 @@ export default defineConfig({
     define: {
       __CHAVE_HMAC__: JSON.stringify(SEGREDOS.CHAVE_HMAC),
       __CHAVE_AES__: JSON.stringify(SEGREDOS.CHAVE_AES),
-      __SALT_AES__: JSON.stringify(SEGREDOS.SALT_AES)
+      __SALT_AES__: JSON.stringify(SEGREDOS.SALT_AES),
+      // O multicaixa precisa da flag também no processo principal: é lá que o
+      // servidor sobe e que o boot decide se esta máquina é um caixa adicional.
+      // Sem isso, o Básico ainda carregaria o mecanismo, só sem a tela.
+      __FEAT_MULTICAIXA__: JSON.stringify(FEATURES.multicaixa),
+      // A edição também no principal, para o atualizador saber sozinho em qual
+      // canal ele deve procurar versão nova — ver electron/atualizador.ts.
+      __EDICAO__: JSON.stringify(EDICAO)
     },
     build: {
       rollupOptions: {
@@ -107,7 +126,9 @@ export default defineConfig({
       __FEAT_DASHBOARD__: JSON.stringify(FEATURES.dashboard),
       __FEAT_CHATBOT__: JSON.stringify(FEATURES.chatbot),
       __FEAT_ETIQUETAS__: JSON.stringify(FEATURES.etiquetas),
-      __FEAT_TEF__: JSON.stringify(FEATURES.tef)
+      __FEAT_TEF__: JSON.stringify(FEATURES.tef),
+      __FEAT_NFE__: JSON.stringify(FEATURES.nfe),
+      __FEAT_MULTICAIXA__: JSON.stringify(FEATURES.multicaixa)
     },
     plugins: [react()]
   }

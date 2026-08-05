@@ -18,8 +18,17 @@
  */
 const Database = require('better-sqlite3')
 const path = require('path')
+const fs = require('fs')
 
-const CAMINHO = path.join(process.env.APPDATA, 'FHVP Tech Assistencia', 'database.sqlite')
+// A assistência só teve um nome de pasta (ver electron/pastaDadosLogica.ts) —
+// a forma de lista fica pra igualar o varejo, que tem nomes legados.
+const CAMINHO = ['FHVP Tech Assistencia']
+  .map((nome) => path.join(process.env.APPDATA, nome, 'database.sqlite'))
+  .find((c) => fs.existsSync(c))
+if (!CAMINHO) {
+  console.error('Nenhum banco encontrado nas pastas de dados conhecidas.')
+  process.exit(1)
+}
 
 // ── RNG determinístico (mulberry32) ───────────────────────────────────────────
 let _seed = 0x9e3779b9

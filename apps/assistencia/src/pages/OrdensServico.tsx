@@ -1,8 +1,10 @@
-import { FC, Fragment, useEffect, useMemo, useState } from 'react'
+import { FC, Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { IMaskInput } from 'react-imask'
 import {
   Plus, Search, Wrench, MapPin, Eye, EyeOff, Package, ShieldCheck,
-  Trash2, UserPlus, AlertTriangle, History
+  Trash2, UserPlus, History, Printer, MessageCircle, FileDown, Cctv, Laptop,
+  ImagePlus, X
 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
@@ -10,6 +12,12 @@ import { Label } from '@fhvptech/core/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@fhvptech/core/ui/dialog'
 import { useToast } from '@fhvptech/core/ui/toast'
 import Paginacao from '@fhvptech/core/ui/paginacao'
+import { useImprimir } from '@/components/ImpressaoProvider'
+import { obterDadosLoja } from '@/utils/dadosLoja'
+import { nomeImpressao } from '@/utils/nomeImpressao'
+import { gerarHtmlComprovanteEntradaOS, gerarHtmlComprovanteEntregaOS } from '@/utils/comprovantesOS'
+import { gerarHtmlLaudoOS, gerarHtmlOrcamentoOS } from '@/utils/documentosOS'
+import { abrirWhatsAppOS } from '@/utils/whatsapp'
 
 const ITENS_POR_PAGINA = 20
 
@@ -19,9 +27,14 @@ type StatusOS =
   | 'aberta' | 'orcamento' | 'aguardando_aprovacao' | 'aprovada' | 'agendada'
   | 'em_reparo' | 'aguardando_peca' | 'pronta' | 'entregue' | 'recusada' | 'cancelada'
 
+type NaturezaOS = 'conserto' | 'instalacao'
+type CategoriaOS = 'equipamento' | 'cftv'
+
 type OrdemServico = {
   id: number
   tipo_atendimento: TipoAtendimento
+  natureza: NaturezaOS
+  categoria: CategoriaOS
   cliente_id: number
   tecnico_id: number
   status: StatusOS
@@ -57,6 +70,7 @@ type ItemOS = {
   produto_nome?: string
   produto_tipo?: string
   tamanho?: string | null
+  estoque_disponivel?: number | null
 }
 
 type HistoricoOS = {
@@ -64,6 +78,13 @@ type HistoricoOS = {
   status: StatusOS
   observacao: string | null
   vendedor_nome?: string
+  criada_em: string
+}
+
+type FotoOS = {
+  id: number
+  nome: string | null
+  dados: string
   criada_em: string
 }
 
@@ -89,7 +110,7 @@ const STATUS_META: Record<StatusOS, { rotulo: string; cor: string }> = {
   aguardando_aprovacao: { rotulo: 'Aguardando aprovação', cor: 'bg-amber-100 text-amber-700' },
   aprovada: { rotulo: 'Aprovada', cor: 'bg-violet-100 text-violet-700' },
   agendada: { rotulo: 'Agendada', cor: 'bg-cyan-100 text-cyan-700' },
-  em_reparo: { rotulo: 'Em reparo', cor: 'bg-orange-100 text-orange-700' },
+  em_reparo: { rotulo: 'Em execução', cor: 'bg-orange-100 text-orange-700' },
   aguardando_peca: { rotulo: 'Aguardando peça', cor: 'bg-yellow-100 text-yellow-800' },
   pronta: { rotulo: 'Pronta', cor: 'bg-green-100 text-green-700' },
   entregue: { rotulo: 'Entregue', cor: 'bg-emerald-100 text-emerald-700' },
@@ -131,6 +152,31 @@ const hojeLocal = (): string => {
 
 const numeroOS = (id: number): string => `#${String(id).padStart(3, '0')}`
 
+// Redimensiona a foto no navegador antes de guardar: foto de celular (3-8MB)
+// vira JPEG de até 1600px (~300-600KB) — o banco agradece e o laudo fica leve.
+// Lê via FileReader→data URL (NÃO blob:): a CSP do index.html só libera
+// img-src 'self' e data: — blob: seria bloqueado e a foto "falharia" à toa.
+const LADO_MAX_FOTO = 1600
+const redimensionarFoto = (arquivo: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const leitor = new FileReader()
+    leitor.onerror = () => reject(new Error(`Não consegui ler o arquivo "${arquivo.name}".`))
+    leitor.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const escala = Math.min(1, LADO_MAX_FOTO / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(img.width * escala))
+        canvas.height = Math.max(1, Math.round(img.height * escala))
+        canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.onerror = () => reject(new Error(`"${arquivo.name}" não é uma imagem válida.`))
+      img.src = leitor.result as string
+    }
+    leitor.readAsDataURL(arquivo)
+  })
+
 const BadgeStatus: FC<{ status: StatusOS }> = ({ status }) => (
   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${STATUS_META[status].cor}`}>
     {STATUS_META[status].rotulo}
@@ -150,6 +196,20 @@ const BadgeGarantia: FC = () => (
   </span>
 )
 
+// Conserto é o padrão da casa — só a instalação ganha selo, pra saltar aos olhos.
+const BadgeInstalacao: FC = () => (
+  <span className="inline-flex items-center rounded-full bg-indigo-100 text-indigo-700 px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap">
+    Instalação
+  </span>
+)
+
+// Equipamento é o feijão-com-arroz — só o CFTV ganha selo.
+const BadgeCftv: FC = () => (
+  <span className="inline-flex items-center gap-1 rounded-full bg-cyan-100 text-cyan-700 px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap">
+    <Cctv className="w-3 h-3" /> CFTV
+  </span>
+)
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const OrdensServico: FC = () => {
@@ -162,6 +222,14 @@ const OrdensServico: FC = () => {
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [modalNovaAberto, setModalNovaAberto] = useState(false)
   const [detalhe, setDetalhe] = useState<OrdemDetalhada | null>(null)
+  const location = useLocation()
+
+  // Chegadas do Painel Diário: abrir direto uma OS específica ou o formulário de nova.
+  useEffect(() => {
+    const st = location.state as { abrirOs?: number; novaOs?: boolean } | null
+    if (st?.abrirOs) abrirDetalhe(st.abrirOs)
+    if (st?.novaOs) setModalNovaAberto(true)
+  }, [])
 
   const carregar = async () => {
     const [rOs, rClientes, rProdutos] = await Promise.all([
@@ -227,15 +295,20 @@ const OrdensServico: FC = () => {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Ordens de Serviço</h2>
-        <Button onClick={() => setModalNovaAberto(true)}>
+        <div>
+          <h2 className="text-2xl font-bold">Ordens de Serviço</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Ficou pra fazer? É OS. Levou embora agora? É venda no PDV.
+          </p>
+        </div>
+        <Button onClick={() => setModalNovaAberto(true)} data-tour="os-nova">
           <Plus className="w-4 h-4 mr-2" />
           Nova OS
         </Button>
       </div>
 
       {/* Abas por situação + busca */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4" data-tour="os-abas">
         {ABAS.map((a) => (
           <button
             key={a.id}
@@ -260,7 +333,7 @@ const OrdensServico: FC = () => {
       </div>
 
       {/* Tabela */}
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -300,6 +373,7 @@ const OrdensServico: FC = () => {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 min-w-0">
                       <BadgeTipo tipo={os.tipo_atendimento} />
+                      {os.categoria === 'cftv' && <BadgeCftv />}
                       <span className="truncate max-w-[220px] text-muted-foreground" title={os.equipamento ?? os.endereco_atendimento ?? ''}>
                         {os.tipo_atendimento === 'bancada' ? os.equipamento : os.endereco_atendimento}
                       </span>
@@ -308,6 +382,7 @@ const OrdensServico: FC = () => {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       <BadgeStatus status={os.status} />
+                      {os.natureza === 'instalacao' && <BadgeInstalacao />}
                       {os.os_origem_id != null && <BadgeGarantia />}
                     </div>
                   </td>
@@ -369,7 +444,8 @@ const OrdensServico: FC = () => {
 // Nova OS
 
 type FormNovaOS = {
-  tipo: TipoAtendimento
+  categoria: CategoriaOS
+  natureza: NaturezaOS
   cliente_id: string
   equipamento: string
   numero_serie: string
@@ -382,7 +458,8 @@ type FormNovaOS = {
 }
 
 const FORM_NOVA_VAZIO: FormNovaOS = {
-  tipo: 'bancada',
+  categoria: 'equipamento',
+  natureza: 'conserto',
   cliente_id: '',
   equipamento: '',
   numero_serie: '',
@@ -460,16 +537,19 @@ const ModalNovaOS: FC<{
   const salvar = async () => {
     setErro('')
     if (!form.cliente_id) { setErro('Selecione o cliente.'); return }
-    if (!form.defeito_relatado.trim()) { setErro('Descreva o defeito relatado pelo cliente.'); return }
-    if (form.tipo === 'bancada' && !form.equipamento.trim()) {
+    if (!form.defeito_relatado.trim()) { setErro('Descreva o que precisa ser feito.'); return }
+    if (form.categoria === 'equipamento' && !form.equipamento.trim()) {
       setErro('Informe o equipamento que ficou na bancada.'); return
     }
-    if (form.tipo === 'externo' && !form.endereco_atendimento.trim()) {
+    if (form.categoria === 'cftv' && !form.endereco_atendimento.trim()) {
       setErro('Informe o endereço do atendimento.'); return
     }
     setSalvando(true)
     const resp = await window.api.os.criar({
-      tipo_atendimento: form.tipo,
+      categoria: form.categoria,
+      // Equipamento fica SEMPRE na bancada da loja; serviço na rua é só CFTV.
+      tipo_atendimento: form.categoria === 'cftv' ? 'externo' : 'bancada',
+      natureza: form.natureza,
       cliente_id: parseInt(form.cliente_id),
       defeito_relatado: form.defeito_relatado,
       equipamento: form.equipamento || null,
@@ -493,24 +573,7 @@ const ModalNovaOS: FC<{
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
-          {/* Bancada × Externo */}
-          <div className="flex gap-2">
-            {(['bancada', 'externo'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, tipo: t }))}
-                className={`flex-1 flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                  form.tipo === t ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'
-                }`}
-              >
-                {t === 'bancada' ? <Wrench className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
-                {t === 'bancada' ? 'Bancada (aparelho fica na loja)' : 'Externo (atendimento no cliente)'}
-              </button>
-            ))}
-          </div>
-
-          {/* Cliente */}
+          {/* Cliente primeiro — depois a pergunta que molda o resto do formulário. */}
           <div className="grid gap-1.5">
             <Label htmlFor="os-cliente">
               Cliente <span className="text-destructive">*</span>
@@ -558,8 +621,51 @@ const ModalNovaOS: FC<{
             )}
           </div>
 
-          {form.tipo === 'bancada' ? (
+          {/* EM QUE se trabalha — a primeira bifurcação: o resto do formulário
+              se adapta a ela. CFTV é sempre no local do cliente; equipamento
+              fica sempre na bancada da loja. */}
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { id: 'equipamento', rotulo: 'Equipamento', desc: 'Computador, notebook, impressora, celular...', Icone: Laptop },
+                { id: 'cftv', rotulo: 'Sistema CFTV', desc: 'Câmeras, DVR e monitoramento no local', Icone: Cctv }
+              ] as const
+            ).map(({ id, rotulo, desc, Icone }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({ ...f, categoria: id, natureza: id === 'cftv' ? 'instalacao' : 'conserto' }))
+                }
+                className={`flex flex-col items-center gap-0.5 rounded-md border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  form.categoria === id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Icone className="w-4 h-4" />
+                  {rotulo}
+                </span>
+                <span className="text-[11px] font-normal text-muted-foreground">{desc}</span>
+              </button>
+            ))}
+          </div>
+
+          {form.categoria === 'equipamento' ? (
             <>
+              {/* Chips de um toque: o balcão é rápido. O aparelho fica SEMPRE
+                  na bancada da loja — serviço na rua, por aqui, é só o CFTV. */}
+              <div className="flex flex-wrap gap-1.5 -mb-1">
+                {(['Computador', 'Notebook', 'Impressora', 'Celular'] as const).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, equipamento: `${c} ` }))}
+                    className="rounded-full border px-2.5 py-1 text-xs font-medium hover:bg-accent transition-colors"
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-1.5">
                   <Label htmlFor="os-equip">
@@ -573,14 +679,18 @@ const ModalNovaOS: FC<{
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="os-serie">Nº de série</Label>
-                  <Input
+                  <Label htmlFor="os-serie">Número de Série (Opcional)</Label>
+                  {/* Máscara permissiva: só letras/números/traço, sempre maiúsculo —
+                      série de fabricante varia demais pra um formato fixo. */}
+                  <IMaskInput
                     id="os-serie"
+                    mask={/^[a-zA-Z0-9-]*$/}
+                    prepare={(s: string) => s.toUpperCase()}
                     value={form.numero_serie}
-                    onChange={setF('numero_serie')}
+                    onAccept={(valor: string) => setForm((f) => ({ ...f, numero_serie: valor }))}
                     onBlur={verificarSerie}
-                    placeholder="Opcional"
-                    className="font-mono"
+                    placeholder="ex.: SN-4F7K9821"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </div>
               </div>
@@ -615,7 +725,7 @@ const ModalNovaOS: FC<{
                     id="os-senha"
                     value={form.senha_acesso}
                     onChange={setF('senha_acesso')}
-                    placeholder="Se o cliente autorizar"
+                    placeholder="ex.: 1234"
                   />
                 </div>
               </div>
@@ -630,40 +740,78 @@ const ModalNovaOS: FC<{
               </div>
             </>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="os-end">
-                  Endereço do atendimento <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="os-end"
-                  value={form.endereco_atendimento}
-                  onChange={setF('endereco_atendimento')}
-                  placeholder="Rua, número, bairro"
-                />
+            <>
+              {/* Sistema CFTV: sempre no local do cliente. Instalação nova é o
+                  caso clássico; manutenção cobre câmera sem imagem, DVR mudo. */}
+              <div className="flex gap-2">
+                {(['instalacao', 'conserto'] as const).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, natureza: n }))}
+                    className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                      form.natureza === n ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    {n === 'instalacao' ? 'Instalação nova' : 'Manutenção / conserto'}
+                  </button>
+                ))}
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="os-agenda">Agendar visita para</Label>
+                <Label htmlFor="os-sistema">Sistema / equipamentos no local (opcional)</Label>
                 <Input
-                  id="os-agenda"
-                  type="datetime-local"
-                  value={form.agendado_para}
-                  onChange={setF('agendado_para')}
+                  id="os-sistema"
+                  value={form.equipamento}
+                  onChange={setF('equipamento')}
+                  placeholder="Ex.: DVR Intelbras 8 canais + 6 câmeras"
                 />
               </div>
-            </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="os-end">
+                    Endereço do atendimento <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="os-end"
+                    value={form.endereco_atendimento}
+                    onChange={setF('endereco_atendimento')}
+                    placeholder="Rua, número, bairro"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="os-agenda">Agendar visita para</Label>
+                  <Input
+                    id="os-agenda"
+                    type="datetime-local"
+                    value={form.agendado_para}
+                    onChange={setF('agendado_para')}
+                  />
+                </div>
+              </div>
+            </>
           )}
 
           <div className="grid gap-1.5">
             <Label htmlFor="os-defeito">
-              Defeito relatado pelo cliente <span className="text-destructive">*</span>
+              {form.categoria === 'cftv'
+                ? form.natureza === 'instalacao'
+                  ? 'O que será instalado? (escopo do serviço)'
+                  : 'Qual o problema do sistema?'
+                : 'Defeito relatado pelo cliente'}{' '}
+              <span className="text-destructive">*</span>
             </Label>
             <textarea
               id="os-defeito"
               value={form.defeito_relatado}
               onChange={setF('defeito_relatado')}
               rows={3}
-              placeholder='Nas palavras do cliente. Ex.: "liga mas não dá vídeo"'
+              placeholder={
+                form.categoria === 'cftv'
+                  ? form.natureza === 'instalacao'
+                    ? 'Ex.: 4 câmeras + DVR com acesso pelo celular'
+                    : 'Ex.: câmera do portão sem imagem; DVR parou de gravar'
+                  : 'Nas palavras do cliente. Ex.: "liga mas não dá vídeo"'
+              }
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
             />
           </div>
@@ -701,13 +849,32 @@ const ModalDetalheOS: FC<{
   const [pickerAberto, setPickerAberto] = useState(false)
   const [motivoModal, setMotivoModal] = useState<null | 'cancelar' | 'recusar' | 'garantia'>(null)
   const [agendarPara, setAgendarPara] = useState('')
+  const [fechamentoAberto, setFechamentoAberto] = useState(false)
+  // Registro fotográfico + erro do laudo "na cara" (nada de toast escondido)
+  const [fotos, setFotos] = useState<FotoOS[]>([])
+  const [erroLaudo, setErroLaudo] = useState(false)
+  const [erroFoto, setErroFoto] = useState('')
+  const [arrastando, setArrastando] = useState(false)
+  const inputFotoRef = useRef<HTMLInputElement>(null)
+  const imprimir = useImprimir()
 
   useEffect(() => {
     setDiagnostico(os.diagnostico ?? '')
     setGarantiaDias(String(os.garantia_dias))
     setSenhaVisivel(false)
+    setFechamentoAberto(false)
     setAgendarPara(os.agendado_para ? os.agendado_para.replace(' ', 'T').slice(0, 16) : '')
   }, [os.id, os.diagnostico, os.garantia_dias, os.agendado_para])
+
+  useEffect(() => {
+    setErroLaudo(false)
+    setErroFoto('')
+    setArrastando(false)
+    ;(async () => {
+      const r = await window.api.os.listarFotos(os.id)
+      setFotos(r.success ? (r.data as FotoOS[]) : [])
+    })()
+  }, [os.id])
 
   const encerrada = ENCERRADAS.includes(os.status)
   const orcamentoEditavel = ORCAMENTO_EDITAVEL.includes(os.status)
@@ -744,6 +911,100 @@ const ModalDetalheOS: FC<{
   const salvarDiagnostico = () =>
     chamar(() => window.api.os.atualizar(os.id, { diagnostico }), 'Diagnóstico salvo.')
 
+  // Documentos formais em PDF (A4, papel timbrado): orçamento pra aprovação
+  // por escrito / propostas CFTV, e laudo técnico assinado pelo responsável.
+  const gerarPdf = async (qual: 'orcamento' | 'laudo') => {
+    if (qual === 'orcamento' && os.itens.length === 0) {
+      showToast({ message: 'Adicione itens ao orçamento antes de gerar o PDF.', variant: 'destructive' })
+      return
+    }
+    if (qual === 'laudo') {
+      // Sem diagnóstico não existe laudo — e o aviso tem que ser NA CARA:
+      // pinta o campo de vermelho e rola até ele (toast some atrás do modal).
+      if (!diagnostico.trim()) {
+        setErroLaudo(true)
+        const campo = document.getElementById('os-diag')
+        campo?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        ;(campo as HTMLTextAreaElement | null)?.focus({ preventScroll: true })
+        return
+      }
+      // Diagnóstico digitado mas ainda não salvo? Salva sozinho — clicar em
+      // "Laudo técnico" já diz que o parecer está pronto.
+      if (diagnostico !== (os.diagnostico ?? '')) {
+        const ok = await chamar(() => window.api.os.atualizar(os.id, { diagnostico }), 'Diagnóstico salvo.')
+        if (!ok) return
+      }
+    }
+    const loja = await obterDadosLoja()
+    const html =
+      qual === 'orcamento'
+        ? gerarHtmlOrcamentoOS(os, loja)
+        : gerarHtmlLaudoOS({ ...os, diagnostico }, loja, fotos)
+    const nome = qual === 'orcamento' ? nomeImpressao.osOrcamento(os.id) : nomeImpressao.osLaudo(os.id)
+    const r = await window.api.impressao.salvarPdf(html, nome)
+    if (!r.success) showToast({ message: `Erro ao gerar PDF: ${r.error}`, variant: 'destructive' })
+  }
+
+  // Anexa em série: cada foto é redimensionada e já entra na OS (a lista que
+  // volta do banco substitui a local — sem segunda viagem).
+  const anexarFotos = async (arquivos: FileList | File[]) => {
+    setErroFoto('')
+    for (const arquivo of Array.from(arquivos)) {
+      if (!arquivo.type.startsWith('image/')) {
+        setErroFoto(`"${arquivo.name}" não é uma imagem.`)
+        continue
+      }
+      try {
+        const dados = await redimensionarFoto(arquivo)
+        const r = await window.api.os.adicionarFoto(os.id, arquivo.name || null, dados)
+        if (!r.success) { setErroFoto(r.error); break }
+        setFotos(r.data as FotoOS[])
+      } catch (e) {
+        setErroFoto((e as Error).message)
+      }
+    }
+  }
+
+  const removerFoto = async (fotoId: number) => {
+    const r = await window.api.os.removerFoto(fotoId)
+    if (r.success) setFotos(r.data as FotoOS[])
+    else showToast({ message: r.error, variant: 'destructive' })
+  }
+
+  const chamarWhatsApp = () => {
+    if (!abrirWhatsAppOS(os.cliente_telefone, { ...os, total })) {
+      showToast({ message: 'Este cliente não tem um telefone válido no cadastro.', variant: 'destructive' })
+    }
+  }
+
+  // Comprovantes na térmica (mesmo fluxo do cupom do PDV: diálogo de impressora
+  // do sistema, ou direto se o dono ligou "imprimir direto" nas Configurações).
+  const imprimirComprovante = async (qual: 'entrada' | 'entrega', dadosOS: OrdemDetalhada = os) => {
+    const loja = await obterDadosLoja()
+
+    // Quanto ainda falta receber, pro QR do PIX no comprovante de entrega.
+    // Vem da venda vinculada consultada AGORA, e não da soma dos itens da OS:
+    // as duas dão o mesmo número no dia da entrega, mas só a venda sabe o que
+    // aconteceu depois. Uma 2ª via tirada semanas mais tarde, com o cliente já
+    // tendo pago, sai sem cobrança — que é o certo.
+    let saldoEmAberto = 0
+    if (qual === 'entrega' && dadosOS.venda_id != null) {
+      const rv = await window.api.vendas.buscarPorId(dadosOS.venda_id)
+      if (rv.success && rv.data) {
+        const venda = rv.data as { total: number; valor_pago: number }
+        saldoEmAberto = venda.total - venda.valor_pago
+      }
+    }
+
+    const html =
+      qual === 'entrada'
+        ? gerarHtmlComprovanteEntradaOS(dadosOS, loja)
+        : gerarHtmlComprovanteEntregaOS({ ...dadosOS, saldo_em_aberto: saldoEmAberto }, loja)
+    const nome =
+      qual === 'entrada' ? nomeImpressao.osEntrada(dadosOS.id) : nomeImpressao.osEntrega(dadosOS.id)
+    await imprimir(html, nome, 'cupom')
+  }
+
   const salvarGarantia = () => {
     const dias = parseInt(garantiaDias)
     if (isNaN(dias) || dias < 0) {
@@ -754,22 +1015,58 @@ const ModalDetalheOS: FC<{
   }
 
   // Ações principais por status (espelha as transições do backend — que valida de novo)
-  const acoes: Array<{ rotulo: string; onClick: () => void; variante?: 'default' | 'outline' }> = []
+  const acoes: Array<{
+    rotulo: string
+    onClick: () => void
+    variante?: 'default' | 'outline'
+    desabilitada?: boolean
+    aviso?: string
+  }> = []
+  // Sem itens não tem o que aprovar — e uma OS aprovada vazia terminaria
+  // entregue de graça no fechamento. Garantia (os_origem_id) é a exceção:
+  // cortesia por natureza, igual à regra do backend.
+  const orcamentoVazio = os.itens.length === 0 && os.os_origem_id == null
   if (os.status === 'aberta') {
     acoes.push({ rotulo: 'Montar orçamento', onClick: () => mudarStatus('orcamento') })
   } else if (os.status === 'orcamento') {
-    acoes.push({ rotulo: 'Enviar pra aprovação', onClick: () => mudarStatus('aguardando_aprovacao') })
+    acoes.push({
+      rotulo: 'Enviar pra aprovação',
+      onClick: () => mudarStatus('aguardando_aprovacao'),
+      desabilitada: orcamentoVazio,
+      aviso: orcamentoVazio
+        ? 'Adicione ao menos um item ao orçamento pra poder enviar pra aprovação — OS sem itens terminaria entregue de graça.'
+        : undefined
+    })
   } else if (os.status === 'aguardando_aprovacao') {
     acoes.push({ rotulo: 'Cliente aprovou o orçamento', onClick: () => mudarStatus('aprovada') })
     acoes.push({ rotulo: 'Voltar pro orçamento', onClick: () => mudarStatus('orcamento'), variante: 'outline' })
     acoes.push({ rotulo: 'Cliente recusou', onClick: () => setMotivoModal('recusar'), variante: 'outline' })
   } else if (os.status === 'aprovada' || os.status === 'agendada') {
-    acoes.push({ rotulo: 'Iniciar reparo', onClick: () => mudarStatus('em_reparo') })
+    acoes.push({
+      rotulo:
+        os.natureza === 'instalacao' ? 'Iniciar instalação'
+        : os.categoria === 'cftv' ? 'Iniciar manutenção'
+        : 'Iniciar reparo',
+      onClick: () => mudarStatus('em_reparo')
+    })
   } else if (os.status === 'em_reparo') {
-    acoes.push({ rotulo: 'Serviço pronto', onClick: () => mudarStatus('pronta') })
-    acoes.push({ rotulo: 'Aguardando peça', onClick: () => mudarStatus('aguardando_peca'), variante: 'outline' })
+    acoes.push({
+      rotulo:
+        os.natureza === 'instalacao' ? 'Instalação concluída'
+        : os.categoria === 'cftv' ? 'Manutenção concluída'
+        : 'Serviço pronto',
+      onClick: () => mudarStatus('pronta')
+    })
+    acoes.push({
+      rotulo: os.natureza === 'instalacao' ? 'Aguardando material' : 'Aguardando peça',
+      onClick: () => mudarStatus('aguardando_peca'),
+      variante: 'outline'
+    })
   } else if (os.status === 'aguardando_peca') {
-    acoes.push({ rotulo: 'Peça chegou — retomar reparo', onClick: () => mudarStatus('em_reparo') })
+    acoes.push({
+      rotulo: os.natureza === 'instalacao' ? 'Material chegou — retomar' : 'Peça chegou — retomar reparo',
+      onClick: () => mudarStatus('em_reparo')
+    })
   }
 
   return (
@@ -780,6 +1077,8 @@ const ModalDetalheOS: FC<{
             OS {numeroOS(os.id)}
             <BadgeStatus status={os.status} />
             <BadgeTipo tipo={os.tipo_atendimento} />
+            {os.categoria === 'cftv' && <BadgeCftv />}
+            {os.natureza === 'instalacao' && <BadgeInstalacao />}
             {os.os_origem_id != null && <BadgeGarantia />}
           </DialogTitle>
         </DialogHeader>
@@ -845,6 +1144,14 @@ const ModalDetalheOS: FC<{
                   <span className="font-medium text-foreground">Endereço: </span>
                   {os.endereco_atendimento}
                 </div>
+                {os.equipamento && (
+                  <div className="col-span-2">
+                    <span className="font-medium text-foreground">
+                      {os.categoria === 'cftv' ? 'Sistema: ' : 'Equipamento: '}
+                    </span>
+                    {os.equipamento}
+                  </div>
+                )}
                 {os.agendado_para && (
                   <div className="col-span-2">
                     <span className="font-medium text-foreground">Visita agendada: </span>
@@ -854,7 +1161,13 @@ const ModalDetalheOS: FC<{
               </>
             )}
             <div className="col-span-2">
-              <span className="font-medium text-foreground">Defeito relatado: </span>
+              <span className="font-medium text-foreground">
+                {os.natureza === 'instalacao'
+                  ? 'Serviço solicitado: '
+                  : os.categoria === 'cftv'
+                    ? 'Problema do sistema: '
+                    : 'Defeito relatado: '}
+              </span>
               {os.defeito_relatado}
             </div>
           </div>
@@ -865,18 +1178,93 @@ const ModalDetalheOS: FC<{
             <textarea
               id="os-diag"
               value={diagnostico}
-              onChange={(e) => setDiagnostico(e.target.value)}
+              onChange={(e) => { setDiagnostico(e.target.value); setErroLaudo(false) }}
               disabled={encerrada}
               rows={2}
               placeholder="O que foi encontrado e o que será feito."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none disabled:opacity-60"
+              className={`w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none disabled:opacity-60 ${
+                erroLaudo ? 'border-destructive ring-1 ring-destructive' : 'border-input'
+              }`}
             />
+            {erroLaudo && (
+              <p className="text-destructive text-xs bg-destructive/10 rounded px-2 py-1.5">
+                Pra gerar o laudo técnico, preencha aqui o diagnóstico — é ele que vira a
+                "Análise e parecer técnico" do documento.
+              </p>
+            )}
             {!encerrada && diagnostico !== (os.diagnostico ?? '') && (
               <Button size="sm" variant="outline" className="justify-self-end" onClick={salvarDiagnostico}>
                 Salvar diagnóstico
               </Button>
             )}
           </div>
+
+          {/* Registro fotográfico — as fotos que ilustram o laudo técnico */}
+          {(!encerrada || fotos.length > 0) && (
+            <div className="grid gap-1.5">
+              <Label>Fotos do laudo{fotos.length > 0 ? ` (${fotos.length})` : ''}</Label>
+              {!encerrada && (
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setArrastando(true) }}
+                  onDragLeave={() => setArrastando(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setArrastando(false)
+                    if (e.dataTransfer.files.length > 0) anexarFotos(e.dataTransfer.files)
+                  }}
+                  onClick={() => inputFotoRef.current?.click()}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed px-3 py-5 text-xs cursor-pointer transition-colors ${
+                    arrastando
+                      ? 'border-primary bg-primary/5 text-primary'
+                      : 'border-input text-muted-foreground hover:bg-muted/40'
+                  }`}
+                >
+                  <ImagePlus className="w-5 h-5" />
+                  <span>
+                    <b>Solte as fotos aqui</b> ou clique para escolher · JPG/PNG, até 12 por OS
+                  </span>
+                </div>
+              )}
+              <input
+                ref={inputFotoRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) anexarFotos(e.target.files)
+                  e.target.value = '' // permite escolher o mesmo arquivo de novo
+                }}
+              />
+              {erroFoto && (
+                <p className="text-destructive text-xs bg-destructive/10 rounded px-2 py-1.5">{erroFoto}</p>
+              )}
+              {fotos.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {fotos.map((f) => (
+                    <div key={f.id} className="relative group w-20 h-20 rounded-md border overflow-hidden">
+                      <img
+                        src={f.dados}
+                        alt={f.nome ?? 'Foto da OS'}
+                        title={f.nome ?? ''}
+                        className="w-full h-full object-cover"
+                      />
+                      {!encerrada && (
+                        <button
+                          type="button"
+                          onClick={() => removerFoto(f.id)}
+                          title="Remover foto"
+                          className="absolute top-0.5 right-0.5 rounded-full bg-black/60 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Orçamento */}
           <div>
@@ -894,7 +1282,7 @@ const ModalDetalheOS: FC<{
                 Nenhum item ainda. {orcamentoEditavel ? 'Adicione serviços e peças do catálogo.' : ''}
               </p>
             ) : (
-              <div className="border rounded-md overflow-hidden">
+              <div className="border rounded-md overflow-x-auto">
                 <table className="w-full text-sm">
                   <tbody>
                     {os.itens.map((item) => (
@@ -908,6 +1296,18 @@ const ModalDetalheOS: FC<{
                               {item.produto_nome}{item.tamanho ? ` (${item.tamanho})` : ''}
                             </span>
                           </div>
+                          {/* Orçar peça que falta é normal (compra-se depois da
+                              aprovação) — mas o técnico precisa VER a promessa.
+                              A trava dura continua na entrega. */}
+                          {item.produto_tipo === 'produto' &&
+                            item.estoque_disponivel != null &&
+                            item.quantidade > item.estoque_disponivel && (
+                              <p className="text-[11px] text-amber-600 mt-0.5 ml-[22px]">
+                                {item.estoque_disponivel <= 0
+                                  ? 'sem estoque — a peça precisa ser comprada antes da entrega'
+                                  : `só ${item.estoque_disponivel} em estoque — o resto precisa ser comprado antes da entrega`}
+                              </p>
+                            )}
                         </td>
                         <td className="px-3 py-2 w-20 text-center">
                           {orcamentoEditavel ? (
@@ -1015,7 +1415,13 @@ const ModalDetalheOS: FC<{
           {!encerrada && (
             <div className="flex flex-wrap items-center gap-2 border-t pt-4">
               {acoes.map((a) => (
-                <Button key={a.rotulo} variant={a.variante ?? 'default'} onClick={a.onClick}>
+                <Button
+                  key={a.rotulo}
+                  variant={a.variante ?? 'default'}
+                  onClick={a.onClick}
+                  disabled={a.desabilitada}
+                  title={a.aviso}
+                >
                   {a.rotulo}
                 </Button>
               ))}
@@ -1042,9 +1448,7 @@ const ModalDetalheOS: FC<{
                 </div>
               )}
               {os.status === 'pronta' && (
-                <Button disabled title="Chega no próximo bloco: gera a venda, recebe e imprime cupom + garantia.">
-                  Entregar e receber
-                </Button>
+                <Button onClick={() => setFechamentoAberto(true)}>Entregar e receber</Button>
               )}
               <Button
                 variant="ghost"
@@ -1053,14 +1457,51 @@ const ModalDetalheOS: FC<{
               >
                 Cancelar OS
               </Button>
+              {acoes
+                .filter((a) => a.desabilitada && a.aviso)
+                .map((a) => (
+                  <p key={a.rotulo} className="basis-full text-xs text-amber-600">
+                    {a.aviso}
+                  </p>
+                ))}
             </div>
           )}
-          {os.status === 'pronta' && (
-            <p className="text-[11px] text-muted-foreground -mt-3 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              O fechamento (entregar, receber e imprimir garantia) chega no próximo bloco da Fase 3b.
-            </p>
-          )}
+          {/* Documentos: térmica (comprovantes) + PDF formal (orçamento/laudo) + WhatsApp */}
+          <div className="flex flex-wrap gap-2">
+            {os.tipo_atendimento === 'bancada' && (
+              <Button size="sm" variant="outline" onClick={() => imprimirComprovante('entrada')}>
+                <Printer className="w-3.5 h-3.5 mr-1.5" />
+                Comprovante de entrada
+              </Button>
+            )}
+            {os.status === 'entregue' && (
+              <Button size="sm" variant="outline" onClick={() => imprimirComprovante('entrega')}>
+                <Printer className="w-3.5 h-3.5 mr-1.5" />
+                Comprovante de entrega
+              </Button>
+            )}
+            {os.itens.length > 0 && (
+              <Button size="sm" variant="outline" onClick={() => gerarPdf('orcamento')}>
+                <FileDown className="w-3.5 h-3.5 mr-1.5" />
+                Orçamento (PDF)
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => gerarPdf('laudo')}>
+              <FileDown className="w-3.5 h-3.5 mr-1.5" />
+              Laudo técnico (PDF)
+            </Button>
+            {os.cliente_telefone && ['aguardando_aprovacao', 'agendada', 'pronta'].includes(os.status) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-green-700 border-green-300 hover:bg-green-50 hover:text-green-800"
+                onClick={chamarWhatsApp}
+              >
+                <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
+                Chamar no WhatsApp
+              </Button>
+            )}
+          </div>
 
           {/* Linha do tempo */}
           <div>
@@ -1092,6 +1533,22 @@ const ModalDetalheOS: FC<{
                 ? os.itens.map((i) => (i.id === existente.id ? { ...i, quantidade: i.quantidade + 1 } : i))
                 : [...os.itens, { id: 0, produto_id, variacao_id: variacao_id ?? null, quantidade: 1, preco_unitario: preco }]
               salvarItens(novos)
+            }}
+          />
+        )}
+
+        {fechamentoAberto && (
+          <ModalFechamento
+            os={os}
+            total={total}
+            onFechar={() => setFechamentoAberto(false)}
+            onFechada={async (atualizada) => {
+              setFechamentoAberto(false)
+              showToast({ message: `OS ${numeroOS(os.id)} entregue.`, variant: 'success' })
+              onMudou()
+              // Cliente na frente do balcão: já emite o comprovante de entrega
+              // (com venda, garantia e validade recém-carimbadas).
+              await imprimirComprovante('entrega', atualizada)
             }}
           />
         )}
@@ -1144,6 +1601,47 @@ const ModalPickerItem: FC<{
   onEscolher: (produtoId: number, variacaoId: number | null, preco: number) => void
 }> = ({ produtos, onFechar, onEscolher }) => {
   const [termo, setTermo] = useState('')
+  // Cadastro na hora: o serviço que ainda não existe no catálogo não pode
+  // travar o orçamento. Nasce aqui e já cai como item da OS.
+  const [criando, setCriando] = useState<null | 'servico' | 'produto'>(null)
+  const [novoNome, setNovoNome] = useState('')
+  const [novoPreco, setNovoPreco] = useState('')
+  const [novoEstoque, setNovoEstoque] = useState('1')
+  const [erroNovo, setErroNovo] = useState('')
+  const [salvandoNovo, setSalvandoNovo] = useState(false)
+
+  const abrirCriar = (tipo: 'servico' | 'produto') => {
+    setCriando(tipo)
+    setNovoNome(termo.trim()) // aproveita o que foi buscado e não achado
+    setNovoPreco('')
+    setNovoEstoque('1')
+    setErroNovo('')
+  }
+
+  const salvarNovo = async () => {
+    const nome = novoNome.trim()
+    if (!nome) { setErroNovo('Informe o nome.'); return }
+    const preco = parseFloat(novoPreco.replace(',', '.'))
+    if (isNaN(preco) || preco < 0) { setErroNovo('Preço inválido.'); return }
+    setSalvandoNovo(true)
+    const resp = await window.api.produtos.criar({
+      tipo: criando,
+      nome,
+      codigo_barras: null,
+      categoria: null,
+      preco,
+      custo: 0,
+      estoque: criando === 'produto' ? Math.max(0, parseInt(novoEstoque) || 0) : 0,
+      fornecedor_id: null
+    })
+    setSalvandoNovo(false)
+    if (resp.success) {
+      const novo = resp.data as { id: number; preco: number }
+      onEscolher(novo.id, null, novo.preco)
+    } else {
+      setErroNovo(resp.error)
+    }
+  }
   const filtrados = useMemo(() => {
     const t = termo.toLowerCase().trim()
     const base = t
@@ -1185,6 +1683,7 @@ const ModalPickerItem: FC<{
                       <button
                         key={v.id}
                         onClick={() => onEscolher(p.id, v.id, p.preco)}
+                        title={`${v.estoque} em estoque`}
                         className="px-2 py-1 rounded border text-xs font-medium hover:bg-accent"
                       >
                         {v.tamanho}
@@ -1202,6 +1701,15 @@ const ModalPickerItem: FC<{
                       ? <Wrench className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                       : <Package className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
                     <span className="truncate" title={p.nome}>{p.nome}</span>
+                    {p.tipo === 'produto' && (
+                      <span
+                        className={`shrink-0 text-[11px] ${
+                          p.estoque <= 0 ? 'text-amber-600 font-medium' : 'text-muted-foreground'
+                        }`}
+                      >
+                        {p.estoque <= 0 ? 'sem estoque' : `${p.estoque} em estoque`}
+                      </span>
+                    )}
                   </div>
                   <span className="font-semibold shrink-0 ml-3">{fmt(p.preco)}</span>
                 </button>
@@ -1212,6 +1720,261 @@ const ModalPickerItem: FC<{
             <p className="text-center py-8 text-muted-foreground text-sm">Nenhum item encontrado.</p>
           )}
         </div>
+
+        {/* Cadastro na hora — o item que não existe no catálogo não trava o orçamento */}
+        <div className="mt-2">
+          {criando === null ? (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => abrirCriar('servico')}>
+                <Wrench className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+                Cadastrar serviço
+              </Button>
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => abrirCriar('produto')}>
+                <Package className="w-3.5 h-3.5 mr-1.5" />
+                Cadastrar peça/produto
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+              <p className="text-xs font-medium">
+                {criando === 'servico' ? 'Novo serviço' : 'Nova peça/produto'} — entra no catálogo e
+                já cai neste orçamento.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  autoFocus
+                  placeholder={criando === 'servico' ? 'Ex.: Troca de tela' : 'Ex.: SSD 480GB'}
+                  value={novoNome}
+                  onChange={(e) => { setNovoNome(e.target.value); setErroNovo('') }}
+                  className="flex-1"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Preço (R$)"
+                  value={novoPreco}
+                  onChange={(e) => { setNovoPreco(e.target.value); setErroNovo('') }}
+                  className="w-28"
+                />
+                {criando === 'produto' && (
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    title="Estoque inicial da peça"
+                    placeholder="Estoque"
+                    value={novoEstoque}
+                    onChange={(e) => setNovoEstoque(e.target.value)}
+                    className="w-24"
+                  />
+                )}
+              </div>
+              {erroNovo && (
+                <p className="text-destructive text-xs bg-destructive/10 rounded px-2 py-1.5">{erroNovo}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setCriando(null)}>Voltar</Button>
+                <Button size="sm" onClick={salvarNovo} disabled={salvandoNovo}>
+                  {salvandoNovo ? 'Salvando...' : 'Salvar e adicionar'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Entregar e receber: gera a venda a partir do orçamento (a máquina financeira
+// é a mesma do PDV — crediário, parcelas e entrada inclusos). OS sem itens
+// (garantia/cortesia) só registra a entrega.
+
+const ModalFechamento: FC<{
+  os: OrdemDetalhada
+  total: number
+  onFechar: () => void
+  onFechada: (atualizada: OrdemDetalhada) => void
+}> = ({ os, total, onFechar, onFechada }) => {
+  const dataDaqui = (dias: number): string => {
+    const d = new Date()
+    d.setDate(d.getDate() + dias)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  const [forma, setForma] = useState<'pago' | 'pendente' | 'parcelado'>('pago')
+  // Sem data pré-preenchida DE PROPÓSITO: o vencimento é um combinado com o
+  // cliente — tem que ser escolhido conscientemente (os atalhos dão a rapidez).
+  const [vencimento, setVencimento] = useState('')
+  const [parcelas, setParcelas] = useState('2')
+  const [entrada, setEntrada] = useState('')
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const semCobranca = os.itens.length === 0
+  const entradaNum = Math.max(0, parseFloat(entrada.replace(',', '.')) || 0)
+  const nParcelas = parseInt(parcelas) || 0
+  const financiado = Math.max(0, total - entradaNum)
+
+  const confirmar = async () => {
+    setErro('')
+    if (!semCobranca && forma !== 'pago') {
+      if (total <= 0) {
+        setErro('O total é zero — não há nada pra receber depois. Use "À vista".')
+        return
+      }
+      if (!vencimento) {
+        setErro(forma === 'parcelado' ? 'Escolha a data do 1º vencimento.' : 'Escolha a data de vencimento.')
+        return
+      }
+      if (forma === 'parcelado' && nParcelas < 2) { setErro('Parcelado exige ao menos 2 parcelas.'); return }
+      if (entradaNum >= total) {
+        setErro('A entrada não pode ser igual ou maior que o total — pra receber tudo agora, use "À vista".')
+        return
+      }
+    }
+    setSalvando(true)
+    const resp = await window.api.os.fechar(
+      os.id,
+      semCobranca
+        ? { status_pagamento: 'pago' }
+        : {
+            status_pagamento: forma,
+            data_vencimento: forma === 'pago' ? null : vencimento,
+            num_parcelas: forma === 'parcelado' ? nParcelas : null,
+            entrada: forma === 'pago' ? 0 : entradaNum
+          }
+    )
+    setSalvando(false)
+    if (resp.success) onFechada(resp.data as OrdemDetalhada)
+    else setErro(resp.error)
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onFechar()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Entregar e receber — OS {numeroOS(os.id)}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          {semCobranca ? (
+            <p className="text-sm text-muted-foreground">
+              Esta OS não tem itens no orçamento — a entrega será registrada <b>sem cobrança</b>{' '}
+              (cortesia ou atendimento em garantia).
+            </p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                <span className="text-sm font-medium">Total do serviço</span>
+                <span className="text-xl font-bold text-primary">{fmt(total)}</span>
+              </div>
+
+              <div className="flex gap-2">
+                {(
+                  [
+                    { id: 'pago', rotulo: 'À vista' },
+                    { id: 'pendente', rotulo: 'A prazo' },
+                    { id: 'parcelado', rotulo: 'Parcelado' }
+                  ] as const
+                ).map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => { setForma(f.id); setErro('') }}
+                    className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                      forma === f.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    {f.rotulo}
+                  </button>
+                ))}
+              </div>
+
+              {forma !== 'pago' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="fech-venc">
+                      {forma === 'parcelado' ? '1º vencimento' : 'Vencimento'}{' '}
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="fech-venc"
+                      type="date"
+                      value={vencimento}
+                      onChange={(e) => { setVencimento(e.target.value); setErro('') }}
+                    />
+                    <div className="flex gap-1.5">
+                      {[7, 15, 30].map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => { setVencimento(dataDaqui(d)); setErro('') }}
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                            vencimento === dataDaqui(d)
+                              ? 'border-primary bg-primary/5 text-primary'
+                              : 'text-muted-foreground hover:bg-accent'
+                          }`}
+                        >
+                          +{d} dias
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {forma === 'parcelado' ? (
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="fech-parc">Parcelas</Label>
+                      <select
+                        id="fech-parc"
+                        value={parcelas}
+                        onChange={(e) => setParcelas(e.target.value)}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {Array.from({ length: 11 }, (_, i) => i + 2).map((n) => (
+                          <option key={n} value={n}>
+                            {n}× de ≈ {fmt(financiado / n)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div />
+                  )}
+                  <div className="col-span-2 grid gap-1.5">
+                    <Label htmlFor="fech-entrada">Entrada recebida agora (opcional)</Label>
+                    <Input
+                      id="fech-entrada"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={entrada}
+                      onChange={(e) => setEntrada(e.target.value)}
+                      placeholder="0,00"
+                    />
+                    {entradaNum > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Fica {forma === 'parcelado' ? 'parcelado' : 'a receber'}: <b>{fmt(financiado)}</b>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {erro && (
+            <p className="text-destructive text-xs bg-destructive/10 rounded px-2 py-1.5">{erro}</p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onFechar}>Voltar</Button>
+          <Button onClick={confirmar} disabled={salvando}>
+            {salvando ? 'Registrando...' : semCobranca ? 'Confirmar entrega' : 'Receber e entregar'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

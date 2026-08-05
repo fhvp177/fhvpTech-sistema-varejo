@@ -1,5 +1,5 @@
 import { FC, useEffect, useMemo, useState } from 'react'
-import { Wallet, Banknote, UserPlus, ShieldAlert } from 'lucide-react'
+import { Wallet, Banknote, UserPlus, ShieldAlert, AlertTriangle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -43,12 +43,15 @@ type Props = {
 
 // Modal de devolução/troca (v1). Localiza os itens da venda, deixa escolher
 // quantidade + se volta ao estoque, e resolve em crédito na loja (precisa de
-// cliente) ou dinheiro de volta (saída de caixa → exige PIN do dono se quem
-// opera não é dono). O valor de cada item já vem proporcional ao desconto.
+// cliente) ou dinheiro de volta (saída de caixa → exige PIN do gerente se quem
+// opera não é gerente). O valor de cada item já vem proporcional ao desconto.
 const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) => {
   const { showToast } = useToast()
   const imprimir = useImprimir()
   const aberto = vendaId !== null
+  // Nota fiscal da venda: devolver mercadoria com nota emitida tem implicação
+  // fiscal que o sistema NÃO resolve sozinho — mas também não pode ficar mudo.
+  const [notaDaVenda, setNotaDaVenda] = useState<NotaFiscalVenda | null>(null)
 
   const [carregando, setCarregando] = useState(false)
   const [statusOk, setStatusOk] = useState(true)
@@ -100,6 +103,12 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
       if (rClientes.success) setClientes(rClientes.data as Cliente[])
       setCarregando(false)
     })
+
+    if (__FEAT_NFE__) {
+      window.api.fiscal.notasDasVendas([vendaId!]).then((r) => {
+        setNotaDaVenda(r.success ? (r.data[vendaId!] ?? null) : null)
+      })
+    }
   }, [aberto, vendaId])
 
   // Saldo de crédito do cliente que vai receber (mostra atual + novo).
@@ -183,7 +192,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
       return
     }
     if (tipo === 'dinheiro' && !ehDono && !/^\d{4,6}$/.test(pinDono)) {
-      setErro('Devolução em dinheiro exige o PIN de um dono (4 a 6 dígitos).')
+      setErro('Devolução em dinheiro exige o PIN de um gerente (4 a 6 dígitos).')
       return
     }
     const itensEnviar = itens
@@ -258,12 +267,31 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
             <DialogTitle>Devolução — Venda #{vendaId}</DialogTitle>
           </DialogHeader>
 
+          {/* Devolver com nota emitida exige um documento fiscal de entrada,
+              que o sistema ainda não emite. Avisar é o mínimo honesto: o
+              lojista precisa saber que há uma pendência com o contador. */}
+          {notaDaVenda?.status === 'autorizado' && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p>
+                  Esta venda tem a <strong>nota fiscal nº {notaDaVenda.numero}</strong> autorizada.
+                </p>
+                <p>
+                  A devolução aqui acerta o seu estoque e o dinheiro, mas{' '}
+                  <strong>não desfaz a nota</strong>. Combine com o seu contador como registrar
+                  esta devolução — normalmente é preciso um documento fiscal de entrada.
+                </p>
+              </div>
+            </div>
+          )}
+
           {carregando ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Carregando itens…</p>
           ) : !statusOk ? (
             <p className="text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded px-3 py-2">
               Só é possível devolver itens de vendas <strong>totalmente pagas</strong>. Para vendas a
-              prazo ou parceladas, fale com o dono.
+              prazo ou parceladas, fale com o gerente.
             </p>
           ) : itens.every((it) => it.quantidade_disponivel <= 0) ? (
             <p className="text-sm bg-muted/40 text-muted-foreground rounded px-3 py-2">
@@ -272,7 +300,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
           ) : (
             <div className="space-y-4 text-sm">
               {/* Itens devolvíveis */}
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-muted/50 text-xs text-muted-foreground">
                     <tr>
@@ -292,7 +320,11 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
                           className={`${i % 2 ? 'bg-muted/20' : ''} ${indisponivel ? 'opacity-50' : ''}`}
                         >
                           <td className="px-3 py-2">
-                            <div className="font-medium truncate max-w-[320px]" title={it.produto_nome}>{it.produto_nome}</div>
+                            {/* Nome inteiro, quebrando linha. Antes era `truncate max-w-[320px]`, e
+                                aquele mínimo de 320px era o que empurrava a tabela pra fora do
+                                modal. Truncar também era ruim por si: numa devolução o operador
+                                precisa distinguir dois produtos de nome parecido. */}
+                            <div className="font-medium break-words">{it.produto_nome}</div>
                             <div className="text-xs text-muted-foreground">
                               Comprou {it.quantidade_vendida}
                               {it.quantidade_devolvida > 0 && ` · já devolveu ${it.quantidade_devolvida}`}
@@ -395,12 +427,12 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
                 </div>
               )}
 
-              {/* Dinheiro + não-dono → PIN do dono */}
+              {/* Dinheiro + não-gerente → PIN do gerente */}
               {tipo === 'dinheiro' && !ehDono && (
                 <div className="space-y-1.5 bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <Label className="text-xs flex items-center gap-1.5 text-amber-700">
                     <ShieldAlert className="w-4 h-4" />
-                    Saída de dinheiro do caixa exige autorização do dono
+                    Saída de dinheiro do caixa exige autorização do gerente
                   </Label>
                   <input
                     type="password"
@@ -408,7 +440,7 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
                     autoComplete="off"
                     value={pinDono}
                     onChange={(e) => { setPinDono(e.target.value.replace(/\D/g, '').slice(0, 6)); setErro('') }}
-                    placeholder="PIN do dono"
+                    placeholder="PIN do gerente"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-center tracking-[0.3em] font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </div>

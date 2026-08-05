@@ -27,7 +27,7 @@ Este app **nasceu como cópia integral de `apps/varejo`** (Fase 0, 2026-07-04) �
 
 | Item | Valor |
 |---|---|
-| Package | `@fhvptech/assistencia` |
+| Package | `fhvptech-assistencia` |
 | appId | `com.fhvp.assistencia` |
 | productName | `FHVP Tech Assistência Técnica` |
 | userData | `%APPDATA%\FHVP Tech Assistencia` (candidato único em `pastaDados.ts`) |

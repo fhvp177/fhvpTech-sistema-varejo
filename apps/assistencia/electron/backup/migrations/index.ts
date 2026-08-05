@@ -25,8 +25,22 @@ import { aplicar023RecalcularValorPagoParcelado } from './023_recalcular_valor_p
 import { aplicar024Notificacoes } from './024_notificacoes'
 import { aplicar025CancelarVenda } from './025_cancelar_venda'
 import { aplicar026ValorPagoAvista } from './026_valor_pago_avista'
-import { aplicar027ProdutoTipo } from './027_produto_tipo'
-import { aplicar028OrdensServico } from './028_ordens_servico'
+import { aplicar027ContasPagar } from './027_contas_pagar'
+import { aplicar028NotasEntrada } from './028_notas_entrada'
+import { aplicar029ProdutoReferencia } from './029_produto_referencia'
+import { aplicar030LojaIdentidadeLegada } from './030_loja_identidade_legada'
+import { aplicar031FiscalNfce } from './031_fiscal_nfce'
+import { aplicar032FiscalEndereco } from './032_fiscal_endereco'
+import { aplicar033VendaFormaPagamento } from './033_venda_forma_pagamento'
+import { aplicar034ClienteFiscal } from './034_cliente_fiscal'
+import { aplicar035NotaModelo } from './035_nota_modelo'
+import { aplicar036PinTamanho } from './036_pin_tamanho'
+import { aplicar027ProdutoTipo } from './os/027_produto_tipo'
+import { aplicar028OrdensServico } from './os/028_ordens_servico'
+import { aplicar029OsNatureza } from './os/029_os_natureza'
+import { aplicar030OsCategoria } from './os/030_os_categoria'
+import { aplicar031OsFotos } from './os/031_os_fotos'
+import { aplicarAt001NfseServico } from './os/at_001_nfse_servico'
 
 // Lista de migrations, na ordem de aplicação — herdadas do varejo e mantidas
 // IDÊNTICAS de propósito: o backup de um cliente do varejo restaura direto
@@ -34,6 +48,25 @@ import { aplicar028OrdensServico } from './028_ordens_servico'
 // entram como migrations NOVAS por cima, nunca editando as antigas. O runner
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
 // só o conteúdo, que é domínio deste app. Cada nicho terá a sua própria lista.
+//
+// ⚠️ POR QUE HÁ DOIS 027, DOIS 028, DOIS 029, DOIS 030 E DOIS 031.
+// Os dois apps criaram migrations 027+ ao mesmo tempo e sem saber um do outro: o
+// varejo numerou Contas a Pagar/notas de entrada/fiscal, a assistência numerou
+// tipo de produto/OS. Isso NÃO quebra nada — o runner casa por `nome`, que é
+// único nos dois conjuntos ('027_contas_pagar' ≠ '027_produto_tipo'), e o número
+// é só convenção de leitura. Renumerar seria pior que conviver: o nome já está
+// carimbado na tabela `_migrations` dos bancos existentes, e trocá-lo faria a
+// migration rodar de novo.
+//
+// Os arquivos das duas famílias ficam em pastas separadas (raiz = herdado do
+// varejo, ./os = desta assistência) pra que a duplicidade seja óbvia ao abrir a
+// pasta, e não uma pegadinha.
+//
+// REGRA PRA DAQUI PRA FRENTE: migration nova que vier do varejo entra no bloco
+// de cima com o nome original. Migration nova só da assistência entra no bloco
+// de baixo com nome prefixado `at_` e numeração própria (ex.:
+// 'at_001_nfse_servico') — assim as duas numerações nunca mais se cruzam, por
+// mais que o varejo avance para 036, 037 e adiante.
 export const MIGRATIONS: Migration[] = [
   { nome: '001_modulo_backup', aplicar: aplicar001ModuloBackup },
   { nome: '002_ativar_backup', aplicar: aplicar002AtivarBackup },
@@ -61,7 +94,25 @@ export const MIGRATIONS: Migration[] = [
   { nome: '024_notificacoes', aplicar: aplicar024Notificacoes },
   { nome: '025_cancelar_venda', aplicar: aplicar025CancelarVenda },
   { nome: '026_valor_pago_avista', aplicar: aplicar026ValorPagoAvista },
-  // ── Daqui pra baixo: migrations PRÓPRIAS da assistência ──
+  { nome: '027_contas_pagar', aplicar: aplicar027ContasPagar },
+  { nome: '028_notas_entrada', aplicar: aplicar028NotasEntrada },
+  { nome: '029_produto_referencia', aplicar: aplicar029ProdutoReferencia },
+  { nome: '030_loja_identidade_legada', aplicar: aplicar030LojaIdentidadeLegada },
+  { nome: '031_fiscal_nfce', aplicar: aplicar031FiscalNfce },
+  { nome: '032_fiscal_endereco', aplicar: aplicar032FiscalEndereco },
+  { nome: '033_venda_forma_pagamento', aplicar: aplicar033VendaFormaPagamento },
+  { nome: '034_cliente_fiscal', aplicar: aplicar034ClienteFiscal },
+  { nome: '035_nota_modelo', aplicar: aplicar035NotaModelo },
+  { nome: '036_pin_tamanho', aplicar: aplicar036PinTamanho },
+
+  // ── Migrations PRÓPRIAS da assistência (arquivos em ./os) ──
   { nome: '027_produto_tipo', aplicar: aplicar027ProdutoTipo },
   { nome: '028_ordens_servico', aplicar: aplicar028OrdensServico },
+  { nome: '029_os_natureza', aplicar: aplicar029OsNatureza },
+  { nome: '030_os_categoria', aplicar: aplicar030OsCategoria },
+  { nome: '031_os_fotos', aplicar: aplicar031OsFotos },
+  // Daqui pra frente, migration só da assistência usa o prefixo `at_` com
+  // numeração própria — assim ela nunca colide com a do varejo, que segue em
+  // 036, 037…
+  { nome: 'at_001_nfse_servico', aplicar: aplicarAt001NfseServico },
 ]

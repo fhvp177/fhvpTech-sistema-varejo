@@ -1,35 +1,47 @@
 import { createContext, FC, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { MemoryRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import {
   Lock,
   LayoutDashboard,
+  BarChart3,
   Package,
   Users,
   Truck,
   ShoppingCart,
   ClipboardList,
+  CalendarCheck,
   Tags,
+  Receipt,
   Settings,
+  FileText,
   DatabaseBackup,
   MessageCircle,
   QrCode,
   Crown,
+  Calculator,
   ChevronDown,
   LogOut,
   LucideIcon
 } from 'lucide-react'
 import Fornecedores from './pages/Fornecedores'
+import ContasPagar from './pages/ContasPagar'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
 import OrdensServico from './pages/OrdensServico'
+import PainelDiario from './pages/PainelDiario'
 import Configuracoes from './pages/Configuracoes'
+import Relatorios from './pages/Relatorios'
 import TelaRestauracao from './pages/TelaRestauracao'
 import LicencaBloqueada from '@fhvptech/core/ui/LicencaBloqueada'
+import RelogioIncorreto from '@fhvptech/core/ui/RelogioIncorreto'
+import { bloqueioDeRelogio, type BloqueioRelogio } from '@fhvptech/core/lib/relogioBloqueio'
 import LoginSistema from './pages/LoginSistema'
 import ModalCadastrarEmailDono from './components/ModalCadastrarEmailDono'
 import IndicadorBackupAtivo from './components/backup/IndicadorBackupAtivo'
 import AlertaBackupFalhando from './components/backup/AlertaBackupFalhando'
+import AvisoSemConexao from './components/AvisoSemConexao'
+import TelaSemCaixaPrincipal from './components/TelaSemCaixaPrincipal'
 import DialogoBackupAoFechar from './components/backup/DialogoBackupAoFechar'
 import ModalAtualizacaoDisponivel from './components/ModalAtualizacaoDisponivel'
 import ModalPagamentoPix from '@fhvptech/core/ui/ModalPagamentoPix'
@@ -37,6 +49,8 @@ import ErrorBoundary from './components/ErrorBoundary'
 import DashboardSkeleton from './components/DashboardSkeleton'
 import RotaSomenteDono from './components/RotaSomenteDono'
 import GuiaBoasVindas from '@fhvptech/core/ui/GuiaBoasVindas'
+import TourGuiado, { type PassoTour } from '@fhvptech/core/ui/TourGuiado'
+import { construirPassosTour } from './data/passosTour'
 import ChecklistPrimeirosPassos, { type EstadoOnboarding } from './components/ChecklistPrimeirosPassos'
 import { construirSlidesGuia } from './data/slidesGuia'
 import NovidadesModal, { type ItemNovidade } from '@fhvptech/core/ui/NovidadesModal'
@@ -53,6 +67,10 @@ import { useAutoLock } from './hooks/useAutoLock'
 const Dashboard = __FEAT_DASHBOARD__ ? lazy(() => import('./pages/Dashboard')) : null
 const EtiquetasA4 = __FEAT_ETIQUETAS__ ? lazy(() => import('./pages/EtiquetasA4')) : null
 const ChatAssistente = __FEAT_CHATBOT__ ? lazy(() => import('./components/ChatAssistente')) : null
+const ConfiguracaoFiscal = __FEAT_NFE__ ? lazy(() => import('./pages/ConfiguracaoFiscal')) : null
+// Calculadora do balcão — existe em todos os planos (é ferramenta de operação,
+// não de plano). Carregada sob demanda: só entra na memória se for aberta.
+const Calculadora = lazy(() => import('./components/Calculadora'))
 
 const FallbackCarregando: FC = () => (
   <div className="flex-1 flex items-center justify-center p-8">
@@ -60,7 +78,7 @@ const FallbackCarregando: FC = () => (
   </div>
 )
 
-type EstadoLicenca = 'verificando' | 'valida' | 'invalida'
+type EstadoLicenca = 'verificando' | 'valida' | 'invalida' | 'relogio'
 type EstadoAuth = 'verificando' | 'bloqueado' | 'desbloqueado'
 
 export type SessaoVendedor = {
@@ -107,24 +125,43 @@ export const useOnboarding = () => useContext(OnboardingContext)
 // Permite que Configurações reabra as novidades da versão atual ("Ver novidades").
 type NovidadesCtx = { abrirNovidades: () => void }
 const NovidadesContext = createContext<NovidadesCtx>({ abrirNovidades: () => {} })
+
+// Permite que Configurações reinicie o tour guiado pelas telas ("Refazer tour").
+type TourCtx = { abrirTour: () => void }
+const TourContext = createContext<TourCtx>({ abrirTour: () => {} })
+export const useTour = () => useContext(TourContext)
+
+// Calculadora do balcão. O estado vive aqui porque a janela é global — flutua
+// por cima de qualquer tela, inclusive do PDV. O PDV precisa poder LER se ela
+// está aberta: lá o Esc sai do caixa, e quem aperta Esc pra limpar o visor da
+// calculadora não quer perder a venda.
+type CalculadoraCtx = { aberta: boolean; alternar: () => void }
+const CalculadoraContext = createContext<CalculadoraCtx>({ aberta: false, alternar: () => {} })
+export const useCalculadora = () => useContext(CalculadoraContext)
 export const useNovidades = () => useContext(NovidadesContext)
 
 // MemoryRouter é necessário no Electron: não existe servidor HTTP nem hash routing
 const App: FC = () => {
   const [estadoLicenca, setEstadoLicenca] = useState<EstadoLicenca>('verificando')
   const [mensagemLicenca, setMensagemLicenca] = useState('')
+  // Bloqueio por data errada — tela própria, não é problema de licença.
+  const [relogio, setRelogio] = useState<BloqueioRelogio | null>(null)
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
   const [avisoLicenca, setAvisoLicenca] = useState<string | null>(null)
   const [pdvAtivo, setPdvAtivo] = useState(false)
   const [estadoAuth, setEstadoAuth] = useState<EstadoAuth>('verificando')
+  // Caixa adicional que não conseguiu falar com o computador principal ao abrir.
+  const [falhaCaixaPrincipal, setFalhaCaixaPrincipal] = useState<string | null>(null)
+  const [tentativaCaixaPrincipal, setTentativaCaixaPrincipal] = useState(0)
   const [autoLockMinutos, setAutoLockMinutos] = useState(15)
   const [mostrarPagamento, setMostrarPagamento] = useState(false)
   const [vendedor, setVendedor] = useState<SessaoVendedor | null>(null)
-  // Dono adiou o cadastro de email de recuperação — esconde só nesta sessão.
+  // Gerente adiou o cadastro de email de recuperação — esconde só nesta sessão.
   const [pulouEmailDono, setPulouEmailDono] = useState(false)
   // Onboarding (tutorial de primeira abertura): estado do banco + guia aberto.
   const [onboarding, setOnboarding] = useState<EstadoOnboarding | null>(null)
   const [guiaAberto, setGuiaAberto] = useState(false)
+  const [calculadoraAberta, setCalculadoraAberta] = useState(false)
   const slidesGuia = useMemo(() => construirSlidesGuia(), [])
   // "O que há de novo" — destaques exibidos uma vez após uma atualização.
   const [novidades, setNovidades] = useState<{ versao: string; itens: ItemNovidade[] } | null>(null)
@@ -134,8 +171,10 @@ const App: FC = () => {
     const resp = await window.api.licenca.validar()
     if (resp.success) {
       const status = resp.data
+      const bloqueio = bloqueioDeRelogio(status)
       setMensagemLicenca(status.mensagem)
-      setEstadoLicenca(status.valida ? 'valida' : 'invalida')
+      setRelogio(bloqueio)
+      setEstadoLicenca(status.valida ? 'valida' : bloqueio ? 'relogio' : 'invalida')
       setDiasRestantes(
         status.valida && status.diasRestantes !== undefined ? status.diasRestantes : null
       )
@@ -167,14 +206,23 @@ const App: FC = () => {
   useEffect(() => {
     if (estadoLicenca !== 'valida') return
     ;(async () => {
-      const respStatus = await window.api.auth.obterStatus()
-      if (respStatus.success) {
-        setAutoLockMinutos(respStatus.data.autoLockMinutos)
+      try {
+        const respStatus = await window.api.auth.obterStatus()
+        if (respStatus.success) {
+          setAutoLockMinutos(respStatus.data.autoLockMinutos)
+        }
+        const sessao = await recarregarSessao()
+        setFalhaCaixaPrincipal(null)
+        setEstadoAuth(sessao ? 'desbloqueado' : 'bloqueado')
+      } catch (erro) {
+        // Num caixa adicional estas duas perguntas vão pela rede até o
+        // computador principal. Sem ele, elas LANÇAM — e sem este catch o
+        // estado nunca saía de "verificando", deixando a tela presa sem dizer
+        // por quê e, se o caixa tivesse sido removido, sem nenhuma saída.
+        setFalhaCaixaPrincipal((erro as Error).message || 'Sem conexão com o caixa principal.')
       }
-      const sessao = await recarregarSessao()
-      setEstadoAuth(sessao ? 'desbloqueado' : 'bloqueado')
     })()
-  }, [estadoLicenca, recarregarSessao])
+  }, [estadoLicenca, recarregarSessao, tentativaCaixaPrincipal])
 
   // ── Onboarding ──────────────────────────────────────────────────────────────
   // Relê o estado do tutorial. Em caso de falha, assume "tudo visto" (fail-safe:
@@ -201,18 +249,41 @@ const App: FC = () => {
     recarregarOnboarding()
   }, [estadoAuth, vendedor, recarregarOnboarding])
 
-  // Primeira abertura do dono → abre o guia antes de tudo.
+  // Primeira abertura do gerente → abre o guia antes de tudo.
   useEffect(() => {
     if (onboarding && vendedor?.papel === 'dono' && !onboarding.guiaVisto) {
       setGuiaAberto(true)
     }
   }, [onboarding, vendedor?.papel])
 
+  // Tour guiado pelas telas reais (holofote + balão). Passos != null = tour rodando.
+  const [tourPassos, setTourPassos] = useState<PassoTour[] | null>(null)
+  const iniciarTour = useCallback((ehDonoTour: boolean) => {
+    setPdvAtivo(false) // o tour navega pelas telas; o modo PDV esconderia o menu
+    setTourPassos(construirPassosTour(ehDonoTour))
+  }, [])
+  const fecharTour = useCallback(() => setTourPassos(null), [])
+  const abrirTour = useCallback(() => iniciarTour(true), [iniciarTour])
+
   const fecharGuia = useCallback(async () => {
+    // Primeira abertura de verdade (não um replay)? Emenda o tour pelas telas
+    // logo depois do carrossel — o gerente novo sai sabendo ONDE cada coisa mora.
+    const primeiraVez = onboarding ? !onboarding.guiaVisto : false
     setGuiaAberto(false)
     await window.api.onboarding.marcarGuiaVisto()
     recarregarOnboarding()
-  }, [recarregarOnboarding])
+    if (primeiraVez) iniciarTour(true)
+  }, [recarregarOnboarding, onboarding, iniciarTour])
+
+  // Vendedor entrou pela primeira vez nesta máquina → tour enxuto do dia a dia.
+  // Flag em localStorage (é só UI): marcada já no início pra nunca insistir.
+  useEffect(() => {
+    if (estadoAuth !== 'desbloqueado' || !vendedor || vendedor.papel === 'dono' || guiaAberto) return
+    const chave = `fhvp-tour-visto-vendedor-${vendedor.id}`
+    if (localStorage.getItem(chave)) return
+    localStorage.setItem(chave, '1')
+    iniciarTour(false)
+  }, [estadoAuth, vendedor, guiaAberto, iniciarTour])
 
   const abrirGuia = useCallback(() => setGuiaAberto(true), [])
 
@@ -281,6 +352,20 @@ const App: FC = () => {
     return () => window.removeEventListener('keydown', handler)
   }, [estadoAuth, bloquear])
 
+  // Atalho global F10 abre/fecha a calculadora. Fica aqui, e não no PDV, porque
+  // a calculadora serve a tela toda — mas é no PDV que ele faz mais falta: lá a
+  // barra lateral (e com ela o botão da calculadora) some.
+  useEffect(() => {
+    if (estadoAuth !== 'desbloqueado') return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'F10' || e.ctrlKey || e.altKey || e.metaKey) return
+      e.preventDefault()
+      setCalculadoraAberta((v) => !v)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [estadoAuth])
+
   // Auto-lock por inatividade — só roda quando desbloqueado e tempo > 0
   useAutoLock(estadoAuth === 'desbloqueado' ? autoLockMinutos : 0, bloquear)
 
@@ -292,7 +377,20 @@ const App: FC = () => {
     )
   }
 
-  if (estadoLicenca === 'invalida') {
+  if (estadoLicenca === 'relogio' && relogio) {
+    return (
+      <RelogioIncorreto
+        {...relogio}
+        subtitulo="Sistema de Gestão de Assistência Técnica"
+        onTentarNovamente={validarLicenca}
+      />
+    )
+  }
+
+  // Qualquer estado que não seja 'valida' cai aqui — 'verificando' e 'relogio'
+  // já retornaram acima. Testar por diferença, e não por igualdade a
+  // 'invalida', garante que um estado novo nunca escorra para dentro do app.
+  if (estadoLicenca !== 'valida') {
     return (
       <>
         <LicencaBloqueada
@@ -307,6 +405,17 @@ const App: FC = () => {
           onLicencaRenovada={aoRenovar}
         />
       </>
+    )
+  }
+
+  // Vem ANTES do "verificando": é exatamente o estado em que o caixa adicional
+  // ficava preso, e agora ele explica o motivo e oferece saída.
+  if (__FEAT_MULTICAIXA__ && falhaCaixaPrincipal !== null) {
+    return (
+      <TelaSemCaixaPrincipal
+        motivo={falhaCaixaPrincipal}
+        onTentarNovamente={() => setTentativaCaixaPrincipal((n) => n + 1)}
+      />
     )
   }
 
@@ -328,23 +437,34 @@ const App: FC = () => {
       >
        <OnboardingContext.Provider value={{ abrirGuia }}>
         <NovidadesContext.Provider value={{ abrirNovidades }}>
+        <TourContext.Provider value={{ abrirTour }}>
         <LockContext.Provider value={{ bloquear, autoLockMinutos, setAutoLockMinutos }}>
           <PdvModeContext.Provider value={{ ativo: pdvAtivo, setAtivo: setPdvAtivo }}>
+           <CalculadoraContext.Provider
+             value={{ aberta: calculadoraAberta, alternar: () => setCalculadoraAberta((v) => !v) }}
+           >
             <MemoryRouter>
               <div className="flex h-screen bg-background">
                 {!pdvAtivo && (
                   <Sidebar
                     diasRestantes={diasRestantes}
                     onBloquear={bloquear}
+                    onAbrirCalculadora={() => setCalculadoraAberta((v) => !v)}
                     onRenovarComPix={abrirPagamento}
                     vendedor={vendedor}
                   />
                 )}
                 <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Aparece inclusive com o PDV aberto, ao contrário dos
+                      demais avisos: é justamente durante a venda que perder o
+                      caixa principal precisa ficar visível. */}
+                  <AvisoSemConexao />
                   {!pdvAtivo && <AlertaBackupFalhando />}
                   {!pdvAtivo && vendedor?.papel === 'dono' && (
                     <div className="h-12 shrink-0 border-b bg-background flex items-center justify-end px-6">
-                      <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
+                      <span data-tour="sino">
+                        <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
+                      </span>
                     </div>
                   )}
                   <main className={`flex-1 overflow-auto ${pdvAtivo ? '' : 'pb-24'}`}>
@@ -356,9 +476,34 @@ const App: FC = () => {
                       onDispensar={dispensarChecklist}
                     />
                     <Routes>
-                      {Dashboard ? (
+                      {/* A raiz não desenha tela: ela ENCAMINHA conforme o papel.
+                          O gerente cai na Dashboard (a leitura do negócio); o
+                          técnico cai no Painel Diário (a fila de trabalho dele).
+                          Mandar todo mundo pra Dashboard daria ao técnico uma tela
+                          de cadeado como primeira coisa do dia — ela é somenteDono. */}
+                      <Route
+                        path="/"
+                        element={
+                          // ⚠️ Espera a sessão chegar antes de decidir. O
+                          // <Navigate> resolve UMA vez, na montagem, e com
+                          // `replace` não há volta: decidir com `vendedor`
+                          // ainda nulo mandaria o gerente pro Painel Diário e
+                          // ele ficaria lá, porque a rota '/' já teria saído do
+                          // histórico.
+                          vendedor === null ? (
+                            <FallbackCarregando />
+                          ) : (
+                            <Navigate
+                              to={vendedor.papel === 'dono' && Dashboard ? '/dashboard' : '/painel'}
+                              replace
+                            />
+                          )
+                        }
+                      />
+                      <Route path="/painel" element={<PainelDiario />} />
+                      {Dashboard && (
                         <Route
-                          path="/"
+                          path="/dashboard"
                           element={
                             <RotaSomenteDono titulo="Dashboard">
                               <Suspense fallback={<DashboardSkeleton />}>
@@ -367,10 +512,16 @@ const App: FC = () => {
                             </RotaSomenteDono>
                           }
                         />
-                      ) : (
-                        <Route path="/" element={<Navigate to="/produtos" replace />} />
                       )}
                       <Route path="/fornecedores" element={<Fornecedores />} />
+                      <Route
+                        path="/contas-pagar"
+                        element={
+                          <RotaSomenteDono titulo="Contas a Pagar">
+                            <ContasPagar />
+                          </RotaSomenteDono>
+                        }
+                      />
                       <Route path="/produtos" element={<Produtos />} />
                       <Route path="/clientes" element={<Clientes />} />
                       <Route path="/vendas" element={<Vendas />} />
@@ -382,6 +533,26 @@ const App: FC = () => {
                             <Suspense fallback={<FallbackCarregando />}>
                               <EtiquetasA4 />
                             </Suspense>
+                          }
+                        />
+                      )}
+                      <Route
+                        path="/relatorios"
+                        element={
+                          <RotaSomenteDono titulo="Relatórios">
+                            <Relatorios />
+                          </RotaSomenteDono>
+                        }
+                      />
+                      {ConfiguracaoFiscal && (
+                        <Route
+                          path="/fiscal"
+                          element={
+                            <RotaSomenteDono titulo="Nota fiscal">
+                              <Suspense fallback={<FallbackCarregando />}>
+                                <ConfiguracaoFiscal />
+                              </Suspense>
+                            </RotaSomenteDono>
                           }
                         />
                       )}
@@ -406,6 +577,17 @@ const App: FC = () => {
                 </div>
               </div>
               <IndicadorBackupAtivo />
+              {tourPassos && estadoAuth === 'desbloqueado' && !guiaAberto && (
+                <TourHost passos={tourPassos} onFechar={fecharTour} />
+              )}
+              {vendedor && (
+                <Suspense fallback={null}>
+                  <Calculadora
+                    aberta={calculadoraAberta}
+                    onFechar={() => setCalculadoraAberta(false)}
+                  />
+                </Suspense>
+              )}
               {ChatAssistente && vendedor && !pdvAtivo && (
                 <ErrorBoundary rotulo="ChatAssistente">
                   <Suspense fallback={null}>
@@ -421,8 +603,10 @@ const App: FC = () => {
                 onLicencaRenovada={aoRenovar}
               />
             </MemoryRouter>
+           </CalculadoraContext.Provider>
           </PdvModeContext.Provider>
         </LockContext.Provider>
+        </TourContext.Provider>
         </NovidadesContext.Provider>
        </OnboardingContext.Provider>
       </SessaoContext.Provider>
@@ -479,14 +663,19 @@ const ToastInicial: FC<{ aviso: string | null; onMostrado: () => void }> = ({
 
 type ItemSidebar = { to: string; label: string; icon: LucideIcon; somenteDono?: boolean }
 const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
-  ...(__FEAT_DASHBOARD__
-    ? [
-        {
-          titulo: 'Visão geral',
-          itens: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, somenteDono: true }]
-        }
-      ]
-    : []),
+  {
+    titulo: 'Visão geral',
+    itens: [
+      // A Dashboard abre primeiro pra quem é gerente. O técnico não tem acesso a
+      // ela (somenteDono), e por isso o '/' o encaminha direto ao Painel Diário —
+      // senão ele começaria o dia numa tela de cadeado.
+      ...(__FEAT_DASHBOARD__
+        ? [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, somenteDono: true }]
+        : []),
+      { to: '/painel', label: 'Painel Diário', icon: CalendarCheck },
+      { to: '/relatorios', label: 'Relatórios', icon: BarChart3, somenteDono: true }
+    ]
+  },
   {
     titulo: 'Cadastros',
     itens: [
@@ -506,8 +695,18 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
     ]
   },
   {
+    titulo: 'Financeiro',
+    itens: [
+      { to: '/contas-pagar', label: 'Contas a Pagar', icon: Receipt, somenteDono: true }
+    ]
+  },
+  {
     titulo: 'Sistema',
     itens: [
+      // Só existe no plano Pro; no Básico a flag remove o item e o chunk.
+      ...(__FEAT_NFE__
+        ? [{ to: '/fiscal', label: 'Nota fiscal', icon: FileText, somenteDono: true }]
+        : []),
       { to: '/configuracoes', label: 'Configurações', icon: Settings, somenteDono: true },
       { to: '/restauracao', label: 'Restauração', icon: DatabaseBackup, somenteDono: true }
     ]
@@ -547,7 +746,7 @@ const UserMenu: FC<{ vendedor: SessaoVendedor; onSair: () => void }> = ({
           <p className="text-[11px] text-slate-400 flex items-center gap-1">
             {ehDono ? (
               <>
-                <Crown className="w-3 h-3 text-amber-400" /> Dono
+                <Crown className="w-3 h-3 text-amber-400" /> Gerente
               </>
             ) : (
               'Técnico'
@@ -576,13 +775,21 @@ const UserMenu: FC<{ vendedor: SessaoVendedor; onSair: () => void }> = ({
   )
 }
 
+// O motor do tour precisa navegar entre rotas — por isso este host vive DENTRO
+// do MemoryRouter e injeta o navigate no componente genérico do core.
+const TourHost: FC<{ passos: PassoTour[]; onFechar: () => void }> = ({ passos, onFechar }) => {
+  const navigate = useNavigate()
+  return <TourGuiado passos={passos} onNavegar={navigate} onFechar={onFechar} />
+}
+
 const Sidebar: FC<{
   diasRestantes: number | null
   onBloquear: () => void
   onRenovarComPix: () => void
+  onAbrirCalculadora: () => void
   vendedor: SessaoVendedor | null
-}> = ({ diasRestantes, onBloquear, onRenovarComPix, vendedor }) => (
-  <nav className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
+}> = ({ diasRestantes, onBloquear, onRenovarComPix, onAbrirCalculadora, vendedor }) => (
+  <nav data-tour="menu" className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
     <div className="mb-4">
       <h1 className="text-lg font-bold text-white">FHVP Tech</h1>
       <p className="text-xs text-slate-400">Sistema de Gestão de Assistência Técnica</p>
@@ -604,7 +811,7 @@ const Sidebar: FC<{
                   key={to}
                   to={to}
                   end={to === '/'}
-                  title={bloqueado ? 'Restrito ao dono' : undefined}
+                  title={bloqueado ? 'Restrito ao gerente' : undefined}
                   className={({ isActive }) =>
                     `anim-gatilho flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
                       isActive
@@ -648,6 +855,14 @@ const Sidebar: FC<{
           Renovar com PIX
         </button>
       )}
+      <button
+        onClick={onAbrirCalculadora}
+        title="Abrir a calculadora"
+        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium text-slate-300 bg-slate-800/60 hover:bg-slate-700 hover:text-white transition-colors"
+      >
+        <Calculator className="w-4 h-4" />
+        Calculadora
+      </button>
       <a
         href={URL_SUPORTE_WHATSAPP}
         target="_blank"

@@ -2,14 +2,19 @@ import { FC, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
+import CadastroPixLoja from '@/components/CadastroPixLoja'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
 import ConfigImpressao from '@/components/ConfigImpressao'
+import ConfigMulticaixa from '@/components/ConfigMulticaixa'
 import CidadeSeletor from '@/components/CidadeSeletor'
-import { useOnboarding, useNovidades } from '@/App'
+import SecaoConfig from '@/components/SecaoConfig'
+import { useOnboarding, useNovidades, useTour, useLock } from '@/App'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
+import type { EstadoMulticaixa } from '@/types/multicaixa'
+import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { UFS } from '@/data/ufs'
 
 // Mesmo visual do <Input> do core — usado nos campos com máscara (IMaskInput
@@ -53,6 +58,7 @@ const fmtData = (iso: string | null) => {
 const Configuracoes: FC = () => {
   const { abrirGuia } = useOnboarding()
   const { abrirNovidades } = useNovidades()
+  const { abrirTour } = useTour()
   const [infoAtualizacao, setInfoAtualizacao] = useState<InfoAtualizacao | null>(null)
   const [verificandoUpdate, setVerificandoUpdate] = useState(false)
   const [status, setStatus] = useState<StatusBackup | null>(null)
@@ -65,12 +71,23 @@ const Configuracoes: FC = () => {
   const [salvando, setSalvando] = useState(false)
   const [fazendoBackup, setFazendoBackup] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+  // Feedback do backup manual mora DENTRO do card dele — mensagem de backup
+  // aparecendo ao lado do "Salvar configurações" era metade da confusão.
+  const [feedbackBackup, setFeedbackBackup] = useState<Feedback | null>(null)
 
   // Dados da loja (identidade no cupom)
   const [loja, setLoja] = useState<DadosLoja | null>(null)
+  // Resumos das seções fechadas — é o que permite ler a tela sem abrir nada.
+  const { autoLockMinutos } = useLock()
+  const [totalVendedores, setTotalVendedores] = useState<number | null>(null)
+  const [estadoMulticaixa, setEstadoMulticaixa] = useState<EstadoMulticaixa | null>(null)
+  const { ehCaixaAdicional } = useSituacaoMulticaixa()
+  const [prefsImpressao, setPrefsImpressao] = useState<{
+    cupom: { printer: string }
+    documento: { printer: string }
+  } | null>(null)
   const [salvandoLoja, setSalvandoLoja] = useState(false)
   const [feedbackLoja, setFeedbackLoja] = useState<Feedback | null>(null)
-  const [lojaAberta, setLojaAberta] = useState(false)
   const [erroLogo, setErroLogo] = useState('')
   const inputLogoRef = useRef<HTMLInputElement>(null)
 
@@ -91,6 +108,22 @@ const Configuracoes: FC = () => {
   useEffect(() => { carregarStatus() }, [])
 
   useEffect(() => { obterDadosLoja().then(setLoja) }, [])
+  // Dados que alimentam os resumos das seções fechadas.
+  useEffect(() => {
+    window.api.vendedores.listar().then((r) => {
+      if (r.success) setTotalVendedores((r.data as unknown[]).length)
+    })
+    // Só para o resumo da seção recolhida — o componente de dentro recarrega
+    // por conta própria quando o lojista mexe. No Básico o canal não existe.
+    if (__FEAT_MULTICAIXA__) {
+      window.api.multicaixa.estado().then((r) => {
+        if (r.success) setEstadoMulticaixa(r.data)
+      })
+    }
+    window.api.impressao.obterPreferencias().then((r) => {
+      if (r.success) setPrefsImpressao(r.data)
+    })
+  }, [])
 
   const atualizarLoja = (campo: keyof DadosLoja, valor: string | boolean | null) =>
     setLoja((prev) => (prev ? { ...prev, [campo]: valor } : prev))
@@ -199,23 +232,47 @@ const Configuracoes: FC = () => {
 
   const fazerBackup = async () => {
     setFazendoBackup(true)
-    setFeedback(null)
+    setFeedbackBackup(null)
     const resp = await window.api.backup.fazerManual()
     setFazendoBackup(false)
     if (resp.success) {
-      mostrarFeedback('ok', 'Backup manual realizado com sucesso!')
+      setFeedbackBackup({ tipo: 'ok', msg: 'Backup criado com sucesso!' })
       await carregarStatus()
     } else {
-      mostrarFeedback('erro', `Falha no backup: ${(resp as { success: false; error: string }).error}`)
+      setFeedbackBackup({
+        tipo: 'erro',
+        msg: `Falha no backup: ${(resp as { success: false; error: string }).error}`
+      })
     }
+    setTimeout(() => setFeedbackBackup(null), 4000)
   }
+
+  // Textos curtos que aparecem ao lado do título quando a seção está fechada.
+  const resumoSeguranca = `bloqueio em ${autoLockMinutos} min`
+  const resumoVendedores =
+    totalVendedores === null
+      ? null
+      : `${totalVendedores} ${totalVendedores === 1 ? 'cadastrado' : 'cadastrados'}`
+  const impressoraCupom = prefsImpressao?.cupom?.printer
+  const resumoImpressao = impressoraCupom || 'nenhuma escolhida'
+  const resumoMulticaixa =
+    estadoMulticaixa === null
+      ? null
+      : estadoMulticaixa.modo !== 'servidor'
+        ? 'desligado'
+        : `${estadoMulticaixa.terminais.length} ${estadoMulticaixa.terminais.length === 1 ? 'caixa conectado' : 'caixas conectados'}`
 
   return (
     <div className="p-8 max-w-2xl">
       <h2 className="text-2xl font-bold mb-6">Configurações</h2>
 
-      <div className="space-y-6 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2">Sistema</h3>
+      <SecaoConfig
+        id="sistema"
+        titulo="Sistema"
+        icone={<Sparkles className="w-4 h-4" />}
+        resumo={infoAtualizacao?.versaoAtual ? `versão ${infoAtualizacao.versaoAtual}` : null}
+      >
+        <div className="space-y-6">
 
         <div className="border rounded-lg p-4 bg-muted/30 space-y-3">
           <div className="flex items-start justify-between gap-4">
@@ -287,35 +344,42 @@ const Configuracoes: FC = () => {
             Ver novamente
           </Button>
         </div>
-      </div>
 
-      <div className="space-y-4 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2">Segurança</h3>
+        <div className="border rounded-lg p-4 bg-muted/30 flex items-start justify-between gap-4">
+          <div>
+            <p className="font-medium text-sm flex items-center gap-1.5">
+              <Footprints className="w-4 h-4 text-blue-600" /> Tour pelas telas
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Um passeio guiado pelo sistema de verdade: cada parada acende o botão certo e
+              explica pra que ele serve.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={abrirTour} className="shrink-0">
+            Fazer o tour
+          </Button>
+        </div>
+        </div>
+      </SecaoConfig>
+
+      <SecaoConfig
+        id="seguranca"
+        titulo="Segurança"
+        icone={<ShieldCheck className="w-4 h-4" />}
+        resumo={resumoSeguranca}
+      >
         <ConfigSeguranca />
-      </div>
+      </SecaoConfig>
 
-      {/* ── Dados da loja (identidade no cupom) — seção recolhível ── */}
-      <div className="space-y-4 mb-10">
-        <button
-          type="button"
-          onClick={() => setLojaAberta((v) => !v)}
-          className="w-full flex items-center justify-between border-b pb-2 text-left group"
-        >
-          <span className="text-lg font-semibold flex items-center gap-2">
-            <Store className="w-4 h-4" /> Dados da loja
-            {!lojaAberta && loja?.nome && (
-              <span className="text-sm font-normal text-muted-foreground">— {loja.nome}</span>
-            )}
-          </span>
-          <ChevronDown
-            className={`w-5 h-5 text-muted-foreground transition-transform group-hover:text-foreground ${
-              lojaAberta ? 'rotate-180' : ''
-            }`}
-          />
-        </button>
-
-        {lojaAberta && (
-          <>
+      {/* Dados da loja — mesma mecânica das demais (era um recolhível próprio,
+          feito antes do componente existir). */}
+      <SecaoConfig
+        id="loja"
+        titulo="Dados da loja"
+        icone={<Store className="w-4 h-4" />}
+        resumo={loja?.nome || null}
+      >
+          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Nome, CNPJ e endereço que aparecem no cupom e no comprovante de devolução.
               A logo é opcional e pode ser exibida no topo dos cupons.
@@ -472,6 +536,14 @@ const Configuracoes: FC = () => {
               </div>
             </div>
 
+            <CadastroPixLoja
+              chave={loja.pix_chave}
+              tipo={loja.pix_tipo}
+              nomeLoja={loja.nome || loja.razao_social}
+              cidadeLoja={loja.cidade}
+              onChange={(campo, valor) => atualizarLoja(campo, valor)}
+            />
+
             <div className="flex items-center gap-3">
               <Button onClick={salvarLoja} disabled={salvandoLoja}>
                 {salvandoLoja ? 'Salvando...' : 'Salvar dados da loja'}
@@ -484,28 +556,64 @@ const Configuracoes: FC = () => {
             </div>
           </div>
             )}
-          </>
-        )}
-      </div>
+          </div>
+      </SecaoConfig>
 
-      <div className="space-y-4 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2">Técnicos</h3>
+      <SecaoConfig
+        id="vendedores"
+        titulo="Técnicos"
+        icone={<Users className="w-4 h-4" />}
+        resumo={resumoVendedores}
+      >
+        <div className="space-y-4">
         <p className="text-sm text-muted-foreground -mt-1">
           Cadastre os técnicos da assistência. Cada venda registra o técnico que a realizou,
           permitindo acompanhar produção individual no histórico.
         </p>
         <CadastroVendedores />
-      </div>
+        </div>
+      </SecaoConfig>
 
-      <div className="space-y-4 mb-10">
-        <h3 className="text-lg font-semibold border-b pb-2">Impressão</h3>
+      <SecaoConfig
+        id="impressao"
+        titulo="Impressão"
+        icone={<Printer className="w-4 h-4" />}
+        resumo={resumoImpressao}
+      >
+        <div className="space-y-4">
         <p className="text-sm text-muted-foreground -mt-1">
           Escolha a impressora de cada tipo de documento. Marque "imprimir direto" para o
           cupom sair na hora, sem abrir a janela de impressão.
         </p>
         <ConfigImpressao />
-      </div>
+        </div>
+      </SecaoConfig>
 
+      {__FEAT_MULTICAIXA__ && (
+      <SecaoConfig
+        id="multicaixa"
+        titulo="Multicaixa"
+        icone={<MonitorSmartphone className="w-4 h-4" />}
+        resumo={resumoMulticaixa}
+      >
+        <div className="space-y-4">
+        <p className="text-sm text-muted-foreground -mt-1">
+          Permite que outro computador trabalhe nos mesmos dados desta loja, na rede local ou
+          pela internet. Os dados continuam guardados apenas aqui.
+        </p>
+        <ConfigMulticaixa />
+        </div>
+      </SecaoConfig>
+      )}
+
+      {/* Backup fica ABERTO: é o único que o lojista vem CONSULTAR ("rodou?"),
+          não configurar. Escondê-lo atrás de um clique pioraria a tela.
+
+          Some por completo no caixa adicional: lá não existe banco para copiar,
+          e os canais de backup já recusam. Mostrar botões que só respondem
+          "indisponível" seria pior que não mostrar nada — quem é dono dos dados
+          é o computador principal, e é lá que o backup se configura. */}
+      {!ehCaixaAdicional && (
       <div className="space-y-6">
         <h3 className="text-lg font-semibold border-b pb-2">Backup de Dados</h3>
 
@@ -650,9 +758,37 @@ const Configuracoes: FC = () => {
           </p>
         </div>
 
-        {/* Salvar */}
-        <div className="flex items-center gap-3">
+        {/* Backup manual — é ação de BACKUP, então mora aqui na seção de backup,
+            num card com cara própria (longe do rodapé, que é território do Salvar) */}
+        <div className="border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-start gap-3">
+            <HardDriveDownload className="w-5 h-5 mt-0.5 text-muted-foreground shrink-0" />
+            <div className="flex-1">
+              <h4 className="font-medium text-sm">Backup manual</h4>
+              <p className="text-sm text-muted-foreground mt-0.5 mb-3">
+                Cria um backup imediato salvo na pasta{' '}
+                <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">manuais/</code>.
+                Útil antes de operações importantes.
+              </p>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" onClick={fazerBackup} disabled={fazendoBackup}>
+                  <HardDriveDownload className="w-4 h-4 mr-2" />
+                  {fazendoBackup ? 'Criando backup...' : 'Fazer backup agora'}
+                </Button>
+                {feedbackBackup && (
+                  <p className={`text-sm font-medium ${feedbackBackup.tipo === 'ok' ? 'text-green-600' : 'text-destructive'}`}>
+                    {feedbackBackup.msg}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Salvar — rodapé clássico do formulário: sozinho, com divisória e ícone */}
+        <div className="border-t pt-5 flex items-center gap-3">
           <Button onClick={salvar} disabled={salvando}>
+            <Save className="w-4 h-4 mr-2" />
             {salvando ? 'Salvando...' : 'Salvar configurações'}
           </Button>
           {feedback && (
@@ -661,20 +797,8 @@ const Configuracoes: FC = () => {
             </p>
           )}
         </div>
-
-        {/* Backup manual */}
-        <div className="border-t pt-5">
-          <h4 className="font-medium mb-1">Backup manual</h4>
-          <p className="text-sm text-muted-foreground mb-3">
-            Cria um backup imediato salvo na pasta{' '}
-            <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">manuais/</code>.
-            Útil antes de operações importantes.
-          </p>
-          <Button variant="outline" onClick={fazerBackup} disabled={fazendoBackup}>
-            {fazendoBackup ? 'Criando backup...' : 'Fazer backup agora'}
-          </Button>
-        </div>
       </div>
+      )}
     </div>
   )
 }

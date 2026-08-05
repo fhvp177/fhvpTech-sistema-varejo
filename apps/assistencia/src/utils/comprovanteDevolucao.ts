@@ -1,5 +1,5 @@
-// Gera o HTML do comprovante de devolução, no mesmo estilo térmico (~76mm) do
-// cupom de venda. Reusa os dados da loja de cupomVenda (fonte única).
+// Gera o HTML do comprovante de devolução, no mesmo estilo térmico (bobina de
+// 80mm) do cupom de venda. Reusa os dados da loja de cupomVenda (fonte única).
 
 import { logoHtml } from './cupomVenda'
 import { nomeImpressao } from './nomeImpressao'
@@ -36,7 +36,9 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao, lo
   const numeroDev = String(dev.id).padStart(3, '0')
   const numeroPedido = String(dev.venda_id).padStart(3, '0')
 
-  const lojaLinhas: string[] = [`<div class="loja-nome">${escapar(loja.nome)}</div>`]
+  // Loja sem nome (identidade ainda não preenchida) não imprime linha vazia.
+  const lojaLinhas: string[] = []
+  if (loja.nome) lojaLinhas.push(`<div class="loja-nome">${escapar(loja.nome)}</div>`)
   if (loja.telefone) lojaLinhas.push(`<div>${escapar(loja.telefone)}</div>`)
   if (dev.vendedor_nome) lojaLinhas.push(`<div>Atendente: ${escapar(dev.vendedor_nome)}</div>`)
 
@@ -77,18 +79,27 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao, lo
   <title>${nomeImpressao.devolucao(dev.id, dev.venda_id)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    @page { margin: 4mm; }
+    /* 2mm, não 4: a cabeça térmica alcança 72,07mm a partir da borda
+       esquerda do papel, e o corpo do cupom tem 68mm. Com 4mm de cada lado
+       o conteúdo terminaria em 72,00mm — 0,07mm de folga, ou seja, nenhuma. */
+    @page { margin: 2mm; }
+    /* Tudo em negrito, de propósito — ver o comentário em cupomVenda.ts:
+       a 203dpi o traço fino do Courier vira ponto solto, e o negrito não. */
     html, body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 11px; color: #000; background: #fff;
+      font-size: 11px; font-weight: bold; color: #000; background: #fff;
     }
-    body { width: 76mm; max-width: 100%; margin: 0 auto; padding: 2mm 1mm; line-height: 1.35; }
+    /* 68mm = cabe nos 72,07mm que a térmica desenha (a conta está em cupomVenda.ts). */
+    body { width: 68mm; max-width: 100%; margin: 0 auto; padding: 2mm 1mm; line-height: 1.35; overflow-wrap: anywhere; }
     .cabecalho { margin-bottom: 4px; }
     .logo-wrap { text-align: center; margin-bottom: 4px; }
     .logo { max-width: 60mm; max-height: 22mm; object-fit: contain; }
     .loja-nome { font-weight: bold; font-size: 13px; }
-    .linha-dupla { border-top: 2px double #000; margin: 4px 0; }
-    .linha-simples { border-top: 1px dashed #000; margin: 4px 0; }
+    /* Divisória única e tracejada, do jeito clássico de cupom. Antes havia
+       duas: uma '2px double' pras seções e uma '1px dashed' pro resto. A dupla
+       não sobrevive a 203dpi — o vão do meio some no arredondamento e ela sai
+       como uma tarja preta grossa. A tracejada imprime como tracejado mesmo. */
+    .divisoria { border-top: 1px dashed #000; margin: 4px 0; }
     .titulo-secao { text-align: center; font-weight: bold; font-size: 12px; margin: 2px 0; }
     .pedido-num { text-align: center; font-weight: bold; font-size: 13px; padding: 2px 0; }
     .bloco-cliente { font-size: 11px; }
@@ -96,7 +107,8 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao, lo
     table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
     table th, table td { padding: 1px 2px; vertical-align: top; text-align: left; }
     table th { font-weight: bold; }
-    .col-num { text-align: right; white-space: nowrap; }
+    /* padding-left = sarjeta entre os números (a conta está em cupomVenda.ts). */
+    .col-num { text-align: right; white-space: nowrap; padding-left: 8px; }
     .col-nome { word-break: break-word; }
     .total-linha { display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; padding: 2px 0; }
     .aviso { text-align: center; font-size: 10.5px; margin: 6px 0; font-weight: bold; }
@@ -104,7 +116,9 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao, lo
     .assinatura .linha { border-top: 1px solid #000; margin: 0 4mm 2px; }
     .rodape-loja { margin-top: 14px; padding-top: 6px; border-top: 1px dashed #000; text-align: center; font-size: 10px; line-height: 1.4; }
     .rodape-loja .nome-loja { font-weight: bold; font-size: 11px; margin-bottom: 1px; }
-    @media print { html, body { width: auto; } body { padding: 0; } }
+    /* Sem soltar a largura aqui — era isso que picava o cupom na térmica.
+       Explicação inteira em cupomVenda.ts. */
+    @media print { body { margin: 0; padding: 0 0 4mm; } }
   </style>
 </head>
 <body>
@@ -113,10 +127,10 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao, lo
     ${lojaLinhas.join('\n    ')}
   </div>
 
-  <div class="linha-dupla"></div>
+  <div class="divisoria"></div>
   <div class="pedido-num">COMPROVANTE DE DEVOLUÇÃO</div>
   <div class="pedido-num" style="font-size:12px;">N° ${numeroDev} — ref. pedido N° ${numeroPedido}</div>
-  <div class="linha-dupla"></div>
+  <div class="divisoria"></div>
 
   <div class="bloco-cliente">
     <div>Data....: ${fmtDataHora(dev.data)}</div>
@@ -126,17 +140,17 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao, lo
     }
   </div>
 
-  <div class="linha-dupla"></div>
+  <div class="divisoria"></div>
   <div class="titulo-secao">ITENS DEVOLVIDOS</div>
-  <div class="linha-dupla"></div>
+  <div class="divisoria"></div>
 
   <table>
     <thead>
       <tr>
-        <th class="col-nome">Nome</th>
+        <th class="col-nome">Item</th>
         <th class="col-num">Qtd.</th>
-        <th class="col-num">Vr. unt.</th>
-        <th class="col-num">Subtotal</th>
+        <th class="col-num">Unit.</th>
+        <th class="col-num">Total</th>
       </tr>
     </thead>
     <tbody>
@@ -144,26 +158,26 @@ export function gerarHtmlComprovanteDevolucao(dev: DadosComprovanteDevolucao, lo
     </tbody>
   </table>
 
-  <div class="linha-simples"></div>
+  <div class="divisoria"></div>
 
   <div class="total-linha">
     <span>Total devolvido:</span>
     <span>${fmt(dev.valor_total)}</span>
   </div>
-  <div class="total-linha" style="font-weight: normal; font-size: 11px;">
+  <div class="total-linha" style="font-size: 11px;">
     <span>Forma:</span>
     <span>${formaTexto}</span>
   </div>${
     dev.tipo === 'credito' && dev.saldo_credito_novo != null
       ? `
-  <div class="total-linha" style="font-weight: normal; font-size: 11px;">
+  <div class="total-linha" style="font-size: 11px;">
     <span>Saldo de crédito:</span>
     <span>${fmt(dev.saldo_credito_novo)}</span>
   </div>`
       : ''
   }
 
-  <div class="linha-simples"></div>
+  <div class="divisoria"></div>
   <div class="aviso">*** Este comprovante não é documento fiscal ***</div>
 
   <div class="assinatura">

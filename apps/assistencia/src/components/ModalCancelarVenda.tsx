@@ -66,7 +66,7 @@ const ModalCancelarVenda: FC<Props> = ({ venda, ehDono, onFechar, onConfirmado }
       return
     }
     if (!ehDono && !pin.trim()) {
-      setErro('Digite o PIN de um dono para autorizar.')
+      setErro('Digite o PIN de um gerente para autorizar.')
       return
     }
     setSalvando(true)
@@ -127,7 +127,7 @@ const ModalCancelarVenda: FC<Props> = ({ venda, ehDono, onFechar, onConfirmado }
               {!ehDono && (
                 <div>
                   <label className="text-sm font-medium">
-                    PIN do dono <span className="text-destructive">*</span>
+                    PIN do gerente <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="password"
@@ -138,7 +138,7 @@ const ModalCancelarVenda: FC<Props> = ({ venda, ehDono, onFechar, onConfirmado }
                     className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Cancelar uma venda exige a autorização de um dono.
+                    Cancelar uma venda exige a autorização de um gerente.
                   </p>
                 </div>
               )}

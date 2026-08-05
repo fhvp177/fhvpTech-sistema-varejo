@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   itensDevolviveis,
   saldoCredito,
@@ -20,13 +20,13 @@ type EntradaDevolucao = {
   cliente_id?: number | null
   motivo?: string | null
   itens: ItemDevolverEntrada[]
-  // Só usado quando tipo='dinheiro' e o vendedor logado não é dono: PIN de um
-  // dono pra autorizar a saída de dinheiro do caixa.
+  // Só usado quando tipo='dinheiro' e o vendedor logado não é gerente: PIN de um
+  // gerente pra autorizar a saída de dinheiro do caixa.
   pinDono?: string
 }
 
 export function registrarHandlersDevolucoes(): void {
-  ipcMain.handle('devolucoes:itensDevolviveis', (_event, vendaId: number) => {
+  registrarCanal('devolucoes:itensDevolviveis', (vendaId: number) => {
     try {
       return { success: true, data: itensDevolviveis(vendaId) }
     } catch (error) {
@@ -34,7 +34,7 @@ export function registrarHandlersDevolucoes(): void {
     }
   })
 
-  ipcMain.handle('devolucoes:saldoCredito', (_event, clienteId: number) => {
+  registrarCanal('devolucoes:saldoCredito', (clienteId: number) => {
     try {
       return { success: true, data: saldoCredito(clienteId) }
     } catch (error) {
@@ -42,7 +42,7 @@ export function registrarHandlersDevolucoes(): void {
     }
   })
 
-  ipcMain.handle('devolucoes:porVenda', (_event, vendaId: number) => {
+  registrarCanal('devolucoes:porVenda', (vendaId: number) => {
     try {
       return { success: true, data: listarDevolucoesPorVenda(vendaId) }
     } catch (error) {
@@ -50,13 +50,13 @@ export function registrarHandlersDevolucoes(): void {
     }
   })
 
-  ipcMain.handle('devolucoes:registrar', async (_event, entrada: EntradaDevolucao) => {
+  registrarCanal('devolucoes:registrar', async (entrada: EntradaDevolucao) => {
     try {
       const sessao = requerSessao()
 
       // Permissão por risco: crédito (dinheiro fica na loja) → basta o vendedor
-      // logado. Dinheiro de volta (sai do caixa) → exige dono: ou o logado já é
-      // dono, ou um dono autoriza pelo PIN. A verificação do PIN roda aqui no
+      // logado. Dinheiro de volta (sai do caixa) → exige gerente: ou o logado já é
+      // gerente, ou um gerente autoriza pelo PIN. A verificação do PIN roda aqui no
       // main — o renderer não tem como forjar a autorização.
       let autorizadoPorId: number | null = null
       if (entrada.tipo === 'dinheiro') {
@@ -65,7 +65,7 @@ export function registrarHandlersDevolucoes(): void {
         } else {
           const donoId = await verificarPinDono(entrada.pinDono ?? '')
           if (donoId === null) {
-            throw new Error('Devolução em dinheiro exige autorização do dono (PIN não confere).')
+            throw new Error('Devolução em dinheiro exige autorização do gerente (PIN não confere).')
           }
           autorizadoPorId = donoId
         }

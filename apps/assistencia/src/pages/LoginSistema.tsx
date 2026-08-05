@@ -2,12 +2,16 @@ import { FC, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Lock, ShieldCheck, Crown, User as UserIcon } from 'lucide-react'
 import logoEmpresa from '@/assets/logo.png'
 import ModalRecuperacaoPin from '@/components/ModalRecuperacaoPin'
+import ModalConfigurarMaquina from '@/components/ModalConfigurarMaquina'
+import { useFocoAoLiberar } from '@fhvptech/core/lib/useFocoAoLiberar'
 
 type VendedorLogin = {
   id: number
   nome: string
   papel: 'dono' | 'vendedor'
   tem_pin: number
+  /** Dígitos do PIN desta pessoa; null enquanto o sistema ainda não sabe. */
+  pin_tamanho: number | null
 }
 
 type Props = {
@@ -29,7 +33,12 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
   const [tentativas, setTentativas] = useState(0)
   const [segundosTravado, setSegundosTravado] = useState(0)
   const [mostrarRecuperacao, setMostrarRecuperacao] = useState(false)
+  const [mostrarConfigurarMaquina, setMostrarConfigurarMaquina] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Guarda o último PIN que a confirmação automática já enviou. Sem isto, uma
+  // falha que NÃO limpa o campo (erro de sistema, não PIN errado) deixaria o
+  // efeito reenviando o mesmo PIN em laço.
+  const pinAutoEnviado = useRef<string | null>(null)
 
   useEffect(() => {
     carregarVendedores()
@@ -42,9 +51,16 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
     }
   }, [carregandoLista, vendedores, selecionado])
 
-  useEffect(() => {
-    if (selecionado) inputRef.current?.focus()
-  }, [selecionado])
+  // Mantém o cursor no campo do PIN — inclusive DEPOIS de errar, que é quando
+  // ele se perdia. O porquê (e por que `focus()` dentro de `entrar()` não
+  // resolve) está no próprio hook, junto com os outros lugares que sofriam do
+  // mesmo problema.
+  useFocoAoLiberar(
+    inputRef,
+    carregando || segundosTravado > 0,
+    Boolean(selecionado) && !mostrarRecuperacao && !mostrarConfigurarMaquina,
+    selecionado?.id
+  )
 
   // Conta regressiva do bloqueio temporário após 5 erros
   useEffect(() => {
@@ -134,11 +150,39 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
       const restantes = MAX_TENTATIVAS - novasTentativas
       setErro(`PIN incorreto. ${restantes} tentativa${restantes !== 1 ? 's' : ''} restante${restantes !== 1 ? 's' : ''}.`)
     }
-    inputRef.current?.focus()
+    // O foco volta pelo efeito lá em cima, quando o campo deixa de estar
+    // desabilitado. Chamar focus() aqui seria um no-op: neste ponto o React
+    // ainda não repintou e o input segue `disabled`.
   }
 
   const acao = modoCadastro ? cadastrarPrimeiroPin : entrar
   const travado = segundosTravado > 0
+
+  /**
+   * Confirma sozinho ao completar o PIN, como faz o Windows — sem Enter.
+   *
+   * Só funciona porque o sistema sabe QUANTOS dígitos o PIN desta pessoa tem
+   * (ver migration 036). O PIN aqui vai de 4 a 6 dígitos: confirmar num tamanho
+   * fixo arrancaria uma tentativa errada de quem tem PIN mais longo e, com o
+   * bloqueio de 5 tentativas, o trancaria para fora do sistema.
+   *
+   * Quem ainda não tem tamanho conhecido (instalação anterior à 036) segue com
+   * Enter até o primeiro login dar certo — é ele que ensina o tamanho.
+   */
+  useEffect(() => {
+    const tamanho = selecionado?.pin_tamanho ?? 0
+    // Editou o PIN: rearma, pra que uma nova digitação possa enviar de novo.
+    if (pin.length < tamanho) pinAutoEnviado.current = null
+    if (modoCadastro || tamanho < 4) return
+    if (pin.length !== tamanho) return
+    if (carregando || travado) return
+    if (pinAutoEnviado.current === pin) return
+    pinAutoEnviado.current = pin
+    entrar()
+    // `entrar` é recriada a cada render; incluí-la nas dependências criaria
+    // laço. O gatilho é o PIN chegar no tamanho, e isso está coberto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin, selecionado, modoCadastro, carregando, travado])
   const podeEnviar =
     !carregando && !travado && pin.length >= 4 && (!modoCadastro || pinConfirmacao.length >= 4)
 
@@ -187,7 +231,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
                     <p className="text-xs text-slate-500 flex items-center gap-1">
                       {v.papel === 'dono' ? (
                         <>
-                          <Crown className="w-3 h-3" /> Dono da loja
+                          <Crown className="w-3 h-3" /> Gerente da loja
                         </>
                       ) : (
                         <>
@@ -220,7 +264,7 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate">{selecionado.nome}</p>
             <p className="text-xs text-slate-500">
-              {selecionado.papel === 'dono' ? 'Dono da loja' : 'Técnico'}
+              {selecionado.papel === 'dono' ? 'Gerente da loja' : 'Técnico'}
             </p>
           </div>
           {vendedores.length > 1 && (
@@ -354,6 +398,21 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
             </span>
           </p>
         )}
+
+        {/* Precisa estar ANTES do login: um computador recém-instalado não tem
+            vendedores para listar, então ninguém consegue entrar nele para
+            chegar às Configurações. Discreto de propósito — a loja com um caixa
+            só nunca vai precisar disto. */}
+        {__FEAT_MULTICAIXA__ && !selecionado && (
+          <p className="text-center text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
+            <button
+              onClick={() => setMostrarConfigurarMaquina(true)}
+              className="hover:text-slate-600 hover:underline"
+            >
+              Configurar este computador
+            </button>
+          </p>
+        )}
       </div>
 
       {mostrarRecuperacao && (
@@ -361,6 +420,13 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
           onCancelar={() => setMostrarRecuperacao(false)}
           onSucesso={onDesbloquear}
         />
+      )}
+
+      {/* A flag precisa estar AQUI também, e não só no botão: enquanto houver
+          uma referência ao componente, o bundler não consegue removê-lo do
+          binário do Básico — ele ficaria escondido em vez de ausente. */}
+      {__FEAT_MULTICAIXA__ && mostrarConfigurarMaquina && (
+        <ModalConfigurarMaquina onFechar={() => setMostrarConfigurarMaquina(false)} />
       )}
     </div>
   )

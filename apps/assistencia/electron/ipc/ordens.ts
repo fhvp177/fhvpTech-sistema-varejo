@@ -1,14 +1,19 @@
 import { ipcMain } from 'electron'
 import {
+  adicionarFotoOS,
   atualizarOS,
   criarOS,
   criarOSGarantia,
   definirItensOS,
+  fecharOS,
   historicoDoAparelho,
+  listarFotosOS,
   listarOS,
   mudarStatusOS,
   obterOS,
+  removerFotoOS,
   type DadosEdicaoOS,
+  type DadosFechamentoOS,
   type DadosItemOS,
   type DadosNovaOS,
   type ExtrasMudanca
@@ -86,10 +91,54 @@ export function registrarHandlersOrdens(): void {
     }
   })
 
+  ipcMain.handle('os:fechar', (_event, id: number, dados: DadosFechamentoOS) => {
+    try {
+      const sessao = requerSessao()
+      const os = fecharOS(id, dados, sessao.id)
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: os }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
   ipcMain.handle('os:historicoAparelho', (_event, numeroSerie: string, ignorarOsId?: number) => {
     try {
       requerSessao()
       return { success: true, data: historicoDoAparelho(numeroSerie, ignorarOsId) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Registro fotográfico do laudo. Adicionar/remover devolvem a lista nova —
+  // o renderer não precisa de segunda viagem pra se atualizar.
+  ipcMain.handle('os:listarFotos', (_event, osId: number) => {
+    try {
+      requerSessao()
+      return { success: true, data: listarFotosOS(osId) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('os:adicionarFoto', (_event, osId: number, nome: string | null, dados: string) => {
+    try {
+      requerSessao()
+      const fotos = adicionarFotoOS(osId, nome, dados)
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: fotos }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('os:removerFoto', (_event, fotoId: number) => {
+    try {
+      requerSessao()
+      const fotos = removerFotoOS(fotoId)
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: fotos }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

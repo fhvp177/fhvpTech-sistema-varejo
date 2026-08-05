@@ -42,6 +42,40 @@ const api = {
     deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('fornecedores:deletar', id)
   },
 
+  // Contas a pagar (o que a loja deve: fornecedor, aluguel, luz, salário…)
+  contasPagar: {
+    listar: (filtro?: 'aberto' | 'pago' | 'todas'): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:listar', filtro),
+    resumo: (): Promise<RespostaIPC> => ipcRenderer.invoke('contasPagar:resumo'),
+    criar: (dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:criar', dados),
+    atualizar: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:atualizar', id, dados),
+    deletar: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:deletar', id),
+    registrarPagamento: (id: number, valor: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:registrarPagamento', id, valor),
+    estornarPagamento: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:estornarPagamento', id)
+  },
+
+  // Notas de entrada (importação de NF-e via XML)
+  notasEntrada: {
+    analisar: (
+      chave: string,
+      fornecedorCnpj: string | null,
+      itens: unknown[]
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notasEntrada:analisar', chave, fornecedorCnpj, itens),
+    importar: (dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notasEntrada:importar', dados),
+    listar: (mes?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notasEntrada:listar', mes),
+    meses: (): Promise<RespostaIPC> => ipcRenderer.invoke('notasEntrada:meses'),
+    exportarXmls: (mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('notasEntrada:exportarXmls', mes)
+  },
+
   // Categorias
   categorias: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('categorias:listar'),
@@ -107,8 +141,16 @@ const api = {
       ipcRenderer.invoke('os:definirItens', id, itens),
     mudarStatus: (id: number, novo: string, extras?: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('os:mudarStatus', id, novo, extras),
+    fechar: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('os:fechar', id, dados),
     historicoAparelho: (numeroSerie: string, ignorarOsId?: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('os:historicoAparelho', numeroSerie, ignorarOsId),
+    listarFotos: (osId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('os:listarFotos', osId),
+    adicionarFoto: (osId: number, nome: string | null, dados: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('os:adicionarFoto', osId, nome, dados),
+    removerFoto: (fotoId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('os:removerFoto', fotoId),
     criarGarantia: (osOrigemId: number, defeitoRelatado: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('os:criarGarantia', osOrigemId, defeitoRelatado)
   },
@@ -151,6 +193,7 @@ const api = {
     validar: (): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:validar'),
     ativar: (chave: string): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:ativar', chave),
     obterClienteId: (): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:obterClienteId'),
+    destravarRelogio: (): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:destravarRelogio'),
     criarCobranca: (dados: {
       diasContratados?: number
       valorCentavos?: number
@@ -163,6 +206,12 @@ const api = {
   impressao: {
     imprimir: (html: string, nomeArquivo?: string, deviceName?: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('impressao:imprimir', html, nomeArquivo, deviceName),
+    imprimirPdf: (
+      pdfBase64: string,
+      nomeArquivo?: string,
+      deviceName?: string
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:imprimirPdf', pdfBase64, nomeArquivo, deviceName),
     listarImpressoras: (): Promise<RespostaIPC> =>
       ipcRenderer.invoke('impressao:listarImpressoras'),
     imprimirJanela: (deviceName: string): Promise<RespostaIPC> =>
@@ -171,8 +220,12 @@ const api = {
       ipcRenderer.invoke('impressao:obterPreferencias'),
     salvarPreferencias: (prefs: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('impressao:salvarPreferencias', prefs),
-    salvarPdf: (html: string, nomeArquivo?: string): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('impressao:salvarPdf', html, nomeArquivo)
+    salvarPdf: (
+      html: string,
+      nomeArquivo?: string,
+      categoria?: 'cupom' | 'documento'
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('impressao:salvarPdf', html, nomeArquivo, categoria)
   },
 
   // Chatbot (assistente de IA)
@@ -182,10 +235,100 @@ const api = {
     ): Promise<RespostaIPC> => ipcRenderer.invoke('chat:enviar', historico)
   },
 
+  // Preferências de interface (ex.: seções recolhidas das Configurações).
+  // Restrito a chaves de UI — ver electron/ipc/preferenciasUi.ts.
+  config: {
+    obter: (chave: string): Promise<RespostaIPC> => ipcRenderer.invoke('config:obter', chave),
+    salvar: (chave: string, valor: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('config:salvar', chave, valor)
+  },
+
   // Dados da loja (identidade nos cupons: nome, CNPJ, logo)
   loja: {
     obter: (): Promise<RespostaIPC> => ipcRenderer.invoke('loja:obter'),
     salvar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('loja:salvar', dados)
+  },
+
+  // Configuração fiscal da NFC-e (só plano Pro). Certificado A1 e CSC NÃO
+  // trafegam por aqui — ver electron/ipc/fiscal.ts.
+  fiscal: {
+    obter: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:obter'),
+    salvar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:salvar', dados),
+    diagnostico: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:diagnostico'),
+    diasParaVencerCertificado: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:diasParaVencerCertificado'),
+    // Ponte com o backend/ACBr (passos 2 e 3 da habilitação).
+    resolverMunicipio: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:resolverMunicipio'),
+    cadastrarEmpresa: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:cadastrarEmpresa'),
+    enviarCertificado: (args: { certificadoBase64: string; senha: string }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:enviarCertificado', args),
+    configurarCsc: (args: { csc: string; idCsc: string }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:configurarCsc', args),
+    statusRemoto: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:statusRemoto'),
+    // Emissão da nota de uma venda (sempre pós-venda; nunca trava o caixa).
+    emitirNfce: (args: {
+      vendaId: number
+      formaPagamento?: string
+      modelo?: 55 | 65
+    }): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:emitirNfce', args),
+    statusNfce: (args: { vendaId: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:statusNfce', args),
+    notasDasVendas: (ids: number[]): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:notasDasVendas', ids),
+    danfe: (args: { vendaId: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:danfe', args),
+    cancelarNfce: (args: { vendaId: number; justificativa: string }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:cancelarNfce', args),
+    // ── NFS-e: a nota do SERVIÇO, que vai pra prefeitura ─────────────────────
+    // Numa venda mista (peça + mão de obra) as duas notas convivem: a
+    // mercadoria sai na NFC-e/NF-e, o serviço sai aqui.
+    consultarCidadeNfse: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:consultarCidadeNfse'),
+    configurarNfse: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:configurarNfse'),
+    emitirNfse: (args: { vendaId: number; discriminacao?: string }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:emitirNfse', args),
+    statusNfse: (args: { vendaId: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:statusNfse', args),
+    notasServicoDasVendas: (ids: number[]): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:notasServicoDasVendas', ids),
+    danfse: (args: { vendaId: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:danfse', args),
+    cancelarNfse: (args: { vendaId: number; justificativa: string }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:cancelarNfse', args),
+    // Classificação fiscal dos serviços (item da LC 116 + alíquota de ISS).
+    obterServico: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:obterServico', id),
+    salvarServico: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:salvarServico', id, dados),
+    listarServicos: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:listarServicos'),
+    diagnosticoNfse: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:diagnosticoNfse'),
+    // Cadastro fiscal do cliente (destinatário da NF-e).
+    obterCliente: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:obterCliente', id),
+    salvarCliente: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:salvarCliente', id, dados),
+    buscarCep: (cep: string): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:buscarCep', cep),
+    // Classificação fiscal dos produtos (NCM e afins).
+    obterProduto: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:obterProduto', id),
+    salvarProduto: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:salvarProduto', id, dados),
+    listarClassificacao: (filtro: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:listarClassificacao', filtro),
+    categoriasPendentes: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:categoriasPendentes'),
+    aplicarEmLote: (args: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:aplicarEmLote', args),
+    // XML (obrigação de guarda) e relatório mensal.
+    xmlNota: (args: { vendaId: number }): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:xmlNota', args),
+    notasDoMes: (mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:notasDoMes', mes),
+    mesesComNotas: (): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:mesesComNotas'),
+    salvarXmls: (
+      mes: string,
+      arquivos: Array<{ nome: string; conteudo: string }>
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:salvarXmls', mes, arquivos)
   },
 
   // Onboarding (tutorial de primeira abertura: guia + checklist)
@@ -279,6 +422,38 @@ const api = {
       const handler = (_: IpcRendererEvent, visivel: boolean) => cb(visivel)
       ipcRenderer.on('backup:carregando', handler)
       return () => ipcRenderer.removeListener('backup:carregando', handler)
+    }
+  },
+
+  // Multi-caixa — o PC da loja servindo um segundo caixa
+  multicaixa: {
+    estado: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:estado'),
+    ligarServidor: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:ligarServidor'),
+    desligarServidor: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:desligarServidor'),
+    abrirPareamento: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:abrirPareamento'),
+    liberarFirewall: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:liberarFirewall'),
+    fecharPareamento: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:fecharPareamento'),
+    revogarTerminal: (id: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:revogarTerminal', id),
+    // Clonagem: trazer o banco de outro computador
+    abrirClonagem: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:abrirClonagem'),
+    fecharClonagem: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:fecharClonagem'),
+    exigeSenhaParaReceber: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:exigeSenhaParaReceber'),
+    receberBanco: (endereco: string, codigo: string, senha: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:receberBanco', endereco, codigo, senha),
+    conectarComoTerminal: (endereco: string, codigo: string, nome: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:conectarComoTerminal', endereco, codigo, nome),
+    sairDoModoTerminal: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('multicaixa:sairDoModoTerminal'),
+    reiniciarApp: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:reiniciarApp'),
+    situacao: (): Promise<RespostaIPC> => ipcRenderer.invoke('multicaixa:situacao'),
+    onConexao: (cb: (conectado: boolean) => void): (() => void) => {
+      const handler = (_: IpcRendererEvent, conectado: boolean) => cb(conectado)
+      ipcRenderer.on('multicaixa:conexao', handler)
+      return () => ipcRenderer.removeListener('multicaixa:conexao', handler)
     }
   }
 }

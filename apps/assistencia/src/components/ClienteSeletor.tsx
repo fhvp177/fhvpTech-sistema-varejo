@@ -1,8 +1,13 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, X, User, Building2, ChevronDown } from 'lucide-react'
 
 export type ClienteSeletorHandle = {
   abrir: () => void
+  // Lido no momento da tecla (não é estado do React): quem hospeda o seletor
+  // precisa saber se a busca está aberta pra não tratar o Esc como se fosse
+  // dele. Ver o Esc do PDV em Vendas.tsx.
+  estaAberto: () => boolean
 }
 
 export type ClienteSelecionavel = {
@@ -33,6 +38,10 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [indiceFoco, setIndiceFoco] = useState(0)
+  // Espelho do `aberto` pra consulta síncrona via ref (o estado do React já pode
+  // ter sido atualizado quando quem hospeda o seletor vai olhar).
+  const abertoRef = useRef(false)
+  abertoRef.current = aberto
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listaRef = useRef<HTMLUListElement>(null)
@@ -83,7 +92,7 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
     setTimeout(() => inputRef.current?.focus(), 0)
   }
 
-  useImperativeHandle(ref, () => ({ abrir }), [])
+  useImperativeHandle(ref, () => ({ abrir, estaAberto: () => abertoRef.current }), [])
 
   const selecionar = (id: string) => {
     onChange(id)
@@ -115,6 +124,44 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
       if (escolhido) selecionar(String(escolhido.id))
     }
   }
+
+  /**
+   * Onde desenhar a lista. Ela vai num PORTAL (fora da árvore do diálogo), e
+   * não mais como `absolute` filha deste componente.
+   *
+   * Motivo: o DialogContent do core limita a altura e rola (`max-h-[90vh]
+   * overflow-y-auto`). Um elemento posicionado dentro de um container que rola
+   * é RECORTADO na borda dele — e, por ser `absolute`, a lista não entra no
+   * `scrollHeight`, então nem rolando ela apareceria. No portal ela fica presa
+   * à janela e nunca é cortada, esteja o seletor dentro de um diálogo ou não.
+   */
+  const [posicaoLista, setPosicaoLista] = useState<{
+    left: number
+    top: number
+    width: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!aberto) {
+      setPosicaoLista(null)
+      return
+    }
+    const medir = () => {
+      const el = containerRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setPosicaoLista({ left: r.left, top: r.bottom, width: r.width })
+    }
+    medir()
+    // O diálogo pode rolar por baixo da lista aberta; remedir mantém as duas
+    // juntas. `true` no capture pega a rolagem de qualquer ancestral.
+    window.addEventListener('resize', medir)
+    window.addEventListener('scroll', medir, true)
+    return () => {
+      window.removeEventListener('resize', medir)
+      window.removeEventListener('scroll', medir, true)
+    }
+  }, [aberto])
 
   // Scroll do item focado pra dentro da viewport do dropdown
   useEffect(() => {
@@ -169,8 +216,17 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
         </button>
       )}
 
-      {aberto && (
-        <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-lg overflow-hidden">
+      {aberto &&
+        posicaoLista &&
+        createPortal(
+          <div
+            className="fixed z-[60] mt-1 bg-popover border rounded-md shadow-lg overflow-hidden"
+            style={{
+              left: posicaoLista.left,
+              top: posicaoLista.top,
+              width: posicaoLista.width
+            }}
+          >
           <ul ref={listaRef} className="max-h-72 overflow-y-auto py-1">
             {/* Opção "venda avulsa" sempre disponível no topo */}
             <li
@@ -209,8 +265,9 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
               Mostrando até {MAX_RESULTADOS} resultados — refine a busca se necessário.
             </div>
           )}
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 })

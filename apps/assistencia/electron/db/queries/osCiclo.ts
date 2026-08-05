@@ -9,6 +9,16 @@
 
 export type TipoAtendimento = 'bancada' | 'externo'
 
+// ONDE o trabalho acontece é o TipoAtendimento; O QUE ele é, é a natureza.
+// Instalação (CFTV, alarme, SSD no notebook) não tem "defeito" — os rótulos
+// da UI e dos documentos se ajustam por ela.
+export type NaturezaOS = 'conserto' | 'instalacao'
+
+// EM QUE se trabalha: um aparelho avulso ou um sistema de CFTV. É a primeira
+// pergunta da Nova OS — o formulário inteiro se adapta por ela (equipamento
+// pede aparelho/série/senha; CFTV é sempre no local e pede endereço/escopo).
+export type CategoriaOS = 'equipamento' | 'cftv'
+
 export type StatusOS =
   | 'aberta'
   | 'orcamento'
@@ -31,7 +41,7 @@ export const ROTULOS_STATUS: Record<StatusOS, string> = {
   aguardando_aprovacao: 'Aguardando aprovação',
   aprovada: 'Aprovada',
   agendada: 'Agendada',
-  em_reparo: 'Em reparo',
+  em_reparo: 'Em execução', // neutro: vale pra conserto E instalação
   aguardando_peca: 'Aguardando peça',
   pronta: 'Pronta',
   entregue: 'Entregue',

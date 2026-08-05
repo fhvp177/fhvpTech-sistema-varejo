@@ -19,7 +19,14 @@ export const nomeImpressao = {
   devolucao: (devId: number, vendaId: number): string =>
     `Devolucao-${pad(devId)}-ref-Venda-${pad(vendaId)}`,
   relatorioEstoque: (d: Date = new Date()): string => `Relatorio-Estoque-${dataSlug(d)}`,
+  tabelaReferencias: (d: Date = new Date()): string => `Tabela-Referencias-${dataSlug(d)}`,
   // mes vem como 'YYYY-MM' (já filesystem-safe) — ex.: Relatorio-Vendas-2026-06
   relatorioVendas: (mes: string): string => `Relatorio-Vendas-${mes}`,
-  etiquetas: (d: Date = new Date()): string => `Etiquetas-${dataHoraSlug(d)}`
+  relatorioEntradas: (mes: string): string => `Relatorio-Entradas-${mes}`,
+  notaServico: (vendaId: number): string => `Nota-Servico-ref-Venda-${pad(vendaId)}`,
+  etiquetas: (d: Date = new Date()): string => `Etiquetas-${dataHoraSlug(d)}`,
+  osEntrada: (osId: number): string => `OS-${pad(osId)}-Comprovante-Entrada`,
+  osEntrega: (osId: number): string => `OS-${pad(osId)}-Comprovante-Entrega`,
+  osOrcamento: (osId: number): string => `OS-${pad(osId)}-Orcamento`,
+  osLaudo: (osId: number): string => `OS-${pad(osId)}-Laudo-Tecnico`
 }

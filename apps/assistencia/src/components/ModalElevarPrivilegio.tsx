@@ -9,11 +9,12 @@ import {
 } from '@fhvptech/core/ui/dialog'
 import { Button } from '@fhvptech/core/ui/button'
 import { Label } from '@fhvptech/core/ui/label'
+import { useFocoAoLiberar } from '@fhvptech/core/lib/useFocoAoLiberar'
 
 type Props = {
   aberto: boolean
   onClose: () => void
-  // Quando o PIN do dono é aceito, recebe o donoId (pra log futuro) e o próprio
+  // Quando o PIN do gerente é aceito, recebe o donoId (pra log futuro) e o próprio
   // PIN digitado — ações que revalidam no backend (ex.: cadastro de produto por
   // vendedor) precisam reenviá-lo; quem não precisa simplesmente ignora.
   onAutorizar: (donoId: number, pin: string) => void
@@ -38,10 +39,15 @@ const ModalElevarPrivilegio: FC<Props> = ({ aberto, onClose, onAutorizar, motivo
     }
   }, [aberto])
 
+  // Devolve o cursor ao campo depois de um PIN recusado. Sem isto o gerente
+  // erra, o campo esvazia e ele precisa clicar de novo — bem no meio de uma
+  // venda parada esperando autorização.
+  useFocoAoLiberar(inputRef, validando, aberto)
+
   const autorizar = async () => {
     setErro('')
     if (!/^\d{4,6}$/.test(pin)) {
-      setErro('Digite o PIN do dono (4 a 6 dígitos).')
+      setErro('Digite o PIN do gerente (4 a 6 dígitos).')
       return
     }
     setValidando(true)
@@ -52,9 +58,10 @@ const ModalElevarPrivilegio: FC<Props> = ({ aberto, onClose, onAutorizar, motivo
       return
     }
     if (!resp.data.ok || resp.data.donoId === null) {
-      setErro('PIN do dono incorreto.')
+      setErro('PIN do gerente incorreto.')
       setPin('')
-      inputRef.current?.focus()
+      // O foco volta pelo useFocoAoLiberar: aqui o input ainda está `disabled`
+      // (o React não repintou) e focar campo desabilitado é no-op.
       return
     }
     onAutorizar(resp.data.donoId, pin)
@@ -66,13 +73,13 @@ const ModalElevarPrivilegio: FC<Props> = ({ aberto, onClose, onAutorizar, motivo
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-amber-600" />
-            Autorização do dono
+            Autorização do gerente
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-1">
           <p className="text-sm text-muted-foreground">{motivo}</p>
           <div>
-            <Label className="text-xs mb-1 block">PIN de um dono da loja</Label>
+            <Label className="text-xs mb-1 block">PIN de um gerente da loja</Label>
             <input
               ref={inputRef}
               type="password"

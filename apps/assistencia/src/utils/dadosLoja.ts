@@ -1,6 +1,8 @@
 // Identidade da loja (nome, CNPJ, endereço, logo) usada nos cupons e comprovantes.
 // Vem do banco via IPC (window.api.loja) — um build só, cada loja com seus dados.
 
+import type { TipoChavePix } from '@fhvptech/core/lib/pixBrCode'
+
 export type DadosLoja = {
   nome: string
   razao_social: string
@@ -12,6 +14,11 @@ export type DadosLoja = {
   telefone: string
   logo: string | null // data URI (base64) ou null
   exibir_logo: boolean
+  // Chave PIX da loja e, quando o lojista precisou dizer na mao, o tipo dela.
+  // Vazia = sem QR de pagamento em documento nenhum. Ver electron/ipc/loja.ts
+  // pra por que ela mora na config comum e qual e o risco de verdade.
+  pix_chave: string
+  pix_tipo: TipoChavePix | ''
 }
 
 // Fallback usado só se o IPC falhar (raro). Os valores reais — inclusive o legado
@@ -26,7 +33,9 @@ export const LOJA_PADRAO: DadosLoja = {
   cep: '',
   telefone: '',
   logo: null,
-  exibir_logo: false
+  exibir_logo: false,
+  pix_chave: '',
+  pix_tipo: ''
 }
 
 // Monta a linha "Cidade-UF  CEP" do cupom a partir dos campos separados.

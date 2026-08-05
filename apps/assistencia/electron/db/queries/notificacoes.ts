@@ -123,7 +123,7 @@ export function alertasDoBanco(): AlertaVivo[] {
         severidade: 'info',
         titulo: 'Meta do mês batida! 🎉',
         descricao: `Você alcançou ${fmtBRL(fat)} de ${fmtBRL(meta)}.`,
-        rota: '/',
+        rota: '/dashboard',
         acao: null
       })
     } else {
@@ -138,7 +138,7 @@ export function alertasDoBanco(): AlertaVivo[] {
           severidade: 'info',
           titulo: 'Reta final da meta',
           descricao: `Faltam ${fmtBRL(meta - fat)} para a meta, em ${diasRestantes} dia(s).`,
-          rota: '/',
+          rota: '/dashboard',
           acao: null
         })
       }
@@ -201,8 +201,113 @@ export function alertasDoBanco(): AlertaVivo[] {
     })
   }
 
+  // ── Rotina da assistência (Ordens de Serviço) ──
+
+  // Visitas externas agendadas pra hoje (inclui atrasadas de dias anteriores).
+  const { visitasHoje } = db
+    .prepare(
+      `SELECT COUNT(*) AS visitasHoje FROM ordens_servico
+       WHERE status = 'agendada' AND date(agendado_para) <= date('now', 'localtime')`
+    )
+    .get() as { visitasHoje: number }
+  if (visitasHoje > 0) {
+    alertas.push({
+      chave: 'os-visitas-hoje',
+      assinatura: `${visitasHoje}:${hoje}`,
+      tipo: 'relacionamento',
+      severidade: 'alerta',
+      titulo: 'Visitas agendadas',
+      descricao: `${visitasHoje} atendimento(s) externo(s) pra hoje ou atrasado(s).`,
+      rota: '/os',
+      acao: null
+    })
+  }
+
+  // Dias desde o último movimento de uma OS (mesma conta da lista de OS).
+  const DIAS_PARADA = `CAST(julianday('now', 'localtime') - julianday(
+    COALESCE((SELECT MAX(h.criada_em) FROM os_historico h WHERE h.os_id = os.id), os.criada_em)
+  ) AS INTEGER)`
+
+  // Orçamentos esperando o cliente há 3+ dias — dinheiro evaporando na fila.
+  const { aprovParadas } = db
+    .prepare(
+      `SELECT COUNT(*) AS aprovParadas FROM (
+         SELECT ${DIAS_PARADA} AS dias FROM ordens_servico os
+         WHERE os.status = 'aguardando_aprovacao'
+       ) WHERE dias >= 3`
+    )
+    .get() as { aprovParadas: number }
+  if (aprovParadas > 0) {
+    alertas.push({
+      chave: 'os-aprovacao-parada',
+      assinatura: `${aprovParadas}:${hoje}`,
+      tipo: 'dinheiro',
+      severidade: 'alerta',
+      titulo: 'Orçamentos sem resposta',
+      descricao: `${aprovParadas} orçamento(s) esperando o cliente há 3+ dias — vale um WhatsApp.`,
+      rota: '/os',
+      acao: null
+    })
+  }
+
+  // Aparelhos prontos encalhados há 5+ dias sem retirada.
+  const { prontasParadas } = db
+    .prepare(
+      `SELECT COUNT(*) AS prontasParadas FROM (
+         SELECT ${DIAS_PARADA} AS dias FROM ordens_servico os
+         WHERE os.status = 'pronta'
+       ) WHERE dias >= 5`
+    )
+    .get() as { prontasParadas: number }
+  if (prontasParadas > 0) {
+    alertas.push({
+      chave: 'os-prontas-encalhadas',
+      assinatura: `${prontasParadas}:${hoje}`,
+      tipo: 'relacionamento',
+      severidade: 'alerta',
+      titulo: 'Prontos sem retirada',
+      descricao: `${prontasParadas} aparelho(s) pronto(s) há 5+ dias esperando o cliente buscar.`,
+      rota: '/os',
+      acao: null
+    })
+  }
+
   // (Sem alerta de aniversariantes neste nicho: o cadastro de cliente da
   // assistência não coleta data de nascimento — decisão da poda da Fase 1.)
+
+  // ── Certificado digital vencendo ────────────────────────────────────────────
+  // O A1 vale 1 ano. Sem este aviso, o lojista descobre que venceu do pior
+  // jeito possível: a nota parando de sair numa manhã de movimento. Tirar um
+  // certificado novo leva dias (exige videoconferência de validação), então o
+  // aviso começa cedo — 30 dias.
+  const validadeCert = lerConfig('fiscal_certificado_validade')
+  if (validadeCert) {
+    const fim = new Date(validadeCert)
+    if (!Number.isNaN(fim.getTime())) {
+      const dias = Math.ceil((fim.getTime() - Date.now()) / 86_400_000)
+      if (dias <= 30) {
+        const venceu = dias < 0
+        alertas.push({
+          chave: 'certificado-fiscal',
+          // A assinatura muda a cada dia, então o aviso volta a aparecer
+          // conforme a data se aproxima.
+          assinatura: `${hoje}:${dias}`,
+          tipo: 'sistema',
+          severidade: venceu || dias <= 7 ? 'critico' : 'alerta',
+          titulo: venceu
+            ? 'Certificado digital VENCIDO'
+            : dias === 0
+              ? 'Certificado digital vence hoje'
+              : `Certificado digital vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}`,
+          descricao: venceu
+            ? 'Sua loja não consegue emitir nota fiscal até renovar o certificado.'
+            : 'Renove antes do vencimento para não parar de emitir nota fiscal. A emissão de um novo leva alguns dias.',
+          rota: '/fiscal',
+          acao: null
+        })
+      }
+    }
+  }
 
   return alertas
 }

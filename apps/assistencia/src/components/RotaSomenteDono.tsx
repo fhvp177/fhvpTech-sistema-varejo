@@ -7,7 +7,7 @@ type Props = {
   children: ReactNode
 }
 
-// Bloqueia a rota inteira pra quem não é dono. Mostra mensagem amigável
+// Bloqueia a rota inteira pra quem não é gerente. Mostra mensagem amigável
 // com explicação. Usado em Dashboard, Configurações, Restauração.
 const RotaSomenteDono: FC<Props> = ({ titulo, children }) => {
   const { ehDono, vendedor } = useSessao()
@@ -21,8 +21,8 @@ const RotaSomenteDono: FC<Props> = ({ titulo, children }) => {
         </div>
         <h2 className="text-xl font-semibold text-foreground">{titulo} bloqueado</h2>
         <p className="text-sm text-muted-foreground">
-          Esta tela é restrita ao dono da loja. Se precisar acessar,
-          {vendedor ? ` peça pra um dono entrar com a conta dele.` : ' faça login como dono.'}
+          Esta tela é restrita ao gerente da loja. Se precisar acessar,
+          {vendedor ? ` peça pra um gerente entrar com a conta dele.` : ' faça login como gerente.'}
         </p>
       </div>
     </div>

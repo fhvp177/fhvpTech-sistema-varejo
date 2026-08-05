@@ -1,4 +1,4 @@
-import { FC, useEffect, useMemo, useState } from 'react'
+import { FC, Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { IMaskInput } from 'react-imask'
 import { Pencil, Trash2, Plus, Search, Wallet, User, Building2 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
@@ -71,6 +71,27 @@ type FormCliente = {
   observacao: string
 }
 
+// Dados fiscais do cliente (destinatário da NF-e) — só no plano Pro; no
+// Básico a flag remove o componente e o chunk do binário.
+const CadastroFiscalCliente = __FEAT_NFE__
+  ? lazy(() => import('@/components/CadastroFiscalCliente'))
+  : null
+
+// Definido AQUI, e não importado do componente, porque ele é carregado por
+// `lazy` — um import estático traria o módulo de volta pro binário do Básico.
+const FISCAL_VAZIO: FiscalCliente = {
+  endereco_logradouro: '',
+  endereco_numero: '',
+  endereco_complemento: '',
+  endereco_bairro: '',
+  cidade: '',
+  uf: '',
+  cep: '',
+  codigo_municipio: '',
+  inscricao_estadual: '',
+  indicador_ie: '9'
+}
+
 const FORM_VAZIO: FormCliente = {
   nome: '', telefone: '', endereco: '', cpf: '',
   tipo_pessoa: 'fisica', cnpj: '', razao_social: '', observacao: ''
@@ -118,6 +139,13 @@ const Clientes: FC = () => {
   const [dialogAberto, setDialogAberto] = useState(false)
   const [editando, setEditando] = useState<Cliente | null>(null)
   const [form, setForm] = useState<FormCliente>(FORM_VAZIO)
+  // Dados fiscais do cliente (destinatário da NF-e). Vivem à parte do form
+  // porque são gravados por outro caminho — ver window.api.fiscal.salvarCliente.
+  const [fiscal, setFiscal] = useState<FiscalCliente>(FISCAL_VAZIO)
+  // Cidade/UF/IBGE da própria loja: viram sugestão no cadastro fiscal de um
+  // cliente NOVO, porque a maioria do consumidor de balcão é da mesma cidade.
+  // Só a cidade — CEP e rua são do comprador e ficam por conta dele.
+  const [padraoFiscalLoja, setPadraoFiscalLoja] = useState<Partial<FiscalCliente>>({})
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [clienteDividas, setClienteDividas] = useState<Cliente | null>(null)
@@ -159,18 +187,40 @@ const Clientes: FC = () => {
     setPaginaAtual(1)
   }, [busca])
 
+  // Carrega uma vez a localização da loja para sugerir no cadastro fiscal de
+  // clientes novos. Só no Pro — o Básico não tem nota fiscal.
+  useEffect(() => {
+    if (!__FEAT_NFE__) return
+    Promise.all([
+      window.api.config.obter('loja_cidade'),
+      window.api.config.obter('loja_uf'),
+      window.api.config.obter('fiscal_codigo_municipio')
+    ]).then(([cidade, uf, ibge]) => {
+      setPadraoFiscalLoja({
+        cidade: (cidade.success && cidade.data) || '',
+        uf: (uf.success && uf.data) || '',
+        codigo_municipio: (ibge.success && ibge.data) || ''
+      })
+    })
+  }, [])
+
   const inicioPagina = (paginaAtual - 1) * ITENS_POR_PAGINA
   const listaPaginada = listaFiltrada.slice(inicioPagina, inicioPagina + ITENS_POR_PAGINA)
 
   const abrirNovo = () => {
     setEditando(null)
     setForm(FORM_VAZIO)
+    // Cliente novo já nasce com a cidade da loja sugerida (editável).
+    setFiscal({ ...FISCAL_VAZIO, ...padraoFiscalLoja })
     setErro('')
     setDialogAberto(true)
   }
 
   const abrirEdicao = (c: Cliente) => {
     setEditando(c)
+    // Começa limpo; o CadastroFiscalCliente carrega o que estiver salvo deste
+    // cliente (senão o fiscal do cliente anterior vazaria pra este).
+    setFiscal(FISCAL_VAZIO)
     setForm({
       nome: c.nome,
       telefone: c.telefone,
@@ -248,6 +298,13 @@ const Clientes: FC = () => {
       : await window.api.clientes.criar(dados)
 
     if (resp.success) {
+      // Dados fiscais vão por um caminho próprio (não fazem parte do cadastro
+      // básico). Valem para qualquer cliente — PF também pode receber NF-e —,
+      // só dependem da feature existir.
+      if (__FEAT_NFE__) {
+        const idCliente = editando?.id ?? (resp.data as { id?: number } | null)?.id
+        if (idCliente) await window.api.fiscal.salvarCliente(idCliente, fiscal)
+      }
       await carregarClientes()
       setDialogAberto(false)
     } else {
@@ -295,7 +352,7 @@ const Clientes: FC = () => {
         />
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -337,10 +394,10 @@ const Clientes: FC = () => {
                       {iniciaisDoNome(c.nome)}
                     </span>
                     <div className="min-w-0">
-                      <div className="truncate max-w-[260px]" title={c.nome}>{c.nome}</div>
+                      <div className="truncate max-w-[190px] 2xl:max-w-[260px]" title={c.nome}>{c.nome}</div>
                       {c.tipo_pessoa === 'juridica' && c.razao_social && (
                         <div
-                          className="text-xs text-muted-foreground font-normal truncate max-w-[260px]"
+                          className="text-xs text-muted-foreground font-normal truncate max-w-[190px] 2xl:max-w-[260px]"
                           title={c.razao_social}
                         >
                           {c.razao_social}
@@ -348,7 +405,7 @@ const Clientes: FC = () => {
                       )}
                       {c.observacao && (
                         <div
-                          className="text-xs text-muted-foreground font-normal italic truncate max-w-[260px]"
+                          className="text-xs text-muted-foreground font-normal italic truncate max-w-[190px] 2xl:max-w-[260px]"
                           title={c.observacao}
                         >
                           {c.observacao}
@@ -363,7 +420,7 @@ const Clientes: FC = () => {
                 <td className="px-4 py-3 text-muted-foreground">{c.telefone}</td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {c.endereco
-                    ? <div className="truncate max-w-[220px]" title={c.endereco}>{c.endereco}</div>
+                    ? <div className="truncate max-w-[130px] 2xl:max-w-[220px]" title={c.endereco}>{c.endereco}</div>
                     : '—'}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{formatarData(c.data_cadastro)}</td>
@@ -411,7 +468,7 @@ const Clientes: FC = () => {
       />
 
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
-        <DialogContent className="max-w-[560px]">
+        <DialogContent className="max-w-[560px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editando ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
           </DialogHeader>
@@ -467,6 +524,18 @@ const Clientes: FC = () => {
                   placeholder="Razão social da empresa"
                 />
               </div>
+            )}
+
+            {/* Dados exigidos pela NF-e — qualquer cliente (PF também pode
+                receber NF-e), só no plano Pro. Retrátil pra não pesar a tela. */}
+            {CadastroFiscalCliente && (
+              <Suspense fallback={null}>
+                <CadastroFiscalCliente
+                  clienteId={editando?.id ?? null}
+                  valor={fiscal}
+                  onChange={setFiscal}
+                />
+              </Suspense>
             )}
 
             <div className="grid gap-1.5">

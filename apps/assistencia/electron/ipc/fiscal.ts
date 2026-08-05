@@ -1,0 +1,1317 @@
+import { dialog } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
+import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
+import {
+  diagnosticoFiscal,
+  vendaParaNota,
+  notaDaVenda,
+  notasDasVendas,
+  proximaTentativa,
+  registrarNotaLocal,
+  atualizarStatusNotaLocal,
+  gravarFormaPagamento,
+  obterFiscalCliente,
+  salvarFiscalCliente,
+  obterFiscalProduto,
+  salvarFiscalProduto,
+  listarParaClassificar,
+  aplicarFiscalEmLote,
+  categoriasPendentes,
+  guardarXmlNota,
+  obterXmlNota,
+  notasDoMes,
+  mesesComNotas,
+  vendaParaNotaServico,
+  notaServicoDaVenda,
+  notasServicoDasVendas,
+  proximaTentativaServico,
+  registrarNotaServicoLocal,
+  atualizarStatusNotaServicoLocal,
+  obterFiscalServico,
+  salvarFiscalServico,
+  listarServicosParaClassificar,
+  diagnosticoNfse,
+  type FiscalCliente,
+  type FiscalProduto,
+  type FiscalServico
+} from '../db/queries/fiscal'
+import { requerDono, requerSessao } from '../sessao'
+import { urlBackend } from '../backendUrl'
+
+// Configuração fiscal da loja (NFC-e). Mora na tabela `config` (key-value),
+// mesmo padrão da identidade da loja em ipc/loja.ts — um build só, cada loja com
+// os seus dados. Só existe no plano Pro (flag __FEAT_NFE__).
+//
+// ── O que este arquivo deliberadamente NÃO guarda ─────────────────────────────
+// O certificado A1 e o CSC são credenciais da EMPRESA DO CLIENTE, não nossas:
+// com o A1 dá pra assinar qualquer documento em nome daquele CNPJ. Os dois
+// passam pelo sistema apenas de passagem (tela → backend → ACBr), que é quem
+// tem estrutura pra guardá-los. Aqui fica só o que é inofensivo e útil offline:
+// o número identificador do CSC (que não é segredo, é um sequencial tipo
+// "000001") e os METADADOS do certificado — titular e data de validade.
+//
+// A validade em cache é o que permite o sino avisar "seu certificado vence em
+// 30 dias" sem bater na API toda hora. Sem esse aviso, o lojista descobre que o
+// certificado venceu do pior jeito possível: a nota parando de sair numa manhã
+// de movimento.
+
+// CRT — Código de Regime Tributário, como a SEFAZ enumera. Define se o produto
+// usa CSOSN (Simples) ou CST (regime normal), então muda o cálculo inteiro da
+// nota. Vazio = ainda não informado.
+export type RegimeTributario = '' | '1' | '2' | '3'
+
+// Faixa de série normal definida pela SEFAZ (890-899 é avulsa do Fisco, 900-999
+// é SCAN). Mesmos números que a tela usa — ver src/utils/validacaoFiscal.ts.
+const SERIE_MIN = 0
+const SERIE_MAX = 889
+
+// Como a loja chama a forma de pagamento → código que a SEFAZ entende (tPag).
+// Quando o TEF entrar, a transação do cartão já devolve débito/crédito e cai
+// direto neste mesmo mapa.
+const TPAG_POR_FORMA: Record<string, string> = {
+  dinheiro: '01',
+  cheque: '02',
+  credito: '03', // cartão de crédito
+  debito: '04', // cartão de débito
+  crediario: '05', // fiado / crédito da própria loja
+  pix: '17',
+  outro: '99'
+}
+
+function tPagDaForma(forma: string): string {
+  return TPAG_POR_FORMA[(forma ?? '').toLowerCase()] ?? '99'
+}
+
+export type ConfigFiscal = {
+  inscricao_estadual: string
+  regime_tributario: RegimeTributario
+  codigo_municipio: string // código IBGE de 7 dígitos
+  email: string
+  serie_nfce: number
+  cfop_padrao: string
+  csc_id: string
+  ambiente: 'homologacao' | 'producao'
+  // Endereço decomposto que a ACBr exige no cadastro do emitente (o cupom segue
+  // usando o texto livre de Dados da loja; estes campos são só pra nota).
+  // Cidade, UF e CEP continuam vindo de Dados da loja — aqui só o que falta.
+  endereco_logradouro: string
+  endereco_numero: string
+  endereco_complemento: string
+  endereco_bairro: string
+  /** Largura da bobina da impressora: 80mm (padrão) ou 58mm (estreita). */
+  largura_bobina: number
+  // ── NFS-e (serviço, municipal) ──────────────────────────────────────────────
+  // Tudo daqui é do MUNICÍPIO, não da SEFAZ, e por isso não tem equivalente
+  // acima: a Inscrição Municipal é o cadastro do prestador na prefeitura, e a
+  // série/numeração do RPS é definida por ela, não por nós.
+  inscricao_municipal: string
+  nfse_serie_rps: string
+  /** Próximo RPS a usar. Cliente vindo de outro sistema CONTINUA a numeração. */
+  nfse_proximo_rps: number
+  nfse_lote: number
+  nfse_optante_simples: boolean
+  /** ISS retido na fonte pelo tomador — combinação do contador com o cliente. */
+  nfse_iss_retido: boolean
+  // Derivados — preenchidos pelo sistema, não digitados.
+  empresa_cadastrada: boolean // já registrada como emitente na ACBr
+  csc_configurado: boolean
+  certificado_titular: string
+  certificado_validade: string // ISO; vazio quando não há certificado
+  /** Config de NFS-e já enviada à ACBr (o passo equivalente ao CSC da NFC-e). */
+  nfse_configurada: boolean
+  /** '' = ainda não perguntamos · 'sim'/'nao' = resposta da ACBr, em cache. */
+  nfse_cidade_atendida: '' | 'sim' | 'nao'
+  nfse_provedor: string
+  configurada: boolean
+}
+
+// Nasce em branco e em HOMOLOGAÇÃO: enquanto o lojista não conferiu tudo com o
+// contador, o pior cenário é emitir nota de teste — que não vale fiscalmente e
+// não custa crédito de verdade. Produção é uma escolha consciente.
+const FISCAL_EM_BRANCO: ConfigFiscal = {
+  inscricao_estadual: '',
+  regime_tributario: '',
+  codigo_municipio: '',
+  email: '',
+  serie_nfce: 1,
+  cfop_padrao: '',
+  csc_id: '',
+  ambiente: 'homologacao',
+  endereco_logradouro: '',
+  endereco_numero: '',
+  endereco_complemento: '',
+  endereco_bairro: '',
+  largura_bobina: 80,
+  inscricao_municipal: '',
+  nfse_serie_rps: '',
+  nfse_proximo_rps: 1,
+  nfse_lote: 1,
+  nfse_optante_simples: true,
+  nfse_iss_retido: false,
+  empresa_cadastrada: false,
+  csc_configurado: false,
+  certificado_titular: '',
+  certificado_validade: '',
+  nfse_configurada: false,
+  nfse_cidade_atendida: '',
+  nfse_provedor: '',
+  configurada: false
+}
+
+// O endereço é lido SEMPRE, mesmo antes de o lojista configurar o resto: a
+// migration 032 pode tê-lo pré-preenchido a partir do endereço em texto livre,
+// e esse adiantamento tem que aparecer na tela já na primeira abertura.
+function lerEnderecoFiscal(): Pick<
+  ConfigFiscal,
+  'endereco_logradouro' | 'endereco_numero' | 'endereco_complemento' | 'endereco_bairro'
+> {
+  return {
+    endereco_logradouro: lerConfig('fiscal_endereco_logradouro'),
+    endereco_numero: lerConfig('fiscal_endereco_numero'),
+    endereco_complemento: lerConfig('fiscal_endereco_complemento'),
+    endereco_bairro: lerConfig('fiscal_endereco_bairro')
+  }
+}
+
+// Só dígitos — IE e código IBGE vêm com máscara dependendo de onde o lojista
+// copiou ("06.123.456-7"), e a SEFAZ quer o número limpo.
+function apenasDigitos(valor: string): string {
+  return (valor ?? '').replace(/\D/g, '')
+}
+
+function obterConfigFiscal(): ConfigFiscal {
+  // Endereço vem sempre — mesmo sem o resto configurado, pode haver
+  // pré-preenchimento da migration esperando conferência.
+  if (lerConfig('fiscal_configurada') !== '1') {
+    return { ...FISCAL_EM_BRANCO, ...lerEnderecoFiscal() }
+  }
+
+  const serie = Number.parseInt(lerConfig('fiscal_serie_nfce'), 10)
+  const ambiente = lerConfig('fiscal_ambiente') === 'producao' ? 'producao' : 'homologacao'
+  const regime = lerConfig('fiscal_regime_tributario')
+
+  return {
+    inscricao_estadual: lerConfig('fiscal_inscricao_estadual'),
+    regime_tributario: (['1', '2', '3'].includes(regime) ? regime : '') as RegimeTributario,
+    codigo_municipio: lerConfig('fiscal_codigo_municipio'),
+    email: lerConfig('fiscal_email'),
+    // Série inválida no banco cairia numa nota rejeitada lá na frente; 1 é o
+    // valor normal do varejo e é melhor default que NaN.
+    serie_nfce: Number.isFinite(serie) && serie > 0 ? serie : 1,
+    cfop_padrao: lerConfig('fiscal_cfop_padrao'),
+    csc_id: lerConfig('fiscal_csc_id'),
+    ambiente,
+    ...lerEnderecoFiscal(),
+    largura_bobina: lerConfig('fiscal_largura_bobina') === '58' ? 58 : 80,
+    ...lerNfse(),
+    empresa_cadastrada: lerConfig('fiscal_empresa_cadastrada') === '1',
+    csc_configurado: lerConfig('fiscal_csc_configurado') === '1',
+    certificado_titular: lerConfig('fiscal_certificado_titular'),
+    certificado_validade: lerConfig('fiscal_certificado_validade'),
+    nfse_configurada: lerConfig('fiscal_nfse_configurada') === '1',
+    nfse_cidade_atendida: (['sim', 'nao'].includes(lerConfig('fiscal_nfse_cidade_atendida'))
+      ? lerConfig('fiscal_nfse_cidade_atendida')
+      : '') as '' | 'sim' | 'nao',
+    nfse_provedor: lerConfig('fiscal_nfse_provedor'),
+    configurada: true
+  }
+}
+
+// Bloco da NFS-e. O `optante_simples` nasce LIGADO porque é o regime da imensa
+// maioria das assistências — e porque é o único que o montador de nota suporta
+// hoje, tanto aqui quanto na NFC-e.
+function lerNfse(): Pick<
+  ConfigFiscal,
+  | 'inscricao_municipal'
+  | 'nfse_serie_rps'
+  | 'nfse_proximo_rps'
+  | 'nfse_lote'
+  | 'nfse_optante_simples'
+  | 'nfse_iss_retido'
+> {
+  const proximo = Number.parseInt(lerConfig('fiscal_nfse_proximo_rps'), 10)
+  const lote = Number.parseInt(lerConfig('fiscal_nfse_lote'), 10)
+  return {
+    inscricao_municipal: lerConfig('fiscal_inscricao_municipal'),
+    nfse_serie_rps: lerConfig('fiscal_nfse_serie_rps'),
+    nfse_proximo_rps: Number.isFinite(proximo) && proximo > 0 ? proximo : 1,
+    nfse_lote: Number.isFinite(lote) && lote > 0 ? lote : 1,
+    // Ausente = ligado (o default de quem nunca mexeu), não desligado.
+    nfse_optante_simples: lerConfig('fiscal_nfse_optante_simples') !== '0',
+    nfse_iss_retido: lerConfig('fiscal_nfse_iss_retido') === '1'
+  }
+}
+
+// Quantos dias faltam pro certificado vencer. `null` quando não há certificado
+// ou a data gravada não faz sentido — quem chama decide o que mostrar.
+export function diasParaVencerCertificado(agora = new Date()): number | null {
+  const validade = lerConfig('fiscal_certificado_validade')
+  if (!validade) return null
+  const fim = new Date(validade)
+  if (Number.isNaN(fim.getTime())) return null
+  return Math.ceil((fim.getTime() - agora.getTime()) / 86_400_000)
+}
+
+export function registrarHandlersFiscal(): void {
+  // Configuração fiscal é assunto do gerente: mexe em tributação e em credencial
+  // da empresa, não é coisa de balconista.
+  registrarCanal('fiscal:obter', () => {
+    try {
+      requerDono()
+      return { success: true, data: obterConfigFiscal() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Diagnóstico do "está tudo pronto?". Roda 100% local e de graça — nenhuma
+  // chamada à API, nenhum crédito gasto.
+  registrarCanal('fiscal:diagnostico', () => {
+    try {
+      requerDono()
+      return { success: true, data: diagnosticoFiscal() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Salva só o que o lojista digita. Certificado e CSC entram por caminhos
+  // próprios (Fase 2), justamente pra não trafegarem junto com dados comuns.
+  registrarCanal('fiscal:salvar', (dados: Partial<ConfigFiscal>) => {
+    try {
+      requerDono()
+
+      // Última linha de defesa. A tela já impede a digitação errada e é lá que
+      // mora a validação boa de UX (formato da IE por estado, e-mail, etc.);
+      // aqui ficam só as regras que, se furadas, ESTRAGAM A EMISSÃO depois —
+      // e que por isso não podem depender só da interface. De propósito não é
+      // uma cópia da validação da tela: duplicar aquilo garantiria divergência
+      // entre as duas com o tempo.
+      const serie = Number(dados.serie_nfce)
+      if (!Number.isInteger(serie) || serie < SERIE_MIN || serie > SERIE_MAX) {
+        // Antes isto era corrigido calado pra 1. Corrigir em silêncio é pior:
+        // o lojista salva 900, o sistema grava 1, e ninguém entende por que as
+        // notas saem numa série que ele não escolheu.
+        throw new Error(`Série inválida: use um número entre ${SERIE_MIN} e ${SERIE_MAX}.`)
+      }
+
+      const regime = dados.regime_tributario ?? ''
+      if (!['1', '2', '3'].includes(regime)) {
+        throw new Error('Regime tributário inválido.')
+      }
+
+      gravarConfig('fiscal_inscricao_estadual', apenasDigitos(dados.inscricao_estadual ?? ''))
+      gravarConfig('fiscal_regime_tributario', regime)
+      gravarConfig('fiscal_codigo_municipio', apenasDigitos(dados.codigo_municipio ?? ''))
+      gravarConfig('fiscal_email', (dados.email ?? '').trim())
+      gravarConfig('fiscal_serie_nfce', String(serie))
+      gravarConfig('fiscal_cfop_padrao', apenasDigitos(dados.cfop_padrao ?? ''))
+      gravarConfig('fiscal_csc_id', apenasDigitos(dados.csc_id ?? ''))
+      gravarConfig('fiscal_ambiente', dados.ambiente === 'producao' ? 'producao' : 'homologacao')
+      // Endereço estruturado (só pra nota; texto livre do cupom não é tocado).
+      gravarConfig('fiscal_endereco_logradouro', (dados.endereco_logradouro ?? '').trim())
+      gravarConfig('fiscal_endereco_numero', (dados.endereco_numero ?? '').trim())
+      gravarConfig('fiscal_endereco_complemento', (dados.endereco_complemento ?? '').trim())
+      gravarConfig('fiscal_endereco_bairro', (dados.endereco_bairro ?? '').trim())
+      gravarConfig('fiscal_largura_bobina', Number(dados.largura_bobina) === 58 ? '58' : '80')
+
+      // NFS-e. A numeração do RPS é o campo perigoso: cliente que vem de outro
+      // sistema tem que CONTINUAR de onde parou, senão a prefeitura recusa RPS
+      // repetido. Por isso ele é validado aqui e não corrigido em silêncio.
+      const proximoRps = Number(dados.nfse_proximo_rps ?? 1)
+      if (!Number.isInteger(proximoRps) || proximoRps < 1) {
+        throw new Error('O próximo número de RPS precisa ser um número inteiro a partir de 1.')
+      }
+      const loteRps = Number(dados.nfse_lote ?? 1)
+      if (!Number.isInteger(loteRps) || loteRps < 1) {
+        throw new Error('O número do lote de RPS precisa ser um número inteiro a partir de 1.')
+      }
+      gravarConfig('fiscal_inscricao_municipal', (dados.inscricao_municipal ?? '').trim())
+      gravarConfig('fiscal_nfse_serie_rps', (dados.nfse_serie_rps ?? '').trim())
+      gravarConfig('fiscal_nfse_proximo_rps', String(proximoRps))
+      gravarConfig('fiscal_nfse_lote', String(loteRps))
+      gravarConfig('fiscal_nfse_optante_simples', dados.nfse_optante_simples === false ? '0' : '1')
+      gravarConfig('fiscal_nfse_iss_retido', dados.nfse_iss_retido === true ? '1' : '0')
+
+      gravarConfig('fiscal_configurada', '1')
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('fiscal:diasParaVencerCertificado', () => {
+    try {
+      requerSessao()
+      return { success: true, data: diasParaVencerCertificado() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarHandlersFiscalRemoto()
+}
+
+// ─── Ponte com o backend (ACBr) ───────────────────────────────────────────────
+// Estes handlers falam com o backend do Fly, que fala com a ACBr. O certificado
+// e o CSC passam por aqui mas NÃO são gravados localmente — seguem pro backend
+// e de lá pra ACBr. Só metadados inofensivos (validade do certificado, id do
+// CSC, flag "configurado") ficam no config local, pra alimentar a tela e o
+// aviso de vencimento sem precisar bater na API toda hora.
+
+type RespostaBackend = { ok?: boolean; erro?: string; [k: string]: unknown }
+
+// Chamada ao backend com o clienteId da licença. Traduz o corpo de erro do
+// backend na mensagem que a tela mostra (o backend já manda `erro` legível).
+async function chamarBackendFiscal(
+  rota: string,
+  opcoes: { metodo?: string; corpo?: Record<string, unknown> } = {}
+): Promise<RespostaBackend> {
+  const clienteId = extrairClienteIdLocal()
+  if (!clienteId) throw new Error('Nenhuma licença ativa encontrada nesta instalação.')
+
+  const { metodo = 'GET', corpo } = opcoes
+  // clienteId vai no corpo (POST/PUT) ou na query (GET).
+  const temCorpo = metodo !== 'GET'
+  const url = new URL(`${urlBackend()}${rota}`)
+  if (!temCorpo) url.searchParams.set('clienteId', clienteId)
+
+  let r: Response
+  try {
+    r = await fetch(url, {
+      method: metodo,
+      headers: temCorpo ? { 'Content-Type': 'application/json' } : undefined,
+      body: temCorpo ? JSON.stringify({ clienteId, ...corpo }) : undefined
+    })
+  } catch (e) {
+    throw new Error(`Não foi possível falar com o servidor fiscal: ${(e as Error).message}`)
+  }
+
+  const texto = await r.text()
+  let dados: RespostaBackend = {}
+  try {
+    dados = texto ? (JSON.parse(texto) as RespostaBackend) : {}
+  } catch {
+    throw new Error(`Resposta inesperada do servidor fiscal (HTTP ${r.status}).`)
+  }
+  if (!r.ok) throw new Error(dados.erro || `Erro ${r.status} no servidor fiscal.`)
+  return dados
+}
+
+// Monta os dados do emitente a partir do que já está no banco (identidade da
+// loja + config fiscal). Endereço decomposto vem do namespace fiscal_endereco_*;
+// cidade/UF/CEP da identidade da loja.
+function montarDadosEmpresa(): Record<string, unknown> {
+  const cnpj = apenasDigitos(lerConfig('loja_cnpj'))
+  if (cnpj.length !== 14) {
+    throw new Error('Cadastre o CNPJ da loja em Dados da loja antes de habilitar a nota.')
+  }
+  const razao = lerConfig('loja_razao_social') || lerConfig('loja_nome')
+  const email = lerConfig('fiscal_email')
+  const logradouro = lerConfig('fiscal_endereco_logradouro')
+  const numero = lerConfig('fiscal_endereco_numero')
+  const bairro = lerConfig('fiscal_endereco_bairro')
+  if (!razao) throw new Error('Preencha a razão social em Dados da loja.')
+  if (!email) throw new Error('Preencha o e-mail da empresa.')
+  if (!logradouro || !numero || !bairro) {
+    throw new Error('Preencha o endereço da nota (logradouro, número e bairro).')
+  }
+
+  return {
+    cpf_cnpj: cnpj,
+    nome_razao_social: razao,
+    nome_fantasia: lerConfig('loja_nome') || undefined,
+    email,
+    inscricao_estadual: apenasDigitos(lerConfig('fiscal_inscricao_estadual')) || undefined,
+    fone: lerConfig('loja_telefone') || undefined,
+    endereco: {
+      logradouro,
+      numero,
+      complemento: lerConfig('fiscal_endereco_complemento') || undefined,
+      bairro,
+      codigo_municipio: apenasDigitos(lerConfig('fiscal_codigo_municipio')) || undefined,
+      cidade: lerConfig('loja_cidade') || undefined,
+      uf: (lerConfig('loja_uf') || '').toUpperCase(),
+      cep: apenasDigitos(lerConfig('loja_cep'))
+    }
+  }
+}
+
+function registrarHandlersFiscalRemoto(): void {
+  // Resolve o código IBGE do município pelo CEP da loja (a nota exige, e
+  // ninguém sabe de cabeça). Grava pra não consultar de novo.
+  registrarCanal('fiscal:resolverMunicipio', async () => {
+    try {
+      requerDono()
+      const jaTem = lerConfig('fiscal_codigo_municipio')
+      if (jaTem) return { success: true, data: { codigo_municipio: jaTem, cidade: '' } }
+
+      const cep = apenasDigitos(lerConfig('loja_cep'))
+      if (cep.length !== 8) throw new Error('Preencha o CEP da loja em Dados da loja.')
+
+      const r = await chamarBackendFiscal(`/fiscal/cep/${cep}`)
+      const end = (r.endereco ?? {}) as { codigo_ibge?: string; municipio?: string }
+      if (end.codigo_ibge) gravarConfig('fiscal_codigo_municipio', end.codigo_ibge)
+      return {
+        success: true,
+        data: { codigo_municipio: end.codigo_ibge ?? '', cidade: end.municipio ?? '' }
+      }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Cadastra/atualiza a empresa emitente na ACBr (passo que antecede tudo).
+  registrarCanal('fiscal:cadastrarEmpresa', async () => {
+    try {
+      requerDono()
+      const empresa = montarDadosEmpresa() as { endereco: { codigo_municipio?: string } }
+      // Sem código do município? Resolve pelo CEP antes de cadastrar.
+      if (!empresa.endereco.codigo_municipio) {
+        const cep = apenasDigitos(lerConfig('loja_cep'))
+        const r = await chamarBackendFiscal(`/fiscal/cep/${cep}`)
+        const end = (r.endereco ?? {}) as { codigo_ibge?: string }
+        if (!end.codigo_ibge) throw new Error('Não foi possível achar o município pelo CEP.')
+        gravarConfig('fiscal_codigo_municipio', end.codigo_ibge)
+        empresa.endereco.codigo_municipio = end.codigo_ibge
+      }
+      await chamarBackendFiscal('/fiscal/empresa', { metodo: 'POST', corpo: { empresa } })
+      gravarConfig('fiscal_empresa_cadastrada', '1')
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Sobe o certificado A1. Recebe o arquivo já em base64 e a senha do renderer;
+  // repassa e guarda só a validade/titular que a ACBr devolve.
+  registrarCanal(
+    'fiscal:enviarCertificado',
+    async (args: { certificadoBase64: string; senha: string }) => {
+      try {
+        requerDono()
+        const cnpj = apenasDigitos(lerConfig('loja_cnpj'))
+        const r = await chamarBackendFiscal('/fiscal/certificado', {
+          metodo: 'PUT',
+          corpo: {
+            cpf_cnpj: cnpj,
+            certificado: args?.certificadoBase64 ?? '',
+            senha: args?.senha ?? ''
+          }
+        })
+        // Só metadados — o .pfx e a senha não voltam e não são guardados.
+        gravarConfig('fiscal_certificado_validade', String(r.validade ?? ''))
+        gravarConfig('fiscal_certificado_titular', String(r.titular ?? ''))
+        return { success: true, data: { validade: r.validade, titular: r.titular } }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  // Configura o CSC (autentica o QR Code da NFC-e). O CSC em si vai pro backend
+  // e não fica aqui; só o id (que não é segredo) e a flag "configurado".
+  registrarCanal(
+    'fiscal:configurarCsc',
+    async (args: { csc: string; idCsc: string }) => {
+      try {
+        requerDono()
+        const cnpj = apenasDigitos(lerConfig('loja_cnpj'))
+        const regime = lerConfig('fiscal_regime_tributario')
+        const crt = Number(regime)
+        if (![1, 2, 3].includes(crt)) {
+          throw new Error('Defina o regime tributário no passo 1 antes do CSC.')
+        }
+        const idCsc = apenasDigitos(args?.idCsc ?? '')
+        const csc = (args?.csc ?? '').trim()
+        if (!idCsc || !csc) throw new Error('Informe o identificador e o código do CSC.')
+
+        const ambiente =
+          lerConfig('fiscal_ambiente') === 'producao' ? 'producao' : 'homologacao'
+        await chamarBackendFiscal('/fiscal/nfce-config', {
+          metodo: 'PUT',
+          corpo: {
+            cpf_cnpj: cnpj,
+            config: { CRT: crt, ambiente, sefaz: { id_csc: Number(idCsc), csc } }
+          }
+        })
+        // Guarda só o id e a flag; o CSC não fica no config local.
+        gravarConfig('fiscal_csc_id', idCsc)
+        gravarConfig('fiscal_csc_configurado', '1')
+        return { success: true, data: null }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  // ── Emissão da NFC-e de uma venda ───────────────────────────────────────────
+  // REGRA DE OURO: isto roda SEMPRE depois da venda gravada, nunca durante.
+  // Se a SEFAZ estiver fora do ar, ou faltar crédito, ou o certificado vencer,
+  // a venda continua existindo e o caixa continua vendendo — a nota fica
+  // pendente e pode ser reenviada. Nota fiscal segurando a fila do caixa é
+  // inaceitável numa loja.
+  registrarCanal(
+    'fiscal:emitirNfce',
+    async (args: { vendaId: number; formaPagamento?: string; modelo?: 55 | 65 }) => {
+      try {
+        // Emitir é rotina de balcão: qualquer usuário logado pode. Só a
+        // CONFIGURAÇÃO fiscal (certificado, CSC, regime) é do gerente.
+        requerSessao()
+        const vendaId = Number(args?.vendaId)
+        if (!Number.isInteger(vendaId) || vendaId <= 0) throw new Error('Venda inválida.')
+
+        const venda = vendaParaNota(vendaId)
+        if (!venda) throw new Error('Venda não encontrada.')
+        if (venda.cancelada) throw new Error('Esta venda foi cancelada — não pode gerar nota.')
+        if (!venda.itens.length) throw new Error('Esta venda não tem itens.')
+
+        // Já existe nota vigente? Não emite outra (a trava definitiva é o índice
+        // único no banco e a idempotência do backend; aqui é só cortesia, pra
+        // dar uma mensagem clara em vez de erro de banco).
+        const atual = notaDaVenda(vendaId)
+        if (atual && ['autorizado', 'pendente'].includes(atual.status)) {
+          return { success: true, data: { jaEmitida: true, nota: atual } }
+        }
+
+        // Forma de pagamento: grava na venda (o TEF preencherá este mesmo campo
+        // no futuro). Venda a prazo não pergunta — é crediário por definição.
+        const forma = (args?.formaPagamento ?? '').trim() || venda.forma_pagamento || ''
+        if (!forma) throw new Error('Informe a forma de pagamento.')
+        if (forma !== venda.forma_pagamento) gravarFormaPagamento(vendaId, forma)
+
+        const cfg = obterConfigFiscal()
+        if (!cfg.configurada) throw new Error('Configure a nota fiscal antes de emitir.')
+        const crt = Number(cfg.regime_tributario)
+        if (![1, 2, 3].includes(crt)) throw new Error('Defina o regime tributário.')
+
+        const uf = lerConfig('loja_uf')
+        const codigoMunicipio = apenasDigitos(lerConfig('fiscal_codigo_municipio'))
+        if (!uf) throw new Error('Preencha o estado da loja em Dados da loja.')
+        if (!codigoMunicipio) throw new Error('Município da loja não resolvido — abra a tela de Nota fiscal.')
+
+        // CFOP: o do produto manda; sem ele, o padrão da loja; sem nada, 5102
+        // (venda de mercadoria dentro do estado), que cobre o varejo comum.
+        const cfopPadrao = apenasDigitos(cfg.cfop_padrao) || '5102'
+
+        // Qual documento sai é escolha do lojista na hora de emitir. Se a tela
+        // não mandar (versão antiga), cai no padrão: PJ → NF-e (modelo 55),
+        // consumidor — pessoa física ou venda sem cliente — → NFC-e (modelo 65).
+        const escolhido = args?.modelo
+        const modelo: 55 | 65 =
+          escolhido === 55 || escolhido === 65
+            ? escolhido
+            : venda.cliente_tipo_pessoa === 'juridica'
+              ? 55
+              : 65
+        // NF-e exige um destinatário identificado. Venda de balcão sem cliente
+        // só pode NFC-e — barra aqui com mensagem clara em vez de deixar a
+        // montagem estourar no backend.
+        if (modelo === 55 && !venda.destinatario) {
+          throw new Error(
+            'A NF-e precisa de um cliente identificado na venda. Venda no balcão sem cliente só emite cupom (NFC-e).'
+          )
+        }
+
+        const tentativa = proximaTentativa(vendaId)
+        const referencia = `v${vendaId}-t${tentativa}`
+
+        const corpo = {
+          referencia,
+          modelo,
+          serie: cfg.serie_nfce,
+          emitente: { uf: uf.toUpperCase(), codigo_municipio: codigoMunicipio, crt },
+          venda: {
+            itens: venda.itens.map((i) => ({
+              nome: i.nome,
+              ncm: apenasDigitos(i.ncm ?? ''),
+              cfop: apenasDigitos(i.cfop ?? '') || cfopPadrao,
+              cst_csosn: (i.cst_csosn ?? '').trim(),
+              origem: (i.origem ?? '0').trim(),
+              unidade: (i.unidade ?? 'UN').trim(),
+              quantidade: i.quantidade,
+              valor_unitario: i.valor_unitario,
+              codigo: i.codigo ?? undefined,
+              codigo_barras: i.codigo_barras ?? undefined
+            })),
+            desconto: venda.desconto || 0,
+            pagamentos: [{ tPag: tPagDaForma(forma), valor: venda.total }],
+            // NFC-e pode sair sem identificação; com CPF, entra no documento.
+            consumidor: venda.cliente_cpf
+              ? { cpf: venda.cliente_cpf, nome: venda.cliente_nome ?? undefined }
+              : undefined,
+            // NF-e exige o destinatário completo. Quem valida o que falta é o
+            // backend, que devolve a mensagem dizendo qual campo preencher.
+            destinatario:
+              modelo === 55 && venda.destinatario
+                ? {
+                    cnpj: venda.destinatario.cnpj ?? undefined,
+                    cpf: venda.destinatario.cpf ?? undefined,
+                    nome: venda.destinatario.nome,
+                    logradouro: venda.destinatario.logradouro ?? '',
+                    numero: venda.destinatario.numero ?? '',
+                    complemento: venda.destinatario.complemento ?? undefined,
+                    bairro: venda.destinatario.bairro ?? '',
+                    cidade: venda.destinatario.cidade ?? '',
+                    uf: venda.destinatario.uf ?? '',
+                    cep: venda.destinatario.cep ?? undefined,
+                    codigo_municipio: venda.destinatario.codigo_municipio ?? '',
+                    inscricao_estadual: venda.destinatario.inscricao_estadual ?? undefined,
+                    indicador_ie: (venda.destinatario.indicador_ie ?? '9') as '1' | '2' | '9',
+                    telefone: venda.destinatario.telefone ?? undefined
+                  }
+                : undefined
+          }
+        }
+
+        // O ambiente (teste × produção) é do seletor da tela e SÓ é conhecido
+        // aqui — o backend lê da query e, sem ela, assume homologação. Sem este
+        // parâmetro, escolher "Produção" não tinha efeito: tudo saía como teste.
+        const r = await chamarBackendFiscal(`/fiscal/nfce?ambiente=${cfg.ambiente}`, {
+          metodo: 'POST',
+          corpo
+        })
+        const emissao = (r.emissao ?? {}) as {
+          serie?: number
+          numero?: number
+          acbr_id?: string | null
+          status?: string
+          chave?: string | null
+          motivo?: string | null
+        }
+
+        registrarNotaLocal({
+          venda_id: vendaId,
+          tentativa,
+          referencia,
+          acbr_id: emissao.acbr_id ?? null,
+          ambiente: cfg.ambiente,
+          modelo,
+          serie: emissao.serie ?? cfg.serie_nfce,
+          numero: emissao.numero ?? 0,
+          chave: emissao.chave ?? null,
+          status: emissao.status ?? 'pendente',
+          motivo: emissao.motivo ?? null
+        })
+
+        return { success: true, data: { jaEmitida: Boolean(r.jaEmitida), nota: notaDaVenda(vendaId) } }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  // Consulta o desfecho de uma nota que ficou pendente (a emissão é assíncrona:
+  // a SEFAZ responde em segundos, mas não na mesma requisição). Consultar
+  // status não custa crédito.
+  registrarCanal('fiscal:statusNfce', async (args: { vendaId: number }) => {
+    try {
+      requerSessao()
+      const nota = notaDaVenda(Number(args?.vendaId))
+      if (!nota) return { success: true, data: null }
+      if (nota.status !== 'pendente') return { success: true, data: nota }
+
+      const r = await chamarBackendFiscal(`/fiscal/nfce/${nota.referencia}`)
+      const e = (r.emissao ?? {}) as { status?: string; chave?: string | null; motivo?: string | null }
+      if (e.status && e.status !== nota.status) {
+        atualizarStatusNotaLocal(nota.referencia, e.status, e.chave ?? null, e.motivo ?? null)
+      }
+      return { success: true, data: notaDaVenda(Number(args.vendaId)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // ── Classificação fiscal dos produtos ───────────────────────────────────────
+  // Sem NCM o produto não sai em nota. Estes handlers são o que torna possível
+  // resolver isso — antes deles, o sistema apontava o problema e não deixava
+  // ninguém consertar.
+  registrarCanal('fiscal:obterProduto', (id: number) => {
+    try {
+      requerSessao()
+      return { success: true, data: obterFiscalProduto(Number(id)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('fiscal:salvarProduto', (id: number, dados: FiscalProduto) => {
+    try {
+      requerSessao()
+      salvarFiscalProduto(Number(id), {
+        ncm: apenasDigitos(dados?.ncm ?? ''),
+        cfop: apenasDigitos(dados?.cfop ?? ''),
+        cst_csosn: apenasDigitos(dados?.cst_csosn ?? ''),
+        origem: (dados?.origem ?? '0').trim() || '0',
+        unidade: (dados?.unidade ?? 'UN').trim().toUpperCase() || 'UN'
+      })
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal(
+    'fiscal:listarClassificacao',
+    (filtro: { apenasPendentes?: boolean; categoria?: string | null; busca?: string }) => {
+      try {
+        requerSessao()
+        return { success: true, data: listarParaClassificar(filtro ?? {}) }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  registrarCanal('fiscal:categoriasPendentes', () => {
+    try {
+      requerSessao()
+      return { success: true, data: categoriasPendentes() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Aplica a mesma classificação a vários produtos — o que torna a tarefa
+  // viável numa loja com centenas de itens.
+  registrarCanal(
+    'fiscal:aplicarEmLote',
+    (args: {
+        ids?: number[]
+        categoria?: string | null
+        dados: Partial<FiscalProduto>
+        somentePendentes?: boolean
+      }
+    ) => {
+      try {
+        // Classificação fiscal em massa mexe no que vai declarado ao Fisco:
+        // decisão do gerente.
+        requerDono()
+        const dados: Partial<FiscalProduto> = {}
+        if (args?.dados?.ncm) dados.ncm = apenasDigitos(args.dados.ncm)
+        if (args?.dados?.cfop) dados.cfop = apenasDigitos(args.dados.cfop)
+        if (args?.dados?.cst_csosn) dados.cst_csosn = apenasDigitos(args.dados.cst_csosn)
+        if (args?.dados?.origem) dados.origem = String(args.dados.origem).trim()
+        if (args?.dados?.unidade) dados.unidade = String(args.dados.unidade).trim().toUpperCase()
+
+        const total = aplicarFiscalEmLote({
+          ids: args?.ids,
+          categoria: args?.categoria,
+          dados,
+          somentePendentes: args?.somentePendentes
+        })
+        return { success: true, data: { atualizados: total } }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  // ── XML e relatório ─────────────────────────────────────────────────────────
+  // O XML é o documento que vale legalmente. Guardamos no primeiro download
+  // porque a ACBr cobra crédito a partir do segundo.
+  registrarCanal('fiscal:xmlNota', async (args: { vendaId: number }) => {
+    try {
+      requerSessao()
+      const nota = notaDaVenda(Number(args?.vendaId))
+      if (!nota) throw new Error('Esta venda não tem nota fiscal.')
+
+      const guardado = obterXmlNota(nota.referencia)
+      if (guardado) return { success: true, data: { xml: guardado, doCache: true } }
+
+      const r = await chamarBackendFiscal(`/fiscal/nfce/${nota.referencia}/xml`)
+      const xml = String(r.xml ?? '')
+      if (xml) guardarXmlNota(nota.referencia, xml)
+      return { success: true, data: { xml, doCache: false } }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('fiscal:notasDoMes', (mes: string) => {
+    try {
+      requerDono()
+      return { success: true, data: notasDoMes(String(mes ?? '')) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('fiscal:mesesComNotas', () => {
+    try {
+      requerDono()
+      return { success: true, data: mesesComNotas() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Salva os XMLs do mês numa pasta escolhida pelo lojista — o pacote que ele
+  // entrega ao contador. Mesmo padrão da exportação das notas de entrada.
+  registrarCanal(
+    'fiscal:salvarXmls',
+    async (mes: string, arquivos: Array<{ nome: string; conteudo: string }>) => {
+      try {
+        requerDono()
+        const lista = Array.isArray(arquivos) ? arquivos : []
+        if (!lista.length) throw new Error('Nenhum XML para salvar.')
+
+        const resultado = await dialog.showOpenDialog({
+          properties: ['openDirectory', 'createDirectory'],
+          title: `Escolher pasta pros XMLs de ${mes}`
+        })
+        if (resultado.canceled || resultado.filePaths.length === 0) {
+          return { success: true, data: null } // lojista desistiu — não é erro
+        }
+
+        const pasta = resultado.filePaths[0]
+        for (const a of lista) {
+          // Nome vem da chave de acesso; sanitiza pra não escapar da pasta.
+          const nome = String(a.nome).replace(/[^A-Za-z0-9._-]/g, '_')
+          writeFileSync(join(pasta, nome), String(a.conteudo), 'utf-8')
+        }
+        return { success: true, data: { pasta, quantidade: lista.length } }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  // Cadastro fiscal do cliente (destinatário da NF-e). Liberado pra vendedor:
+  // é dado de cadastro, não configuração da loja.
+  registrarCanal('fiscal:obterCliente', (id: number) => {
+    try {
+      requerSessao()
+      return { success: true, data: obterFiscalCliente(Number(id)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('fiscal:salvarCliente', (id: number, dados: FiscalCliente) => {
+    try {
+      requerSessao()
+      salvarFiscalCliente(Number(id), {
+        endereco_logradouro: (dados?.endereco_logradouro ?? '').trim(),
+        endereco_numero: (dados?.endereco_numero ?? '').trim(),
+        endereco_complemento: (dados?.endereco_complemento ?? '').trim(),
+        endereco_bairro: (dados?.endereco_bairro ?? '').trim(),
+        cidade: (dados?.cidade ?? '').trim(),
+        uf: (dados?.uf ?? '').trim().toUpperCase(),
+        cep: apenasDigitos(dados?.cep ?? ''),
+        codigo_municipio: apenasDigitos(dados?.codigo_municipio ?? ''),
+        inscricao_estadual: apenasDigitos(dados?.inscricao_estadual ?? ''),
+        indicador_ie: ['1', '2', '9'].includes(dados?.indicador_ie) ? dados.indicador_ie : '9'
+      })
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Endereço a partir do CEP (traz o código IBGE do município, obrigatório na
+  // nota). Usado no cadastro fiscal do cliente pra não fazer ninguém procurar
+  // esse número.
+  registrarCanal('fiscal:buscarCep', async (cep: string) => {
+    try {
+      requerSessao()
+      const limpo = apenasDigitos(cep ?? '')
+      if (limpo.length !== 8) throw new Error('CEP inválido.')
+      const r = await chamarBackendFiscal(`/fiscal/cep/${limpo}`)
+      return { success: true, data: r.endereco }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // DANFE em PDF, no tamanho da bobina. É o documento que o cliente leva —
+  // equivale ao cupom, mas com valor fiscal. Baixar não custa crédito, então
+  // reimprimir é de graça.
+  registrarCanal('fiscal:danfe', async (args: { vendaId: number }) => {
+    try {
+      requerSessao()
+      const nota = notaDaVenda(Number(args?.vendaId))
+      if (!nota) throw new Error('Esta venda não tem nota fiscal.')
+      if (nota.status !== 'autorizado') {
+        throw new Error('A nota ainda não foi autorizada pela SEFAZ.')
+      }
+      // Largura vale só pra NFC-e (bobina). A NF-e é A4 e o backend ignora.
+      const largura = lerConfig('fiscal_largura_bobina') === '58' ? 58 : 80
+      const r = await chamarBackendFiscal(
+        `/fiscal/nfce/${nota.referencia}/danfe?largura=${largura}`
+      )
+      return { success: true, data: { pdfBase64: String(r.pdfBase64 ?? ''), numero: nota.numero } }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Cancelamento da nota. Prazo legal curto (na NFC-e costuma ser 30 minutos) e
+  // justificativa obrigatória de 15+ caracteres — a SEFAZ exige.
+  registrarCanal(
+    'fiscal:cancelarNfce',
+    async (args: { vendaId: number; justificativa: string }) => {
+      try {
+        // Cancelar apaga um documento fiscal já emitido: é decisão do gerente.
+        requerDono()
+        const nota = notaDaVenda(Number(args?.vendaId))
+        if (!nota) throw new Error('Esta venda não tem nota fiscal.')
+        const justificativa = (args?.justificativa ?? '').trim()
+        if (justificativa.length < 15) {
+          throw new Error('A justificativa precisa ter pelo menos 15 caracteres.')
+        }
+        await chamarBackendFiscal(`/fiscal/nfce/${nota.referencia}/cancelamento`, {
+          metodo: 'POST',
+          corpo: { justificativa }
+        })
+        atualizarStatusNotaLocal(nota.referencia, 'cancelado', null, justificativa)
+        return { success: true, data: notaDaVenda(Number(args.vendaId)) }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  // Estado das notas de várias vendas — a lista de vendas pinta o status de
+  // cada linha com uma consulta só, sem ir à rede.
+  registrarCanal('fiscal:notasDasVendas', (ids: number[]) => {
+    try {
+      requerSessao()
+      const lista = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isInteger)
+      return { success: true, data: notasDasVendas(lista) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Estado remoto pro semáforo: saldo de créditos e certificado na ACBr.
+  registrarCanal('fiscal:statusRemoto', async () => {
+    try {
+      requerDono()
+      const [cert, cred] = await Promise.allSettled([
+        chamarBackendFiscal('/fiscal/certificado'),
+        chamarBackendFiscal('/fiscal/creditos')
+      ])
+      return {
+        success: true,
+        data: {
+          certificado:
+            cert.status === 'fulfilled'
+              ? { existe: Boolean(cert.value.existe), validade: cert.value.validade ?? '' }
+              : null,
+          creditos:
+            cred.status === 'fulfilled' ? Number(cred.value.creditos_disponiveis ?? 0) : null
+        }
+      }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // ── NFS-e (nota de serviço, municipal) ──────────────────────────────────────
+
+  /**
+   * A cidade da loja emite NFS-e?
+   *
+   * Primeira coisa que a tela pergunta, e a resposta fica em cache na config:
+   * "não atendida" precisa aparecer ANTES de o lojista ir atrás de Inscrição
+   * Municipal e alíquotas com o contador. NFC-e funciona em qualquer município;
+   * NFS-e depende de a prefeitura ter provedor integrado, e não ter é comum em
+   * cidade pequena.
+   */
+  registrarCanal('fiscal:consultarCidadeNfse', async () => {
+    try {
+      requerDono()
+      const ibge = lerConfig('fiscal_codigo_municipio').replace(/\D/g, '')
+      if (ibge.length !== 7) {
+        throw new Error(
+          'Antes de consultar, termine o passo 1: falta o município da empresa (o sistema o descobre pelo CEP).'
+        )
+      }
+      const r = await chamarBackendFiscal(`/fiscal/nfse/cidade/${ibge}`)
+      const atendida = Boolean(r.atendida)
+      const cidade = (r.cidade ?? null) as { provedor?: string; municipio?: string } | null
+      gravarConfig('fiscal_nfse_cidade_atendida', atendida ? 'sim' : 'nao')
+      gravarConfig('fiscal_nfse_provedor', cidade?.provedor ?? '')
+      return { success: true, data: { atendida, cidade } }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Manda pra ACBr a configuração de NFS-e da empresa: numeração do RPS e
+  // regime. É o passo equivalente ao CSC da NFC-e.
+  registrarCanal('fiscal:configurarNfse', async () => {
+    try {
+      requerDono()
+      const cfg = obterConfigFiscal()
+      if (!cfg.empresa_cadastrada) {
+        throw new Error('Cadastre a empresa e envie o certificado antes de habilitar a NFS-e.')
+      }
+      if (!cfg.nfse_serie_rps.trim()) {
+        throw new Error('Informe a série do RPS (a prefeitura diz qual usar).')
+      }
+      await chamarBackendFiscal('/fiscal/nfse-config', {
+        metodo: 'PUT',
+        corpo: {
+          config: {
+            ambiente: cfg.ambiente,
+            rps: {
+              numero: cfg.nfse_proximo_rps,
+              serie: cfg.nfse_serie_rps.trim(),
+              lote: cfg.nfse_lote
+            },
+            regTrib: { opSimpNac: cfg.nfse_optante_simples ? 2 : 1 }
+          }
+        }
+      })
+      gravarConfig('fiscal_nfse_configurada', '1')
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  /**
+   * Emite a NFS-e de uma venda.
+   *
+   * Emitir é rotina de balcão (`requerSessao`), como a NFC-e — a CONFIGURAÇÃO é
+   * que é do gerente. E, também como a NFC-e, a emissão é SEMPRE pós-venda
+   * gravada: prefeitura fora do ar não trava o caixa, a nota fica pendente.
+   */
+  registrarCanal('fiscal:emitirNfse', async (args: { vendaId: number }) => {
+    try {
+      requerSessao()
+      const vendaId = Number(args?.vendaId)
+      const cfg = obterConfigFiscal()
+      if (!cfg.configurada) throw new Error('Configure a nota fiscal antes de emitir.')
+      if (cfg.nfse_cidade_atendida === 'nao') {
+        throw new Error(
+          'A prefeitura da sua cidade não é atendida para NFS-e. Fale com o suporte antes de tentar emitir.'
+        )
+      }
+
+      const venda = vendaParaNotaServico(vendaId)
+      if (!venda) throw new Error('Venda não encontrada.')
+      if (venda.cancelada) throw new Error('Esta venda está cancelada — não é possível emitir nota.')
+      if (venda.servicos.length === 0) {
+        throw new Error('Esta venda não tem serviço. A nota de mercadoria é a NFC-e ou a NF-e.')
+      }
+
+      // Barrado aqui, nomeando o serviço, em vez de gastar crédito pra receber
+      // rejeição em código da prefeitura.
+      const semClassificacao = venda.servicos.filter(
+        (s) => !s.item_lista_servico || s.aliquota_iss == null
+      )
+      if (semClassificacao.length > 0) {
+        throw new Error(
+          `Falta a classificação fiscal de: ${semClassificacao.map((s) => s.nome).join(', ')}. ` +
+            'Preencha o item da lista de serviços (LC 116) e a alíquota de ISS em Produtos e Serviços.'
+        )
+      }
+
+      const jaVigente = notaServicoDaVenda(vendaId)
+      if (jaVigente && ['autorizada', 'processando'].includes(jaVigente.status)) {
+        return { success: true, data: { jaEmitida: true, nota: jaVigente } }
+      }
+
+      // Referência com prefixo 's': a idempotência do backend é por referência
+      // dentro do cliente, e a NFC-e da MESMA venda usa 'v<id>-t<n>'.
+      const tentativa = proximaTentativaServico(vendaId)
+      const referencia = `s${vendaId}-t${tentativa}`
+
+      const r = await chamarBackendFiscal(`/fiscal/nfse?ambiente=${cfg.ambiente}`, {
+        metodo: 'POST',
+        corpo: {
+          referencia,
+          prestador: {
+            codigo_municipio: cfg.codigo_municipio,
+            iss_retido: cfg.nfse_iss_retido
+          },
+          venda: {
+            desconto: venda.desconto,
+            discriminacao: (args as { discriminacao?: string })?.discriminacao,
+            tomador: venda.tomador
+              ? {
+                  nome: venda.tomador.nome,
+                  cpf: venda.tomador.cpf ?? undefined,
+                  cnpj: venda.tomador.cnpj ?? undefined,
+                  email: undefined,
+                  telefone: venda.tomador.telefone ?? undefined,
+                  endereco: {
+                    logradouro: venda.tomador.logradouro ?? undefined,
+                    numero: venda.tomador.numero ?? undefined,
+                    complemento: venda.tomador.complemento ?? undefined,
+                    bairro: venda.tomador.bairro ?? undefined,
+                    cidade: venda.tomador.cidade ?? undefined,
+                    uf: venda.tomador.uf ?? undefined,
+                    cep: venda.tomador.cep ?? undefined,
+                    codigo_municipio: venda.tomador.codigo_municipio ?? undefined
+                  }
+                }
+              : { nome: '' },
+            servicos: venda.servicos.map((s) => ({
+              nome: s.nome,
+              item_lista_servico: s.item_lista_servico ?? '',
+              aliquota_iss: Number(s.aliquota_iss ?? 0),
+              codigo_tributacao_municipio: s.codigo_tributacao_municipio ?? undefined,
+              codigo_cnae: s.codigo_cnae ?? undefined,
+              quantidade: s.quantidade,
+              valor_unitario: s.valor_unitario
+            }))
+          }
+        }
+      })
+
+      const emissao = (r.emissao ?? {}) as {
+        numero?: number
+        acbr_id?: string | null
+        status?: string
+        codigo_verificacao?: string | null
+        link_url?: string | null
+        motivo?: string | null
+      }
+
+      registrarNotaServicoLocal({
+        venda_id: vendaId,
+        tentativa,
+        referencia,
+        acbr_id: emissao.acbr_id ?? null,
+        ambiente: cfg.ambiente,
+        numero: emissao.numero ?? 0,
+        codigo_verificacao: emissao.codigo_verificacao ?? null,
+        link_url: emissao.link_url ?? null,
+        status: emissao.status ?? 'processando',
+        motivo: emissao.motivo ?? null
+      })
+
+      return {
+        success: true,
+        data: { jaEmitida: Boolean(r.jaEmitida), nota: notaServicoDaVenda(vendaId) }
+      }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // A prefeitura responde em segundos, mas não na mesma requisição. Consultar
+  // status não custa crédito.
+  registrarCanal('fiscal:statusNfse', async (args: { vendaId: number }) => {
+    try {
+      requerSessao()
+      const nota = notaServicoDaVenda(Number(args?.vendaId))
+      if (!nota) return { success: true, data: null }
+      if (nota.status !== 'processando') return { success: true, data: nota }
+
+      const r = await chamarBackendFiscal(`/fiscal/nfse/${nota.referencia}`)
+      const e = (r.emissao ?? {}) as {
+        status?: string
+        chave?: string | null
+        numero?: number
+      }
+      if (e.status && e.status !== nota.status) {
+        atualizarStatusNotaServicoLocal(
+          nota.referencia,
+          e.status,
+          e.chave ?? null,
+          (r.motivo as string | null) ?? null,
+          e.numero
+        )
+      }
+      return { success: true, data: notaServicoDaVenda(Number(args.vendaId)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // DANFSE em PDF. Diferente do DANFE da NFC-e, é A4 — o cliente recebe por
+  // e-mail ou impresso em folha, nunca na bobina.
+  registrarCanal('fiscal:danfse', async (args: { vendaId: number }) => {
+    try {
+      requerSessao()
+      const nota = notaServicoDaVenda(Number(args?.vendaId))
+      if (!nota) throw new Error('Esta venda não tem nota de serviço.')
+      if (nota.status !== 'autorizada') {
+        throw new Error('A nota ainda não foi autorizada pela prefeitura.')
+      }
+      const r = await chamarBackendFiscal(`/fiscal/nfse/${nota.referencia}/pdf`)
+      return { success: true, data: { pdfBase64: r.pdfBase64 as string } }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Cancelar é do GERENTE: o técnico emite, mas desfazer documento fiscal não
+  // é decisão de balcão. Mesma regra da NFC-e.
+  registrarCanal(
+    'fiscal:cancelarNfse',
+    async (args: { vendaId: number; justificativa: string }) => {
+      try {
+        requerDono()
+        const nota = notaServicoDaVenda(Number(args?.vendaId))
+        if (!nota) throw new Error('Esta venda não tem nota de serviço.')
+        await chamarBackendFiscal(`/fiscal/nfse/${nota.referencia}/cancelamento`, {
+          metodo: 'POST',
+          corpo: { justificativa: args?.justificativa ?? '' }
+        })
+        atualizarStatusNotaServicoLocal(nota.referencia, 'cancelada', null, null)
+        return { success: true, data: notaServicoDaVenda(Number(args.vendaId)) }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  registrarCanal('fiscal:notasServicoDasVendas', (ids: number[]) => {
+    try {
+      requerSessao()
+      return { success: true, data: notasServicoDasVendas(Array.isArray(ids) ? ids : []) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // ── Classificação fiscal dos serviços ───────────────────────────────────────
+  // O par item da LC 116 + alíquota de ISS vem do contador. São poucos serviços
+  // numa assistência, então não há aplicação em lote como nos produtos: cada um
+  // tem o seu item e a sua alíquota, e agrupar convidaria ao erro.
+  registrarCanal('fiscal:obterServico', (id: number) => {
+    try {
+      requerDono()
+      return { success: true, data: obterFiscalServico(Number(id)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('fiscal:salvarServico', (id: number, dados: FiscalServico) => {
+    try {
+      requerDono()
+      salvarFiscalServico(Number(id), dados)
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('fiscal:listarServicos', () => {
+    try {
+      requerDono()
+      return { success: true, data: listarServicosParaClassificar() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('fiscal:diagnosticoNfse', () => {
+    try {
+      requerDono()
+      return { success: true, data: diagnosticoNfse() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+}

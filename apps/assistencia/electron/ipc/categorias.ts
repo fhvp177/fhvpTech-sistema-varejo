@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   listarCategorias,
   criarCategoria,
@@ -10,7 +10,7 @@ import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager
 import { requerDono } from '../sessao'
 
 export function registrarHandlersCategorias(): void {
-  ipcMain.handle('categorias:listar', () => {
+  registrarCanal('categorias:listar', () => {
     try {
       return { success: true, data: listarCategorias() }
     } catch (error) {
@@ -18,7 +18,7 @@ export function registrarHandlersCategorias(): void {
     }
   })
 
-  ipcMain.handle('categorias:criar', (_event, nome: string) => {
+  registrarCanal('categorias:criar', (nome: string) => {
     try {
       requerDono()
       const resultado = criarCategoria(nome)
@@ -33,7 +33,7 @@ export function registrarHandlersCategorias(): void {
     }
   })
 
-  ipcMain.handle('categorias:atualizar', (_event, id: number, nome: string) => {
+  registrarCanal('categorias:atualizar', (id: number, nome: string) => {
     try {
       requerDono()
       atualizarCategoria(id, nome)
@@ -48,7 +48,7 @@ export function registrarHandlersCategorias(): void {
     }
   })
 
-  ipcMain.handle('categorias:deletar', (_event, id: number) => {
+  registrarCanal('categorias:deletar', (id: number) => {
     try {
       requerDono()
       deletarCategoria(id)
@@ -59,7 +59,7 @@ export function registrarHandlersCategorias(): void {
     }
   })
 
-  ipcMain.handle('categorias:definir-tamanhos', (_event, id: number, usa: boolean) => {
+  registrarCanal('categorias:definir-tamanhos', (id: number, usa: boolean) => {
     try {
       requerDono()
       definirUsaTamanhos(id, usa)

@@ -1,8 +1,11 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { criarVenda } from './vendas'
 import {
   estaEncerrada,
   podeTransitar,
   ROTULOS_STATUS,
+  type CategoriaOS,
+  type NaturezaOS,
   type StatusOS,
   type TipoAtendimento
 } from './osCiclo'
@@ -22,6 +25,10 @@ export type ItemOS = {
   produto_nome?: string
   produto_tipo?: string
   tamanho?: string | null
+  // null = serviço (quantidade livre). Pra peça, é o saldo ATUAL do estoque —
+  // a UI avisa quando o orçamento promete mais do que existe (a trava dura
+  // continua no fechamento, via criarVenda).
+  estoque_disponivel?: number | null
 }
 
 export type HistoricoOS = {
@@ -34,9 +41,19 @@ export type HistoricoOS = {
   criada_em: string
 }
 
+export type FotoOS = {
+  id: number
+  os_id: number
+  nome: string | null
+  dados: string // data URL (image/jpeg redimensionada no renderer)
+  criada_em: string
+}
+
 export type OrdemServico = {
   id: number
   tipo_atendimento: TipoAtendimento
+  natureza: NaturezaOS
+  categoria: CategoriaOS
   cliente_id: number
   tecnico_id: number
   status: StatusOS
@@ -71,6 +88,8 @@ export type OrdemDetalhada = OrdemServico & {
 
 export type DadosNovaOS = {
   tipo_atendimento: TipoAtendimento
+  natureza?: NaturezaOS // ausente = 'conserto'
+  categoria?: CategoriaOS // ausente = 'equipamento'; 'cftv' força atendimento externo
   cliente_id: number
   defeito_relatado: string
   equipamento?: string | null
@@ -137,7 +156,10 @@ export function obterOS(id: number): OrdemDetalhada | null {
 
   const itens = db
     .prepare(
-      `SELECT i.*, p.nome AS produto_nome, p.tipo AS produto_tipo, pv.tamanho AS tamanho
+      `SELECT i.*, p.nome AS produto_nome, p.tipo AS produto_tipo, pv.tamanho AS tamanho,
+              CASE WHEN p.tipo = 'servico' THEN NULL
+                   WHEN i.variacao_id IS NOT NULL THEN pv.estoque
+                   ELSE p.estoque END AS estoque_disponivel
        FROM os_itens i
        JOIN produtos p ON p.id = i.produto_id
        LEFT JOIN produto_variacoes pv ON pv.id = i.variacao_id
@@ -174,9 +196,14 @@ export function criarOS(dados: DadosNovaOS, tecnicoId: number): OrdemDetalhada {
   if (!cliente) throw new Error('Cliente não encontrado.')
 
   const defeito = limpar(dados.defeito_relatado)
-  if (!defeito) throw new Error('Descreva o defeito relatado pelo cliente.')
+  if (!defeito) throw new Error('Descreva o que precisa ser feito (defeito relatado ou serviço solicitado).')
 
-  const tipo: TipoAtendimento = dados.tipo_atendimento === 'externo' ? 'externo' : 'bancada'
+  // CFTV é sempre atendimento no local — o sistema mora na casa do cliente.
+  // (Se ele trouxer só o DVR pro balcão, isso é uma OS de equipamento.)
+  const categoria: CategoriaOS = dados.categoria === 'cftv' ? 'cftv' : 'equipamento'
+  const tipo: TipoAtendimento =
+    categoria === 'cftv' || dados.tipo_atendimento === 'externo' ? 'externo' : 'bancada'
+  const natureza: NaturezaOS = dados.natureza === 'instalacao' ? 'instalacao' : 'conserto'
   const equipamento = limpar(dados.equipamento)
   const endereco = limpar(dados.endereco_atendimento)
   if (tipo === 'bancada' && !equipamento) {
@@ -191,16 +218,20 @@ export function criarOS(dados: DadosNovaOS, tecnicoId: number): OrdemDetalhada {
     const r = db
       .prepare(
         `INSERT INTO ordens_servico
-           (tipo_atendimento, cliente_id, tecnico_id, equipamento, numero_serie, acessorios,
+           (tipo_atendimento, natureza, categoria, cliente_id, tecnico_id, equipamento, numero_serie, acessorios,
             estado_entrada, senha_acesso, endereco_atendimento, agendado_para, defeito_relatado)
-         VALUES (@tipo, @cliente_id, @tecnico_id, @equipamento, @numero_serie, @acessorios,
+         VALUES (@tipo, @natureza, @categoria, @cliente_id, @tecnico_id, @equipamento, @numero_serie, @acessorios,
                  @estado_entrada, @senha_acesso, @endereco, @agendado_para, @defeito)`
       )
       .run({
         tipo,
+        natureza,
+        categoria,
         cliente_id: dados.cliente_id,
         tecnico_id: tecnicoId,
-        equipamento: tipo === 'bancada' ? equipamento : null,
+        // No externo o equipamento é opcional: descreve o sistema/aparelho
+        // atendido no local (ex.: "DVR Intelbras 8 canais + 6 câmeras").
+        equipamento,
         numero_serie: tipo === 'bancada' ? limpar(dados.numero_serie) : null,
         acessorios: tipo === 'bancada' ? limpar(dados.acessorios) : null,
         estado_entrada: tipo === 'bancada' ? limpar(dados.estado_entrada) : null,
@@ -294,6 +325,16 @@ export function definirItensOS(osId: number, itens: DadosItemOS[], vendedorId: n
     }
     const p = db.prepare('SELECT id FROM produtos WHERE id = ?').get(item.produto_id)
     if (!p) throw new Error(`Produto/serviço #${item.produto_id} não encontrado.`)
+    // Variação (se veio) tem que existir E ser do próprio produto — senão o
+    // fechamento baixaria o estoque do tamanho errado.
+    if (item.variacao_id != null) {
+      const v = db
+        .prepare('SELECT produto_id FROM produto_variacoes WHERE id = ?')
+        .get(item.variacao_id) as { produto_id: number } | undefined
+      if (!v || v.produto_id !== item.produto_id) {
+        throw new Error('Variação inválida para esse produto.')
+      }
+    }
   }
 
   db.transaction(() => {
@@ -333,9 +374,9 @@ export function mudarStatusOS(
 ): void {
   const db = obterBancoDeDados()
   const os = db
-    .prepare('SELECT status, tipo_atendimento, agendado_para FROM ordens_servico WHERE id = ?')
+    .prepare('SELECT status, tipo_atendimento, agendado_para, os_origem_id FROM ordens_servico WHERE id = ?')
     .get(id) as
-    | { status: StatusOS; tipo_atendimento: TipoAtendimento; agendado_para: string | null }
+    | { status: StatusOS; tipo_atendimento: TipoAtendimento; agendado_para: string | null; os_origem_id: number | null }
     | undefined
   if (!os) throw new Error('OS não encontrada.')
 
@@ -356,7 +397,10 @@ export function mudarStatusOS(
     throw new Error('Informe o motivo do cancelamento.')
   }
 
-  if (novo === 'aguardando_aprovacao') {
+  // OS comum sem item aprovada = serviço entregue de graça lá na frente.
+  // A exceção é a OS de garantia (os_origem_id): ela é cortesia por natureza —
+  // a "aprovação" dela é o cliente autorizar o retrabalho, sem orçamento.
+  if (novo === 'aguardando_aprovacao' && os.os_origem_id == null) {
     const { n } = db.prepare('SELECT COUNT(*) AS n FROM os_itens WHERE os_id = ?').get(id) as { n: number }
     if (n === 0) throw new Error('Adicione ao menos um item ao orçamento antes de enviar pra aprovação.')
   }
@@ -377,6 +421,156 @@ export function mudarStatusOS(
     ).run({ id, novo, agendado_para: agendadoPara })
     gravarHistorico(id, novo, observacao, vendedorId)
   })()
+}
+
+export type DadosFechamentoOS = {
+  status_pagamento: 'pago' | 'pendente' | 'parcelado'
+  data_vencimento?: string | null
+  num_parcelas?: number | null
+  entrada?: number
+}
+
+// Entrega e recebe: o momento em que a OS encontra a máquina de vendas. Os
+// itens do orçamento viram uma venda comum (mesmo criarVenda do PDV — baixa
+// peça do estoque, respeita crediário/parcelas/entrada, alimenta relatórios) e
+// a OS carimba entrega + garantia. OS SEM itens (cortesia/garantia) entrega
+// sem gerar venda. Tudo numa transação: se a venda falhar (ex.: estoque da
+// peça acabou), nada muda.
+export function fecharOS(id: number, dados: DadosFechamentoOS, vendedorId: number): OrdemDetalhada {
+  const db = obterBancoDeDados()
+  const os = obterOS(id)
+  if (!os) throw new Error('OS não encontrada.')
+  if (!podeTransitar(os.status, 'entregue', os.tipo_atendimento)) {
+    throw new Error(
+      `Só dá pra entregar uma OS que está "Pronta". Status atual: ${ROTULOS_STATUS[os.status]}.`
+    )
+  }
+
+  // Valida o combinado ANTES de tocar no banco. O criarVenda barra estoque e
+  // entrada, mas vencimento/parcelas passavam crus até ele — e uma venda a
+  // prazo sem vencimento (ou "parcelada" sem NENHUMA parcela criada) nasceria
+  // invisível pras cobranças. Esta é a fronteira da OS: nada entra pela metade.
+  const forma = dados.status_pagamento
+  if (forma !== 'pago' && forma !== 'pendente' && forma !== 'parcelado') {
+    throw new Error('Forma de recebimento inválida.')
+  }
+  const total = +os.itens.reduce((s, i) => s + i.quantidade * i.preco_unitario, 0).toFixed(2)
+  let vencimento: string | null = null
+  let numParcelas: number | null = null
+  let entrada = 0
+  if (os.itens.length > 0 && forma !== 'pago') {
+    if (total <= 0) {
+      throw new Error('O total da OS é zero — não há nada pra receber depois. Use "À vista".')
+    }
+    vencimento = (dados.data_vencimento ?? '').trim() || null
+    if (!vencimento || !/^\d{4}-\d{2}-\d{2}$/.test(vencimento)) {
+      throw new Error(forma === 'parcelado' ? 'Informe a data do 1º vencimento.' : 'Informe a data de vencimento.')
+    }
+    if (forma === 'parcelado') {
+      const n = dados.num_parcelas
+      if (!Number.isInteger(n) || (n as number) < 2 || (n as number) > 12) {
+        throw new Error('Parcelamento exige de 2 a 12 parcelas.')
+      }
+      numParcelas = n as number
+    }
+    const e = dados.entrada ?? 0
+    if (typeof e !== 'number' || !Number.isFinite(e) || e < 0) {
+      throw new Error('Valor de entrada inválido.')
+    }
+    entrada = e
+  }
+
+  db.transaction(() => {
+    let vendaId: number | null = null
+    if (os.itens.length > 0) {
+      const venda = criarVenda({
+        cliente_id: os.cliente_id,
+        vendedor_id: vendedorId,
+        status_pagamento: forma,
+        data_vencimento: vencimento,
+        num_parcelas: numParcelas,
+        entrada,
+        itens: os.itens.map((i) => ({
+          produto_id: i.produto_id,
+          variacao_id: i.variacao_id,
+          quantidade: i.quantidade,
+          preco_unitario: i.preco_unitario
+        }))
+      })
+      vendaId = venda.id
+    }
+    db.prepare(
+      `UPDATE ordens_servico
+       SET status = 'entregue', entregue_em = datetime('now', 'localtime'), venda_id = ?
+       WHERE id = ?`
+    ).run(vendaId, id)
+    gravarHistorico(
+      id,
+      'entregue',
+      vendaId ? `Venda #${vendaId} gerada no recebimento` : 'Entrega sem cobrança',
+      vendedorId
+    )
+  })()
+
+  return obterOS(id)!
+}
+
+// ── Registro fotográfico (ilustra o laudo técnico) ──
+// Fotos moram no banco (data URL JPEG já redimensionada pelo renderer) pra
+// viajar no MESMO backup do resto. Tetos aqui: 12 fotos por OS e ~2MB cada —
+// o renderer comprime pra bem menos, o teto é cinto de segurança.
+
+const MAX_FOTOS_POR_OS = 12
+const MAX_TAMANHO_FOTO = 3_000_000 // chars do data URL (~2,2MB de imagem)
+
+export function listarFotosOS(osId: number): FotoOS[] {
+  const db = obterBancoDeDados()
+  return db
+    .prepare('SELECT * FROM os_fotos WHERE os_id = ? ORDER BY id')
+    .all(osId) as FotoOS[]
+}
+
+export function adicionarFotoOS(osId: number, nome: string | null, dados: string): FotoOS[] {
+  const db = obterBancoDeDados()
+  const os = db.prepare('SELECT status FROM ordens_servico WHERE id = ?').get(osId) as
+    | { status: StatusOS }
+    | undefined
+  if (!os) throw new Error('OS não encontrada.')
+  if (estaEncerrada(os.status)) {
+    throw new Error(`Esta OS está encerrada (${ROTULOS_STATUS[os.status]}) — as fotos dela ficam como estão.`)
+  }
+  if (typeof dados !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(dados)) {
+    throw new Error('Arquivo inválido: envie uma imagem (JPG, PNG ou WebP).')
+  }
+  if (dados.length > MAX_TAMANHO_FOTO) {
+    throw new Error('Foto grande demais. Tente uma imagem menor.')
+  }
+  const { n } = db.prepare('SELECT COUNT(*) AS n FROM os_fotos WHERE os_id = ?').get(osId) as { n: number }
+  if (n >= MAX_FOTOS_POR_OS) {
+    throw new Error(`Esta OS já tem ${MAX_FOTOS_POR_OS} fotos — remova alguma antes de adicionar outra.`)
+  }
+  db.prepare('INSERT INTO os_fotos (os_id, nome, dados) VALUES (?, ?, ?)').run(
+    osId,
+    limpar(nome),
+    dados
+  )
+  return listarFotosOS(osId)
+}
+
+export function removerFotoOS(fotoId: number): FotoOS[] {
+  const db = obterBancoDeDados()
+  const foto = db.prepare('SELECT os_id FROM os_fotos WHERE id = ?').get(fotoId) as
+    | { os_id: number }
+    | undefined
+  if (!foto) throw new Error('Foto não encontrada.')
+  const os = db.prepare('SELECT status FROM ordens_servico WHERE id = ?').get(foto.os_id) as
+    | { status: StatusOS }
+    | undefined
+  if (os && estaEncerrada(os.status)) {
+    throw new Error(`Esta OS está encerrada (${ROTULOS_STATUS[os.status]}) — as fotos dela ficam como estão.`)
+  }
+  db.prepare('DELETE FROM os_fotos WHERE id = ?').run(fotoId)
+  return listarFotosOS(foto.os_id)
 }
 
 // "Este aparelho já passou aqui antes?" — busca por número de série.
@@ -423,13 +617,15 @@ export function criarOSGarantia(osOrigemId: number, defeitoRelatado: string, tec
     const r = db
       .prepare(
         `INSERT INTO ordens_servico
-           (tipo_atendimento, cliente_id, tecnico_id, equipamento, numero_serie, senha_acesso,
+           (tipo_atendimento, natureza, categoria, cliente_id, tecnico_id, equipamento, numero_serie, senha_acesso,
             endereco_atendimento, defeito_relatado, os_origem_id)
-         VALUES (@tipo, @cliente_id, @tecnico_id, @equipamento, @numero_serie, @senha_acesso,
+         VALUES (@tipo, @natureza, @categoria, @cliente_id, @tecnico_id, @equipamento, @numero_serie, @senha_acesso,
                  @endereco, @defeito, @origem_id)`
       )
       .run({
         tipo: origem.tipo_atendimento,
+        natureza: origem.natureza,
+        categoria: origem.categoria,
         cliente_id: origem.cliente_id,
         tecnico_id: tecnicoId,
         equipamento: origem.equipamento,

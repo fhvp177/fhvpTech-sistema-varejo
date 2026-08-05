@@ -1,6 +1,7 @@
-import { FC, useEffect, useRef, useState } from 'react'
+import { FC, Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2 } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
+import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
@@ -24,10 +25,20 @@ import { obterDadosLoja } from '@/utils/dadosLoja'
 import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido, type VencimentosMes } from '@/utils/relatorioVendas'
-import { usePdvMode, useSessao } from '@/App'
+import { useCalculadora, usePdvMode, useSessao } from '@/App'
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
 import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancelarVenda'
+
+// Nota fiscal só existe no plano Pro. Com a flag falsa, o `lazy` vira null e o
+// bundler tira o componente (e o chunk) do binário do Básico.
+const BotaoNotaServico = __FEAT_NFE__
+  ? lazy(() => import('@/components/BotaoNotaServico'))
+  : null
+
+const BotaoNotaFiscal = __FEAT_NFE__
+  ? lazy(() => import('@/components/BotaoNotaFiscal'))
+  : null
 
 const ITENS_POR_PAGINA = 20
 
@@ -62,6 +73,9 @@ type Venda = {
   cliente_telefone?: string | null
   cliente_endereco?: string | null
   cliente_cpf?: string | null
+  cliente_tipo_pessoa?: 'fisica' | 'juridica' | null
+  /** 1 quando a venda tem mão de obra — só então cabe nota de serviço. */
+  tem_servico?: number
   vendedor_nome?: string | null
   cancelada?: number
   cancelada_em?: string | null
@@ -115,6 +129,7 @@ type Variacao = {
 type Produto = {
   id: number
   codigo_barras: string | null
+  referencia: string | null
   nome: string
   tipo: 'produto' | 'servico'
   preco: number
@@ -231,6 +246,8 @@ const Vendas: FC = () => {
 // ─── Histórico de Vendas ──────────────────────────────────────────────────────
 
 const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
+  const { ehCaixaAdicional, conectado } = useSituacaoMulticaixa()
+  const semCaixaPrincipal = ehCaixaAdicional && !conectado
   const [lista, setLista] = useState<Venda[]>([])
   const [listaCanceladas, setListaCanceladas] = useState<Venda[]>([])
   const [filtroStatus, setFiltroStatus] = useState<StatusPagamento | 'todos' | 'cancelada'>('todos')
@@ -244,6 +261,10 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [devolverVendaId, setDevolverVendaId] = useState<number | null>(null)
   const [vendaCancelar, setVendaCancelar] = useState<VendaCancelar | null>(null)
   const [menuImprimir, setMenuImprimir] = useState<{ vendaId: number; devolucoes: DevolucaoComItens[] } | null>(null)
+  // Nota fiscal de cada venda (só plano Pro). Mapa venda_id → nota.
+  const [notas, setNotas] = useState<Record<number, NotaFiscalVenda>>({})
+  // Notas de SERVIÇO, num mapa à parte: numa venda mista as duas convivem.
+  const [notasServico, setNotasServico] = useState<Record<number, NotaServicoVenda>>({})
   const [relatorioAberto, setRelatorioAberto] = useState(false)
   const [relMes, setRelMes] = useState('') // mês escolhido dentro do diálogo de relatório
   const [relIncluiProdutos, setRelIncluiProdutos] = useState(false)
@@ -259,7 +280,21 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
       window.api.vendas.listar(mes || undefined),
       window.api.vendas.listarCanceladas(mes || undefined)
     ])
-    if (resp.success) setLista(resp.data as Venda[])
+    if (resp.success) {
+      const vendas = resp.data as Venda[]
+      setLista(vendas)
+      // Estado fiscal de todas as vendas numa consulta só (local, sem rede) —
+      // uma por linha deixaria a lista lenta.
+      if (__FEAT_NFE__ && vendas.length) {
+        const ids = vendas.map((v) => v.id)
+        const [rn, rs] = await Promise.all([
+          window.api.fiscal.notasDasVendas(ids),
+          window.api.fiscal.notasServicoDasVendas(ids)
+        ])
+        if (rn.success) setNotas(rn.data)
+        if (rs.success) setNotasServico(rs.data)
+      }
+    }
     if (respCanc.success) setListaCanceladas(respCanc.data as Venda[])
   }
 
@@ -274,7 +309,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   }
 
   // Estorna UMA parcela paga: reverte o recebimento dela, em qualquer venda e a
-  // qualquer momento. Só o dono — a trava também é reforçada no processo main.
+  // qualquer momento. Só o gerente — a trava também é reforçada no processo main.
   const estornarParcela = async (parcela: Parcela) => {
     if (
       !(await confirmar({
@@ -295,7 +330,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   }
 
   // Estorna o recebimento inteiro de uma venda simples (à vista ou a prazo sem
-  // parcelas): reabre a venda. Só o dono.
+  // parcelas): reabre a venda. Só o gerente.
   const estornarRecebimento = async (venda: VendaDetalhada) => {
     // À vista grava valor_pago = 0 (o status 'pago' é que a marca como paga), então
     // o valor recebido de fato, para exibir, é o total nesse caso.
@@ -443,7 +478,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const salvarPdfCupom = async (id: number) => {
     const doc = await gerarCupom(id)
     if (!doc) return
-    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome)
+    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome, 'cupom')
     if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
   }
 
@@ -487,7 +522,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
   const salvarPdfComprovanteDevolucao = async (dev: DevolucaoComItens) => {
     const doc = await gerarComprovanteDevolucao(dev)
-    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome)
+    const r = await window.api.impressao.salvarPdf(doc.html, doc.nome, 'cupom')
     if (!r.success) alert(`Erro ao salvar PDF: ${r.error}`)
   }
 
@@ -549,17 +584,31 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Vendas</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Vendas</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Levou embora agora? É venda. Ficou pra fazer? Abra uma OS.
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button
             variant="outline"
+            data-tour="vendas-relatorio"
             onClick={() => { setRelMes(filtroMes || mesMaximo); setRelatorioAberto(true) }}
             disabled={lista.length === 0}
           >
             <FileText className="w-4 h-4 mr-2" />
             Relatório do mês
           </Button>
-          <Button onClick={onNova}>
+          {/* Sem contato com o caixa principal, abrir o PDV só levaria o
+              operador a montar uma venda inteira para descobrir no fim que ela
+              não pode ser registrada. Melhor barrar na entrada e dizer por quê. */}
+          <Button
+            onClick={onNova}
+            data-tour="vendas-nova"
+            disabled={semCaixaPrincipal}
+            title={semCaixaPrincipal ? 'Sem conexão com o caixa principal.' : undefined}
+          >
             <Plus className="w-4 h-4 mr-2" />
             Nova Venda (PDV)
           </Button>
@@ -613,7 +662,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         </div>
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -720,6 +769,47 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     >
                       <Printer className="w-4 h-4" />
                     </Button>
+                    {BotaoNotaFiscal && (
+                      <Suspense fallback={null}>
+                        <BotaoNotaFiscal
+                          vendaId={v.id}
+                          aPrazo={v.status_pagamento !== 'pago'}
+                          clienteTipoPessoa={v.cliente_tipo_pessoa}
+                          ehDono={ehDono}
+                          nota={notas[v.id] ?? null}
+                          onMudou={(nota) =>
+                            setNotas((m) => {
+                              if (!nota) {
+                                const { [v.id]: _, ...resto } = m
+                                return resto
+                              }
+                              return { ...m, [v.id]: nota }
+                            })
+                          }
+                        />
+                      </Suspense>
+                    )}
+                    {/* Nota de serviço: só aparece quando houve mão de obra. Na
+                        venda mista ela fica LADO A LADO com a de mercadoria —
+                        são documentos que se somam, não alternativas. */}
+                    {BotaoNotaServico && Boolean(v.tem_servico) && (
+                      <Suspense fallback={null}>
+                        <BotaoNotaServico
+                          vendaId={v.id}
+                          ehDono={ehDono}
+                          nota={notasServico[v.id] ?? null}
+                          onMudou={(nota) =>
+                            setNotasServico((m) => {
+                              if (!nota) {
+                                const { [v.id]: _, ...resto } = m
+                                return resto
+                              }
+                              return { ...m, [v.id]: nota }
+                            })
+                          }
+                        />
+                      </Suspense>
+                    )}
                     {v.status_pagamento === 'pago' && seloDevolucao(v)?.label !== 'Totalmente devolvida' && (
                       <Button
                         variant="ghost"
@@ -819,7 +909,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
               )}
 
               {/* Itens da venda */}
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full table-fixed text-sm">
                   <thead className="bg-muted/50">
                     <tr>
@@ -924,7 +1014,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
               {vendaDetalhada.parcelas.length > 0 && (
                 <div>
                   <p className="font-medium mb-1.5">Parcelas</p>
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-lg overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
@@ -1209,6 +1299,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
 const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { setAtivo: setPdvAtivo } = usePdvMode()
+  const { aberta: calculadoraAberta } = useCalculadora()
   const { ehDono } = useSessao()
   const { showToast } = useToast()
   const imprimir = useImprimir()
@@ -1296,7 +1387,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const finalizarVendaRef = useRef<() => void>(() => {})
   const abrirClienteRapidoRef = useRef<() => void>(() => {})
   const abrirProdutoRapidoRef = useRef<() => void>(() => {})
-  // O que rodar quando um dono autoriza no modal de elevação — recebe o PIN
+  // O que rodar quando um gerente autoriza no modal de elevação — recebe o PIN
   // digitado pra revalidação no backend (ex.: cadastro de produto por vendedor).
   const aoElevarRef = useRef<(pin: string) => void>(() => {})
   const onSairRef = useRef(onSair)
@@ -1521,11 +1612,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       return
     }
 
-    // Vendedor (não-dono) só finaliza desconto acima do teto se um dono autorizar
+    // Vendedor (não-gerente) só finaliza desconto acima do teto se um gerente autorizar
     if (descontoAcimaDoTeto) {
       setErro('')
       setMotivoElevar(
-        `O desconto aplicado (${descontoPctReal.toFixed(1)}%) ultrapassa o teto de ${tetoDesconto}% sem PIN do dono. Peça pra um dono digitar o PIN dele pra autorizar esta venda.`
+        `O desconto aplicado (${descontoPctReal.toFixed(1)}%) ultrapassa o teto de ${tetoDesconto}% sem PIN do gerente. Peça pra um gerente digitar o PIN dele pra autorizar esta venda.`
       )
       aoElevarRef.current = () => persistirVenda()
       setModalElevarAberto(true)
@@ -1576,18 +1667,40 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           e.preventDefault()
           finalizarVendaRef.current()
           break
-        case 'Escape':
-          // Se algum modal estiver aberto, deixa o Radix fechá-lo (não previne).
-          // Só sai do PDV se nada estiver aberto.
-          if (consultaPrecoAberta || buscaProdutos || modalClienteAberto || modalProdutoAberto || modalElevarAberto) return
+        case 'Escape': {
+          // Esc é sempre "fecha o que está por cima" — só é "sai do caixa"
+          // quando não há nada por cima. A busca de cliente (F4) tem estado
+          // próprio dentro do componente, por isso é consultada pela ref.
+          const algoAberto =
+            consultaPrecoAberta ||
+            buscaProdutos ||
+            modalClienteAberto ||
+            modalProdutoAberto ||
+            modalElevarAberto ||
+            calculadoraAberta ||
+            (clienteSeletorRef.current?.estaAberto() ?? false) ||
+            // Rede de segurança: qualquer diálogo aberto na tela, inclusive os
+            // que não são desta página (aviso de atualização, por exemplo) e os
+            // que alguém adicionar aqui amanhã sem lembrar desta lista. Na fase
+            // de captura ele ainda está montado, então dá pra perguntar ao DOM.
+            document.querySelector('[role="dialog"][data-state="open"]') !== null
+          // Não previne: quem está aberto se fecha sozinho.
+          if (algoAberto) return
           e.preventDefault()
           onSairRef.current()
           break
+        }
       }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [consultaPrecoAberta, buscaProdutos, modalClienteAberto, modalProdutoAberto, modalElevarAberto])
+    // Fase de CAPTURA (o `true` no fim), não de bolha — e isso é o coração do
+    // conserto. O Radix fecha os diálogos num listener de captura no document, e
+    // o React aplica esse fechamento ainda DENTRO do mesmo evento de tecla. Na
+    // bolha, este handler rodava depois disso: o efeito já havia se re-registrado
+    // com o estado zerado, lia "nenhuma janela aberta" e derrubava o PDV inteiro
+    // junto com o diálogo. Na captura, quem decide é o estado de antes da tecla.
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [consultaPrecoAberta, buscaProdutos, modalClienteAberto, modalProdutoAberto, modalElevarAberto, calculadoraAberta])
 
   const abrirClienteRapido = () => {
     setTipoPessoaRapido('fisica')
@@ -1656,7 +1769,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   }
 
   // Cria o produto e já joga no carrinho. `pinDono` vai quando quem opera não é
-  // dono (revalidado no backend). Reaproveita o produto devolvido — sem reler o banco.
+  // gerente (revalidado no backend). Reaproveita o produto devolvido — sem reler o banco.
   const persistirProduto = async (pinDono?: string) => {
     setSalvandoProduto(true)
     setErroProduto('')
@@ -1694,22 +1807,31 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     const preco = parseFloat(precoProdutoRapido.replace(',', '.'))
     if (isNaN(preco) || preco <= 0) { setErroProduto('Informe um preço de venda válido.'); return }
 
-    // Dono cadastra direto; vendedor precisa do PIN de um dono (validado no backend).
+    // Gerente cadastra direto; vendedor precisa do PIN de um gerente (validado no backend).
     if (ehDono) {
       persistirProduto()
     } else {
-      setMotivoElevar('Cadastrar um produto novo precisa da autorização de um dono. Peça pra um dono digitar o PIN dele.')
+      setMotivoElevar('Cadastrar um produto novo precisa da autorização de um gerente. Peça pra um gerente digitar o PIN dele.')
       aoElevarRef.current = (pin) => persistirProduto(pin)
       setModalElevarAberto(true)
     }
   }
 
-  const produtosFiltrados = produtos.filter(
-    (p) =>
-      p.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
-      (p.codigo_barras ?? '').includes(termoBusca) ||
-      p.variacoes.some((v) => v.codigo_barras.includes(termoBusca))
-  )
+  // Referência exata primeiro: digitou "10", o produto ref. 10 encabeça a lista.
+  const termoBuscaLimpo = termoBusca.trim().toLowerCase()
+  const produtosFiltrados = produtos
+    .filter(
+      (p) =>
+        p.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
+        (p.codigo_barras ?? '').includes(termoBusca) ||
+        (p.referencia ?? '').toLowerCase().includes(termoBuscaLimpo) ||
+        p.variacoes.some((v) => v.codigo_barras.includes(termoBusca))
+    )
+    .sort((a, b) => {
+      if (!termoBuscaLimpo) return 0
+      const exato = (p: Produto) => ((p.referencia ?? '').toLowerCase() === termoBuscaLimpo ? 1 : 0)
+      return exato(b) - exato(a)
+    })
 
   return (
     <div className="flex flex-col h-full">
@@ -1735,11 +1857,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 value={codigoScan}
                 onChange={(e) => setCodigoScan(e.target.value)}
                 onKeyDown={handleScan}
-                placeholder="Aponte o leitor ou digite o código de barras..."
+                placeholder="Aponte o leitor ou digite o código/referência..."
+                data-tour="pdv-leitor"
                 className="flex h-10 w-full rounded-md border-2 border-primary bg-background px-3 py-2 pl-9 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
-            <Button variant="outline" onClick={() => { setBuscaProdutos(true); setTermoBusca('') }}>
+            <Button variant="outline" data-tour="pdv-buscar" onClick={() => { setBuscaProdutos(true); setTermoBusca('') }}>
               <ShoppingCart className="w-4 h-4 mr-2" />
               Buscar produto
             </Button>
@@ -1917,7 +2040,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </div>
           {!ehDono && (
             <p className={`text-[11px] mt-1 ${descontoAcimaDoTeto ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
-              Teto sem PIN do dono: {tetoDesconto}%
+              Teto sem PIN do gerente: {tetoDesconto}%
               {descontoAcimaDoTeto && ' — vai exigir autorização ao finalizar'}
             </p>
           )}
@@ -2339,7 +2462,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               autoFocus
-              placeholder="Nome ou código de barras..."
+              placeholder="Nome, referência ou código de barras..."
               value={termoBusca}
               onChange={(e) => setTermoBusca(e.target.value)}
               className="pl-9"
@@ -2353,7 +2476,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 return (
                   <div key={p.id} className={`px-3 py-2.5 text-sm ${i > 0 ? 'border-t' : ''}`}>
                     <div className="flex justify-between items-center gap-3">
-                      <div className="font-medium truncate min-w-0" title={p.nome}>{p.nome}</div>
+                      <div className="font-medium truncate min-w-0" title={p.nome}>
+                        {p.nome}
+                        {p.referencia && (
+                          <span className="ml-2 text-xs font-normal font-mono text-muted-foreground">Ref. {p.referencia}</span>
+                        )}
+                      </div>
                       <div className="font-semibold shrink-0">{fmt(p.preco)}</div>
                     </div>
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -2395,9 +2523,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 >
                   <div className="min-w-0">
                     <div className="font-medium truncate" title={p.nome}>{p.nome}</div>
-                    {!ehServico && (
-                      <div className="text-xs text-muted-foreground font-mono truncate" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
-                    )}
+                    <div className="text-xs text-muted-foreground font-mono truncate" title={p.codigo_barras ?? undefined}>
+                      {[p.referencia ? `Ref. ${p.referencia}` : '', ehServico ? '' : p.codigo_barras]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </div>
                   </div>
                   <div className="text-right shrink-0 ml-3">
                     <div className="font-semibold">{fmt(p.preco)}</div>
@@ -2424,7 +2554,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         produtos={produtos}
       />
 
-      {/* ── Autorização do dono pra desconto acima do teto ── */}
+      {/* ── Autorização do gerente pra desconto acima do teto ── */}
       <ModalElevarPrivilegio
         aberto={modalElevarAberto}
         onClose={() => setModalElevarAberto(false)}
@@ -2437,13 +2567,16 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     </div>
 
       {/* ── Barra de dicas com atalhos (estilo PDV antigo) ── */}
-      <div className="shrink-0 bg-slate-900 text-slate-300 text-xs px-4 py-1.5 flex items-center justify-center gap-5 flex-wrap select-none">
+      {/* Fonte grande e em caixa alta de propósito: o caixa lê esta barra de pé,
+          de relance e à distância do monitor — não é texto pra ser estudado. */}
+      <div className="shrink-0 bg-slate-900 text-slate-300 text-sm uppercase tracking-wide px-4 py-2 flex items-center justify-center gap-5 flex-wrap select-none">
         <DicaTecla tecla="F2" acao="Consulta preço" />
         <DicaTecla tecla="F3" acao="Buscar produto" />
         <DicaTecla tecla="F4" acao="Cliente" />
         <DicaTecla tecla="F5" acao="+ Cliente" />
         <DicaTecla tecla="F6" acao="+ Produto" />
         <DicaTecla tecla="F9" acao="Finalizar" />
+        <DicaTecla tecla="F10" acao="Calculadora" />
         <DicaTecla tecla="ESC" acao="Sair" />
       </div>
     </div>
@@ -2452,7 +2585,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
 
 const DicaTecla: FC<{ tecla: string; acao: string }> = ({ tecla, acao }) => (
   <span className="flex items-center gap-1.5">
-    <kbd className="px-1.5 py-0.5 bg-slate-700 border border-slate-600 rounded text-[10px] font-mono text-slate-100">
+    <kbd className="px-1.5 py-0.5 bg-slate-700 border border-slate-600 rounded text-[11px] font-mono text-slate-100">
       {tecla}
     </kbd>
     <span>{acao}</span>

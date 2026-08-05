@@ -135,9 +135,18 @@ export function listarVendas(mes?: string): Venda[] {
   return db
     .prepare(
       `SELECT v.*, c.nome AS cliente_nome,
+              c.tipo_pessoa AS cliente_tipo_pessoa,
               vd.nome AS vendedor_nome,
               COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente,
-              COALESCE(dev.valor_devolvido, 0) AS valor_devolvido
+              COALESCE(dev.valor_devolvido, 0) AS valor_devolvido,
+              -- A venda tem mão de obra? Decide se o botão da nota de SERVIÇO
+              -- aparece. Vem junto na lista de propósito: perguntar por linha
+              -- seriam 300 consultas ao abrir a tela.
+              EXISTS (
+                SELECT 1 FROM itens_venda iv
+                JOIN produtos p ON p.id = iv.produto_id
+                WHERE iv.venda_id = v.id AND p.tipo = 'servico'
+              ) AS tem_servico
        FROM vendas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
        LEFT JOIN vendedores vd ON vd.id = v.vendedor_id
@@ -313,7 +322,7 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   const creditoUsado = Math.max(0, +(dados.valor_credito_usado ?? 0).toFixed(2))
   if (creditoUsado > 0) {
     if (!dados.cliente_id) {
-      throw new Error('Para usar crédito, selecione o cliente dono do crédito.')
+      throw new Error('Para usar crédito, selecione o cliente gerente do crédito.')
     }
     if (dados.status_pagamento !== 'pago') {
       throw new Error('Crédito da loja só pode ser usado em venda à vista.')
@@ -528,7 +537,7 @@ export function pagarParcela(parcelaId: number): void {
 // Estorna (reverte) o recebimento de UMA parcela paga: devolve a parcela para
 // pendente ou inadimplente conforme já venceu, tira o valor do total recebido da
 // venda (valor_pago) e recalcula o status. É o inverso exato do pagarParcela e
-// funciona em qualquer parcela paga, a qualquer momento. Ação do dono — a trava
+// funciona em qualquer parcela paga, a qualquer momento. Ação do gerente — a trava
 // de permissão fica no IPC.
 export function estornarParcela(parcelaId: number): void {
   const db = obterBancoDeDados()
@@ -564,7 +573,7 @@ export function estornarParcela(parcelaId: number): void {
 // reabre a venda zerando o total recebido e voltando o status para pendente ou
 // inadimplente conforme o vencimento. Vendas simples não guardam os pagamentos
 // parciais individualmente, então o estorno é do recebimento inteiro — as
-// parceladas usam estornarParcela. Ação do dono (trava no IPC).
+// parceladas usam estornarParcela. Ação do gerente (trava no IPC).
 export function estornarRecebimento(vendaId: number): void {
   const db = obterBancoDeDados()
   const venda = db
@@ -673,6 +682,32 @@ export function cancelarVenda(id: number, canceladaPorId: number, motivo: string
   if (!estado) throw new Error('Venda não encontrada.')
   const elegivel = avaliarCancelamento(estado)
   if (!elegivel.permitido) throw new Error(elegivel.motivo)
+
+  // Venda com nota fiscal VÁLIDA não pode ser cancelada por aqui: o documento
+  // continuaria valendo na SEFAZ, com mercadoria que não saiu. Cancelar a nota
+  // é ato fiscal próprio (prazo curto, justificativa, registro na SEFAZ), então
+  // exige ser feito antes — de propósito, na tela da nota.
+  //
+  // A tabela pode não existir em instalação que nunca teve o módulo fiscal.
+  const temTabelaNota = db
+    .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'nfce_emitidas'`)
+    .get()
+  if (temTabelaNota) {
+    const notaViva = db
+      .prepare(
+        `SELECT numero, status FROM nfce_emitidas
+         WHERE venda_id = ? AND status IN ('autorizado','pendente')
+         ORDER BY tentativa DESC LIMIT 1`
+      )
+      .get(id) as { numero: number; status: string } | undefined
+    if (notaViva) {
+      throw new Error(
+        notaViva.status === 'pendente'
+          ? 'Esta venda tem uma nota fiscal aguardando a SEFAZ. Verifique o resultado antes de cancelar.'
+          : `Esta venda tem a nota fiscal nº ${notaViva.numero} autorizada. Cancele a nota primeiro (na lista de vendas, no ícone da nota).`
+      )
+    }
+  }
 
   const itens = db
     .prepare('SELECT produto_id, variacao_id, quantidade FROM itens_venda WHERE venda_id = ?')

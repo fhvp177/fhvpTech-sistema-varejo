@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   listarVendas,
   listarVendasCanceladas,
@@ -34,7 +34,7 @@ function dispararBackupPorVendaSeAtivo(): void {
 }
 
 export function registrarHandlersVendas(): void {
-  ipcMain.handle('vendas:listar', (_event, mes?: string) => {
+  registrarCanal('vendas:listar', (mes?: string) => {
     try {
       return { success: true, data: listarVendas(mes) }
     } catch (error) {
@@ -42,7 +42,7 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  ipcMain.handle('vendas:listarCanceladas', (_event, mes?: string) => {
+  registrarCanal('vendas:listarCanceladas', (mes?: string) => {
     try {
       return { success: true, data: listarVendasCanceladas(mes) }
     } catch (error) {
@@ -50,7 +50,7 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  ipcMain.handle('vendas:buscarPorId', (_event, id: number) => {
+  registrarCanal('vendas:buscarPorId', (id: number) => {
     try {
       return { success: true, data: buscarVendaPorId(id) ?? null }
     } catch (error) {
@@ -60,7 +60,7 @@ export function registrarHandlersVendas(): void {
 
   // A venda é sempre atribuída ao vendedor logado. Ignora qualquer vendedor_id
   // que venha do renderer — a sessão é fonte da verdade pra rastreabilidade.
-  ipcMain.handle('vendas:criar', (_event, dados: DadosNovaVenda) => {
+  registrarCanal('vendas:criar', (dados: DadosNovaVenda) => {
     try {
       const sessao = requerSessao()
       const resultado = criarVenda({ ...dados, vendedor_id: sessao.id })
@@ -72,7 +72,7 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  ipcMain.handle('vendas:atualizarStatus', (_event, id: number, status: StatusPagamento) => {
+  registrarCanal('vendas:atualizarStatus', (id: number, status: StatusPagamento) => {
     try {
       atualizarStatusVenda(id, status)
       obterBackupManager().marcarAlteracao()
@@ -82,7 +82,7 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  ipcMain.handle('vendas:pagarParcela', (_event, parcelaId: number) => {
+  registrarCanal('vendas:pagarParcela', (parcelaId: number) => {
     try {
       pagarParcela(parcelaId)
       obterBackupManager().marcarAlteracao()
@@ -92,7 +92,7 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  ipcMain.handle('vendas:registrarPagamentoParcial', (_event, id: number, valor: number) => {
+  registrarCanal('vendas:registrarPagamentoParcial', (id: number, valor: number) => {
     try {
       registrarPagamentoParcial(id, valor)
       obterBackupManager().marcarAlteracao()
@@ -102,15 +102,15 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  // Estornar (reverter) um recebimento. Ação corretiva do dono — coerente com a
-  // hierarquia: o vendedor registra o recebimento, mas só o dono reverte. A regra
+  // Estornar (reverter) um recebimento. Ação corretiva do gerente — coerente com a
+  // hierarquia: o vendedor registra o recebimento, mas só o gerente reverte. A regra
   // de "o que" reverter fica nas queries. Uma parcela (parcelada) ou o recebimento
   // inteiro (venda simples).
-  ipcMain.handle('vendas:estornarParcela', (_event, parcelaId: number) => {
+  registrarCanal('vendas:estornarParcela', (parcelaId: number) => {
     try {
       requerSessao()
       if (!ehDono()) {
-        throw new Error('Estornar um recebimento requer a autorização do dono.')
+        throw new Error('Estornar um recebimento requer a autorização do gerente.')
       }
       estornarParcela(parcelaId)
       obterBackupManager().marcarAlteracao()
@@ -120,11 +120,11 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  ipcMain.handle('vendas:estornarRecebimento', (_event, id: number) => {
+  registrarCanal('vendas:estornarRecebimento', (id: number) => {
     try {
       requerSessao()
       if (!ehDono()) {
-        throw new Error('Estornar um recebimento requer a autorização do dono.')
+        throw new Error('Estornar um recebimento requer a autorização do gerente.')
       }
       estornarRecebimento(id)
       obterBackupManager().marcarAlteracao()
@@ -134,7 +134,7 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  ipcMain.handle('vendas:resumoDashboard', () => {
+  registrarCanal('vendas:resumoDashboard', () => {
     try {
       return { success: true, data: resumoDashboard() }
     } catch (error) {
@@ -142,7 +142,7 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  ipcMain.handle('vendas:produtosMaisVendidos', (_event, mes: string) => {
+  registrarCanal('vendas:produtosMaisVendidos', (mes: string) => {
     try {
       return { success: true, data: produtosMaisVendidosNoMes(mes) }
     } catch (error) {
@@ -153,7 +153,7 @@ export function registrarHandlersVendas(): void {
   // A receber com vencimento dentro do mês ('YYYY-MM') — usado pelo relatório
   // de vendas, que não consegue derivar isso das vendas do mês (parcelas de
   // vendas antigas vencem no mês também).
-  ipcMain.handle('vendas:aReceberDoMes', (_event, mes: string) => {
+  registrarCanal('vendas:aReceberDoMes', (mes: string) => {
     try {
       return { success: true, data: aReceberPorVencimentoNoMes(mes) }
     } catch (error) {
@@ -161,17 +161,17 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  // Cancelar (arquivar) uma venda. Só o dono — ou um vendedor com o PIN do dono,
+  // Cancelar (arquivar) uma venda. Só o gerente — ou um vendedor com o PIN do gerente,
   // mesmo fluxo do cadastro/desconto. A regra de quais vendas podem ser canceladas
   // (virgem ou totalmente devolvida) fica na query `cancelarVenda`.
-  ipcMain.handle('vendas:cancelar', async (_event, id: number, motivo: string, pinDono?: string) => {
+  registrarCanal('vendas:cancelar', async (id: number, motivo: string, pinDono?: string) => {
     try {
       const sessao = requerSessao()
       let autorId = sessao.id
       if (!ehDono()) {
         const donoId = pinDono ? await verificarPinDono(pinDono) : null
         if (donoId === null) {
-          throw new Error('Cancelar uma venda requer a autorização de um dono.')
+          throw new Error('Cancelar uma venda requer a autorização de um gerente.')
         }
         autorId = donoId
       }

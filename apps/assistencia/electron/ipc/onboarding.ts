@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 
@@ -13,7 +13,7 @@ function contar(tabela: 'produtos' | 'clientes' | 'vendas'): number {
 }
 
 export function registrarHandlersOnboarding(): void {
-  ipcMain.handle('onboarding:estado', () => {
+  registrarCanal('onboarding:estado', () => {
     try {
       return {
         success: true,
@@ -24,7 +24,13 @@ export function registrarHandlersOnboarding(): void {
             temProduto: contar('produtos') > 0,
             temCliente: contar('clientes') > 0,
             temVenda: contar('vendas') > 0,
-            lojaConfigurada: lerConfig('loja_configurada') === '1'
+            lojaConfigurada: lerConfig('loja_configurada') === '1',
+            // "Habilitada" = os três passos que dependem do lojista: dados da
+            // empresa salvos, certificado enviado e CSC configurado.
+            fiscalConfigurado:
+              lerConfig('fiscal_configurada') === '1' &&
+              Boolean(lerConfig('fiscal_certificado_validade')) &&
+              lerConfig('fiscal_csc_configurado') === '1'
           }
         }
       }
@@ -33,7 +39,7 @@ export function registrarHandlersOnboarding(): void {
     }
   })
 
-  ipcMain.handle('onboarding:marcarGuiaVisto', () => {
+  registrarCanal('onboarding:marcarGuiaVisto', () => {
     try {
       gravarConfig('onboarding_guia_visto', '1')
       return { success: true, data: null }
@@ -42,7 +48,7 @@ export function registrarHandlersOnboarding(): void {
     }
   })
 
-  ipcMain.handle('onboarding:dispensarChecklist', () => {
+  registrarCanal('onboarding:dispensarChecklist', () => {
     try {
       gravarConfig('onboarding_checklist_dispensada', '1')
       return { success: true, data: null }

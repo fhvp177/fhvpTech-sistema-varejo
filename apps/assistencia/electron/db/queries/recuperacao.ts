@@ -2,9 +2,9 @@ import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 
 export type UsuarioEmail = { id: number; nome: string; email: string }
 
-// Busca um usuário ATIVO (dono OU vendedor) cujo email bate (case-insensitive,
+// Busca um usuário ATIVO (gerente OU vendedor) cujo email bate (case-insensitive,
 // com trim). null se nenhum. Usado no envio e na validação do código. Tie-break:
-// se um dono e um vendedor compartilharem o mesmo email (caso raro), o dono
+// se um gerente e um vendedor compartilharem o mesmo email (caso raro), o gerente
 // vence — ele tem o maior risco de lockout.
 export function obterUsuarioAtivoPorEmail(email: string): UsuarioEmail | null {
   const alvo = email.trim().toLowerCase()

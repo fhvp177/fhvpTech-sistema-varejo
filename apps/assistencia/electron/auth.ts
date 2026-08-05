@@ -4,6 +4,7 @@ import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBa
 import {
   contarDonosAtivos,
   gravarPinHash,
+  gravarPinTamanhoSeAusente,
   listarParaLogin,
   obterPinHash,
   obterVendedor
@@ -20,7 +21,7 @@ const CHAVE_AUTO_LOCK = 'auto_lock_minutos'
 const CHAVE_TETO_DESCONTO = 'teto_desconto_vendedor_pct'
 const BCRYPT_ROUNDS = 12
 
-// Recuperação de PIN do dono por email.
+// Recuperação de PIN do gerente por email.
 const MINUTOS_VALIDADE_RECUPERACAO = 15
 const MAX_TENTATIVAS_RECUPERACAO = 3
 
@@ -45,7 +46,13 @@ export async function verificarPinVendedor(
 ): Promise<boolean> {
   const hash = obterPinHash(vendedorId)
   if (!hash) return false
-  return bcrypt.compare(pin, hash)
+  const confere = await bcrypt.compare(pin, hash)
+  // Aprende o tamanho do PIN de quem já existia antes da migration 036 — só
+  // quando ele ACERTOU, então o número gravado é sempre o do PIN de verdade.
+  // É o que faz a tela de login passar a confirmar sozinha a partir da segunda
+  // entrada, sem obrigar ninguém a trocar de PIN.
+  if (confere) gravarPinTamanhoSeAusente(vendedorId, pin.length)
+  return confere
 }
 
 export async function definirPinVendedor(vendedorId: number, pin: string): Promise<void> {
@@ -56,7 +63,7 @@ export async function definirPinVendedor(vendedorId: number, pin: string): Promi
     throw new Error('Este técnico já tem PIN definido. Use a opção de alterar.')
   }
   const hash = await gerarHash(pin)
-  gravarPinHash(vendedorId, hash)
+  gravarPinHash(vendedorId, hash, pin.length)
 }
 
 export async function alterarPinVendedor(
@@ -68,11 +75,11 @@ export async function alterarPinVendedor(
   const ok = await verificarPinVendedor(vendedorId, pinAtual)
   if (!ok) throw new Error('PIN atual incorreto.')
   const hash = await gerarHash(pinNovo)
-  gravarPinHash(vendedorId, hash)
+  gravarPinHash(vendedorId, hash, pinNovo.length)
 }
 
-// Usado pelo modal "elevar privilégio": qualquer dono ativo cujo PIN bate libera.
-// Retorna o id do dono que autenticou (pra auditoria futura) ou null.
+// Usado pelo modal "elevar privilégio": qualquer gerente ativo cujo PIN bate libera.
+// Retorna o id do gerente que autenticou (pra auditoria futura) ou null.
 export async function verificarPinDono(pin: string): Promise<number | null> {
   for (const v of listarParaLogin()) {
     if (v.papel !== 'dono' || v.tem_pin !== 1) continue
@@ -83,8 +90,8 @@ export async function verificarPinDono(pin: string): Promise<number | null> {
   return null
 }
 
-// Indica se existe ao menos um dono ativo com PIN — usado pela tela de login
-// pra decidir se mostra o fluxo de "primeiro acesso" no dono.
+// Indica se existe ao menos um gerente ativo com PIN — usado pela tela de login
+// pra decidir se mostra o fluxo de "primeiro acesso" no gerente.
 export function temPinConfigurado(): boolean {
   return (
     contarDonosAtivos() > 0 &&
@@ -92,7 +99,7 @@ export function temPinConfigurado(): boolean {
   )
 }
 
-// ───── Recuperação de PIN do dono por email ───────────────────────────
+// ───── Recuperação de PIN do gerente por email ───────────────────────────
 
 export type CodigoGerado = {
   vendedorId: number
@@ -102,7 +109,7 @@ export type CodigoGerado = {
 }
 
 // Gera e PERSISTE (com hash bcrypt) um código de 6 dígitos pro usuário ativo
-// (dono ou vendedor) daquele email, válido por MINUTOS_VALIDADE_RECUPERACAO.
+// (gerente ou vendedor) daquele email, válido por MINUTOS_VALIDADE_RECUPERACAO.
 // Retorna o código em CLARO só pra quem chamou enviar por email — o código
 // nunca fica salvo em claro. Retorna null se nenhum usuário ativo tem esse
 // email (anti-vazamento fica a cargo do chamador; num app local de loja,
@@ -154,7 +161,7 @@ export async function redefinirComCodigo(
   }
 
   const hash = await gerarHash(novoPin)
-  gravarPinHash(usuario.id, hash)
+  gravarPinHash(usuario.id, hash, novoPin.length)
   apagarCodigosRecuperacao(usuario.id)
   return usuario.id
 }
@@ -175,8 +182,8 @@ export function setarAutoLockMinutos(minutos: number): void {
 }
 
 // ───── Teto de desconto por vendedor ──────────────────────────────────
-// Limite máximo de desconto (em %) que um vendedor pode aplicar sem PIN do dono.
-// 0 = qualquer desconto exige PIN do dono. 100 = vendedor pode dar qualquer.
+// Limite máximo de desconto (em %) que um vendedor pode aplicar sem PIN do gerente.
+// 0 = qualquer desconto exige PIN do gerente. 100 = vendedor pode dar qualquer.
 
 export function lerTetoDescontoPct(): number {
   const raw = lerConfig(CHAVE_TETO_DESCONTO)

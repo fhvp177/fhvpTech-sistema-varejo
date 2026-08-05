@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { validarLicenca } from '@fhvptech/core/electron/licenca'
 import { obterEstadoAtualizacao } from '../atualizador'
@@ -17,6 +17,7 @@ import {
   type RecebivelDetalhe,
   type ProdutoAlertaDetalhe
 } from '../db/queries/alertasDetalhe'
+import { alertasContasPagar } from '../db/queries/contasPagar'
 
 // Detalhe que abre no popup ao clicar numa notificação (estado de AGORA).
 export type DetalheNotificacao =
@@ -162,11 +163,11 @@ function alertasDoSistema(): AlertaVivo[] {
 }
 
 function computarESincronizar(): void {
-  sincronizar([...alertasDoBanco(), ...alertasDoSistema()])
+  sincronizar([...alertasDoBanco(), ...alertasContasPagar(), ...alertasDoSistema()])
 }
 
 export function registrarHandlersNotificacoes(): void {
-  ipcMain.handle('notificacoes:listar', () => {
+  registrarCanal('notificacoes:listar', () => {
     try {
       computarESincronizar()
       return { success: true, data: { itens: listar(), naoLidas: contarNaoLidas() } }
@@ -175,7 +176,7 @@ export function registrarHandlersNotificacoes(): void {
     }
   })
 
-  ipcMain.handle('notificacoes:detalhe', (_event, chave: string) => {
+  registrarCanal('notificacoes:detalhe', (chave: string) => {
     try {
       return { success: true, data: detalheDaNotificacao(String(chave)) }
     } catch (error) {
@@ -183,7 +184,7 @@ export function registrarHandlersNotificacoes(): void {
     }
   })
 
-  ipcMain.handle('notificacoes:marcarLidas', () => {
+  registrarCanal('notificacoes:marcarLidas', () => {
     try {
       marcarTodasLidas()
       return { success: true, data: null }
@@ -192,7 +193,7 @@ export function registrarHandlersNotificacoes(): void {
     }
   })
 
-  ipcMain.handle('notificacoes:dispensar', (_event, id: number) => {
+  registrarCanal('notificacoes:dispensar', (id: number) => {
     try {
       dispensar(Number(id))
       return { success: true, data: null }

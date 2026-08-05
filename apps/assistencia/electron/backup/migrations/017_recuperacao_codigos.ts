@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 
-// Recuperação de PIN do dono por email.
+// Recuperação de PIN do gerente por email.
 // Guarda o código de 6 dígitos como HASH bcrypt (nunca em claro), com validade
 // e contador de tentativas. O código é gerado e validado LOCALMENTE; o backend
 // Fly só envia o email. 1 código ativo por vendedor (o novo apaga o anterior).

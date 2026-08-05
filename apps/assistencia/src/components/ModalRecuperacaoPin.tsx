@@ -1,5 +1,6 @@
 import { FC, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Mail, KeyRound, ShieldCheck } from 'lucide-react'
+import { useFocoAoLiberar } from '@fhvptech/core/lib/useFocoAoLiberar'
 
 type Props = {
   // Chamado quando o usuário desiste e volta pro login.
@@ -22,9 +23,10 @@ const ModalRecuperacaoPin: FC<Props> = ({ onCancelar, onSucesso }) => {
   const [carregando, setCarregando] = useState(false)
   const primeiroInput = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    primeiroInput.current?.focus()
-  }, [etapa])
+  // Foco no primeiro campo da etapa — e de volta nele quando um envio falha.
+  // Antes isto dependia só de `etapa`: errar o código deixava o campo
+  // reabilitado, porém sem cursor, porque a etapa não tinha mudado.
+  useFocoAoLiberar(primeiroInput, carregando, true, etapa)
 
   const soDigitos = (v: string) => v.replace(/\D/g, '').slice(0, 6)
 
@@ -44,7 +46,7 @@ const ModalRecuperacaoPin: FC<Props> = ({ onCancelar, onSucesso }) => {
     }
     if (!resp.data.enviado) {
       setErro(
-        'Não encontramos um usuário ativo com esse email. Confira o endereço, ou peça ao dono para redefinir seu PIN nas Configurações.'
+        'Não encontramos um usuário ativo com esse email. Confira o endereço, ou peça ao gerente para redefinir seu PIN nas Configurações.'
       )
       return
     }

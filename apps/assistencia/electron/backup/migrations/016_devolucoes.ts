@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 
 // Troca/devolução com crédito na loja (v1). Desenho fechado em 2026-06-04.
 // - devolucoes: cabeçalho de uma devolução vinculada à venda original. tipo
-//   'credito' (dinheiro fica na loja) ou 'dinheiro' (sai do caixa → exige dono,
+//   'credito' (dinheiro fica na loja) ou 'dinheiro' (sai do caixa → exige gerente,
 //   gravado em autorizado_por_id). vendedor_id = quem registrou. valor_total =
 //   soma dos itens devolvidos.
 // - itens_devolucao: linhas devolvidas. valor_unitario_devolvido já é o valor
