@@ -271,8 +271,11 @@ export function registrarRotasFiscais(app: Hono): void {
 
   // Dados de um CNPJ na base da Receita — preenche o cadastro fiscal do cliente
   // sozinho, inclusive o código IBGE do município (que a NF-e exige e ninguém
-  // decora). ⚠️ Consome 1 crédito por consulta; o app dispara isto num botão,
-  // nunca a cada tecla.
+  // decora).
+  // Não gasta crédito pré-pago: consulta de CNPJ tem cota PRÓPRIA e mensal
+  // (`cnpj-consultas`, 50 mil/mês já no plano grátis), separada da cota dos
+  // documentos fiscais. Disparar num botão em vez de a cada tecla continua
+  // certo — é chamada de rede a terceiro —, mas não por medo de custo.
   app.get('/fiscal/cnpj/:cnpj', async (c) => {
     const lic = exigirLicenca(c.req.query('clienteId'))
     if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)

@@ -830,7 +830,10 @@ function registrarHandlersFiscalRemoto(): void {
   // esse número.
   // Dados da empresa na base da Receita, a partir do CNPJ. É rotina de
   // cadastro (requerSessao), não de configuração fiscal.
-  // ⚠️ Consome 1 crédito por consulta — por isso a tela dispara num botão.
+  // Não gasta crédito pré-pago: consulta de CNPJ tem cota PRÓPRIA e mensal
+  // (`cnpj-consultas`, 50 mil/mês já no plano grátis), separada da cota dos
+  // documentos fiscais. Disparar num botão em vez de a cada tecla continua
+  // certo — é chamada de rede a terceiro —, mas não por medo de custo.
   registrarCanal('fiscal:buscarCnpj', async (cnpj: string) => {
     try {
       requerSessao()
