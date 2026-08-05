@@ -7,6 +7,41 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.34.0',
+    itens: [
+      {
+        emoji: '📱',
+        titulo: 'QR code do PIX no cupom',
+        descricao:
+          'Em Configurações, na seção Dados da loja, passa a ser possível informar a chave PIX do estabelecimento. Com a chave informada, os documentos que ainda possuem valor a receber — cupom de venda a prazo, parcelas em aberto e vendas em atraso — são impressos com um QR code do PIX já preenchido com o valor devido, permitindo ao cliente efetuar o pagamento pela câmera do celular. O cupom de venda já quitada permanece sem o código. A tela de configuração exibe uma prévia do QR code, para conferência da chave antes da gravação. Sem chave informada, os documentos permanecem inalterados.'
+      },
+      {
+        emoji: '🔑',
+        titulo: 'Digitação do PIN',
+        descricao:
+          'Após uma tentativa incorreta, o campo do PIN permanece selecionado, permitindo nova digitação sem necessidade de clicar novamente. O mesmo passa a valer na autorização do gerente, na recuperação de PIN e no cadastro de e-mail. O acesso passa a ser confirmado automaticamente ao completar os dígitos.'
+      },
+      {
+        emoji: '🧾',
+        titulo: 'Classificação fiscal a partir da nota de entrada',
+        descricao:
+          'Produtos cadastrados por meio da importação de XML de nota fiscal passam a receber automaticamente o NCM e a unidade informados na própria nota. Os campos preenchidos manualmente não são alterados.'
+      },
+      {
+        emoji: '🏢',
+        titulo: 'Preenchimento do cadastro fiscal pelo CNPJ',
+        descricao:
+          'No cadastro fiscal do cliente, um botão permite buscar os dados da empresa a partir do CNPJ, preenchendo razão social, endereço e código do município. O sistema informa quando a situação cadastral não consta como ativa.'
+      },
+      {
+        emoji: '🛠️',
+        titulo: 'Correção de bugs',
+        descricao:
+          'Foram corrigidas situações em que janelas de cadastro ultrapassavam a altura da tela, deixando o título e os botões fora de alcance, e em que listas de seleção apareciam cortadas. Também foi corrigida a exibição dos campos de nota fiscal, que em determinada situação apareciam no formulário incorreto.'
+      }
+    ]
+  },
+  {
     versao: '1.33.0',
     itens: [
       {
