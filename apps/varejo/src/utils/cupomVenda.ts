@@ -4,6 +4,8 @@
 
 import { nomeImpressao } from './nomeImpressao'
 import { linhaCidadeUf, type DadosLoja } from './dadosLoja'
+import { qrPixParaDocumento } from '@fhvptech/core/lib/qrCodePix'
+import { blocoPixHtml, CSS_PIX } from './blocoPix'
 
 type ItemCupom = {
   produto_nome?: string
@@ -165,6 +167,19 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
       </tr>`)
   }
 
+  // Quanto o cliente ainda deve. `valor_pago` e a fonte da verdade do total
+  // recebido em qualquer forma de pagamento (a vista, entrada, parcela quitada),
+  // entao esta subtracao serve pros quatro status sem caso especial: venda paga
+  // da zero, e o QR nem chega a ser desenhado.
+  const saldoEmAberto = venda.total - venda.valor_pago
+  const pix = qrPixParaDocumento({
+    chave: loja.pix_chave,
+    tipo: loja.pix_tipo || undefined,
+    beneficiario: loja.nome || loja.razao_social,
+    cidade: loja.cidade,
+    valorEmAberto: saldoEmAberto
+  })
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -289,6 +304,7 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
       font-size: 10px;
       line-height: 1.4;
     }
+${CSS_PIX}
     .rodape-loja .nome-loja {
       font-weight: bold;
       font-size: 11px;
@@ -398,7 +414,7 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
       ${linhasPagamento.join('\n      ')}
     </tbody>
   </table>
-
+${blocoPixHtml(pix)}
   <div class="divisoria"></div>
 
   <div class="aviso">*** Este cupom não é documento fiscal ***</div>

@@ -18,7 +18,11 @@ const M = 'MEGAPALAVRAINTERMINAVELSEMESPACOALGUMPRAQUEBRAR'.repeat(3)
 const lojaAbsurda = {
   ...LOJA_PADRAO,
   nome: M, razao_social: M, cnpj: M, endereco: M,
-  cidade: M, uf: M, cep: M, telefone: M
+  cidade: M, uf: M, cep: M, telefone: M,
+  // Chave real em formato, fictícia em dono. Sem ela o cupom sairia sem o
+  // bloco do PIX e a régua não mediria o QR — que é justamente o elemento de
+  // largura fixa mais teimoso do cupom: ele não encolhe pra caber.
+  pix_chave: '123e4567-e12b-12d1-a456-426655440000'
 }
 
 writeFileSync(join(dir, 'cupom-extremo.html'), gerarHtmlCupomVenda({
@@ -49,7 +53,10 @@ writeFileSync(join(dir, 'cupom-normal.html'), gerarHtmlCupomVenda({
   parcelas: []
 }, { ...LOJA_PADRAO, nome: 'INFORMATICA AVP', telefone: '(85) 99198-3482',
      razao_social: 'INFORMATICA AVP COMERCIO LTDA', cnpj: '00.000.000/0001-00',
-     endereco: 'RUA UM, 100', cidade: 'CIDADE', uf: 'CE', cep: '60000-000' }), 'utf-8')
+     endereco: 'RUA UM, 100', cidade: 'CIDADE', uf: 'CE', cep: '60000-000',
+     // Venda a prazo + chave preenchida = o cupom de baixo sai COM o bloco do
+     // PIX. É nele que dá pra ver se o QR fica legível, e não só se cabe.
+     pix_chave: '123e4567-e12b-12d1-a456-426655440000' }), 'utf-8')
 
 writeFileSync(join(dir, 'devolucao-extremo.html'), gerarHtmlComprovanteDevolucao({
   id: 3, venda_id: 59, data: '2026-08-01T16:06:00', tipo: 'credito',

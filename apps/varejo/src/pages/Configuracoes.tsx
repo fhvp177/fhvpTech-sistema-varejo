@@ -5,6 +5,7 @@ import { Label } from '@fhvptech/core/ui/label'
 import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
+import CadastroPixLoja from '@/components/CadastroPixLoja'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
 import ConfigImpressao from '@/components/ConfigImpressao'
 import ConfigMulticaixa from '@/components/ConfigMulticaixa'
@@ -534,6 +535,14 @@ const Configuracoes: FC = () => {
                 />
               </div>
             </div>
+
+            <CadastroPixLoja
+              chave={loja.pix_chave}
+              tipo={loja.pix_tipo}
+              nomeLoja={loja.nome || loja.razao_social}
+              cidadeLoja={loja.cidade}
+              onChange={(campo, valor) => atualizarLoja(campo, valor)}
+            />
 
             <div className="flex items-center gap-3">
               <Button onClick={salvarLoja} disabled={salvandoLoja}>
