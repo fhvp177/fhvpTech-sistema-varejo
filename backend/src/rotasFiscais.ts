@@ -24,15 +24,24 @@ import {
   type EmitenteNfce
 } from './nfce.ts'
 import {
+  montarPedidoNfse,
+  type VendaParaNfse,
+  type PrestadorNfse
+} from './nfse.ts'
+import {
   garantirEmpresa,
   enviarCertificado,
   consultarCertificado,
   configurarNfce,
   configurarNfe,
+  configurarNfse,
+  consultarCidadeNfse,
   consultarCep,
+  consultarCnpj,
   type DadosEmpresa,
   type ConfigNfce,
-  type ConfigNfe
+  type ConfigNfe,
+  type ConfigNfse
 } from './fiscal.ts'
 import { consultarCreditos, chamarAcbr, ErroAcbr, type CodigoErroAcbr } from './acbr.ts'
 
@@ -50,6 +59,47 @@ type RespostaDfe = {
 // número está consumido de vez (mesmo se rejeitada). Só a AUSÊNCIA de resposta
 // (exceção) devolve o número ao pool.
 const TRANSMITIDA = new Set(['autorizado', 'rejeitado', 'denegado', 'pendente', 'cancelado'])
+
+// ⚠️ A NFS-e tem vocabulário PRÓPRIO de status — 'autorizada'/'negada' (no
+// feminino, porque é "nota"), contra 'autorizado'/'rejeitado' da NFC-e. Reusar o
+// conjunto de cima faria toda NFS-e cair fora do TRANSMITIDA e a contagem mensal
+// do cliente nunca subir: ele emitiria de graça e nós pagaríamos o crédito.
+const TRANSMITIDA_NFSE = new Set([
+  'processando',
+  'autorizada',
+  'negada',
+  'cancelada',
+  'substituida'
+])
+
+// Modelo interno da NFS-e nos nossos registros. A NFS-e não tem "modelo" na
+// acepção da SEFAZ (55/65) porque não é documento estadual; 99 é um marcador
+// nosso, escolhido por não colidir com nenhum modelo real, pra que a mesma
+// tabela de emissões sirva aos três documentos.
+const MODELO_NFSE = 99
+
+// O que a ACBr devolve numa emissão/consulta de NFS-e. Note as diferenças pro
+// RespostaDfe: `numero` vem como TEXTO, não há `chave` (o equivalente é o
+// `codigo_verificacao`, que o cliente digita no site da prefeitura) e o motivo
+// da recusa vem numa lista de mensagens, não num campo só.
+type RespostaNfse = {
+  id?: string
+  status?: string
+  numero?: string
+  codigo_verificacao?: string
+  link_url?: string
+  mensagens?: Array<{ codigo?: string; descricao?: string }>
+}
+
+// Junta as mensagens da prefeitura numa linha só. É o texto que o lojista vê
+// quando a nota é negada — sem isso ele recebe "negada" e mais nada.
+function mensagensNfse(n: RespostaNfse): string | null {
+  const texto = (n.mensagens ?? [])
+    .map((m) => [m?.codigo, m?.descricao].filter(Boolean).join(': '))
+    .filter(Boolean)
+    .join(' · ')
+  return texto || null
+}
 
 const soDigitos = (v: string) => (v ?? '').replace(/\D/g, '')
 
@@ -214,6 +264,26 @@ export function registrarRotasFiscais(app: Hono): void {
     try {
       return c.json({ ok: true, endereco: await consultarCep(c.req.param('cep')) })
     } catch (e) {
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+  })
+
+  // Dados de um CNPJ na base da Receita — preenche o cadastro fiscal do cliente
+  // sozinho, inclusive o código IBGE do município (que a NF-e exige e ninguém
+  // decora). ⚠️ Consome 1 crédito por consulta; o app dispara isto num botão,
+  // nunca a cada tecla.
+  app.get('/fiscal/cnpj/:cnpj', async (c) => {
+    const lic = exigirLicenca(c.req.query('clienteId'))
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+    try {
+      return c.json({ ok: true, empresa: await consultarCnpj(c.req.param('cnpj')) })
+    } catch (e) {
+      // CNPJ que não existe na base volta 404 da ACBr: é resposta legítima, não
+      // falha do sistema — a tela precisa dizer "não encontrei", não "deu erro".
+      if (e instanceof ErroAcbr && e.codigo === 'nao_encontrado') {
+        return c.json({ erro: 'CNPJ não encontrado na base da Receita.', codigo: 'nao_encontrado' }, 404)
+      }
       const { status, corpo } = responderErro(e)
       return c.json(corpo, status as 400)
     }
@@ -470,6 +540,223 @@ export function registrarRotasFiscais(app: Hono): void {
       return c.json({ ok: true, emissao })
     } catch (e) {
       // Falha ao consultar não muda o que já sabemos — devolve o estado atual.
+      const { corpo } = responderErro(e)
+      return c.json({ ok: true, emissao, avisoConsulta: corpo })
+    }
+  })
+
+  // ── NFS-e (nota fiscal de SERVIÇO, municipal) ──────────────────────────────
+  //
+  // Por que é um conjunto de rotas à parte, e não um parâmetro das de cima: a
+  // NFS-e vai pra PREFEITURA, tem numeração controlada pela ACBr, imposto
+  // próprio (ISS) e até um vocabulário de status diferente. Espremer os três
+  // documentos na mesma rota faria cada `if` novo arriscar os dois que já
+  // funcionam em produção no varejo.
+
+  /**
+   * A cidade do cliente emite NFS-e?
+   *
+   * É a PRIMEIRA pergunta a fazer, antes de pedir Inscrição Municipal, alíquota
+   * ou qualquer papelada: NFC-e é padrão nacional e funciona em qualquer
+   * município, mas NFS-e depende de a prefeitura ter provedor integrado. Cidade
+   * não atendida é resposta legítima (`atendida: false`), não erro — a tela usa
+   * isso pra dizer a verdade ao lojista em vez de deixá-lo configurar tudo e
+   * descobrir na primeira emissão.
+   *
+   * Consulta de metadados: não gasta crédito.
+   */
+  app.get('/fiscal/nfse/cidade/:ibge', async (c) => {
+    const lic = exigirLicenca(c.req.query('clienteId'))
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+    try {
+      const cidade = await consultarCidadeNfse(c.req.param('ibge'))
+      return c.json({ ok: true, atendida: true, cidade })
+    } catch (e) {
+      if (e instanceof ErroAcbr && e.codigo === 'nao_encontrado') {
+        return c.json({ ok: true, atendida: false, cidade: null })
+      }
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+  })
+
+  // Configura a NFS-e da empresa: numeração do RPS, série e regime.
+  // ⚠️ O número do RPS é o PRÓXIMO a usar. Cliente vindo de outro sistema tem
+  // que continuar a numeração dele — prefeitura recusa RPS repetido na série.
+  app.put('/fiscal/nfse-config', async (c) => {
+    const body = await c.req.json<{ clienteId?: string; config?: ConfigNfse }>()
+    const lic = exigirLicenca(body.clienteId)
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+    if (!lic.cliente.cnpjEmitente) {
+      return c.json({ erro: 'Empresa emitente ainda não cadastrada.' }, 400)
+    }
+    if (!body.config) return c.json({ erro: 'config obrigatória' }, 400)
+    try {
+      await configurarNfse(lic.cliente.cnpjEmitente, body.config)
+      return c.json({ ok: true })
+    } catch (e) {
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+  })
+
+  app.post('/fiscal/nfse', async (c) => {
+    const body = await c.req.json<{
+      clienteId?: string
+      referencia?: string
+      prestador?: Omit<PrestadorNfse, 'cnpj'>
+      venda?: VendaParaNfse
+    }>()
+    const lic = exigirLicenca(body.clienteId)
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+    if (!lic.cliente.cnpjEmitente) {
+      return c.json({ erro: 'Empresa emitente ainda não cadastrada.' }, 400)
+    }
+    if (!body.referencia) return c.json({ erro: 'referencia obrigatória' }, 400)
+    if (!body.venda || !body.prestador) {
+      return c.json({ erro: 'venda e prestador obrigatórios' }, 400)
+    }
+
+    const clienteId = lic.cliente.clienteId
+
+    // Idempotência: mesma OS/venda reenviada devolve a emissão existente.
+    const existente = obterEmissaoNfce(clienteId, body.referencia)
+    if (existente) return c.json({ ok: true, jaEmitida: true, emissao: existente })
+
+    const ambiente = c.req.query('ambiente') === 'producao' ? 'producao' : 'homologacao'
+
+    let pedido: Record<string, unknown>
+    try {
+      pedido = montarPedidoNfse({
+        venda: body.venda,
+        prestador: { ...body.prestador, cnpj: lic.cliente.cnpjEmitente },
+        ambiente,
+        referencia: body.referencia
+      })
+    } catch (e) {
+      // Nada foi transmitido. Diferente da NFC-e, não há número a devolver: a
+      // numeração do RPS é da ACBr e só anda quando ela aceita o pedido.
+      if (e instanceof ErroMontagem) return c.json({ erro: e.message, codigo: 'validacao' }, 400)
+      throw e
+    }
+
+    let nfse: RespostaNfse
+    try {
+      nfse = await chamarAcbr<RespostaNfse>('/nfse', { metodo: 'POST', corpo: pedido })
+    } catch (e) {
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+
+    const status = nfse.status ?? 'processando'
+    const numero = Number(nfse.numero ?? 0) || 0
+    gravarEmissaoNfce({
+      cliente_id: clienteId,
+      referencia: body.referencia,
+      modelo: MODELO_NFSE,
+      serie: 0,
+      // O número da nota é da prefeitura e vem como texto; 0 enquanto processa.
+      numero,
+      acbr_id: nfse.id ?? null,
+      status,
+      // A NFS-e não tem "chave de acesso" como a NFC-e. O que o cliente usa pra
+      // conferir a nota no site da prefeitura é o código de verificação — ele
+      // ocupa este campo, que é o que a tela já sabe mostrar.
+      chave: nfse.codigo_verificacao ?? null,
+      criada_em: new Date().toISOString()
+    })
+    if (TRANSMITIDA_NFSE.has(status)) registrarNotaMes(clienteId)
+
+    return c.json({
+      ok: true,
+      emissao: {
+        referencia: body.referencia,
+        numero,
+        acbr_id: nfse.id ?? null,
+        status,
+        codigo_verificacao: nfse.codigo_verificacao ?? null,
+        link_url: nfse.link_url ?? null,
+        motivo: mensagensNfse(nfse)
+      },
+      notasNoMes: contarNotasMes(clienteId)
+    })
+  })
+
+  // DANFSE em PDF. Diferente da NFC-e, é documento A4 — não vai em bobina, e a
+  // rota não aceita largura. Baixar não consome crédito.
+  app.get('/fiscal/nfse/:referencia/pdf', async (c) => {
+    const lic = exigirLicenca(c.req.query('clienteId'))
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+    const emissao = obterEmissaoNfce(lic.cliente.clienteId, c.req.param('referencia'))
+    if (!emissao?.acbr_id) return c.json({ erro: 'Nota não encontrada.' }, 404)
+    if (emissao.status !== 'autorizada') {
+      return c.json({ erro: 'A nota ainda não foi autorizada pela prefeitura.' }, 409)
+    }
+    try {
+      const pdf = await chamarAcbr<ArrayBuffer>(`/nfse/${emissao.acbr_id}/pdf`, { binario: true })
+      return c.json({ ok: true, pdfBase64: Buffer.from(pdf).toString('base64') })
+    } catch (e) {
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+  })
+
+  app.post('/fiscal/nfse/:referencia/cancelamento', async (c) => {
+    const body = await c.req.json<{ clienteId?: string; justificativa?: string }>()
+    const lic = exigirLicenca(body.clienteId)
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+    const emissao = obterEmissaoNfce(lic.cliente.clienteId, c.req.param('referencia'))
+    if (!emissao?.acbr_id) return c.json({ erro: 'Nota não encontrada.' }, 404)
+    if (emissao.status !== 'autorizada') {
+      return c.json({ erro: 'Só é possível cancelar uma nota autorizada.' }, 409)
+    }
+    const justificativa = (body.justificativa ?? '').trim()
+    // Conferido ANTES de chamar: cancelar consome crédito, e recusa previsível
+    // não deve gastar.
+    if (justificativa.length < 15) {
+      return c.json({ erro: 'A justificativa precisa ter pelo menos 15 caracteres.' }, 400)
+    }
+    try {
+      await chamarAcbr(`/nfse/${emissao.acbr_id}/cancelamento`, {
+        metodo: 'POST',
+        corpo: { justificativa }
+      })
+      gravarEmissaoNfce({ ...emissao, status: 'cancelada' })
+      return c.json({ ok: true })
+    } catch (e) {
+      const { status, corpo } = responderErro(e)
+      return c.json(corpo, status as 400)
+    }
+  })
+
+  // Consulta de status. Emissão é assíncrona ('processando' até a prefeitura
+  // responder) e consultar NÃO consome crédito.
+  app.get('/fiscal/nfse/:referencia', async (c) => {
+    const lic = exigirLicenca(c.req.query('clienteId'))
+    if (!lic.ok) return c.json({ erro: lic.erro }, lic.status)
+    const emissao = obterEmissaoNfce(lic.cliente.clienteId, c.req.param('referencia'))
+    if (!emissao) return c.json({ erro: 'Nota não encontrada.' }, 404)
+    if (!emissao.acbr_id) return c.json({ ok: true, emissao })
+
+    try {
+      const nfse = await chamarAcbr<RespostaNfse>(`/nfse/${emissao.acbr_id}`)
+      if (nfse.status && nfse.status !== emissao.status) {
+        gravarEmissaoNfce({
+          ...emissao,
+          status: nfse.status,
+          numero: Number(nfse.numero ?? emissao.numero) || emissao.numero,
+          chave: nfse.codigo_verificacao ?? emissao.chave
+        })
+        emissao.status = nfse.status
+        if (nfse.codigo_verificacao) emissao.chave = nfse.codigo_verificacao
+      }
+      return c.json({
+        ok: true,
+        emissao,
+        link_url: nfse.link_url ?? null,
+        motivo: mensagensNfse(nfse)
+      })
+    } catch (e) {
       const { corpo } = responderErro(e)
       return c.json({ ok: true, emissao, avisoConsulta: corpo })
     }

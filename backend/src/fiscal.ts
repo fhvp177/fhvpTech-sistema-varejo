@@ -158,6 +158,77 @@ export function configurarNfe(cpfCnpj: string, config: ConfigNfe): Promise<unkno
   return chamarAcbr(`/empresas/${exigirCnpj(cpfCnpj)}/nfe`, { metodo: 'PUT', corpo: config })
 }
 
+// ── NFS-e (nota de serviço, municipal) ───────────────────────────────────────
+//
+// A diferença de fundo pra NFC-e/NF-e: quem recebe é a PREFEITURA. Não existe um
+// padrão nacional único — cada município escolhe um provedor, e alguns não têm
+// nenhum integrado. Por isso a primeira coisa que a tela faz é PERGUNTAR se a
+// cidade do cliente é atendida, antes de pedir qualquer papelada a ele.
+
+export type CidadeNfse = {
+  codigo_ibge: string
+  uf: string
+  municipio: string
+  /** Provedor que a prefeitura usa (Ginfes, ISSNet, Nacional…). */
+  provedor: string
+  ambientes: Array<'homologacao' | 'producao'>
+  /** Como o provedor autentica: certificado A1, login/senha ou token. */
+  credenciais: Array<'certificado' | 'login_senha' | 'token'>
+}
+
+/**
+ * Cobertura do município. Consulta de metadados: não consome crédito e não
+ * depende de a empresa estar cadastrada, então pode ser chamada na tela antes
+ * de qualquer configuração.
+ *
+ * Município sem provedor devolve 404 na ACBr, que o `chamarAcbr` traduz para
+ * 'nao_encontrado' — a rota converte isso em "cidade não atendida", que é uma
+ * resposta legítima, não um erro do sistema.
+ */
+export function consultarCidadeNfse(codigoIbge: string): Promise<CidadeNfse> {
+  const limpo = soDigitos(codigoIbge)
+  if (limpo.length !== 7) {
+    throw new ErroAcbr('validacao', 'Código IBGE do município inválido (são 7 dígitos).')
+  }
+  return chamarAcbr<CidadeNfse>(`/nfse/cidades/${limpo}`)
+}
+
+export type ConfigNfse = {
+  ambiente: 'homologacao' | 'producao'
+  /**
+   * Numeração do RPS. `numero` e `lote` são os PRÓXIMOS a usar — a ACBr
+   * incrementa sozinha depois de cada emissão.
+   *
+   * ⚠️ Cliente que vem de outro sistema precisa CONTINUAR a numeração dele: a
+   * prefeitura recusa RPS repetido na mesma série. É o mesmo cuidado que a NF-e
+   * exigiu no piloto do varejo.
+   */
+  rps: { numero: number; serie: string; lote: number }
+  regTrib?: {
+    /** 1 = não optante · 2 = optante pelo Simples Nacional. */
+    opSimpNac?: 1 | 2
+    regApTribSN?: number
+    regEspTrib?: number
+  }
+  /** Prefeituras que autenticam por login/senha ou token em vez do A1. */
+  prefeitura?: { login?: string; senha?: string; token?: string }
+  incentivo_fiscal?: boolean
+}
+
+export function configurarNfse(cpfCnpj: string, config: ConfigNfse): Promise<unknown> {
+  if (!config.rps || !Number.isInteger(config.rps.numero) || config.rps.numero < 1) {
+    throw new ErroAcbr('validacao', 'Número do próximo RPS é obrigatório e começa em 1.')
+  }
+  if (!config.rps.serie?.trim()) {
+    throw new ErroAcbr('validacao', 'Série do RPS é obrigatória (a prefeitura informa qual).')
+  }
+  return chamarAcbr(`/empresas/${exigirCnpj(cpfCnpj)}/nfse`, { metodo: 'PUT', corpo: config })
+}
+
+export function consultarConfigNfse(cpfCnpj: string): Promise<ConfigNfse> {
+  return chamarAcbr<ConfigNfse>(`/empresas/${exigirCnpj(cpfCnpj)}/nfse`)
+}
+
 // Endereço a partir do CEP — devolve inclusive o código IBGE do município, que
 // é obrigatório no cadastro e que nenhum lojista sabe de cabeça.
 export type EnderecoPorCep = {
@@ -174,4 +245,41 @@ export function consultarCep(cep: string): Promise<EnderecoPorCep> {
   const limpo = soDigitos(cep)
   if (limpo.length !== 8) throw new ErroAcbr('validacao', 'CEP inválido.')
   return chamarAcbr<EnderecoPorCep>(`/cep/${limpo}`)
+}
+
+// ── Consulta de CNPJ na base da Receita ──────────────────────────────────────
+//
+// Preenche sozinho o cadastro fiscal de um cliente pessoa jurídica: razão
+// social, endereço completo e — o que mais importa — o CÓDIGO IBGE do
+// município, que a NF-e exige e que ninguém sabe de cabeça.
+//
+// ⚠️ CUSTA 1 CRÉDITO por consulta (cota separada da de notas). Por isso a tela
+// tem que disparar isto num BOTÃO, nunca a cada tecla digitada no campo de
+// CNPJ: autocompletar enquanto digita gastaria uma consulta por caractere.
+export type DadosCnpj = {
+  cnpj: string
+  razao_social: string
+  nome_fantasia: string
+  email?: string
+  telefones?: Array<{ ddd: string; numero: string }>
+  situacao_cadastral?: { codigo: string; descricao: string; data?: string }
+  simples?: { optante: boolean }
+  endereco?: {
+    tipo_logradouro?: string
+    logradouro?: string
+    numero?: string
+    complemento?: string
+    bairro?: string
+    cep?: string
+    uf?: string
+    municipio?: { codigo_ibge?: string; descricao?: string }
+  }
+}
+
+export function consultarCnpj(cnpj: string): Promise<DadosCnpj> {
+  const limpo = soDigitos(cnpj)
+  if (limpo.length !== 14) {
+    throw new ErroAcbr('validacao', 'CNPJ inválido — são 14 dígitos.')
+  }
+  return chamarAcbr<DadosCnpj>(`/cnpj/${limpo}`)
 }
