@@ -559,18 +559,6 @@ const Clientes: FC = () => {
               </div>
             )}
 
-            {/* Dados exigidos pela NF-e — qualquer cliente (PF também pode
-                receber NF-e), só no plano Pro. Retrátil pra não pesar a tela. */}
-            {CadastroFiscalCliente && (
-              <Suspense fallback={null}>
-                <CadastroFiscalCliente
-                  clienteId={editando?.id ?? null}
-                  valor={fiscal}
-                  onChange={setFiscal}
-                />
-              </Suspense>
-            )}
-
             <div className="grid gap-1.5">
               <Label htmlFor="telefone">
                 Telefone <span className="text-destructive">*</span>
@@ -622,6 +610,32 @@ const Clientes: FC = () => {
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
               </div>
+            )}
+
+            {/* Dados exigidos pela NF-e — qualquer cliente (PF também pode
+                receber NF-e), só no plano Pro. Retrátil pra não pesar a tela.
+                Fica logo DEPOIS do CPF/CNPJ de propósito: a busca na Receita
+                parte do CNPJ, e um botão que depende de um campo ainda não
+                preenchido logo acima dele só gera "preencha o CNPJ primeiro". */}
+            {CadastroFiscalCliente && (
+              <Suspense fallback={null}>
+                <CadastroFiscalCliente
+                  clienteId={editando?.id ?? null}
+                  valor={fiscal}
+                  onChange={setFiscal}
+                  cnpj={form.cnpj}
+                  // O que a Receita informa e não cabe no bloco fiscal volta
+                  // pra cá: sem isto o lojista veria a razão social na consulta
+                  // e ainda assim teria que digitá-la.
+                  onDadosDaReceita={(d) =>
+                    setForm((f) => ({
+                      ...f,
+                      razao_social: d.razao_social ?? f.razao_social,
+                      telefone: f.telefone || d.telefone || ''
+                    }))
+                  }
+                />
+              </Suspense>
             )}
 
             <div className="grid gap-1.5">

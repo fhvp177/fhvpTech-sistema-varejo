@@ -849,6 +849,22 @@ const Produtos: FC = () => {
             {erro && (
               <p className="text-destructive text-sm bg-destructive/10 rounded px-3 py-2">{erro}</p>
             )}
+
+            {/* Classificação fiscal do produto (NCM/CFOP/CSOSN). Precisa ficar
+                DENTRO do formulário do produto: é aqui que o contador corrige o
+                NCM de um item específico. Até a v1.33 este bloco estava, por
+                engano, no diálogo de cadastro rápido de fornecedor — onde não
+                fazia sentido nenhum e, na prática, deixava a correção pontual
+                de NCM inalcançável. */}
+            {FiscalProdutoCampos && (
+              <Suspense fallback={null}>
+                <FiscalProdutoCampos
+                  produtoId={editando?.id ?? null}
+                  valor={fiscalProduto}
+                  onChange={setFiscalProduto}
+                />
+              </Suspense>
+            )}
           </div>
 
           <DialogFooter>
@@ -891,16 +907,6 @@ const Produtos: FC = () => {
               </p>
             )}
           </div>
-          {FiscalProdutoCampos && (
-            <Suspense fallback={null}>
-              <FiscalProdutoCampos
-                produtoId={editando?.id ?? null}
-                valor={fiscalProduto}
-                onChange={setFiscalProduto}
-              />
-            </Suspense>
-          )}
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalFornecedorAberto(false)}>
               Cancelar

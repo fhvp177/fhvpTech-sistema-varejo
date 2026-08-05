@@ -348,6 +348,40 @@ export function importarNotaEntrada(dados: DadosImportacao): ResumoImportacao {
          SET produto_id = excluded.produto_id, variacao_id = excluded.variacao_id`
     )
 
+    // ── O NCM da nota vira o NCM do produto ────────────────────────────────
+    //
+    // A nota do fornecedor já traz a classificação fiscal de cada item, e ela
+    // vale: é o mesmo produto. Sem isto, o lojista importa 80 itens por XML e a
+    // tela fiscal continua dizendo "80 produtos sem NCM" — com o número certo
+    // guardado logo ali, na nota que ele acabou de importar. Era o que
+    // acontecia: a migration 031 preencheu o histórico UMA VEZ, na atualização,
+    // e as importações seguintes não preenchiam mais nada.
+    //
+    // Três regras, herdadas da 031 porque os motivos continuam valendo:
+    //
+    // 1. **Só preenche o que está VAZIO.** Ajuste do contador nunca é
+    //    sobrescrito por nota nova — ele viu o produto, a Receita não.
+    // 2. **O CFOP NÃO é copiado, de propósito.** O CFOP da entrada descreve a
+    //    operação DO FORNECEDOR (a venda dele pra loja). Reaproveitá-lo na
+    //    saída gera nota que a SEFAZ autoriza e o Fisco contesta depois.
+    // 3. **Vale também na reposição**, não só em produto novo — é assim que um
+    //    produto cadastrado à mão anos atrás finalmente ganha NCM, na primeira
+    //    vez que é recomprado por XML.
+    const herdarFiscalDaNota = db.prepare(
+      `UPDATE produtos
+          SET ncm = CASE
+                      WHEN (ncm IS NULL OR TRIM(ncm) = '') AND @ncm IS NOT NULL
+                           AND TRIM(@ncm) <> '' THEN TRIM(@ncm)
+                      ELSE ncm
+                    END,
+              unidade = CASE
+                          WHEN (unidade IS NULL OR TRIM(unidade) = '') AND @unidade IS NOT NULL
+                               AND TRIM(@unidade) <> '' THEN UPPER(TRIM(@unidade))
+                          ELSE unidade
+                        END
+        WHERE id = @produto_id`
+    )
+
     const registrarItem = (
       item: ItemXmlNota,
       produtoId: number,
@@ -375,6 +409,14 @@ export function importarNotaEntrada(dados: DadosImportacao): ResumoImportacao {
           variacao_id: variacaoId
         })
       }
+      // Em produto de grade este UPDATE roda uma vez por tamanho, sempre no
+      // mesmo produto-pai: da segunda em diante o campo já não está vazio e
+      // nada muda.
+      herdarFiscalDaNota.run({
+        produto_id: produtoId,
+        ncm: item.ncm,
+        unidade: item.unidade
+      })
     }
 
     let produtosNovos = 0

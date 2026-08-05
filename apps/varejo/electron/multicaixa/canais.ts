@@ -133,6 +133,13 @@ export const CANAIS_REDE = [
   'etiquetas:gerarPDF',
   'fiscal:aplicarEmLote',
   'fiscal:buscarCep',
+  // Consulta de CNPJ. Atende o segundo caixa (é cadastro de cliente), mas de
+  // propósito NÃO entra em CANAIS_REPETIVEIS logo abaixo: apesar de ser uma
+  // leitura, ela CONSOME UM CRÉDITO da conta fiscal. Repetir sozinha depois de
+  // falha de rede gastaria crédito sem o lojista pedir — aqui a regra de ouro
+  // da lista ("só entra quem não muda nada") vale por causa do custo, não do
+  // banco.
+  'fiscal:buscarCnpj',
   'fiscal:cadastrarEmpresa',
   'fiscal:cancelarNfce',
   'fiscal:categoriasPendentes',

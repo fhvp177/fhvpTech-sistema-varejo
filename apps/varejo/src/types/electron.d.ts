@@ -391,6 +391,31 @@ interface Window {
       }) => Promise<RespostaIPC<NotaFiscalVenda | null>>
       obterCliente: (id: number) => Promise<RespostaIPC<FiscalCliente | null>>
       salvarCliente: (id: number, dados: FiscalCliente) => Promise<RespostaIPC<null>>
+      /**
+       * Dados da empresa na base da Receita, pelo CNPJ. Preenche o cadastro
+       * fiscal do cliente — inclusive o código IBGE do município.
+       * ⚠️ Consome 1 crédito por consulta: dispare num botão, nunca ao digitar.
+       */
+      buscarCnpj: (cnpj: string) => Promise<
+        RespostaIPC<{
+          cnpj: string
+          razao_social: string
+          nome_fantasia: string
+          email?: string
+          telefones?: Array<{ ddd: string; numero: string }>
+          situacao_cadastral?: { codigo: string; descricao: string }
+          endereco?: {
+            tipo_logradouro?: string
+            logradouro?: string
+            numero?: string
+            complemento?: string
+            bairro?: string
+            cep?: string
+            uf?: string
+            municipio?: { codigo_ibge?: string; descricao?: string }
+          }
+        }>
+      >
       buscarCep: (cep: string) => Promise<
         RespostaIPC<{
           logradouro: string
@@ -501,6 +526,13 @@ interface Window {
         nome: string
         papel: 'dono' | 'vendedor'
         tem_pin: number
+        /**
+         * Quantos dígitos tem o PIN — a tela confirma sozinha ao completar.
+         * `null` enquanto o sistema ainda não sabe (instalação anterior à
+         * migration 036); nesse caso a tela segue pedindo Enter. Só o TAMANHO
+         * chega aqui: o PIN e o hash nunca saem do processo principal.
+         */
+        pin_tamanho: number | null
       }>>>
       login: (vendedorId: number, pin: string) => Promise<RespostaIPC<{
         ok: boolean

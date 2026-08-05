@@ -260,6 +260,8 @@ const api = {
     salvarCliente: (id: number, dados: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('fiscal:salvarCliente', id, dados),
     buscarCep: (cep: string): Promise<RespostaIPC> => ipcRenderer.invoke('fiscal:buscarCep', cep),
+    buscarCnpj: (cnpj: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('fiscal:buscarCnpj', cnpj),
     // Classificação fiscal dos produtos (NCM e afins).
     obterProduto: (id: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('fiscal:obterProduto', id),

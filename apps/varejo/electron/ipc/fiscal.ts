@@ -828,6 +828,21 @@ function registrarHandlersFiscalRemoto(): void {
   // Endereço a partir do CEP (traz o código IBGE do município, obrigatório na
   // nota). Usado no cadastro fiscal do cliente pra não fazer ninguém procurar
   // esse número.
+  // Dados da empresa na base da Receita, a partir do CNPJ. É rotina de
+  // cadastro (requerSessao), não de configuração fiscal.
+  // ⚠️ Consome 1 crédito por consulta — por isso a tela dispara num botão.
+  registrarCanal('fiscal:buscarCnpj', async (cnpj: string) => {
+    try {
+      requerSessao()
+      const limpo = (cnpj ?? '').replace(/\D/g, '')
+      if (limpo.length !== 14) throw new Error('CNPJ inválido — são 14 números.')
+      const r = await chamarBackendFiscal(`/fiscal/cnpj/${limpo}`)
+      return { success: true, data: r.empresa }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
   registrarCanal('fiscal:buscarCep', async (cep: string) => {
     try {
       requerSessao()

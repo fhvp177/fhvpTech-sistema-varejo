@@ -101,6 +101,9 @@ const SCHEMA = `
     codigo_barras TEXT UNIQUE, nome TEXT NOT NULL, categoria TEXT,
     preco REAL NOT NULL, custo REAL NOT NULL DEFAULT 0, estoque INTEGER DEFAULT 0,
     fornecedor_id INTEGER, data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Colunas fiscais da migration 031. Precisam existir aqui porque a
+    -- importação passou a herdar o NCM da nota pro produto.
+    ncm TEXT, cfop TEXT, cst_csosn TEXT, origem TEXT DEFAULT '0', unidade TEXT,
     FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id)
   );
   CREATE TABLE produto_variacoes (
@@ -476,5 +479,95 @@ d('importação de NF-e (banco real via node:sqlite)', () => {
     const xmls = xmlsDoMes('2026-07')
     expect(xmls).toHaveLength(2)
     expect(xmls[0].xml).toContain('<NFe>')
+  })
+  // ── O NCM da nota vira o NCM do produto ────────────────────────────────────
+  // Demanda de cliente real: ele importa dezenas de itens por XML e a tela
+  // fiscal continua acusando "sem NCM", com o número certo guardado na própria
+  // nota que ele acabou de importar.
+  describe('classificação fiscal herdada da nota', () => {
+    it('produto NOVO nasce com o NCM e a unidade da nota', () => {
+      const p = banco!
+        .prepare('SELECT ncm, unidade FROM produtos WHERE codigo_barras = ?')
+        .get('7891234567895') as { ncm: string | null; unidade: string | null }
+      expect(p.ncm).toBe('61044400')
+      expect(p.unidade).toBe('UN')
+    })
+
+    it('o CFOP NÃO é copiado — o da entrada é a operação do FORNECEDOR', () => {
+      // Reaproveitá-lo na saída gera nota que a SEFAZ autoriza e o Fisco
+      // contesta depois. O item da nota guarda o CFOP; o produto, não.
+      const p = banco!
+        .prepare('SELECT cfop FROM produtos WHERE codigo_barras = ?')
+        .get('7891234567895') as { cfop: string | null }
+      expect(p.cfop).toBeNull()
+
+      const item = banco!
+        .prepare("SELECT cfop FROM notas_entrada_itens WHERE cprod = 'PM-889' LIMIT 1")
+        .get() as { cfop: string | null }
+      expect(item.cfop).toBe('5102')
+    })
+
+    it('a REPOSIÇÃO classifica produto antigo que estava sem NCM', () => {
+      // O "PRODUTO LEGADO" foi cadastrado à mão, antes de existir campo fiscal.
+      // A primeira recompra por XML é o que finalmente o classifica.
+      const antes = banco!
+        .prepare("SELECT id, ncm FROM produtos WHERE codigo_barras = '7890000000001'")
+        .get() as { id: number; ncm: string | null }
+      expect(antes.ncm).toBeNull()
+
+      importarNotaEntrada({
+        nota: notaBase(CHAVE_3, '1300'),
+        fornecedor: { ...fornecedorXml, id: null },
+        linhas: [
+          {
+            tipo: 'reposicao',
+            produto_id: antes.id,
+            variacao_id: null,
+            novo_custo: 5,
+            novo_preco: null,
+            item: {
+              ...itemXml('LEG-1', 'PRODUTO LEGADO', 1, 5),
+              ncm: '85044090',
+              unidade: 'PC'
+            }
+          }
+        ]
+      })
+
+      const depois = banco!
+        .prepare('SELECT ncm, unidade FROM produtos WHERE id = ?')
+        .get(antes.id) as { ncm: string; unidade: string }
+      expect(depois.ncm).toBe('85044090')
+      expect(depois.unidade).toBe('PC')
+    })
+
+    it('NUNCA sobrescreve o NCM que o contador já ajustou', () => {
+      const p = banco!
+        .prepare("SELECT id FROM produtos WHERE codigo_barras = '7890000000001'")
+        .get() as { id: number }
+      // O contador corrige na mão…
+      banco!.prepare("UPDATE produtos SET ncm = '99999999' WHERE id = ?").run(p.id)
+
+      // …e uma nota nova chega com outro NCM pro mesmo produto.
+      importarNotaEntrada({
+        nota: notaBase('35261012345678000199550010000012370000012352', '1400'),
+        fornecedor: { ...fornecedorXml, id: null },
+        linhas: [
+          {
+            tipo: 'reposicao',
+            produto_id: p.id,
+            variacao_id: null,
+            novo_custo: 5,
+            novo_preco: null,
+            item: { ...itemXml('LEG-1', 'PRODUTO LEGADO', 1, 5), ncm: '11111111' }
+          }
+        ]
+      })
+
+      const depois = banco!.prepare('SELECT ncm FROM produtos WHERE id = ?').get(p.id) as {
+        ncm: string
+      }
+      expect(depois.ncm, 'ajuste do contador foi atropelado pela nota').toBe('99999999')
+    })
   })
 })
