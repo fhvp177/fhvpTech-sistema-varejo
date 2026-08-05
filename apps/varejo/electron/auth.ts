@@ -4,6 +4,7 @@ import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBa
 import {
   contarDonosAtivos,
   gravarPinHash,
+  gravarPinTamanhoSeAusente,
   listarParaLogin,
   obterPinHash,
   obterVendedor
@@ -45,7 +46,13 @@ export async function verificarPinVendedor(
 ): Promise<boolean> {
   const hash = obterPinHash(vendedorId)
   if (!hash) return false
-  return bcrypt.compare(pin, hash)
+  const confere = await bcrypt.compare(pin, hash)
+  // Aprende o tamanho do PIN de quem já existia antes da migration 036 — só
+  // quando ele ACERTOU, então o número gravado é sempre o do PIN de verdade.
+  // É o que faz a tela de login passar a confirmar sozinha a partir da segunda
+  // entrada, sem obrigar ninguém a trocar de PIN.
+  if (confere) gravarPinTamanhoSeAusente(vendedorId, pin.length)
+  return confere
 }
 
 export async function definirPinVendedor(vendedorId: number, pin: string): Promise<void> {
@@ -56,7 +63,7 @@ export async function definirPinVendedor(vendedorId: number, pin: string): Promi
     throw new Error('Este vendedor já tem PIN definido. Use a opção de alterar.')
   }
   const hash = await gerarHash(pin)
-  gravarPinHash(vendedorId, hash)
+  gravarPinHash(vendedorId, hash, pin.length)
 }
 
 export async function alterarPinVendedor(
@@ -68,7 +75,7 @@ export async function alterarPinVendedor(
   const ok = await verificarPinVendedor(vendedorId, pinAtual)
   if (!ok) throw new Error('PIN atual incorreto.')
   const hash = await gerarHash(pinNovo)
-  gravarPinHash(vendedorId, hash)
+  gravarPinHash(vendedorId, hash, pinNovo.length)
 }
 
 // Usado pelo modal "elevar privilégio": qualquer gerente ativo cujo PIN bate libera.
@@ -154,7 +161,7 @@ export async function redefinirComCodigo(
   }
 
   const hash = await gerarHash(novoPin)
-  gravarPinHash(usuario.id, hash)
+  gravarPinHash(usuario.id, hash, novoPin.length)
   apagarCodigosRecuperacao(usuario.id)
   return usuario.id
 }

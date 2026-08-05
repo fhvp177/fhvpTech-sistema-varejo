@@ -19,6 +19,15 @@ export type VendedorParaLogin = {
   nome: string
   papel: PapelVendedor
   tem_pin: number
+  /**
+   * Quantos dígitos tem o PIN desta pessoa — a tela de login usa isso pra
+   * confirmar sozinha, sem exigir Enter. `null` enquanto ainda não se sabe
+   * (instalação que já existia antes da migration 036): nesse caso a tela
+   * segue pedindo Enter, e o valor é aprendido no primeiro login que der certo.
+   *
+   * Só o TAMANHO trafega até a tela. O PIN e o hash nunca saem do main.
+   */
+  pin_tamanho: number | null
 }
 
 const COLUNAS_PUBLICAS = `
@@ -42,7 +51,7 @@ export function listarParaLogin(): VendedorParaLogin[] {
   const db = obterBancoDeDados()
   return db
     .prepare(
-      `SELECT v.id, v.nome, v.papel,
+      `SELECT v.id, v.nome, v.papel, v.pin_tamanho,
               CASE WHEN v.pin_hash IS NOT NULL AND LENGTH(v.pin_hash) > 0 THEN 1 ELSE 0 END AS tem_pin
        FROM vendedores v
        WHERE v.ativo = 1
@@ -68,10 +77,31 @@ export function obterPinHash(id: number): string | null {
   return row?.pin_hash ?? null
 }
 
-export function gravarPinHash(id: number, pinHash: string): void {
+/**
+ * Grava o hash do PIN e, junto, quantos dígitos ele tem.
+ *
+ * O tamanho é parâmetro OBRIGATÓRIO de propósito: se fosse opcional, um
+ * chamador futuro poderia trocar o PIN e deixar para trás o tamanho do PIN
+ * ANTIGO. Isso seria pior que não ter tamanho nenhum — a tela de login
+ * confirmaria no dígito errado e a pessoa levaria "PIN incorreto" sem
+ * entender, até travar nas 5 tentativas. Aqui os dois andam sempre juntos.
+ */
+export function gravarPinHash(id: number, pinHash: string, tamanhoPin: number): void {
   const db = obterBancoDeDados()
-  const r = db.prepare('UPDATE vendedores SET pin_hash = ? WHERE id = ?').run(pinHash, id)
+  const r = db
+    .prepare('UPDATE vendedores SET pin_hash = ?, pin_tamanho = ? WHERE id = ?')
+    .run(pinHash, tamanhoPin, id)
   if (r.changes === 0) throw new Error('Vendedor não encontrado.')
+}
+
+// Aprende o tamanho de um PIN que já existia, na primeira vez que ele acerta.
+// Só escreve quando ainda não se sabe: nunca sobrescreve o que foi gravado
+// junto com o hash.
+export function gravarPinTamanhoSeAusente(id: number, tamanho: number): void {
+  const db = obterBancoDeDados()
+  db.prepare(
+    'UPDATE vendedores SET pin_tamanho = ? WHERE id = ? AND pin_tamanho IS NULL'
+  ).run(tamanho, id)
 }
 
 export function contarDonosAtivos(): number {

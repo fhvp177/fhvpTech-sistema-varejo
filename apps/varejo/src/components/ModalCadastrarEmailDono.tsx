@@ -1,5 +1,6 @@
 import { FC, useEffect, useRef, useState } from 'react'
 import { Mail, ShieldCheck } from 'lucide-react'
+import { useFocoAoLiberar } from '@fhvptech/core/lib/useFocoAoLiberar'
 
 type Props = {
   vendedorId: number
@@ -19,9 +20,9 @@ const ModalCadastrarEmailDono: FC<Props> = ({ vendedorId, onSalvo, onPular }) =>
   const [carregando, setCarregando] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+  // Foco na abertura e de volta depois de uma falha ao salvar — antes isto só
+  // acontecia na montagem, e um erro deixava o campo sem cursor.
+  useFocoAoLiberar(inputRef, carregando)
 
   const salvar = async () => {
     setErro('')

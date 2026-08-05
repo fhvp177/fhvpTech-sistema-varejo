@@ -108,7 +108,7 @@ export function registrarHandlersVendedores(): void {
         return { success: false, error: 'O PIN deve conter de 4 a 6 dígitos numéricos.' }
       }
       const hash = await bcrypt.hash(novoPin, BCRYPT_ROUNDS)
-      gravarPinHash(id, hash)
+      gravarPinHash(id, hash, novoPin.length)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }
     } catch (error) {

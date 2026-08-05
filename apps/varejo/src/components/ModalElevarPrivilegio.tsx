@@ -9,6 +9,7 @@ import {
 } from '@fhvptech/core/ui/dialog'
 import { Button } from '@fhvptech/core/ui/button'
 import { Label } from '@fhvptech/core/ui/label'
+import { useFocoAoLiberar } from '@fhvptech/core/lib/useFocoAoLiberar'
 
 type Props = {
   aberto: boolean
@@ -38,6 +39,11 @@ const ModalElevarPrivilegio: FC<Props> = ({ aberto, onClose, onAutorizar, motivo
     }
   }, [aberto])
 
+  // Devolve o cursor ao campo depois de um PIN recusado. Sem isto o gerente
+  // erra, o campo esvazia e ele precisa clicar de novo — bem no meio de uma
+  // venda parada esperando autorização.
+  useFocoAoLiberar(inputRef, validando, aberto)
+
   const autorizar = async () => {
     setErro('')
     if (!/^\d{4,6}$/.test(pin)) {
@@ -54,7 +60,8 @@ const ModalElevarPrivilegio: FC<Props> = ({ aberto, onClose, onAutorizar, motivo
     if (!resp.data.ok || resp.data.donoId === null) {
       setErro('PIN do gerente incorreto.')
       setPin('')
-      inputRef.current?.focus()
+      // O foco volta pelo useFocoAoLiberar: aqui o input ainda está `disabled`
+      // (o React não repintou) e focar campo desabilitado é no-op.
       return
     }
     onAutorizar(resp.data.donoId, pin)
