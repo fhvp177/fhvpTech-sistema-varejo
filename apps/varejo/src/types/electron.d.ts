@@ -394,9 +394,8 @@ interface Window {
       /**
        * Dados da empresa na base da Receita, pelo CNPJ. Preenche o cadastro
        * fiscal do cliente — inclusive o código IBGE do município.
-       * Não gasta crédito pré-pago: a consulta de CNPJ tem cota própria e
-       * mensal (50 mil/mês já no plano grátis). Dispare num botão mesmo
-       * assim — é chamada de rede a terceiro.
+       * ⚠️ Custa 0,1 crédito pré-pago por consulta (medido). Dez consultas
+       * equivalem a uma nota fiscal. Dispare num botão, nunca ao digitar.
        */
       buscarCnpj: (cnpj: string) => Promise<
         RespostaIPC<{

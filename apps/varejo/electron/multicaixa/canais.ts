@@ -133,15 +133,12 @@ export const CANAIS_REDE = [
   'etiquetas:gerarPDF',
   'fiscal:aplicarEmLote',
   'fiscal:buscarCep',
-  // Consulta de CNPJ. Atende o segundo caixa (é cadastro de cliente) e fica
-  // FORA de CANAIS_REPETIVEIS logo abaixo — conservador, não obrigatório.
-  //
-  // ⚠️ A justificativa original estava ERRADA: dizia que a consulta gasta
-  // crédito pré-pago da conta fiscal. Não gasta. Ela tem cota própria e
-  // mensal (50 mil/mês no plano grátis), separada da dos documentos. Sendo
-  // leitura idempotente e barata, ela PODERIA ser repetível; só não mudamos
-  // isso agora porque mexer na classificação de canal é mudança de
-  // comportamento do multicaixa, e não há pressa.
+  // Consulta de CNPJ. Atende o segundo caixa (é cadastro de cliente), mas de
+  // propósito NÃO entra em CANAIS_REPETIVEIS logo abaixo: apesar de ser uma
+  // leitura, ela CONSOME 0,1 crédito da conta fiscal (medido — saldo antes e
+  // depois de uma chamada isolada). Repetir sozinha depois de falha de rede
+  // gastaria crédito sem o lojista pedir — aqui a regra de ouro da lista ("só
+  // entra quem não muda nada") vale por causa do custo, não do banco.
   'fiscal:buscarCnpj',
   'fiscal:cadastrarEmpresa',
   'fiscal:cancelarNfce',
