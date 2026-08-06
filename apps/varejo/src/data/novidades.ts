@@ -7,6 +7,23 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.35.0',
+    itens: [
+      {
+        emoji: '📱',
+        titulo: 'QR code do PIX em todos os cupons',
+        descricao:
+          'Com a chave PIX informada em Configurações, todo cupom de venda passa a ser impresso com o QR code do pagamento, inclusive o da venda à vista — que antes era impresso sem o código, por já constar como paga no momento da impressão. O valor do QR code acompanha a situação da venda: cobra o saldo devido quando há entrada, parcela ou prazo em aberto, e o valor total nos demais casos. O texto acima do código acompanha a mesma distinção, trazendo "PAGUE COM PIX" quando há valor em aberto e "PAGAMENTO POR PIX" quando o cupom já consta como pago. Vendas sem valor a cobrar seguem sem o código, assim como as lojas que não informarem a chave PIX.'
+      },
+      {
+        emoji: '🛠️',
+        titulo: 'Correção de bugs',
+        descricao:
+          'Foi corrigida uma situação em que a venda à vista era registrada com data de vencimento, o que refletia no histórico de vendas e nos relatórios.'
+      }
+    ]
+  },
+  {
     versao: '1.34.0',
     itens: [
       {
