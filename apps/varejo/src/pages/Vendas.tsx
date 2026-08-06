@@ -2093,7 +2093,20 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   name="status"
                   value={s}
                   checked={statusPagamento === s}
-                  onChange={() => { setStatusPagamento(s); setErro(''); if (s === 'pago') setEntradaInput('') }}
+                  // Voltar pra "À vista" limpa o que só existe em venda a prazo.
+                  // O campo de vencimento some da tela nesse modo, mas o valor
+                  // digitado antes continuava no estado e ia gravado na venda —
+                  // uma venda de balcão nascia com data de vencimento, o que é
+                  // mentira no relatório: ela aparece como se tivesse prazo no
+                  // histórico e nos totais a receber.
+                  onChange={() => {
+                    setStatusPagamento(s)
+                    setErro('')
+                    if (s === 'pago') {
+                      setEntradaInput('')
+                      setDataVencimento('')
+                    }
+                  }}
                   className="hidden"
                 />
                 <span

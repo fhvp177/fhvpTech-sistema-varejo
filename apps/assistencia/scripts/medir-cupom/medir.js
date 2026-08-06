@@ -10,7 +10,7 @@ const ultimo = process.argv[process.argv.length - 1]
 const dir = ultimo.endsWith('.js')
   ? path.join(require('os').tmpdir(), 'fhvp-medir-cupom')
   : ultimo
-const ARQUIVOS = ['cupom-normal.html', 'cupom-extremo.html', 'devolucao-extremo.html']
+const ARQUIVOS = ['cupom-normal.html', 'cupom-avista.html', 'cupom-extremo.html', 'devolucao-extremo.html']
 
 const MEDIR = `(() => {
   const body = document.body

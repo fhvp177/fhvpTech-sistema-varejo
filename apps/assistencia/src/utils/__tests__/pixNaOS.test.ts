@@ -55,29 +55,45 @@ describe('comprovante de entrega', () => {
     expect(temQr(gerarHtmlComprovanteEntregaOS(os({ saldo_em_aberto: 180 }), LOJA))).toBe(true)
   })
 
-  it('NÃO leva o QR na segunda via, depois de o cliente já ter pago', () => {
-    // Este é o caso que justifica consultar a venda na hora de imprimir em vez
-    // de somar os itens da OS: no papel os dois dão 180, mas só a venda sabe
-    // que o dinheiro entrou.
-    expect(temQr(gerarHtmlComprovanteEntregaOS(os({ saldo_em_aberto: 0 }), LOJA))).toBe(false)
+  it('leva o QR do total mesmo depois de o cliente já ter pago — risco aceito', () => {
+    // Decisão do lojista em 2026-08-06: todo comprovante impresso sai com QR,
+    // porque na entrega o cliente costuma pagar ali mesmo e a OS já está
+    // marcada como quitada quando o papel sai. O preço é a 2ª via de uma OS
+    // paga convidando a pagar de novo. Este teste existe pra que a escolha seja
+    // explícita: se um dia doer, é ele que vira vermelho e aponta o lugar.
+    const html = gerarHtmlComprovanteEntregaOS(os({ saldo_em_aberto: 0 }), LOJA)
+    expect(temQr(html)).toBe(true)
+    expect(html).toContain('<div class="pix-valor">R$ 180,00</div>')
   })
 
-  it('NÃO leva o QR quando quem chamou nem informou saldo', () => {
-    // Campo opcional: ausente tem que significar "não cobre", nunca "cobre o
-    // total". O silêncio precisa ser o lado seguro.
-    expect(temQr(gerarHtmlComprovanteEntregaOS(os(), LOJA))).toBe(false)
+  it('cai no total dos itens quando quem chamou nem informou saldo', () => {
+    const html = gerarHtmlComprovanteEntregaOS(os(), LOJA)
+    expect(temQr(html)).toBe(true)
+    expect(html).toContain('<div class="pix-valor">R$ 180,00</div>')
   })
 
   it('NÃO leva o QR na entrega sem cobrança (cortesia ou garantia)', () => {
+    // O único comprovante de entrega que sai sem QR: sem itens não há total, e
+    // QR de R$ 0,00 no papel é só confusão.
     const cortesia = os({ itens: [], venda_id: null, saldo_em_aberto: 0 })
     const html = gerarHtmlComprovanteEntregaOS(cortesia, LOJA)
     expect(html).toContain('ENTREGA SEM COBRANÇA')
     expect(temQr(html)).toBe(false)
   })
 
-  it('cobra exatamente o saldo informado', () => {
+  it('cobra o saldo, e não o total, quando ainda falta receber uma parte', () => {
+    // OS de 180 com 50 já pagos: o QR pede 130. Pedir 180 seria cobrar duas
+    // vezes o que já entrou.
     const html = gerarHtmlComprovanteEntregaOS(os({ saldo_em_aberto: 130 }), LOJA)
     expect(html).toContain('<div class="pix-valor">R$ 130,00</div>')
+  })
+
+  it('manda pagar quando o cliente deve, e vira etiqueta quando não deve', () => {
+    const devendo = gerarHtmlComprovanteEntregaOS(os({ saldo_em_aberto: 180 }), LOJA)
+    const quitada = gerarHtmlComprovanteEntregaOS(os({ saldo_em_aberto: 0 }), LOJA)
+    expect(devendo).toContain('PAGUE COM PIX')
+    expect(quitada).toContain('PAGAMENTO POR PIX')
+    expect(quitada).not.toContain('PAGUE COM PIX')
   })
 })
 

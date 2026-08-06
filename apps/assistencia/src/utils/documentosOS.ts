@@ -185,7 +185,7 @@ export function gerarHtmlOrcamentoOS(os: DadosComprovanteOS, loja: DadosLoja): s
     tipo: loja.pix_tipo || undefined,
     beneficiario: loja.nome || loja.razao_social,
     cidade: loja.cidade,
-    valorEmAberto: total,
+    valorACobrar: total,
     larguraMmFixa: 32
   })
 

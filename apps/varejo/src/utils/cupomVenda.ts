@@ -167,18 +167,42 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
       </tr>`)
   }
 
-  // Quanto o cliente ainda deve. `valor_pago` e a fonte da verdade do total
-  // recebido em qualquer forma de pagamento (a vista, entrada, parcela quitada),
-  // entao esta subtracao serve pros quatro status sem caso especial: venda paga
-  // da zero, e o QR nem chega a ser desenhado.
+  // ── Quanto o QR cobra: o que falta, e o total quando não falta nada ─────────
+  //
+  // `valor_pago` é a fonte da verdade do total recebido em qualquer forma de
+  // pagamento (à vista, entrada, parcela quitada), então a subtração dá o saldo
+  // devido pros quatro status sem caso especial.
+  //
+  // Saldo zerado cai no total, e isso é decisão do lojista (2026-08-06): TODO
+  // cupom impresso sai com QR, sem exceção. Nasceu do balcão — a venda à vista
+  // é marcada como paga no mesmo instante em que o cupom é impresso, muito antes
+  // do dinheiro entrar, e enquanto o QR dependia de saldo ele nunca aparecia
+  // justamente onde mais serve: o cliente parado na frente do caixa com o
+  // celular na mão.
+  //
+  // ⚠️ O preço, escolhido de olhos abertos e reafirmado depois de exposto: a
+  // REIMPRESSÃO de uma venda que o cliente já pagou (fiado quitado, parcelada
+  // terminada) também sai com QR do valor cheio, e nada impede que ele pague de
+  // novo — QR em papel não avisa ninguém que já foi pago. Se um dia isso doer,
+  // é esta linha que muda: exigir `saldoEmAberto > 0` devolve o comportamento
+  // antigo e o resto do recurso continua de pé.
   const saldoEmAberto = venda.total - venda.valor_pago
+  const valorACobrar = saldoEmAberto > 0 ? saldoEmAberto : venda.total
+
   const pix = qrPixParaDocumento({
     chave: loja.pix_chave,
     tipo: loja.pix_tipo || undefined,
     beneficiario: loja.nome || loja.razao_social,
     cidade: loja.cidade,
-    valorEmAberto: saldoEmAberto
+    valorACobrar
   })
+
+  // O título acompanha o saldo, e a diferença não é enfeite. Com dívida em
+  // aberto o imperativo está certo — o cliente deve, e "PAGUE" é o convite.
+  // Sem dívida, a linha logo acima já carimbou "Pago": ali "PAGUE" leria como
+  // cobrança de algo que o cliente acabou de quitar. "PAGAMENTO POR PIX" é
+  // etiqueta em vez de ordem — diz o que aquele QR é, sem mandar pagar de novo.
+  const tituloPix = saldoEmAberto > 0 ? 'PAGUE COM PIX' : 'PAGAMENTO POR PIX'
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -414,7 +438,7 @@ ${CSS_PIX}
       ${linhasPagamento.join('\n      ')}
     </tbody>
   </table>
-${blocoPixHtml(pix)}
+${blocoPixHtml(pix, { titulo: tituloPix })}
   <div class="divisoria"></div>
 
   <div class="aviso">*** Este cupom não é documento fiscal ***</div>

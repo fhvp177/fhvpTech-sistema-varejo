@@ -52,7 +52,7 @@ describe('quando o desenho do QR quebra', () => {
         chave: LOJA.pix_chave,
         beneficiario: LOJA.nome,
         cidade: LOJA.cidade,
-        valorEmAberto: 200
+        valorACobrar: 200
       })
     ).not.toThrow()
   })

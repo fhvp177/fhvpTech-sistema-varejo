@@ -34,9 +34,12 @@ export type DadosComprovanteOS = {
   venda_id: number | null
   /**
    * Quanto ainda falta receber pela OS. Vem da venda vinculada, consultada na
-   * hora de imprimir — e nao calculado a partir dos itens de proposito: assim
-   * a 2a via emitida depois que o cliente pagou sai SEM o QR, sozinha.
-   * Nulo/zero = nada a receber, e nenhum QR e desenhado.
+   * hora de imprimir — e não calculado a partir dos itens de propósito: só a
+   * venda sabe o que foi pago depois da entrega.
+   *
+   * Nulo ou zero significa "nada a receber", e aí o QR passa a cobrar o total
+   * dos itens (ver a decisão no ponto onde o QR é montado). O único comprovante
+   * que sai sem QR é o de entrega sem cobrança, onde não há itens.
    */
   saldo_em_aberto?: number | null
   itens: Array<{
@@ -264,15 +267,31 @@ export function gerarHtmlComprovanteEntregaOS(os: DadosComprovanteOS, loja: Dado
   <div class="aviso-fraco">A garantia cobre o serviço executado e as peças aplicadas, descrito(s) acima. Não cobre novos defeitos, mau uso, quedas ou contato com líquidos.</div>`
       : `<div class="aviso-fraco">Serviço entregue sem garantia contratual.</div>`
 
-  // O saldo vem pronto de quem chamou, que consultou a venda vinculada. OS
-  // entregue sem cobranca, ou ja quitada, nao leva QR.
+  // Quanto este comprovante cobra. O saldo vem pronto de quem chamou, que
+  // consultou a venda vinculada AGORA — só ela sabe o que aconteceu depois da
+  // entrega. Sem saldo a receber, cobra o total dos serviços e peças: é a mesma
+  // decisão tomada no cupom de venda (2026-08-06), todo comprovante impresso
+  // sai com QR, porque na hora da entrega o cliente costuma pagar ali mesmo e
+  // a OS já pode estar marcada como quitada.
+  //
+  // ⚠️ Inclui a 2ª via de uma OS que o cliente já pagou: ele pode pagar de novo
+  // e o papel não avisa ninguém. Risco aceito pelo lojista — desfazer é voltar
+  // a passar só `saldoEmAberto`.
+  //
+  // Entrega sem cobrança (cortesia, garantia) continua sem QR: sem itens o
+  // total é zero e não há o que cobrar.
+  const saldoEmAberto = os.saldo_em_aberto ?? 0
   const pix = qrPixParaDocumento({
     chave: loja.pix_chave,
     tipo: loja.pix_tipo || undefined,
     beneficiario: loja.nome || loja.razao_social,
     cidade: loja.cidade,
-    valorEmAberto: os.saldo_em_aberto ?? 0
+    valorACobrar: saldoEmAberto > 0 ? saldoEmAberto : total
   })
+
+  // Mesma lógica do cupom: com dívida em aberto o imperativo é um convite
+  // legítimo; sem dívida, vira etiqueta pra não cobrar quem já pagou.
+  const tituloPix = saldoEmAberto > 0 ? 'PAGUE COM PIX' : 'PAGAMENTO POR PIX'
 
   const diagnosticoHtml = os.diagnostico
     ? `
@@ -290,7 +309,7 @@ export function gerarHtmlComprovanteEntregaOS(os: DadosComprovanteOS, loja: Dado
   </div>
   ${diagnosticoHtml}
   ${secaoServicos}
-${blocoPixHtml(pix)}
+${blocoPixHtml(pix, { titulo: tituloPix })}
 
   <div class="divisoria"></div>
   ${garantiaHtml}

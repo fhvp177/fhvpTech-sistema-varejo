@@ -1,10 +1,15 @@
-// A regra do QR no cupom tem uma cara só e um erro caro: imprimir o convite a
-// pagar num comprovante de venda JÁ PAGA. O cliente pagou em dinheiro, leva o
-// papel pra casa, escaneia à noite e paga de novo — e o sistema não tem como
-// saber, porque QR em papel não avisa ninguém.
+// A regra do QR no cupom é simples de dizer e tem um erro caro escondido no
+// valor: TODO cupom impresso sai com QR (decisão do lojista em 2026-08-06), e o
+// QR cobra o SALDO quando ainda falta pagar, ou o TOTAL quando não falta nada.
 //
-// O outro erro caro é o valor: cobrar o total quando já houve entrada ou
-// parcela paga. Estes testes fixam os dois.
+// O erro caro é cobrar o total em cima de quem já pagou uma parte: venda com
+// entrada, parcelada no meio do caminho. Aí o QR tem que pedir só o que resta —
+// pedir o total é cobrar duas vezes o que já entrou.
+//
+// O que NÃO é erro, e está aqui documentado de propósito: a reimpressão de uma
+// venda inteiramente quitada também sai com QR do valor cheio. É o preço
+// aceito pra que a venda à vista — que nasce marcada como paga no instante em
+// que o cupom é impresso — leve QR pro cliente escanear ali no balcão.
 
 import { describe, it, expect } from 'vitest'
 import { gerarHtmlCupomVenda, type DadosCupomVenda } from '../cupomVenda'
@@ -37,27 +42,43 @@ function venda(sobrepor: Partial<DadosCupomVenda> = {}): DadosCupomVenda {
   }
 }
 
-const temQr = (html: string): boolean => html.includes('PAGUE COM PIX')
+// Procura o bloco pela classe, não pelo título: o título muda conforme o cupom
+// tenha ou não saldo em aberto, e um detector preso à palavra "PAGUE" daria
+// "cupom sem QR" justamente nos cupons já pagos, que é onde ele mais engana.
+const temQr = (html: string): boolean => html.includes('class="pix-bloco"')
+
+const valorImpresso = (html: string): string | null =>
+  /<div class="pix-valor">R\$ ([\d.,]+)<\/div>/.exec(html)?.[1] ?? null
+
+const tituloImpresso = (html: string): string | null =>
+  /<div class="pix-titulo">([^<]+)<\/div>/.exec(html)?.[1] ?? null
 
 describe('quando o QR aparece no cupom', () => {
-  it('aparece na venda a prazo, que é onde ele serve pra alguma coisa', () => {
+  it('aparece na venda a prazo', () => {
     expect(temQr(gerarHtmlCupomVenda(venda(), LOJA))).toBe(true)
-  })
-
-  it('NÃO aparece na venda já paga', () => {
-    // O erro caro do recurso. Venda à vista sai com valor_pago igual ao total.
-    const paga = venda({ status_pagamento: 'pago', valor_pago: 200 })
-    expect(temQr(gerarHtmlCupomVenda(paga, LOJA))).toBe(false)
-  })
-
-  it('NÃO aparece quando a parcelada foi toda quitada', () => {
-    const quitada = venda({ status_pagamento: 'parcelado', num_parcelas: 3, valor_pago: 200 })
-    expect(temQr(gerarHtmlCupomVenda(quitada, LOJA))).toBe(false)
   })
 
   it('aparece na venda em atraso', () => {
     const atrasada = venda({ status_pagamento: 'inadimplente', valor_pago: 0 })
     expect(temQr(gerarHtmlCupomVenda(atrasada, LOJA))).toBe(true)
+  })
+
+  it('aparece na venda à vista, que é o caso mais comum da loja', () => {
+    // Ela nasce paga: valor_pago igual ao total, sem vencimento. Enquanto o QR
+    // dependia de saldo, era justamente aqui que ele NUNCA saía — e é aqui que
+    // o cliente está de pé no balcão com o celular na mão.
+    const aVista = venda({ status_pagamento: 'pago', valor_pago: 200, data_vencimento: null })
+    expect(temQr(gerarHtmlCupomVenda(aVista, LOJA))).toBe(true)
+  })
+
+  it('aparece também na reimpressão de venda já quitada — risco aceito', () => {
+    // O fiado que o cliente terminou de pagar vira `pago`, igual à venda à
+    // vista, e o cupom não tem como distinguir os dois. O lojista foi avisado
+    // de que esse papel convida a pagar de novo e manteve a decisão. Este teste
+    // existe pra que a escolha seja explícita: se um dia ele mudar de ideia, é
+    // este teste que vira vermelho primeiro e mostra onde mexer.
+    const fiadoQuitado = venda({ status_pagamento: 'pago', valor_pago: 200 })
+    expect(temQr(gerarHtmlCupomVenda(fiadoQuitado, LOJA))).toBe(true)
   })
 
   it('NÃO aparece quando o lojista não configurou a chave', () => {
@@ -70,6 +91,17 @@ describe('quando o QR aparece no cupom', () => {
     expect(temQr(gerarHtmlCupomVenda(venda(), { ...LOJA, cidade: '' }))).toBe(false)
   })
 
+  it('NÃO aparece quando a venda não cobra nada', () => {
+    // Brinde, bonificação, desconto de 100%: não há valor pra cobrar, e o
+    // padrão do PIX não aceita R$ 0,00. Cupom sai normal, sem QR.
+    const brinde = venda({
+      total: 0,
+      valor_pago: 0,
+      itens: [{ produto_nome: 'Brinde', quantidade: 1, preco_unitario: 0 }]
+    })
+    expect(temQr(gerarHtmlCupomVenda(brinde, LOJA))).toBe(false)
+  })
+
   it('sobrevive a uma loja recém-instalada, sem nada preenchido', () => {
     expect(() => gerarHtmlCupomVenda(venda(), LOJA_PADRAO)).not.toThrow()
     expect(temQr(gerarHtmlCupomVenda(venda(), LOJA_PADRAO))).toBe(false)
@@ -77,9 +109,6 @@ describe('quando o QR aparece no cupom', () => {
 })
 
 describe('quanto o QR cobra', () => {
-  const valorImpresso = (html: string): string | null =>
-    /<div class="pix-valor">R\$ ([\d.,]+)<\/div>/.exec(html)?.[1] ?? null
-
   it('cobra o saldo, não o total, quando houve entrada', () => {
     // Venda de 200 com 80 de entrada: o QR tem que pedir 120. Pedir 200 aqui
     // seria cobrar a entrada duas vezes.
@@ -94,6 +123,47 @@ describe('quanto o QR cobra', () => {
 
   it('cobra o total quando nada foi pago', () => {
     expect(valorImpresso(gerarHtmlCupomVenda(venda(), LOJA))).toBe('200,00')
+  })
+
+  it('cobra o total na venda à vista, onde o saldo já nasce zerado', () => {
+    const aVista = venda({ status_pagamento: 'pago', valor_pago: 200, data_vencimento: null })
+    expect(valorImpresso(gerarHtmlCupomVenda(aVista, LOJA))).toBe('200,00')
+  })
+
+  it('cobra o total, e não o troco, quando o cliente pagou a mais', () => {
+    // valor_pago acima do total deixaria o saldo negativo. O QR não pode nascer
+    // pedindo um valor negativo nem R$ 0,00 — cai no total, como qualquer
+    // cupom de venda quitada.
+    const comTroco = venda({ status_pagamento: 'pago', valor_pago: 250 })
+    expect(valorImpresso(gerarHtmlCupomVenda(comTroco, LOJA))).toBe('200,00')
+  })
+})
+
+describe('como o bloco se chama', () => {
+  // O papel não pode se contradizer. Com dívida em aberto, "PAGUE" é um convite
+  // legítimo. Sem dívida, a linha de pagamento já carimbou "Pago" — mandar
+  // pagar logo abaixo disso lê como cobrança de algo que o cliente já quitou.
+  it('manda pagar quando o cliente ainda deve', () => {
+    expect(tituloImpresso(gerarHtmlCupomVenda(venda(), LOJA))).toBe('PAGUE COM PIX')
+  })
+
+  it('vira etiqueta, e não ordem, no cupom que diz "Pago"', () => {
+    const aVista = venda({ status_pagamento: 'pago', valor_pago: 200, data_vencimento: null })
+    const html = gerarHtmlCupomVenda(aVista, LOJA)
+    // As duas coisas juntas no mesmo papel — é o par que importa, não cada
+    // metade: este é exatamente o cupom onde "PAGUE" se contradizia.
+    expect(html).toContain('<td>Pago</td>')
+    expect(tituloImpresso(html)).toBe('PAGAMENTO POR PIX')
+  })
+
+  it('manda pagar na venda em atraso, onde a cobrança é o ponto', () => {
+    const atrasada = venda({ status_pagamento: 'inadimplente', valor_pago: 0 })
+    expect(tituloImpresso(gerarHtmlCupomVenda(atrasada, LOJA))).toBe('PAGUE COM PIX')
+  })
+
+  it('manda pagar quando sobrou saldo depois da entrada', () => {
+    const comEntrada = venda({ total: 200, entrada: 80, valor_pago: 80 })
+    expect(tituloImpresso(gerarHtmlCupomVenda(comEntrada, LOJA))).toBe('PAGUE COM PIX')
   })
 })
 
@@ -122,7 +192,7 @@ describe('o bloco impresso', () => {
   it('vem depois do bloco de pagamento e antes do aviso de não fiscal', () => {
     // Posição importa: o QR só faz sentido logo abaixo do valor que ele cobra.
     const pagamento = html.indexOf('PAGAMENTO')
-    const pix = html.indexOf('PAGUE COM PIX')
+    const pix = html.indexOf('class="pix-bloco"')
     const aviso = html.indexOf('não é documento fiscal')
     expect(pagamento).toBeGreaterThan(-1)
     expect(pix).toBeGreaterThan(pagamento)

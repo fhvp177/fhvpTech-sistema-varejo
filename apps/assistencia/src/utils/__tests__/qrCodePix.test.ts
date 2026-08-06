@@ -84,9 +84,9 @@ function renderToStaticMarkupSemMargem(payload: string): string {
 }
 
 describe('a regra de quando o QR aparece', () => {
-  const comSaldo = { ...LOJA, valorEmAberto: 150 }
+  const comSaldo = { ...LOJA, valorACobrar: 150 }
 
-  it('desenha quando ainda falta pagar', () => {
+  it('desenha quando há valor a cobrar', () => {
     const r = qrPixParaDocumento(comSaldo)
     expect(r).not.toBeNull()
     expect(r!.valor).toBe(150)
@@ -94,23 +94,24 @@ describe('a regra de quando o QR aparece', () => {
   })
 
   it.each([
-    ['a venda está quitada', { valorEmAberto: 0 }],
-    ['sobrou troco', { valorEmAberto: -5 }],
+    ['não há o que cobrar', { valorACobrar: 0 }],
+    ['sobrou troco', { valorACobrar: -5 }],
     ['o lojista não configurou a chave', { chave: '' }],
     ['a chave é só espaço em branco', { chave: '   ' }],
     ['a chave não existe', { chave: null }],
     ['a chave está inválida', { chave: 'chave que nao existe' }],
     ['falta o nome da loja', { beneficiario: '' }],
     ['falta a cidade da loja', { cidade: '' }],
-    ['o valor não é número', { valorEmAberto: Number.NaN }]
+    ['o valor não é número', { valorACobrar: Number.NaN }]
   ])('não desenha quando %s', (_motivo, extra) => {
     expect(qrPixParaDocumento({ ...comSaldo, ...extra })).toBeNull()
   })
 
-  it('cobra o SALDO, não o total da venda', () => {
-    // Venda de 200 com 150 já pagos tem que gerar QR de 50. Cobrar 200 de novo
-    // é o erro caro deste recurso.
-    const r = qrPixParaDocumento({ ...LOJA, valorEmAberto: 200 - 150 })
+  it('cobra exatamente o valor que o documento mandou cobrar', () => {
+    // Quem decide o número é o documento: numa venda de 200 com 150 já pagos
+    // ele manda 50, e o QR tem que pedir 50. Arredondar, somar ou "corrigir"
+    // aqui é o erro caro deste recurso.
+    const r = qrPixParaDocumento({ ...LOJA, valorACobrar: 200 - 150 })
     expect(r!.valor).toBe(50)
     expect(r!.svg).toContain('<svg')
   })
@@ -118,7 +119,7 @@ describe('a regra de quando o QR aparece', () => {
   it('o valor cobrado é mesmo o que entra no texto do PIX', () => {
     // Prova que o QR desenhado corresponde ao payload com aquele valor — não
     // adianta a regra estar certa e o desenho ser de outro valor.
-    const r = qrPixParaDocumento({ ...LOJA, valorEmAberto: 50 })
+    const r = qrPixParaDocumento({ ...LOJA, valorACobrar: 50 })
     const esperado = montarBrCodePix({ ...LOJA, valor: 50 })
     expect(esperado.ok).toBe(true)
     expect(r!.svg).toBe(desenharQrPix((esperado as { payload: string }).payload).svg)

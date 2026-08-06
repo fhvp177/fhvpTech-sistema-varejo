@@ -42,6 +42,17 @@ writeFileSync(join(dir, 'cupom-extremo.html'), gerarHtmlCupomVenda({
   ]
 }, lojaAbsurda), 'utf-8')
 
+// Loja de tamanho realista. A chave preenchida é o que faz os cupons abaixo
+// saírem COM o bloco do PIX — é neles que dá pra ver se o QR fica legível, e
+// não só se cabe.
+const lojaNormal = {
+  ...LOJA_PADRAO,
+  nome: 'INFORMATICA AVP', telefone: '(85) 99198-3482',
+  razao_social: 'INFORMATICA AVP COMERCIO LTDA', cnpj: '00.000.000/0001-00',
+  endereco: 'RUA UM, 100', cidade: 'CIDADE', uf: 'CE', cep: '60000-000',
+  pix_chave: '123e4567-e12b-12d1-a456-426655440000'
+}
+
 writeFileSync(join(dir, 'cupom-normal.html'), gerarHtmlCupomVenda({
   id: 59, data: '2026-08-01T16:06:00', total: 3860, valor_pago: 0,
   status_pagamento: 'pendente', data_vencimento: '2026-08-03', num_parcelas: null,
@@ -51,12 +62,26 @@ writeFileSync(join(dir, 'cupom-normal.html'), gerarHtmlCupomVenda({
     { produto_nome: 'RACK VERTICAL SLIM', quantidade: 1, preco_unitario: 1234.56 }
   ],
   parcelas: []
-}, { ...LOJA_PADRAO, nome: 'INFORMATICA AVP', telefone: '(85) 99198-3482',
-     razao_social: 'INFORMATICA AVP COMERCIO LTDA', cnpj: '00.000.000/0001-00',
-     endereco: 'RUA UM, 100', cidade: 'CIDADE', uf: 'CE', cep: '60000-000',
-     // Venda a prazo + chave preenchida = o cupom de baixo sai COM o bloco do
-     // PIX. É nele que dá pra ver se o QR fica legível, e não só se cabe.
-     pix_chave: '123e4567-e12b-12d1-a456-426655440000' }), 'utf-8')
+}, lojaNormal), 'utf-8')
+
+// Venda à vista: nasce paga, sem vencimento e sem parcela, e mesmo assim leva
+// QR — o cliente ainda vai pagar ali no balcão. É o cupom mais comum da loja e
+// o único em que o bloco do PIX aparece logo abaixo de uma linha "Pago", então
+// é o que precisa ser olhado pra saber se o papel confunde ou não.
+writeFileSync(join(dir, 'cupom-avista.html'), gerarHtmlCupomVenda({
+  id: 61, data: '2026-08-06T11:39:00', total: 133.9, desconto: 10,
+  valor_pago: 133.9, status_pagamento: 'pago',
+  data_vencimento: null, num_parcelas: null,
+  cliente_nome: 'ANTONIO EDUARDO', cliente_endereco: 'RUA 13 DE MAIO, 121',
+  cliente_telefone: '(85) 9.8147-2058',
+  itens: [
+    {
+      produto_nome: 'ALMOFADA FELTRO EPSON L4250 L4260 L4150 L4160 ORIGINAL EPSON',
+      quantidade: 1, preco_unitario: 143.9
+    }
+  ],
+  parcelas: []
+}, lojaNormal), 'utf-8')
 
 writeFileSync(join(dir, 'devolucao-extremo.html'), gerarHtmlComprovanteDevolucao({
   id: 3, venda_id: 59, data: '2026-08-01T16:06:00', tipo: 'credito',

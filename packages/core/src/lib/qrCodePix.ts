@@ -57,8 +57,13 @@ export type ParamsQrPix = {
   chave: string | null | undefined
   beneficiario: string
   cidade: string
-  /** Quanto ainda falta pagar. Zero ou menos significa quitado: sem QR. */
-  valorEmAberto: number
+  /**
+   * Quanto ESTE documento cobra. Quem chama é que decide o número: pode ser o
+   * saldo que falta (fiado, parcela, OS em aberto) ou o total cheio (venda à
+   * vista, que nasce marcada como paga mas só vai ser paga dali a segundos, no
+   * balcão). Zero ou menos significa "não há o que cobrar": sem QR.
+   */
+  valorACobrar: number
   tipo?: TipoChavePix
   /**
    * Largura fixa, em mm, para documento que não sai na bobina (o orçamento de
@@ -105,31 +110,34 @@ export function desenharQrPix(payload: string, larguraMmFixa?: number): { svg: s
 }
 
 /**
- * Decide se este documento leva QR e, se levar, devolve o desenho pronto.
+ * Desenha o QR deste documento, ou devolve `null` quando não há QR pra desenhar.
  *
- * Devolve `null` sempre que houver qualquer dúvida — loja sem chave, dívida já
- * quitada, dados da loja incompletos, chave inválida. Documento sem QR é um
+ * Devolve `null` sempre que houver qualquer dúvida — loja sem chave, nada a
+ * cobrar, dados da loja incompletos, chave inválida. Documento sem QR é um
  * documento normal; documento com QR quebrado é dinheiro que não chega.
+ *
+ * O que esta função NÃO decide: se o documento deveria cobrar alguma coisa.
+ * Essa pergunta só o documento sabe responder — o cupom, por exemplo, precisa
+ * distinguir "venda à vista sendo paga agora no balcão" de "fiado que o cliente
+ * terminou de pagar mês passado", e as duas chegam aqui marcadas como pagas.
  */
 export function qrPixParaDocumento(p: ParamsQrPix): QrPixPronto | null {
   const chave = (p.chave ?? '').trim()
   if (!chave) return null
-  // Quitado (ou com troco) não leva QR: o cliente já pagou, e um convite a
-  // pagar de novo impresso no comprovante dele é pedir pra receber duas vezes.
+  // Sem valor não há o que cobrar, e QR de R$ 0,00 no papel é só confusão.
   //
   // Hoje o `montarBrCodePix` lá embaixo também recusaria valor zero, então esta
-  // linha é cinto e suspensório — e é de propósito. Ela é a única que fala de
-  // DOCUMENTO QUITADO; a de baixo fala de valor inválido pro padrão do PIX. No
-  // dia em que existir "QR sem valor, o cliente digita" (um código fixo pro
-  // balcão), aquela recusa some e só esta continua impedindo que o comprovante
-  // de quem já pagou saia convidando a pagar de novo.
-  if (!Number.isFinite(p.valorEmAberto) || p.valorEmAberto <= 0) return null
+  // linha é cinto e suspensório — e é de propósito. Ela fala de NÃO HÁ O QUE
+  // COBRAR; a de baixo fala de valor inválido pro padrão do PIX. No dia em que
+  // existir "QR sem valor, o cliente digita" (um código fixo pro balcão),
+  // aquela recusa some e só esta continua segurando o zero.
+  if (!Number.isFinite(p.valorACobrar) || p.valorACobrar <= 0) return null
 
   const brcode = montarBrCodePix({
     chave,
     beneficiario: p.beneficiario,
     cidade: p.cidade,
-    valor: p.valorEmAberto,
+    valor: p.valorACobrar,
     tipo: p.tipo
   })
   if (!brcode.ok) return null
@@ -145,7 +153,7 @@ export function qrPixParaDocumento(p: ParamsQrPix): QrPixPronto | null {
       svg,
       larguraMm,
       beneficiario: normalizarTextoPix(p.beneficiario, 25),
-      valor: p.valorEmAberto
+      valor: p.valorACobrar
     }
   } catch {
     return null
