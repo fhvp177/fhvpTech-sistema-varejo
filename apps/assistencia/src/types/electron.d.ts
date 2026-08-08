@@ -13,6 +13,8 @@ declare const __FEAT_ETIQUETAS__: boolean
 declare const __FEAT_TEF__: boolean
 declare const __FEAT_NFE__: boolean
 declare const __FEAT_MULTICAIXA__: boolean
+/** Tapume de obra da maquininha integrada — false até a feature ficar pronta. */
+declare const __FEAT_PAGAMENTO__: boolean
 
 type RespostaIPC<T = unknown> = { success: true; data: T } | { success: false; error: string }
 
@@ -756,7 +758,18 @@ interface Window {
         versaoBaixada: string | null
       }>>
       verificar: () => Promise<RespostaIPC>
-      instalar: () => Promise<RespostaIPC>
+      /**
+       * Dispara o instalador. `backup` conta o que houve com o backup
+       * pré-atualização: 'nao-se-aplica' é o segundo caixa, que não tem banco
+       * local; 'falhou' é máquina com dados que não conseguiu guardá-los — a
+       * atualização segue, mas o modal avisa.
+       */
+      instalar: () => Promise<RespostaIPC<{
+        backup:
+          | { estado: 'feito' }
+          | { estado: 'nao-se-aplica' }
+          | { estado: 'falhou'; erro: string }
+      }>>
       onEvento: (cb: (evt: { tipo: string; dados?: unknown }) => void) => () => void
     }
     backup: {

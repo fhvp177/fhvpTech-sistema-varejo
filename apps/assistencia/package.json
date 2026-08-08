@@ -21,7 +21,10 @@
     "hash:gerar": "tsx scripts/gerar-hash-migration.ts",
     "medir:cupom": "tsx scripts/medir-cupom/gerar.ts && electron scripts/medir-cupom/medir.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^3.0.0",

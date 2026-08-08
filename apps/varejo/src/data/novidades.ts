@@ -7,6 +7,17 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.36.0',
+    itens: [
+      {
+        emoji: '🛠️',
+        titulo: 'Correção de bugs',
+        descricao:
+          'Foi corrigida uma situação em que o aviso "Instalando a nova versão" permanecia na tela sem que a atualização fosse concluída, em computadores configurados como caixa adicional. A tela de atualização passa a informar quando a instalação não pode ser concluída e a permitir nova tentativa, mantendo o sistema disponível na versão atual enquanto isso. Nas atualizações em que o backup automático não puder ser realizado, o aviso passa a ser exibido antes da instalação.'
+      }
+    ]
+  },
+  {
     versao: '1.35.0',
     itens: [
       {

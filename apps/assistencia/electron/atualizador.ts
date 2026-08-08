@@ -1,7 +1,10 @@
 import { BrowserWindow, app } from 'electron'
 import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { autoUpdater } from 'electron-updater'
-import { executarBackupPreUpdate } from '@fhvptech/core/electron/backup/BackupPreUpdate'
+import {
+  executarBackupPreUpdate,
+  type ResultadoPreUpdate
+} from '@fhvptech/core/electron/backup/BackupPreUpdate'
 
 type RespostaIPC<T = unknown> =
   | { success: true; data: T }
@@ -126,21 +129,45 @@ export function inicializarAtualizador(obterJanela: () => BrowserWindow | null):
     }
   })
 
-  registrarCanal('atualizacao:instalar', async (): Promise<RespostaIPC> => {
-    if (!estado.versaoBaixada) {
-      return { success: false, error: 'Nenhuma atualização baixada disponível.' }
+  registrarCanal(
+    'atualizacao:instalar',
+    async (): Promise<RespostaIPC<{ backup: ResultadoPreUpdate }>> => {
+      if (!estado.versaoBaixada) {
+        return { success: false, error: 'Nenhuma atualização baixada disponível.' }
+      }
+      // Backup antes de fechar — protege contra migrations da nova versão.
+      // O evento 'before-quit-for-update' do electron-updater não serve aqui:
+      // é emitido no autoUpdater nativo do Electron logo antes de app.quit(),
+      // sem tempo de aguardar uma operação assíncrona.
+      //
+      // Ele NÃO pode lançar, e isso é garantido do lado de lá (ver
+      // preUpdateLogica.ts). Uma exceção nesta linha nunca vira mensagem de
+      // erro: o roteador não converte exceção em resposta, então ela sai daqui
+      // como promessa rejeitada e o modal fica preso em "Instalando…" para
+      // sempre. Foi assim que o segundo caixa — que não tem banco e portanto
+      // não tem BackupManager — ficou impossibilitado de se atualizar.
+      const backup = await executarBackupPreUpdate()
+      // (true, true) = instala em SILÊNCIO (sem o assistente do Windows, casado com
+      // nsis.oneClick) e reabre o app sozinho. Sem janela nativa: o usuário só vê o
+      // nosso aviso "Atualizando…" e o sistema reabre já atualizado.
+      //
+      // Silêncio corta os dois lados: se o instalador não subir, não há janela
+      // nativa nenhuma para contar. O `catch` transforma isso em evento de erro
+      // — sem ele a exceção morreria dentro do setImmediate, e de novo o único
+      // sintoma seria a tela parada.
+      setImmediate(() => {
+        try {
+          autoUpdater.quitAndInstall(true, true)
+        } catch (e) {
+          const mensagem = (e as Error).message
+          estado.ultimaMensagem = `Erro ao instalar: ${mensagem}`
+          enviarEvento('erro', { mensagem })
+          console.warn('[atualizador] Falha ao disparar o instalador:', mensagem)
+        }
+      })
+      return { success: true, data: { backup } }
     }
-    // Backup antes de fechar — protege contra migrations da nova versão.
-    // O evento 'before-quit-for-update' do electron-updater não serve aqui:
-    // é emitido no autoUpdater nativo do Electron logo antes de app.quit(),
-    // sem tempo de aguardar uma operação assíncrona.
-    await executarBackupPreUpdate()
-    // (true, true) = instala em SILÊNCIO (sem o assistente do Windows, casado com
-    // nsis.oneClick) e reabre o app sozinho. Sem janela nativa: o usuário só vê o
-    // nosso aviso "Atualizando…" e o sistema reabre já atualizado.
-    setImmediate(() => autoUpdater.quitAndInstall(true, true))
-    return { success: true, data: null }
-  })
+  )
 
   // ─── Verificação automática ao iniciar (só em prod) ──────────────────────
   if (app.isPackaged) {

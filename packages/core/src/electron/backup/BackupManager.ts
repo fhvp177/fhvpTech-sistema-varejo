@@ -267,3 +267,16 @@ export function obterBackupManager(): BackupManager {
   if (!instancia) throw new Error('BackupManager não inicializado. Chame inicializarBackupManager() primeiro.')
   return instancia
 }
+
+/**
+ * Se esta máquina tem backup para fazer.
+ *
+ * Falso no segundo caixa: ele não inicializa banco nem BackupManager (ver a
+ * guarda `if (!ehTerminal)` no main.ts), porque os dados moram no PC principal.
+ * Quem for fazer backup precisa perguntar ANTES em vez de chamar
+ * `obterBackupManager()` e torcer — ele lança, e uma exceção no caminho do
+ * update deixou o segundo caixa preso na tela "Instalando…" para sempre.
+ */
+export function temBackupManager(): boolean {
+  return instancia !== null
+}
