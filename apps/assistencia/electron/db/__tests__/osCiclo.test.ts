@@ -65,8 +65,11 @@ describe('ciclo de vida da OS (osCiclo)', () => {
     expect(transicoesPermitidas('aprovada', 'externo')).toEqual(['em_reparo', 'agendada', 'cancelada'])
   })
 
-  it('garantia padrão é 45 dias (decisão de 2026-07-05) e todo status tem rótulo', () => {
-    expect(GARANTIA_PADRAO_DIAS).toBe(45)
+  it('garantia padrão é 90 dias (revisto em 2026-08-16) e todo status tem rótulo', () => {
+    // Era 45 desde 2026-07-05. O número está aqui para que trocá-lo seja uma
+    // decisão consciente — garantia é promessa impressa no comprovante que o
+    // cliente leva, não detalhe de implementação.
+    expect(GARANTIA_PADRAO_DIAS).toBe(90)
     for (const rotulo of Object.values(ROTULOS_STATUS)) {
       expect(rotulo.length).toBeGreaterThan(0)
     }

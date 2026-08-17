@@ -2,6 +2,7 @@ import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { criarVenda } from './vendas'
 import {
   estaEncerrada,
+  GARANTIA_PADRAO_DIAS,
   podeTransitar,
   ROTULOS_STATUS,
   type CategoriaOS,
@@ -219,9 +220,11 @@ export function criarOS(dados: DadosNovaOS, tecnicoId: number): OrdemDetalhada {
       .prepare(
         `INSERT INTO ordens_servico
            (tipo_atendimento, natureza, categoria, cliente_id, tecnico_id, equipamento, numero_serie, acessorios,
-            estado_entrada, senha_acesso, endereco_atendimento, agendado_para, defeito_relatado)
+            estado_entrada, senha_acesso, endereco_atendimento, agendado_para, defeito_relatado,
+            garantia_dias)
          VALUES (@tipo, @natureza, @categoria, @cliente_id, @tecnico_id, @equipamento, @numero_serie, @acessorios,
-                 @estado_entrada, @senha_acesso, @endereco, @agendado_para, @defeito)`
+                 @estado_entrada, @senha_acesso, @endereco, @agendado_para, @defeito,
+                 @garantia_dias)`
       )
       .run({
         tipo,
@@ -238,7 +241,11 @@ export function criarOS(dados: DadosNovaOS, tecnicoId: number): OrdemDetalhada {
         senha_acesso: tipo === 'bancada' ? limpar(dados.senha_acesso) : null,
         endereco: tipo === 'externo' ? endereco : null,
         agendado_para: tipo === 'externo' ? limpar(dados.agendado_para) : null,
-        defeito
+        defeito,
+        // Explícito de propósito: antes isto vinha do DEFAULT da coluna, onde
+        // ninguém encontrava e ninguém conseguia mudar sem reconstruir a
+        // tabela. A regra de negócio mora em osCiclo.ts.
+        garantia_dias: GARANTIA_PADRAO_DIAS
       })
     osId = r.lastInsertRowid as number
     gravarHistorico(osId, 'aberta', null, tecnicoId)
@@ -622,9 +629,9 @@ export function criarOSGarantia(osOrigemId: number, defeitoRelatado: string, tec
       .prepare(
         `INSERT INTO ordens_servico
            (tipo_atendimento, natureza, categoria, cliente_id, tecnico_id, equipamento, numero_serie, senha_acesso,
-            endereco_atendimento, defeito_relatado, os_origem_id)
+            endereco_atendimento, defeito_relatado, os_origem_id, garantia_dias)
          VALUES (@tipo, @natureza, @categoria, @cliente_id, @tecnico_id, @equipamento, @numero_serie, @senha_acesso,
-                 @endereco, @defeito, @origem_id)`
+                 @endereco, @defeito, @origem_id, @garantia_dias)`
       )
       .run({
         tipo: origem.tipo_atendimento,
@@ -637,7 +644,11 @@ export function criarOSGarantia(osOrigemId: number, defeitoRelatado: string, tec
         senha_acesso: origem.senha_acesso,
         endereco: origem.endereco_atendimento,
         defeito,
-        origem_id: osOrigemId
+        origem_id: osOrigemId,
+        // A OS de garantia recebe o padrão VIGENTE, não o da OS de origem —
+        // é um atendimento novo, com garantia própria a partir da entrega
+        // dele. Era o que já acontecia via DEFAULT da coluna; agora está dito.
+        garantia_dias: GARANTIA_PADRAO_DIAS
       })
     novaId = r.lastInsertRowid as number
     gravarHistorico(novaId, 'aberta', `Garantia da OS #${osOrigemId}`, tecnicoId)

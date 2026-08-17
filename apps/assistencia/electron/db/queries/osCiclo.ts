@@ -32,8 +32,18 @@ export type StatusOS =
   | 'recusada'
   | 'cancelada'
 
-// Padrão decidido pelo dono do produto (2026-07-05): 45 dias, editável por OS.
-export const GARANTIA_PADRAO_DIAS = 45
+// Padrão decidido pelo dono do produto: 45 dias em 2026-07-05, revisto para
+// **90 dias** em 2026-08-16. Continua editável por OS, na tela de detalhe.
+//
+// ⚠️ Quem manda é ESTA constante — `criarOS` e `criarOSGarantia` a passam no
+// INSERT. A coluna `garantia_dias` da migration 028 ainda tem `DEFAULT 45`, e é
+// preciso deixar assim: migration já aplicada não se edita, e o SQLite não muda
+// o default de uma coluna sem reconstruir a tabela inteira. Esse default virou
+// letra morta — nenhum caminho do código chega nele.
+//
+// Mudar este número NÃO mexe em OS já aberta. A garantia que o cliente levou
+// escrita no comprovante é a que vale; o número novo só alcança OS nova.
+export const GARANTIA_PADRAO_DIAS = 90
 
 export const ROTULOS_STATUS: Record<StatusOS, string> = {
   aberta: 'Aberta',
