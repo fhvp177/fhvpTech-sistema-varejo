@@ -428,6 +428,9 @@ export type DadosFechamentoOS = {
   data_vencimento?: string | null
   num_parcelas?: number | null
   entrada?: number
+  // COMO o cliente pagou, quando entrega à vista. A prazo o criarVenda deriva
+  // 'crediario' sozinho, e OS sem itens não gera venda nenhuma.
+  forma_pagamento?: string | null
 }
 
 // Entrega e recebe: o momento em que a OS encontra a máquina de vendas. Os
@@ -490,6 +493,7 @@ export function fecharOS(id: number, dados: DadosFechamentoOS, vendedorId: numbe
         data_vencimento: vencimento,
         num_parcelas: numParcelas,
         entrada,
+        forma_pagamento: dados.forma_pagamento ?? null,
         itens: os.itens.map((i) => ({
           produto_id: i.produto_id,
           variacao_id: i.variacao_id,

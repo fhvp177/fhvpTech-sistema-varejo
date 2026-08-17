@@ -46,8 +46,14 @@ const SEGREDOS = lerSegredosLicenca()
 // hoje; 'pro' = basico + nota fiscal (nfe) + TEF. NF-e e TEF ainda não foram
 // construídos — as flags só reservam o lugar, e o Pro nasce idêntico ao Básico.
 // Default 'pro' = tudo ligado (dev e build padrão, sem regressão).
+//
+// ⚠️ `pagamento` NÃO é flag de plano — é TAPUME DE OBRA. As outras respondem
+// "esta edição vendeu isso?"; esta responde "isto já está pronto pro lojista
+// ver?". Fica `false` em TODAS as edições, inclusive na 'pro', enquanto a
+// maquininha integrada estiver sendo construída. Quando terminar, ela some e o
+// gate passa a ser só `tef`, que é a flag comercial de verdade.
 type Features = Record<
-  'dashboard' | 'chatbot' | 'etiquetas' | 'tef' | 'nfe' | 'multicaixa',
+  'dashboard' | 'chatbot' | 'etiquetas' | 'tef' | 'nfe' | 'multicaixa' | 'pagamento',
   boolean
 >
 const FEATURES_POR_EDICAO: Record<string, Features> = {
@@ -57,9 +63,19 @@ const FEATURES_POR_EDICAO: Record<string, Features> = {
     etiquetas: true,
     tef: false,
     nfe: false,
-    multicaixa: false
+    multicaixa: false,
+    pagamento: false
   },
-  pro: { dashboard: true, chatbot: true, etiquetas: true, tef: true, nfe: true, multicaixa: true }
+  // pagamento fica false aqui TAMBÉM, de propósito — ver o comentário acima.
+  pro: {
+    dashboard: true,
+    chatbot: true,
+    etiquetas: true,
+    tef: true,
+    nfe: true,
+    multicaixa: true,
+    pagamento: false
+  }
 }
 const EDICAO = process.env.EDICAO ?? 'pro'
 const FEATURES = FEATURES_POR_EDICAO[EDICAO]
@@ -84,6 +100,10 @@ export default defineConfig({
       // servidor sobe e que o boot decide se esta máquina é um caixa adicional.
       // Sem isso, o Básico ainda carregaria o mecanismo, só sem a tela.
       __FEAT_MULTICAIXA__: JSON.stringify(FEATURES.multicaixa),
+      // Também no principal: com ela desligada, os canais de pagamento nem
+      // chegam a ser registrados — não basta esconder o botão, o caminho todo
+      // tem que não existir enquanto a obra não acaba.
+      __FEAT_PAGAMENTO__: JSON.stringify(FEATURES.pagamento),
       // A edição também no principal, para o atualizador saber sozinho em qual
       // canal ele deve procurar versão nova — ver electron/atualizador.ts.
       __EDICAO__: JSON.stringify(EDICAO)
@@ -128,6 +148,7 @@ export default defineConfig({
       __FEAT_ETIQUETAS__: JSON.stringify(FEATURES.etiquetas),
       __FEAT_TEF__: JSON.stringify(FEATURES.tef),
       __FEAT_NFE__: JSON.stringify(FEATURES.nfe),
+      __FEAT_PAGAMENTO__: JSON.stringify(FEATURES.pagamento),
       __FEAT_MULTICAIXA__: JSON.stringify(FEATURES.multicaixa)
     },
     plugins: [react()]

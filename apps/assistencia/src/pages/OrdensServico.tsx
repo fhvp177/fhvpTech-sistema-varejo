@@ -18,6 +18,7 @@ import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteEntradaOS, gerarHtmlComprovanteEntregaOS } from '@/utils/comprovantesOS'
 import { gerarHtmlLaudoOS, gerarHtmlOrcamentoOS } from '@/utils/documentosOS'
 import { abrirWhatsAppOS } from '@/utils/whatsapp'
+import { FORMAS_A_VISTA, type FormaPagamento } from '@/utils/formaPagamento'
 
 const ITENS_POR_PAGINA = 20
 
@@ -1804,7 +1805,12 @@ const ModalFechamento: FC<{
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
-  const [forma, setForma] = useState<'pago' | 'pendente' | 'parcelado'>('pago')
+  // CONDIÇÃO (quando) e FORMA (como) são coisas diferentes e ficam lado a lado
+  // aqui — esta variável já se chamou `forma` e guardava a condição, que é a
+  // mesma confusão que existia no PDV. Ver src/utils/formaPagamento.ts.
+  const [condicao, setCondicao] = useState<'pago' | 'pendente' | 'parcelado'>('pago')
+  // Sem pré-marcação: padrão marcado vira mentira silenciosa no relatório.
+  const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | null>(null)
   // Sem data pré-preenchida DE PROPÓSITO: o vencimento é um combinado com o
   // cliente — tem que ser escolhido conscientemente (os atalhos dão a rapidez).
   const [vencimento, setVencimento] = useState('')
@@ -1814,22 +1820,29 @@ const ModalFechamento: FC<{
   const [salvando, setSalvando] = useState(false)
 
   const semCobranca = os.itens.length === 0
+  // Mesma regra do PDV: só pergunta quando há dinheiro entrando agora. OS sem
+  // cobrança (garantia/cortesia) e entrega a prazo não têm o que responder.
+  const precisaEscolherForma = !semCobranca && condicao === 'pago' && total > 0
   const entradaNum = Math.max(0, parseFloat(entrada.replace(',', '.')) || 0)
   const nParcelas = parseInt(parcelas) || 0
   const financiado = Math.max(0, total - entradaNum)
 
   const confirmar = async () => {
     setErro('')
-    if (!semCobranca && forma !== 'pago') {
+    if (precisaEscolherForma && !formaPagamento) {
+      setErro('Escolha como o cliente pagou (dinheiro, débito, crédito ou PIX).')
+      return
+    }
+    if (!semCobranca && condicao !== 'pago') {
       if (total <= 0) {
         setErro('O total é zero — não há nada pra receber depois. Use "À vista".')
         return
       }
       if (!vencimento) {
-        setErro(forma === 'parcelado' ? 'Escolha a data do 1º vencimento.' : 'Escolha a data de vencimento.')
+        setErro(condicao === 'parcelado' ? 'Escolha a data do 1º vencimento.' : 'Escolha a data de vencimento.')
         return
       }
-      if (forma === 'parcelado' && nParcelas < 2) { setErro('Parcelado exige ao menos 2 parcelas.'); return }
+      if (condicao === 'parcelado' && nParcelas < 2) { setErro('Parcelado exige ao menos 2 parcelas.'); return }
       if (entradaNum >= total) {
         setErro('A entrada não pode ser igual ou maior que o total — pra receber tudo agora, use "À vista".')
         return
@@ -1841,10 +1854,12 @@ const ModalFechamento: FC<{
       semCobranca
         ? { status_pagamento: 'pago' }
         : {
-            status_pagamento: forma,
-            data_vencimento: forma === 'pago' ? null : vencimento,
-            num_parcelas: forma === 'parcelado' ? nParcelas : null,
-            entrada: forma === 'pago' ? 0 : entradaNum
+            status_pagamento: condicao,
+            data_vencimento: condicao === 'pago' ? null : vencimento,
+            num_parcelas: condicao === 'parcelado' ? nParcelas : null,
+            entrada: condicao === 'pago' ? 0 : entradaNum,
+            // A prazo o backend deriva 'crediario' sozinho — não mandamos nada.
+            forma_pagamento: precisaEscolherForma ? formaPagamento : null
           }
     )
     setSalvando(false)
@@ -1883,9 +1898,9 @@ const ModalFechamento: FC<{
                   <button
                     key={f.id}
                     type="button"
-                    onClick={() => { setForma(f.id); setErro('') }}
+                    onClick={() => { setCondicao(f.id); setErro('') }}
                     className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                      forma === f.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'
+                      condicao === f.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'
                     }`}
                   >
                     {f.rotulo}
@@ -1893,11 +1908,44 @@ const ModalFechamento: FC<{
                 ))}
               </div>
 
-              {forma !== 'pago' && (
+              {/* Forma de pagamento — COMO o dinheiro entrou. Mesmo bloco do
+                  PDV: a OS entregue à vista é uma venda como qualquer outra, e
+                  sem isto ela nasceria sem forma e furaria o relatório. */}
+              {precisaEscolherForma && (
+                <div className="grid gap-1.5">
+                  <Label>
+                    Forma de pagamento <span className="text-destructive">*</span>
+                  </Label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {FORMAS_A_VISTA.map((f) => {
+                      const Icone = f.icone
+                      const marcada = formaPagamento === f.valor
+                      return (
+                        <button
+                          key={f.valor}
+                          type="button"
+                          onClick={() => { setFormaPagamento(f.valor); setErro('') }}
+                          aria-pressed={marcada}
+                          className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors text-left ${
+                            marcada
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary font-medium'
+                              : 'hover:bg-muted/50'
+                          }`}
+                        >
+                          <Icone className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{f.rotulo}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {condicao !== 'pago' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-1.5">
                     <Label htmlFor="fech-venc">
-                      {forma === 'parcelado' ? '1º vencimento' : 'Vencimento'}{' '}
+                      {condicao === 'parcelado' ? '1º vencimento' : 'Vencimento'}{' '}
                       <span className="text-destructive">*</span>
                     </Label>
                     <Input
@@ -1923,7 +1971,7 @@ const ModalFechamento: FC<{
                       ))}
                     </div>
                   </div>
-                  {forma === 'parcelado' ? (
+                  {condicao === 'parcelado' ? (
                     <div className="grid gap-1.5">
                       <Label htmlFor="fech-parc">Parcelas</Label>
                       <select
@@ -1955,7 +2003,7 @@ const ModalFechamento: FC<{
                     />
                     {entradaNum > 0 && (
                       <p className="text-xs text-muted-foreground">
-                        Fica {forma === 'parcelado' ? 'parcelado' : 'a receber'}: <b>{fmt(financiado)}</b>
+                        Fica {condicao === 'parcelado' ? 'parcelado' : 'a receber'}: <b>{fmt(financiado)}</b>
                       </p>
                     )}
                   </div>

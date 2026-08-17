@@ -25,6 +25,7 @@ import { obterDadosLoja } from '@/utils/dadosLoja'
 import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido, type VencimentosMes } from '@/utils/relatorioVendas'
+import { FORMAS_A_VISTA, type FormaPagamento } from '@/utils/formaPagamento'
 import { useCalculadora, usePdvMode, useSessao } from '@/App'
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
@@ -65,6 +66,8 @@ type Venda = {
   entrada: number
   valor_pago: number
   status_pagamento: StatusPagamento
+  /** COMO foi paga. null nas vendas anteriores ao campo — "não sabemos". */
+  forma_pagamento?: string | null
   data_vencimento: string | null
   num_parcelas: number | null
   valor_inadimplente: number
@@ -185,9 +188,14 @@ const LABEL_STATUS: Record<StatusPagamento, string> = {
   parcelado: 'Parcelado'
 }
 
-// Rótulos da forma de pagamento no PDV — usados durante a venda (presente),
-// diferente de LABEL_STATUS que descreve o estado da venda no histórico (passado).
-const LABEL_FORMA_PAGAMENTO: Record<StatusPagamento, string> = {
+// Rótulos da CONDIÇÃO de pagamento no PDV — o "quando" da venda (presente),
+// diferente de LABEL_STATUS que descreve o estado dela no histórico (passado).
+//
+// Já se chamou LABEL_FORMA_PAGAMENTO, o que era errado e perigoso: forma é o
+// MEIO (dinheiro, cartão, PIX) e mora em src/utils/formaPagamento.ts. Os dois
+// blocos vivem lado a lado nesta tela — se voltarem a ter o mesmo nome, ninguém
+// mais sabe qual é qual.
+const LABEL_CONDICAO_PAGAMENTO: Record<StatusPagamento, string> = {
   pago: 'À vista',
   pendente: 'Venda a prazo',
   inadimplente: 'Inadimplente',
@@ -774,6 +782,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                         <BotaoNotaFiscal
                           vendaId={v.id}
                           aPrazo={v.status_pagamento !== 'pago'}
+                          formaJaConhecida={v.forma_pagamento}
                           clienteTipoPessoa={v.cliente_tipo_pessoa}
                           ehDono={ehDono}
                           nota={notas[v.id] ?? null}
@@ -1311,6 +1320,9 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [clienteId, setClienteId] = useState('')
   const [statusPagamento, setStatusPagamento] = useState<StatusPagamento>('pago')
+  // Sem pré-marcação de propósito: um padrão marcado vira mentira silenciosa no
+  // relatório toda vez que o operador só aperta Enter.
+  const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | null>(null)
   const [creditoDisponivel, setCreditoDisponivel] = useState(0)
   const [usarCredito, setUsarCredito] = useState(false)
   const [dataVencimento, setDataVencimento] = useState('')
@@ -1407,6 +1419,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const creditoAplicado =
     usarCredito && statusPagamento === 'pago' ? +Math.min(creditoDisponivel, total).toFixed(2) : 0
   const aPagar = +(total - creditoAplicado).toFixed(2)
+
+  // Só há o que perguntar quando sobra valor a receber numa venda à vista. A
+  // prazo é crediário e crédito cobrindo tudo é 'credito_loja' — os dois o
+  // backend deriva, e a mesma regra vale lá e aqui.
+  const precisaEscolherForma = statusPagamento === 'pago' && aPagar > 0
 
   // Entrada paga no ato — só em parcelado/a prazo. O que sobra (valorFinanciado)
   // é o que vai pras parcelas ou fica devido na data de vencimento.
@@ -1517,6 +1534,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     setCarrinho([])
     setClienteId('')
     setStatusPagamento('pago')
+    setFormaPagamento(null)
     setDataVencimento('')
     setNumParcelas(2)
     setEntradaInput('')
@@ -1551,6 +1569,9 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       desconto: descontoValor,
       entrada: entradaValor,
       valor_credito_usado: creditoAplicado,
+      // Só vai quando houve escolha. Nos outros casos o backend deriva
+      // ('crediario' a prazo, 'credito_loja' quando o saldo cobre tudo).
+      forma_pagamento: precisaEscolherForma ? formaPagamento : null,
       itens: carrinho.map((item) => ({
         produto_id: item.produto_id,
         variacao_id: item.variacao_id,
@@ -1583,6 +1604,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
 
   const finalizarVenda = async () => {
     if (carrinho.length === 0) { setErro('Adicione pelo menos um produto.'); return }
+    if (precisaEscolherForma && !formaPagamento) {
+      setErro('Escolha como o cliente pagou (dinheiro, débito, crédito ou PIX).')
+      return
+    }
     if (statusPagamento !== 'pago' && !clienteId) {
       setErro('Selecione um cliente para vendas a prazo ou parceladas.')
       return
@@ -2121,9 +2146,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           )}
         </div>
 
-        {/* Forma de pagamento */}
+        {/* Condição de pagamento — QUANDO o cliente paga. A forma (COMO) é o
+            bloco logo abaixo, e só aparece na venda à vista. */}
         <div>
-          <Label className="text-xs mb-2 block">Forma de pagamento</Label>
+          <Label className="text-xs mb-2 block">Condição de pagamento</Label>
           <div className="space-y-1.5">
             {(['pago', 'pendente', 'parcelado'] as StatusPagamento[]).map((s) => (
               <label
@@ -2160,11 +2186,47 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                     statusPagamento === s ? 'bg-current border-current' : 'border-muted-foreground'
                   }`}
                 />
-                {LABEL_FORMA_PAGAMENTO[s]}
+                {LABEL_CONDICAO_PAGAMENTO[s]}
               </label>
             ))}
           </div>
         </div>
+
+        {/* Forma de pagamento — COMO o dinheiro entrou.
+            Só na venda à vista: a prazo é crediário por definição, e quando o
+            crédito da loja cobre o total não entrou dinheiro, cartão nem PIX.
+            Nos dois casos o backend deriva sozinho (ver formaDaVenda) — sumir
+            com a pergunta é melhor que oferecer uma resposta que já se sabe. */}
+        {precisaEscolherForma && (
+          <div>
+            <Label className="text-xs mb-2 block">Forma de pagamento</Label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {FORMAS_A_VISTA.map((f) => {
+                const Icone = f.icone
+                const marcada = formaPagamento === f.valor
+                return (
+                  <button
+                    key={f.valor}
+                    type="button"
+                    onClick={() => {
+                      setFormaPagamento(f.valor)
+                      setErro('')
+                    }}
+                    aria-pressed={marcada}
+                    className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left ${
+                      marcada
+                        ? 'bg-primary/10 border-primary text-primary font-medium'
+                        : 'bg-background hover:bg-muted/30'
+                    }`}
+                  >
+                    <Icone className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{f.rotulo}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Entrada — paga no ato, abate do valor financiado (parcelado) ou
             devido (a prazo). Não aparece no à vista. */}

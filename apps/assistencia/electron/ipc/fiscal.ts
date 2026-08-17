@@ -77,6 +77,10 @@ const TPAG_POR_FORMA: Record<string, string> = {
   credito: '03', // cartão de crédito
   debito: '04', // cartão de débito
   crediario: '05', // fiado / crédito da própria loja
+  // Saldo do cliente na loja (devolução virada em crédito) abatendo a venda.
+  // Separado de 'crediario' de propósito: pra SEFAZ os dois são 05, mas no
+  // relatório do lojista "fiado" e "usou o saldo dele" não são a mesma coisa.
+  credito_loja: '05',
   pix: '17',
   outro: '99'
 }

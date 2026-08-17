@@ -70,6 +70,10 @@ export type DadosNovaVenda = {
   // Crédito na loja do cliente abatido nesta venda (forma de pagamento "usar
   // crédito"). v1: só em venda à vista ('pago'). Lança um 'uso' no ledger.
   valor_credito_usado?: number
+  // COMO o cliente pagou — dinheiro/debito/credito/pix. Só faz sentido em venda
+  // à vista: a prazo é crediário por definição e é DERIVADO aqui, não perguntado.
+  // Ausente grava NULL ("não sabemos"), que é o caso da venda vinda de uma OS.
+  forma_pagamento?: string | null
   itens: Array<{
     produto_id: number
     // Tamanho vendido, quando o produto é de grade. null/ausente = produto simples
@@ -250,6 +254,47 @@ export function buscarVendaPorId(id: number): VendaDetalhada | undefined {
   return { ...venda, itens, parcelas }
 }
 
+// As únicas que o operador pode ESCOLHER. 'crediario' e 'credito_loja' não
+// entram: são derivadas de fatos que o sistema já conhece (ver formaDaVenda).
+// Espelha src/utils/formaPagamento.ts — o renderer não é importável daqui.
+const FORMAS_ESCOLHIVEIS = new Set(['dinheiro', 'debito', 'credito', 'pix'])
+
+/**
+ * Decide COMO a venda foi paga.
+ *
+ * Deriva tudo que dá pra derivar e só aceita escolha onde há escolha de verdade:
+ *
+ * - a prazo/parcelado → sempre 'crediario'. É a definição do prazo, e é a mesma
+ *   regra que a emissão da NFC-e já aplicava, então os dois caminhos não podem
+ *   divergir.
+ * - crédito da loja cobrindo o total → 'credito_loja'. Não entrou dinheiro,
+ *   cartão nem PIX; obrigar o operador a apontar um deles seria forçar mentira.
+ * - resto → o que o operador marcou no caixa.
+ *
+ * Devolve `null` quando ninguém informou. É de propósito que isso NÃO é erro
+ * aqui: a venda gerada ao entregar uma Ordem de Serviço não passa pelo caixa, e
+ * derrubar a entrega da OS por causa de um campo novo seria quebrar um fluxo
+ * que funciona. A obrigatoriedade mora na tela do PDV, que é onde existe alguém
+ * pra responder.
+ */
+export function formaDaVenda(
+  dados: DadosNovaVenda,
+  total: number,
+  creditoUsado: number
+): string | null {
+  if (dados.status_pagamento !== 'pago') return 'crediario'
+  // `> 0` importa: numa venda de total zero, sem crédito nenhum, `0 >= 0` seria
+  // verdade e carimbaria "crédito da loja" numa venda que não usou crédito.
+  if (creditoUsado > 0 && creditoUsado >= total) return 'credito_loja'
+
+  const forma = (dados.forma_pagamento ?? '').trim().toLowerCase()
+  if (!forma) return null
+  if (!FORMAS_ESCOLHIVEIS.has(forma)) {
+    throw new Error(`Forma de pagamento inválida: "${dados.forma_pagamento}".`)
+  }
+  return forma
+}
+
 export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   const db = obterBancoDeDados()
   const ehParcelado = dados.status_pagamento === 'parcelado' && dados.num_parcelas && dados.num_parcelas > 1
@@ -338,9 +383,11 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
     }
   }
 
+  const formaPagamento = formaDaVenda(dados, total, creditoUsado)
+
   const inserirVenda = db.prepare(
-    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas)
-     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas)`
+    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento)
+     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento)`
   )
   const inserirItem = db.prepare(
     `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario)
@@ -373,7 +420,8 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       valor_pago: dados.status_pagamento === 'pago' ? total : entrada,
       status_pagamento: dados.status_pagamento,
       data_vencimento: dados.data_vencimento,
-      num_parcelas: dados.num_parcelas ?? null
+      num_parcelas: dados.num_parcelas ?? null,
+      forma_pagamento: formaPagamento
     })
     vendaId = result.lastInsertRowid as number
 

@@ -11,15 +11,13 @@ import {
 import {
   AlertTriangle,
   Ban,
-  Banknote,
   Check,
   Clock,
-  CreditCard,
   FileText,
-  Printer,
-  Smartphone
+  Printer
 } from 'lucide-react'
 import { useImprimirPdf } from '@/components/ImpressaoProvider'
+import { FORMAS_A_VISTA, ehFormaAVista, type FormaPagamento } from '@/utils/formaPagamento'
 
 // Botão de nota fiscal de UMA venda, na lista de vendas. Encapsula tudo —
 // estado, modal de forma de pagamento e o acompanhamento do desfecho — pra não
@@ -32,19 +30,19 @@ import { useImprimirPdf } from '@/components/ImpressaoProvider'
 // cair, a venda continua lá — o botão fica vermelho e dá pra tentar de novo.
 // Nada aqui bloqueia o caixa.
 
-type FormaPagamento = 'dinheiro' | 'debito' | 'credito' | 'pix' | 'crediario'
-
-const FORMAS: { valor: FormaPagamento; rotulo: string; icone: FC<{ className?: string }> }[] = [
-  { valor: 'dinheiro', rotulo: 'Dinheiro', icone: Banknote },
-  { valor: 'debito', rotulo: 'Cartão de débito', icone: CreditCard },
-  { valor: 'credito', rotulo: 'Cartão de crédito', icone: CreditCard },
-  { valor: 'pix', rotulo: 'PIX', icone: Smartphone }
-]
+// A lista vive em @/utils/formaPagamento, junto com a que o PDV usa ao fechar a
+// venda. Eram duas listas iguais em arquivos diferentes; manter assim garantia
+// que um dia divergissem e a nota saísse com forma que o caixa não oferece.
 
 type Props = {
   vendaId: number
   /** Vendas a prazo não perguntam a forma: é crediário por definição. */
   aPrazo: boolean
+  /** Forma que o PDV já gravou ao fechar a venda. Vem pré-marcada no modal —
+      quem emite confirma em vez de redigitar, e o caminho de menor esforço
+      passa a ser repetir a verdade em vez de escolher qualquer coisa.
+      null/ausente em venda antiga, anterior ao campo. */
+  formaJaConhecida?: string | null
   /** Tipo de pessoa do cliente da venda; null quando é venda sem cliente. Decide
       a SUGESTÃO de documento (PJ → NF-e, consumidor → NFC-e) e se a NF-e é
       possível (venda de balcão sem cliente só emite NFC-e). */
@@ -58,6 +56,7 @@ type Props = {
 const BotaoNotaFiscal: FC<Props> = ({
   vendaId,
   aPrazo,
+  formaJaConhecida,
   clienteTipoPessoa,
   nota,
   onMudou,
@@ -80,9 +79,12 @@ const BotaoNotaFiscal: FC<Props> = ({
   const [erroCancelar, setErroCancelar] = useState<string | null>(null)
 
   // Abre a escolha de documento + forma, sempre pré-marcada no mais provável.
+  // A forma vem do que o caixa registrou ao fechar a venda; só fica em branco
+  // quando ninguém informou (venda antiga) ou quando o valor gravado não é um
+  // dos escolhíveis — 'crediario' e 'credito_loja' não aparecem nesta lista.
   const abrirEscolha = () => {
     setModeloEscolhido(sugestaoModelo)
-    setFormaEscolhida(null)
+    setFormaEscolhida(ehFormaAVista(formaJaConhecida) ? (formaJaConhecida as FormaPagamento) : null)
     setEscolhendo(true)
   }
 
@@ -265,7 +267,7 @@ const BotaoNotaFiscal: FC<Props> = ({
             <div className="space-y-2">
               <p className="text-sm font-medium">Como o cliente pagou?</p>
               <div className="grid grid-cols-2 gap-2">
-                {FORMAS.map((f) => (
+                {FORMAS_A_VISTA.map((f) => (
                   <Button
                     key={f.valor}
                     variant={formaEscolhida === f.valor ? 'default' : 'outline'}

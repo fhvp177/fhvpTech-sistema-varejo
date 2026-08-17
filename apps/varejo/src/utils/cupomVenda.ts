@@ -73,7 +73,10 @@ const fmtDataCurta = (iso: string): string => {
   return new Date(base).toLocaleDateString('pt-BR')
 }
 
-const FORMA_PAGAMENTO: Record<StatusPagamentoCupom, string> = {
+// CONDIÇÃO de pagamento (o "quando"), não a forma (o "como", que é dinheiro/
+// cartão/PIX e vive em src/utils/formaPagamento.ts). A coluna do cupom se
+// chamava "Forma" e mostrava isto aqui — corrigida pra "Cond.".
+const CONDICAO_PAGAMENTO: Record<StatusPagamentoCupom, string> = {
   pago: 'À vista',
   pendente: 'A prazo',
   parcelado: 'Parcelado',
@@ -136,7 +139,7 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
     .join('')
 
   // Bloco de pagamento — usa parcelas se houver, senão usa uma linha única
-  const formaPgto = FORMA_PAGAMENTO[venda.status_pagamento]
+  const formaPgto = CONDICAO_PAGAMENTO[venda.status_pagamento]
   const linhasPagamento: string[] = []
 
   if (venda.parcelas.length > 0) {
@@ -430,7 +433,7 @@ ${CSS_PIX}
       <tr>
         <th>Vencim.</th>
         <th class="col-num">Valor</th>
-        <th>Forma</th>
+        <th>Cond.</th>
         <th>Obs.</th>
       </tr>
     </thead>
