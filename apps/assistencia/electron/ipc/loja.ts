@@ -18,6 +18,17 @@ export type DadosLoja = {
   logo: string | null
   exibir_logo: boolean
   /**
+   * Nos documentos A4 (orçamento, laudo, recibo), a logo ocupa o LUGAR do nome
+   * em vez de aparecer ao lado dele.
+   *
+   * Existe porque em muita assistência a logo já traz o nome desenhado dentro:
+   * imprimir os dois é dizer a mesma coisa duas vezes. Vale só no A4 de
+   * propósito — na bobina térmica o nome em texto é o que sempre sai legível,
+   * e trocá-lo por imagem em impressora suja deixaria o documento sem
+   * identificação nenhuma.
+   */
+  logo_no_lugar_do_nome: boolean
+  /**
    * Chave PIX da loja, usada pra desenhar o QR de pagamento nos documentos com
    * saldo em aberto. Vazia = recurso desligado, e nenhum documento leva QR.
    *
@@ -59,6 +70,7 @@ const LOJA_PADRAO: DadosLoja = {
   telefone: '',
   logo: null,
   exibir_logo: false,
+  logo_no_lugar_do_nome: false,
   pix_chave: '',
   pix_tipo: ''
 }
@@ -79,6 +91,7 @@ function obterDadosLoja(): DadosLoja {
     telefone: lerConfig('loja_telefone'),
     logo: logo || null,
     exibir_logo: lerConfig('loja_exibir_logo') === '1',
+    logo_no_lugar_do_nome: lerConfig('loja_logo_no_lugar_do_nome') === '1',
     pix_chave: lerConfig('loja_pix_chave'),
     pix_tipo: (lerConfig('loja_pix_tipo') as DadosLoja['pix_tipo']) || ''
   }
@@ -105,6 +118,13 @@ export function registrarHandlersLoja(): void {
       gravarConfig('loja_telefone', dados.telefone ?? '')
       gravarConfig('loja_logo', dados.logo ?? '')
       gravarConfig('loja_exibir_logo', dados.exibir_logo ? '1' : '0')
+      // Sem logo ligada não há o que pôr no lugar do nome — gravar '1' aqui
+      // deixaria o cabeçalho SEM identificação alguma no dia em que a logo
+      // fosse removida. A tela também desabilita, mas a garantia mora aqui.
+      gravarConfig(
+        'loja_logo_no_lugar_do_nome',
+        dados.logo_no_lugar_do_nome && dados.exibir_logo && dados.logo ? '1' : '0'
+      )
       gravarConfig('loja_pix_chave', (dados.pix_chave ?? '').trim())
       gravarConfig('loja_pix_tipo', dados.pix_tipo ?? '')
       gravarConfig('loja_configurada', '1')

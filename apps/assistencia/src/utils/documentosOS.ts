@@ -5,7 +5,8 @@
 //   empresas, "sem conserto"), assinado pelo responsável.
 // O tom aqui é o oposto do cupom térmico: A4, tipografia sóbria, seções.
 
-import { linhaCidadeUf, type DadosLoja } from './dadosLoja'
+import { type DadosLoja } from './dadosLoja'
+import { cabecalhoLoja, CSS_PAPEL_TIMBRADO } from './papelTimbrado'
 import { nomeImpressao } from './nomeImpressao'
 import { qrPixParaDocumento } from '@fhvptech/core/lib/qrCodePix'
 import { blocoPixHtml, CSS_PIX } from './blocoPix'
@@ -33,18 +34,6 @@ const numeroOS = (id: number): string => String(id).padStart(3, '0')
 
 // Papel timbrado + moldura comum dos dois documentos.
 function montarDocumento(loja: DadosLoja, tituloDoc: string, tituloJanela: string, corpo: string): string {
-  const logo =
-    loja.exibir_logo && loja.logo
-      ? `<img class="logo" src="${loja.logo}" alt="">`
-      : ''
-  const lojaLinhas: string[] = []
-  if (loja.razao_social) lojaLinhas.push(escapar(loja.razao_social))
-  if (loja.cnpj) lojaLinhas.push(`CNPJ: ${escapar(loja.cnpj)}`)
-  if (loja.endereco) lojaLinhas.push(escapar(loja.endereco))
-  const cidadeUf = linhaCidadeUf(loja)
-  if (cidadeUf) lojaLinhas.push(escapar(cidadeUf))
-  if (loja.telefone) lojaLinhas.push(`Telefone: ${escapar(loja.telefone)}`)
-
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -55,13 +44,7 @@ function montarDocumento(loja: DadosLoja, tituloDoc: string, tituloJanela: strin
     @page { size: A4; margin: 16mm 15mm; }
     html, body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; }
     body { line-height: 1.5; }
-    .cabecalho { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 12px; border-bottom: 2.5px solid #1a1a1a; }
-    .logo { max-height: 64px; max-width: 150px; object-fit: contain; }
-    .loja-bloco { flex: 1; }
-    .loja-nome { font-size: 17px; font-weight: 700; letter-spacing: 0.2px; }
-    .loja-info { font-size: 10.5px; color: #444; margin-top: 2px; }
-    .doc-meta { text-align: right; font-size: 11px; color: #444; white-space: nowrap; }
-    .doc-meta .doc-titulo { font-size: 15px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.5px; }
+    ${CSS_PAPEL_TIMBRADO}
     h2.secao { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #555;
                border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 18px 0 8px; }
     .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 24px; font-size: 12px; }
@@ -90,17 +73,13 @@ ${CSS_PIX}
   </style>
 </head>
 <body>
-  <div class="cabecalho">
-    ${logo}
-    <div class="loja-bloco">
-      <div class="loja-nome">${escapar(loja.nome)}</div>
-      <div class="loja-info">${lojaLinhas.join(' · ')}</div>
-    </div>
-    <div class="doc-meta">
+  ${cabecalhoLoja(
+    loja,
+    `<div class="doc-meta">
       <div class="doc-titulo">${tituloDoc}</div>
       <div>Emitido em ${hojeCurto()}</div>
-    </div>
-  </div>
+    </div>`
+  )}
 
   ${corpo}
 

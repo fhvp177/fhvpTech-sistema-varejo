@@ -126,7 +126,18 @@ const Configuracoes: FC = () => {
   }, [])
 
   const atualizarLoja = (campo: keyof DadosLoja, valor: string | boolean | null) =>
-    setLoja((prev) => (prev ? { ...prev, [campo]: valor } : prev))
+    setLoja((prev) => {
+      if (!prev) return prev
+      const novo = { ...prev, [campo]: valor }
+      // Desligar a logo (ou removê-la) derruba junto o "usar no lugar do nome":
+      // senão o botão ficaria marcado enquanto o efeito dele já não existe, e o
+      // dono só descobriria imprimindo. O backend também recusa a combinação,
+      // mas a tela não pode mostrar uma coisa e gravar outra.
+      const perdeuALogo =
+        (campo === 'exibir_logo' && valor === false) || (campo === 'logo' && !valor)
+      if (perdeuALogo) novo.logo_no_lugar_do_nome = false
+      return novo
+    })
 
   const onSelecionarLogo = async (e: ChangeEvent<HTMLInputElement>) => {
     const arquivo = e.target.files?.[0]
@@ -446,6 +457,43 @@ const Configuracoes: FC = () => {
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
                       loja.exibir_logo ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Só faz sentido depois que a logo existe E está ligada — por
+                  isso vem logo abaixo e desabilitada até lá. Fica desligada por
+                  padrão: quem tem logo sem o nome escrito dentro continua com o
+                  cabeçalho de sempre, sem nenhuma surpresa. */}
+              <div className="flex items-center justify-between border-t pt-3">
+                <div>
+                  <p className="font-medium text-sm">Usar a logo no lugar do nome</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    No orçamento, no laudo técnico e no recibo, a logo entra no lugar do nome
+                    escrito — para quem já tem o nome desenhado dentro dela. O cupom da bobina
+                    não muda: lá o nome em texto é o que sempre sai legível.
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    atualizarLoja('logo_no_lugar_do_nome', !loja.logo_no_lugar_do_nome)
+                  }
+                  disabled={!loja.logo || !loja.exibir_logo}
+                  title={
+                    !loja.logo
+                      ? 'Envie uma logo primeiro.'
+                      : !loja.exibir_logo
+                        ? 'Ligue "Exibir logo" primeiro.'
+                        : undefined
+                  }
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ml-4 disabled:opacity-40 ${
+                    loja.logo_no_lugar_do_nome ? 'bg-primary' : 'bg-muted-foreground/30'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      loja.logo_no_lugar_do_nome ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
                 </button>

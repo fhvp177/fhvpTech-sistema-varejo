@@ -14,6 +14,8 @@ export type DadosLoja = {
   telefone: string
   logo: string | null // data URI (base64) ou null
   exibir_logo: boolean
+  /** Nos documentos A4, a logo ocupa o LUGAR do nome. Ver electron/ipc/loja.ts. */
+  logo_no_lugar_do_nome: boolean
   // Chave PIX da loja e, quando o lojista precisou dizer na mao, o tipo dela.
   // Vazia = sem QR de pagamento em documento nenhum. Ver electron/ipc/loja.ts
   // pra por que ela mora na config comum e qual e o risco de verdade.
@@ -34,6 +36,7 @@ export const LOJA_PADRAO: DadosLoja = {
   telefone: '',
   logo: null,
   exibir_logo: false,
+  logo_no_lugar_do_nome: false,
   pix_chave: '',
   pix_tipo: ''
 }
