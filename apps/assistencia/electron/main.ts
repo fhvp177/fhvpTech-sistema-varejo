@@ -28,6 +28,7 @@ import { registrarHandlersAuth } from './ipc/auth'
 import { registrarHandlersChat } from './ipc/chat'
 import { registrarHandlersDevolucoes } from './ipc/devolucoes'
 import { registrarHandlersOrdens } from './ipc/ordens'
+import { registrarHandlersRecibos } from './ipc/recibos'
 import { registrarHandlersLoja } from './ipc/loja'
 import { registrarHandlersFiscal } from './ipc/fiscal'
 import { registrarHandlersPreferenciasUi } from './ipc/preferenciasUi'
@@ -198,6 +199,7 @@ app.whenReady().then(() => {
   registrarHandlersChat()
   registrarHandlersDevolucoes()
   registrarHandlersOrdens()
+  registrarHandlersRecibos()
   registrarHandlersLoja()
   registrarHandlersFiscal()
   registrarHandlersPreferenciasUi()

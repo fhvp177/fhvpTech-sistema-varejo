@@ -28,5 +28,6 @@ export const nomeImpressao = {
   osEntrada: (osId: number): string => `OS-${pad(osId)}-Comprovante-Entrada`,
   osEntrega: (osId: number): string => `OS-${pad(osId)}-Comprovante-Entrega`,
   osOrcamento: (osId: number): string => `OS-${pad(osId)}-Orcamento`,
-  osLaudo: (osId: number): string => `OS-${pad(osId)}-Laudo-Tecnico`
+  osLaudo: (osId: number): string => `OS-${pad(osId)}-Laudo-Tecnico`,
+  recibo: (numero: number): string => `Recibo-${pad(numero)}`
 }

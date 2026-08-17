@@ -12,6 +12,7 @@ import {
   CalendarCheck,
   Tags,
   Receipt,
+  ReceiptText,
   Settings,
   FileText,
   DatabaseBackup,
@@ -29,6 +30,7 @@ import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
 import OrdensServico from './pages/OrdensServico'
+import Recibos from './pages/Recibos'
 import PainelDiario from './pages/PainelDiario'
 import Configuracoes from './pages/Configuracoes'
 import Relatorios from './pages/Relatorios'
@@ -526,6 +528,7 @@ const App: FC = () => {
                       <Route path="/clientes" element={<Clientes />} />
                       <Route path="/vendas" element={<Vendas />} />
                       <Route path="/os" element={<OrdensServico />} />
+                      <Route path="/recibos" element={<Recibos />} />
                       {EtiquetasA4 && (
                         <Route
                           path="/etiquetas"
@@ -697,7 +700,10 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Financeiro',
     itens: [
-      { to: '/contas-pagar', label: 'Contas a Pagar', icon: Receipt, somenteDono: true }
+      { to: '/contas-pagar', label: 'Contas a Pagar', icon: Receipt, somenteDono: true },
+      // Recibo é do balcão, não só do dono: quem recebe o dinheiro é quem
+      // precisa entregar o papel na hora.
+      { to: '/recibos', label: 'Recibos', icon: ReceiptText }
     ]
   },
   {
