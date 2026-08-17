@@ -17,6 +17,18 @@ export type Cliente = {
   // vínculo trava uma loja de operar a NFC-e de OUTRO CNPJ que não o seu —
   // gravado no 1º cadastro e conferido nas chamadas seguintes.
   cnpjEmitente?: string
+  // De qual revendedor esta loja veio. AUSENTE = cliente direto da FHVP, que é
+  // o caso de todos os que existiam antes da revenda — por isso é opcional e
+  // por isso "ausente" nunca pode ser lido como restrição.
+  revendedorId?: string
+  // Quem trancou a renovação desta loja. NÃO derruba o período corrente: a
+  // licença dela segue valendo offline até a data. Bloquear é sobre o PRÓXIMO
+  // ciclo, que é a única coisa controlável em sistema offline. Guardar QUEM
+  // trancou é o que impede o revendedor de desfazer um bloqueio da FHVP.
+  bloqueadoPor?: 'revendedor' | 'fhvp'
+  motivoBloqueio?: string
+  // Plano contratado — define o preço de atacado cobrado do revendedor.
+  plano?: 'basico' | 'pro'
 }
 
 export type StatusCobranca = 'pendente' | 'paga' | 'expirada'

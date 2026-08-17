@@ -9,6 +9,7 @@ import Database from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Cliente, Cobranca } from './tipos.ts'
+import type { Revendedor } from './revenda.ts'
 
 const DB_PATH = process.env.DB_PATH ?? './data/licenca.db'
 
@@ -25,6 +26,17 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS cobrancas (
     txid TEXT PRIMARY KEY,
+    data TEXT NOT NULL
+  );
+
+  -- Quem revende o sistema. A validade daqui é a COLEIRA: teto de tudo que o
+  -- revendedor emite pros clientes dele (ver revenda.ts). Mora numa tabela
+  -- SEPARADA de propósito — o caminho que ele usa pra emitir só sabe escrever
+  -- na tabela clientes, então ele não tem como levantar o próprio teto. Se
+  -- isso virasse uma checagem no meio do código, um refactor distraído abriria
+  -- a porta sem ninguém perceber.
+  CREATE TABLE IF NOT EXISTS revendedores (
+    revendedorId TEXT PRIMARY KEY,
     data TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS chat_custo (
@@ -126,6 +138,11 @@ const stmts = {
   listClientes: db.prepare('SELECT data FROM clientes'),
   setCliente: db.prepare(
     'INSERT INTO clientes (clienteId, data) VALUES (?, ?) ON CONFLICT(clienteId) DO UPDATE SET data = excluded.data'
+  ),
+  getRevendedor: db.prepare('SELECT data FROM revendedores WHERE revendedorId = ?'),
+  listRevendedores: db.prepare('SELECT data FROM revendedores'),
+  setRevendedor: db.prepare(
+    'INSERT INTO revendedores (revendedorId, data) VALUES (?, ?) ON CONFLICT(revendedorId) DO UPDATE SET data = excluded.data'
   ),
   getCobranca: db.prepare('SELECT data FROM cobrancas WHERE txid = ?'),
   setCobranca: db.prepare(
@@ -292,6 +309,26 @@ export function gravarCliente(cliente: Cliente): void {
 export function listarClientes(): Cliente[] {
   const rows = stmts.listClientes.all() as Array<{ data: string }>
   return rows.map((r) => JSON.parse(r.data) as Cliente)
+}
+
+export function obterRevendedor(revendedorId: string): Revendedor | null {
+  const row = stmts.getRevendedor.get(revendedorId) as { data: string } | undefined
+  return row ? (JSON.parse(row.data) as Revendedor) : null
+}
+
+export function gravarRevendedor(revendedor: Revendedor): void {
+  stmts.setRevendedor.run(revendedor.revendedorId, JSON.stringify(revendedor))
+}
+
+export function listarRevendedores(): Revendedor[] {
+  const rows = stmts.listRevendedores.all() as Array<{ data: string }>
+  return rows.map((r) => JSON.parse(r.data) as Revendedor)
+}
+
+// Clientes de um revendedor. Base do painel dele e da contagem de faturamento —
+// como toda chave passa por aqui, esta consulta É a medição do que ele deve.
+export function listarClientesDoRevendedor(revendedorId: string): Cliente[] {
+  return listarClientes().filter((c) => c.revendedorId === revendedorId)
 }
 
 export function obterCobranca(txid: string): Cobranca | null {

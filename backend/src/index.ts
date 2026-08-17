@@ -26,8 +26,23 @@ import {
   gravarCobranca,
   custoMicroChatMes,
   registrarCustoChat,
-  registrarEnvioRecuperacao
+  registrarEnvioRecuperacao,
+  obterRevendedor,
+  gravarRevendedor,
+  listarRevendedores,
+  listarClientesDoRevendedor
 } from './db.ts'
+import {
+  clienteBloqueado,
+  limitarAoTeto,
+  montarClienteId,
+  idValido,
+  podeEmitir,
+  podeDesbloquear,
+  estadoRevendedor,
+  DIAS_PADRAO_LICENCA,
+  type Revendedor
+} from './revenda.ts'
 import { enviarCodigoRecuperacao } from './email.ts'
 import {
   calcularExpiracao,
@@ -103,30 +118,223 @@ app.post('/admin/cliente', async (c) => {
     contato?: string
     diasIniciais?: number
     valorCentavosRenovacao?: number
+    // Novos e OPCIONAIS: sem eles a rota se comporta exatamente como antes,
+    // que é o caso de todo cliente direto da FHVP.
+    revendedorId?: string
+    plano?: 'basico' | 'pro'
   }>()
   if (!body.clienteId || !body.nome) {
     return c.json({ erro: 'clienteId e nome são obrigatórios' }, 400)
   }
-  if (obterCliente(body.clienteId)) {
+
+  // Cliente de revendedor: id nasce PREFIXADO. Não é cosmético — `nfce_numero`
+  // e `nfce_emissao` são chaveadas por cliente_id, e dois revendedores com uma
+  // "LOJA001" cada dividiriam o contador da NFC-e, emitindo nota com número
+  // repetido. Problema com a SEFAZ, não com o software.
+  let revendedor: Revendedor | null = null
+  if (body.revendedorId) {
+    if (!idValido(body.revendedorId) || !idValido(body.clienteId)) {
+      return c.json({ erro: 'id deve ter 2-20 letras/números, sem hífen' }, 400)
+    }
+    revendedor = obterRevendedor(body.revendedorId.trim().toUpperCase())
+    if (!revendedor) return c.json({ erro: 'revendedor não encontrado' }, 404)
+    if (!podeEmitir(revendedor)) {
+      return c.json(
+        { erro: `revendedor ${estadoRevendedor(revendedor)} — não pode emitir`, estado: estadoRevendedor(revendedor) },
+        403
+      )
+    }
+  }
+  const clienteId = montarClienteId(revendedor?.revendedorId ?? null, body.clienteId)
+
+  if (obterCliente(clienteId)) {
     return c.json({ erro: 'clienteId já existe' }, 409)
   }
 
-  const dias = body.diasIniciais ?? 30
-  const expiracao = calcularExpiracao(dias)
-  const chave = await gerarChaveLicenca(config.CHAVE_HMAC, body.clienteId, expiracao)
+  const dias = body.diasIniciais ?? DIAS_PADRAO_LICENCA
+  // ★ O TETO. Cliente direto passa reto; cliente de revendedor nunca recebe
+  // data além da validade dele. É o que faz bloquear o revendedor esvaziar a
+  // carteira dele sozinha, sem a FHVP tocar em loja nenhuma.
+  const teto = limitarAoTeto(calcularExpiracao(dias), revendedor)
+  if (!teto.ok) return c.json({ erro: teto.erro }, 400)
+
+  const chave = await gerarChaveLicenca(config.CHAVE_HMAC, clienteId, teto.expiracao)
 
   const cliente: Cliente = {
-    clienteId: body.clienteId,
+    clienteId,
     nome: body.nome,
     contato: body.contato,
     criadoEm: new Date().toISOString(),
-    validadeAtual: expiracao,
+    validadeAtual: teto.expiracao,
     ultimoPagamentoEm: new Date().toISOString(),
-    valorCentavosRenovacao: body.valorCentavosRenovacao
+    valorCentavosRenovacao: body.valorCentavosRenovacao,
+    revendedorId: revendedor?.revendedorId,
+    plano: body.plano
   }
   gravarCliente(cliente)
 
-  return c.json({ cliente, chave })
+  return c.json({ cliente, chave, validadeCortadaNoTeto: teto.cortada })
+})
+
+// Renova (ou estende) a licença de um cliente. É por aqui que o revendedor vai
+// renovar os dele quando o painel existir — e o teto vale igual.
+app.post('/admin/cliente/:clienteId/renovar', async (c) => {
+  const clienteId = c.req.param('clienteId')
+  const body = await c.req.json<{ dias?: number }>().catch(() => ({ dias: undefined }))
+  const cliente = obterCliente(clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+  if (clienteBloqueado(cliente)) {
+    return c.json({ erro: `renovação bloqueada por ${cliente.bloqueadoPor}` }, 403)
+  }
+
+  const revendedor = cliente.revendedorId ? obterRevendedor(cliente.revendedorId) : null
+  if (cliente.revendedorId && !revendedor) {
+    return c.json({ erro: 'revendedor do cliente não existe mais' }, 409)
+  }
+  if (revendedor && !podeEmitir(revendedor)) {
+    return c.json({ erro: `revendedor ${estadoRevendedor(revendedor)} — não pode emitir` }, 403)
+  }
+
+  const pedida = somarDiasNaExpiracao(cliente.validadeAtual, body.dias ?? DIAS_PADRAO_LICENCA)
+  const teto = limitarAoTeto(pedida, revendedor)
+  if (!teto.ok) return c.json({ erro: teto.erro }, 400)
+
+  const chave = await gerarChaveLicenca(config.CHAVE_HMAC, clienteId, teto.expiracao)
+  gravarCliente({ ...cliente, validadeAtual: teto.expiracao })
+  return c.json({ ok: true, chave, validade: teto.expiracao, validadeCortadaNoTeto: teto.cortada })
+})
+
+// Tranca/destranca a renovação de UMA loja. Não derruba o período corrente —
+// a licença dela segue valendo offline até a data. `porQuem` é o que impede o
+// revendedor de desfazer um bloqueio da FHVP.
+app.post('/admin/cliente/:clienteId/bloqueio', async (c) => {
+  const clienteId = c.req.param('clienteId')
+  const body = await c.req.json<{
+    bloquear: boolean
+    porQuem?: 'revendedor' | 'fhvp'
+    motivo?: string
+  }>()
+  const cliente = obterCliente(clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+
+  const quem = body.porQuem ?? 'fhvp'
+  if (!body.bloquear && !podeDesbloquear(quem, cliente.bloqueadoPor)) {
+    return c.json({ erro: `bloqueio posto pela FHVP — ${quem} não pode desfazer` }, 403)
+  }
+
+  gravarCliente({
+    ...cliente,
+    bloqueadoPor: body.bloquear ? quem : undefined,
+    motivoBloqueio: body.bloquear ? body.motivo : undefined
+  })
+  return c.json({ ok: true, bloqueado: body.bloquear })
+})
+
+// ───── Revendedores ──────────────────────────────────────────────────
+app.get('/admin/revendedores', (c) => {
+  const lista = listarRevendedores().map((r) => {
+    const clientes = listarClientesDoRevendedor(r.revendedorId)
+    return {
+      revendedorId: r.revendedorId,
+      nome: r.nome,
+      contato: r.contato,
+      validade: r.validade,
+      estado: estadoRevendedor(r),
+      bloqueado: !!r.bloqueado,
+      motivoBloqueio: r.motivoBloqueio,
+      // A cunhagem É a medição: como toda chave passa por aqui, isto é a base
+      // de faturamento dele. Ele não tem como subdeclarar.
+      clientes: clientes.length,
+      clientesAtivos: clientes.filter((cl) => licencaAtiva(cl) && !clienteBloqueado(cl)).length
+    }
+  })
+  return c.json({ total: lista.length, revendedores: lista })
+})
+
+app.post('/admin/revendedor', async (c) => {
+  const body = await c.req.json<{
+    revendedorId: string
+    nome: string
+    contato?: string
+    dias?: number
+    precoCentavosBasico?: number
+    precoCentavosPro?: number
+  }>()
+  if (!body.revendedorId || !body.nome) {
+    return c.json({ erro: 'revendedorId e nome são obrigatórios' }, 400)
+  }
+  if (!idValido(body.revendedorId)) {
+    return c.json({ erro: 'revendedorId deve ter 2-20 letras/números, sem hífen' }, 400)
+  }
+  const id = body.revendedorId.trim().toUpperCase()
+  if (obterRevendedor(id)) return c.json({ erro: 'revendedorId já existe' }, 409)
+
+  const revendedor: Revendedor = {
+    revendedorId: id,
+    nome: body.nome,
+    contato: body.contato,
+    criadoEm: new Date().toISOString(),
+    validade: calcularExpiracao(body.dias ?? DIAS_PADRAO_LICENCA),
+    precoCentavosBasico: body.precoCentavosBasico,
+    precoCentavosPro: body.precoCentavosPro
+  }
+  gravarRevendedor(revendedor)
+  return c.json({ revendedor })
+})
+
+// Estende a coleira do revendedor. É o que o PIX dele vai chamar depois.
+app.post('/admin/revendedor/:revendedorId/validade', async (c) => {
+  const revendedor = obterRevendedor(c.req.param('revendedorId'))
+  if (!revendedor) return c.json({ erro: 'revendedor não encontrado' }, 404)
+  const body = await c.req.json<{ dias?: number }>().catch(() => ({ dias: undefined }))
+  const validade = somarDiasNaExpiracao(revendedor.validade, body.dias ?? DIAS_PADRAO_LICENCA)
+  gravarRevendedor({ ...revendedor, validade })
+  // Repare que estender validade NÃO desbloqueia: são chaves separadas.
+  return c.json({ ok: true, validade, bloqueado: !!revendedor.bloqueado })
+})
+
+// Estrangular: tira o painel dele, NÃO derruba as lojas. A carteira murcha
+// sozinha no ritmo do ciclo (~30 dias), o que dá um mês de negociação em vez de
+// trinta lojistas furiosos num sábado — e o nome na tela deles é o da FHVP.
+app.post('/admin/revendedor/:revendedorId/bloqueio', async (c) => {
+  const revendedor = obterRevendedor(c.req.param('revendedorId'))
+  if (!revendedor) return c.json({ erro: 'revendedor não encontrado' }, 404)
+  const body = await c.req.json<{ bloquear: boolean; motivo?: string }>()
+  gravarRevendedor({
+    ...revendedor,
+    bloqueado: body.bloquear,
+    motivoBloqueio: body.bloquear ? body.motivo : undefined
+  })
+  const clientes = listarClientesDoRevendedor(revendedor.revendedorId)
+  return c.json({
+    ok: true,
+    bloqueado: body.bloquear,
+    // Deixa explícito que as lojas continuam de pé, pra ninguém achar que
+    // cascateou e ir dormir tranquilo achando que cortou.
+    lojasIntactas: clientes.length,
+    aviso: body.bloquear
+      ? 'as lojas dele seguem válidas até a data de cada uma; use /cortar para derrubar'
+      : undefined
+  })
+})
+
+// O botão nuclear, SEPARADO de propósito: derruba as lojas dele agora. É para
+// fraude, não para atraso. Exige confirmar o id no corpo — um POST disparado
+// sem querer não pode desligar o caixa de trinta lojas.
+app.post('/admin/revendedor/:revendedorId/cortar', async (c) => {
+  const id = c.req.param('revendedorId')
+  const revendedor = obterRevendedor(id)
+  if (!revendedor) return c.json({ erro: 'revendedor não encontrado' }, 404)
+  const body = await c.req.json<{ confirmarId: string; motivo?: string }>()
+  if (body.confirmarId !== revendedor.revendedorId) {
+    return c.json({ erro: 'confirmarId não confere — corte não executado' }, 400)
+  }
+  const clientes = listarClientesDoRevendedor(revendedor.revendedorId)
+  for (const cl of clientes) {
+    gravarCliente({ ...cl, bloqueadoPor: 'fhvp', motivoBloqueio: body.motivo })
+  }
+  gravarRevendedor({ ...revendedor, bloqueado: true, motivoBloqueio: body.motivo })
+  return c.json({ ok: true, lojasBloqueadas: clientes.length })
 })
 
 // Atualiza o preço de renovação de um cliente existente. Manda
@@ -300,7 +508,18 @@ app.post('/cobranca', async (c) => {
   const cliente = obterCliente(body.clienteId)
   if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
 
-  const diasContratados = body.diasContratados ?? 30
+  // 1º dos dois portões do bloqueio: não gera nem o QR. O 2º está no
+  // confirmarPagamento — os dois existem porque há uma corrida no meio (QR
+  // gerado às 14h, bloqueio às 15h, pagamento às 16h atravessaria só este).
+  // Recusar ANTES é o certo: melhor não receber do que receber e não entregar.
+  if (clienteBloqueado(cliente)) {
+    return c.json(
+      { erro: 'renovação bloqueada — procure quem lhe vendeu o sistema', bloqueado: true },
+      403
+    )
+  }
+
+  const diasContratados = body.diasContratados ?? DIAS_PADRAO_LICENCA
   // Preço fixo do cliente (cadastrado por admin) sobrescreve o que o app
   // manda. Permite cobrar valores diferentes por cliente sem release do app.
   const valorCentavos =
@@ -406,10 +625,26 @@ async function confirmarPagamento(txid: string): Promise<ResultadoPagamento> {
   const cliente = obterCliente(cobranca.clienteId)
   if (!cliente) return { ok: false, mensagem: 'cliente não encontrado' }
 
+  // 2º portão do bloqueio, e o que dá o desenho certo: o dinheiro CONTA (a
+  // validade é estendida, ninguém fica com pagamento sem contrapartida), mas a
+  // CHAVE não sai. Bloqueio e validade são coisas separadas: emitir exige as
+  // duas, estar em dia E não estar bloqueado. Sem isto, quem foi bloqueado paga
+  // o PIX de sempre e se restaura sozinho — o botão de bloquear não valeria
+  // nada contra alguém com R$100 e a chave PIX.
   const novaExpiracao = somarDiasNaExpiracao(
     cliente.validadeAtual,
     cobranca.diasContratados
   )
+  const agora0 = new Date().toISOString()
+  if (clienteBloqueado(cliente)) {
+    gravarCobranca({ ...cobranca, status: 'paga', pagaEm: agora0 })
+    gravarCliente({ ...cliente, validadeAtual: novaExpiracao, ultimoPagamentoEm: agora0 })
+    return {
+      ok: false,
+      mensagem: 'pagamento recebido, mas a renovação está bloqueada — procure o suporte'
+    }
+  }
+
   const chave = await gerarChaveLicenca(config.CHAVE_HMAC, cliente.clienteId, novaExpiracao)
 
   const agora = new Date().toISOString()
