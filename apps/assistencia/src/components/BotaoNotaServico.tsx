@@ -1,4 +1,4 @@
-import { FC, useState } from 'react'
+import { forwardRef, useImperativeHandle, useState } from 'react'
 import { AlertTriangle, Check, Clock, FileText, Landmark, Loader2, X } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import {
@@ -10,17 +10,22 @@ import {
 } from '@fhvptech/core/ui/dialog'
 import { useImprimirPdf } from '@/components/ImpressaoProvider'
 import { nomeImpressao } from '@/utils/nomeImpressao'
+import type { GatilhoNota } from '@/utils/notasDaVenda'
 
 /**
  * Emissão da NFS-e de uma venda que teve serviço.
  *
- * Fica ao lado do botão da nota de mercadoria, e não dentro dele, porque numa
- * venda mista as DUAS notas existem ao mesmo tempo: a peça é tributada pelo
- * estado, a mão de obra pelo município. Juntar os dois num botão só obrigaria o
- * lojista a escolher entre notas que na verdade se somam.
+ * Numa venda mista as DUAS notas existem ao mesmo tempo: a peça é tributada
+ * pelo estado, a mão de obra pelo município. Elas se SOMAM — nunca se escolhe
+ * entre uma e outra.
+ *
+ * Quem organiza isso na tela é o `NotasDaVenda`: quando os dois documentos
+ * cabem, ele reúne os dois num ícone só e chama este componente pelo ref
+ * (`semGatilho`); quando só cabe o serviço, este componente aparece sozinho,
+ * com o próprio ícone. Ver a explicação da regra em utils/notasDaVenda.ts.
  *
  * Como na NFC-e, emitir é SEMPRE pós-venda gravada: prefeitura fora do ar não
- * trava o caixa — a nota fica "processando" e o botão permite consultar depois.
+ * trava o caixa — a nota fica "processando" e dá pra consultar depois.
  */
 
 type Props = {
@@ -29,22 +34,34 @@ type Props = {
   onMudou: (nota: NotaServicoVenda | null) => void
   /** Cancelar documento fiscal é decisão do gerente, não de balcão. */
   ehDono?: boolean
+  /** Esconde o próprio gatilho — quem abre é o pai, pelo ref. */
+  semGatilho?: boolean
 }
 
-const BotaoNotaServico: FC<Props> = ({ vendaId, nota, onMudou, ehDono = false }) => {
+const BotaoNotaServico = forwardRef<GatilhoNota, Props>(function BotaoNotaServico(
+  { vendaId, nota, onMudou, ehDono = false, semGatilho = false },
+  ref
+) {
   const [ocupado, setOcupado] = useState(false)
   const [erro, setErro] = useState('')
   const [painelAberto, setPainelAberto] = useState(false)
   const [justificativa, setJustificativa] = useState('')
+  // Dois lugares para dar má notícia, porque são dois momentos diferentes:
+  // `erro` aparece DENTRO do painel da nota (falha ao imprimir ou cancelar, com
+  // o painel aberto na frente do usuário) e `detalhe` é um diálogo próprio,
+  // para o que falha com o painel fechado — emitir e consultar. Um só serviria
+  // aos dois casos mal: ou a mensagem apareceria atrás do painel, ou abriria
+  // uma caixa por cima de outra.
+  const [detalhe, setDetalhe] = useState('')
   const imprimirPdf = useImprimirPdf()
 
   const emitir = async () => {
     setOcupado(true)
-    setErro('')
+    setDetalhe('')
     const r = await window.api.fiscal.emitirNfse({ vendaId })
     setOcupado(false)
     if (!r.success) {
-      setErro(r.error)
+      setDetalhe(r.error)
       return
     }
     onMudou(r.data.nota)
@@ -63,7 +80,7 @@ const BotaoNotaServico: FC<Props> = ({ vendaId, nota, onMudou, ehDono = false })
     const r = await window.api.fiscal.statusNfse({ vendaId })
     setOcupado(false)
     if (r.success) onMudou(r.data)
-    else setErro(r.error)
+    else setDetalhe(r.error)
   }
 
   const imprimir = async () => {
@@ -93,66 +110,122 @@ const BotaoNotaServico: FC<Props> = ({ vendaId, nota, onMudou, ehDono = false })
     setJustificativa('')
   }
 
+  // ── Um clique, um lugar ─────────────────────────────────────────────────────
+  // Tudo que este componente faz entra por aqui: o ícone da coluna e a ordem
+  // vinda do painel da venda mista chamam a MESMA função. Antes cada estado
+  // tinha o seu botão com o seu onClick, e foi assim que ele acabou sendo um
+  // botão largo de texto no meio de uma fileira de ícones.
+  const clicar = () => {
+    if (ocupado) return
+    if (!nota || nota.status === 'negada' || nota.status === 'erro') {
+      // Nota recusada: mostra o motivo em vez de reemitir no susto — mesma
+      // regra da nota de mercadoria. O botão "Tentar novamente" do diálogo é
+      // que reemite, e aí é escolha consciente.
+      if (nota) {
+        setDetalhe(nota.motivo || 'A nota de serviço não foi aceita.')
+        return
+      }
+      emitir()
+      return
+    }
+    if (nota.status === 'processando') {
+      consultar()
+      return
+    }
+    if (nota.status === 'autorizada') setPainelAberto(true)
+    // cancelada/substituída não têm ação: o documento acabou.
+  }
+
+  useImperativeHandle(ref, () => ({ abrir: clicar }))
+
   // ── Aparência por estado ────────────────────────────────────────────────────
-  if (!nota || nota.status === 'negada' || nota.status === 'erro') {
-    return (
-      <div className="inline-flex flex-col items-start gap-1">
-        <Button variant="outline" size="sm" onClick={emitir} disabled={ocupado}>
-          {ocupado ? (
-            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-          ) : (
-            <Landmark className="w-3.5 h-3.5 mr-1.5" />
-          )}
-          {nota ? 'Tentar nota de serviço' : 'Nota de serviço'}
-        </Button>
-        {(erro || nota?.motivo) && (
-          <span className="text-[11px] text-destructive max-w-[260px]">
-            {erro || nota?.motivo}
-          </span>
-        )}
-      </div>
-    )
+  // Ícone fantasma, como o da nota de mercadoria: a coluna de ações é uma
+  // fileira de ícones e um botão de texto no meio dela desalinha a linha
+  // inteira. O estado vive na cor e no `title`.
+  const aparencia = (): { Icone: typeof Landmark; cor: string; titulo: string } => {
+    if (ocupado) return { Icone: Loader2, cor: 'text-muted-foreground', titulo: 'Processando…' }
+    if (!nota) {
+      return { Icone: Landmark, cor: 'text-muted-foreground', titulo: 'Emitir nota de serviço' }
+    }
+    switch (nota.status) {
+      case 'autorizada':
+        return {
+          Icone: Check,
+          cor: 'text-emerald-600',
+          titulo: `Nota de serviço ${nota.numero > 0 ? `nº ${nota.numero} ` : ''}autorizada`
+        }
+      case 'processando':
+        return {
+          Icone: Clock,
+          cor: 'text-amber-600',
+          titulo: 'Aguardando a prefeitura — clique para verificar'
+        }
+      case 'cancelada':
+      case 'substituida':
+        return {
+          Icone: X,
+          cor: 'text-muted-foreground',
+          titulo: `Nota de serviço ${nota.status}`
+        }
+      default:
+        return {
+          Icone: AlertTriangle,
+          cor: 'text-red-600',
+          titulo: 'A nota de serviço não foi aceita'
+        }
+    }
   }
 
-  if (nota.status === 'processando') {
-    return (
-      <Button variant="outline" size="sm" onClick={consultar} disabled={ocupado}>
-        {ocupado ? (
-          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-        ) : (
-          <Clock className="w-3.5 h-3.5 mr-1.5" />
-        )}
-        Aguardando a prefeitura
-      </Button>
-    )
-  }
+  const { Icone, cor, titulo } = aparencia()
 
-  if (nota.status === 'cancelada' || nota.status === 'substituida') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-        <X className="w-3.5 h-3.5" />
-        Nota de serviço {nota.status}
-      </span>
-    )
-  }
-
-  // autorizada
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setPainelAberto(true)}
-        className="inline-flex items-center gap-1.5 text-xs text-emerald-700 hover:underline"
-      >
-        <Check className="w-3.5 h-3.5" />
-        Nota de serviço {nota.numero > 0 ? `nº ${nota.numero}` : 'autorizada'}
-      </button>
+      {!semGatilho && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cor}
+          onClick={clicar}
+          title={titulo}
+          disabled={ocupado}
+        >
+          <Icone className={`w-4 h-4 ${ocupado ? 'animate-spin' : ''}`} />
+        </Button>
+      )}
 
-      <Dialog open={painelAberto} onOpenChange={setPainelAberto}>
+      {/* Motivo da recusa, no mesmo formato da nota de mercadoria. Antes isto
+          era um texto vermelho solto embaixo do botão, que esticava a linha da
+          tabela — e sumia de vez quando o gatilho não era desenhado. */}
+      <Dialog open={detalhe !== ''} onOpenChange={(a) => !a && setDetalhe('')}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>A nota de serviço não foi emitida</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm whitespace-pre-wrap break-words">{detalhe}</p>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => {
+                setDetalhe('')
+                emitir()
+              }}
+              disabled={ocupado}
+            >
+              Tentar novamente
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Painel da nota autorizada. O `nota &&` não é zelo à toa: antes os
+          estados eram `return`s separados e o TypeScript sabia que aqui a nota
+          existia. Agora o componente tem um corpo só, e sem esta guarda um
+          `nota.numero` explodiria se o painel abrisse sem nota. */}
+      <Dialog open={painelAberto && nota != null} onOpenChange={setPainelAberto}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nota de serviço</DialogTitle>
           </DialogHeader>
+          {nota && (
 
           <div className="space-y-3 text-sm">
             {nota.numero > 0 && (
@@ -205,6 +278,7 @@ const BotaoNotaServico: FC<Props> = ({ vendaId, nota, onMudou, ehDono = false })
               </div>
             )}
           </div>
+          )}
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setPainelAberto(false)}>
@@ -215,6 +289,6 @@ const BotaoNotaServico: FC<Props> = ({ vendaId, nota, onMudou, ehDono = false })
       </Dialog>
     </>
   )
-}
+})
 
 export default BotaoNotaServico

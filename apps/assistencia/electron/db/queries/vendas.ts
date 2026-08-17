@@ -143,14 +143,21 @@ export function listarVendas(mes?: string): Venda[] {
               vd.nome AS vendedor_nome,
               COALESCE(p_late.valor_inadimplente, 0) AS valor_inadimplente,
               COALESCE(dev.valor_devolvido, 0) AS valor_devolvido,
-              -- A venda tem mão de obra? Decide se o botão da nota de SERVIÇO
-              -- aparece. Vem junto na lista de propósito: perguntar por linha
-              -- seriam 300 consultas ao abrir a tela.
+              -- A venda tem mão de obra? E tem peça? As duas respostas decidem
+              -- QUAIS notas cabem naquela venda: mercadoria sai em NFC-e/NF-e
+              -- (imposto do estado) e serviço em NFS-e (imposto do município).
+              -- Vêm junto na lista de propósito: perguntar por linha seriam 600
+              -- consultas ao abrir a tela.
               EXISTS (
                 SELECT 1 FROM itens_venda iv
                 JOIN produtos p ON p.id = iv.produto_id
                 WHERE iv.venda_id = v.id AND p.tipo = 'servico'
-              ) AS tem_servico
+              ) AS tem_servico,
+              EXISTS (
+                SELECT 1 FROM itens_venda iv
+                JOIN produtos p ON p.id = iv.produto_id
+                WHERE iv.venda_id = v.id AND p.tipo != 'servico'
+              ) AS tem_produto
        FROM vendas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
        LEFT JOIN vendedores vd ON vd.id = v.vendedor_id

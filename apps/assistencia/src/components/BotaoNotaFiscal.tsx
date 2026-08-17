@@ -1,4 +1,4 @@
-import { FC, useState } from 'react'
+import { forwardRef, useImperativeHandle, useState } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useImprimirPdf } from '@/components/ImpressaoProvider'
 import { FORMAS_A_VISTA, ehFormaAVista, type FormaPagamento } from '@/utils/formaPagamento'
+import type { GatilhoNota } from '@/utils/notasDaVenda'
 
 // Botão de nota fiscal de UMA venda, na lista de vendas. Encapsula tudo —
 // estado, modal de forma de pagamento e o acompanhamento do desfecho — pra não
@@ -51,17 +52,27 @@ type Props = {
   onMudou: (nota: NotaFiscalVenda | null) => void
   /** Cancelar nota é decisão do gerente — o técnico emite, mas não desfaz. */
   ehDono?: boolean
+  /**
+   * Esconde o próprio ícone: quem abre é o pai, pelo ref.
+   *
+   * Serve à venda MISTA, onde um painel único (NotasDaVenda) reúne as notas de
+   * peça e de serviço num ícone só. O painel fecha antes de mandar abrir daqui,
+   * e é essa ordem que impede um diálogo de nascer dentro do outro.
+   * Sem a prop, o componente funciona exatamente como sempre funcionou.
+   */
+  semGatilho?: boolean
 }
 
-const BotaoNotaFiscal: FC<Props> = ({
+const BotaoNotaFiscal = forwardRef<GatilhoNota, Props>(function BotaoNotaFiscal({
   vendaId,
   aPrazo,
   formaJaConhecida,
   clienteTipoPessoa,
   nota,
   onMudou,
-  ehDono = false
-}) => {
+  ehDono = false,
+  semGatilho = false
+}, ref) {
   const imprimirPdf = useImprimirPdf()
   // NF-e precisa de um destinatário; venda sem cliente só pode NFC-e. E o
   // documento mais provável já vem marcado: empresa → NF-e, consumidor → NFC-e.
@@ -140,6 +151,11 @@ const BotaoNotaFiscal: FC<Props> = ({
     abrirEscolha()
   }
 
+  // Um clique no ícone e uma ordem vinda do painel da venda mista precisam
+  // fazer a MESMA coisa — por isso os dois entram por `clicar`, e não por
+  // caminhos paralelos que um dia divergiriam.
+  useImperativeHandle(ref, () => ({ abrir: clicar }))
+
   // DANFE: o "cupom" com valor fiscal que o cliente leva. Sai na mesma
   // impressora térmica do cupom comum, e baixar não custa crédito — reimprimir
   // é de graça.
@@ -201,9 +217,11 @@ const BotaoNotaFiscal: FC<Props> = ({
 
   return (
     <>
-      <Button variant="ghost" size="icon" className={cor} onClick={clicar} title={titulo}>
-        <Icone className="w-4 h-4" />
-      </Button>
+      {!semGatilho && (
+        <Button variant="ghost" size="icon" className={cor} onClick={clicar} title={titulo}>
+          <Icone className="w-4 h-4" />
+        </Button>
+      )}
 
       {/* Escolha do documento (NF-e × NFC-e) e, à vista, da forma de pagamento —
           o dado que a nota exige e que a venda ainda não guardava. Quando o TEF
@@ -402,6 +420,6 @@ const BotaoNotaFiscal: FC<Props> = ({
       </Dialog>
     </>
   )
-}
+})
 
 export default BotaoNotaFiscal

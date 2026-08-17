@@ -33,13 +33,9 @@ import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancel
 
 // Nota fiscal só existe no plano Pro. Com a flag falsa, o `lazy` vira null e o
 // bundler tira o componente (e o chunk) do binário do Básico.
-const BotaoNotaServico = __FEAT_NFE__
-  ? lazy(() => import('@/components/BotaoNotaServico'))
-  : null
-
-const BotaoNotaFiscal = __FEAT_NFE__
-  ? lazy(() => import('@/components/BotaoNotaFiscal'))
-  : null
+// Ele carrega os dois botões de nota (mercadoria e serviço) — por isso é o
+// único que a tela precisa conhecer, e o único chunk a puxar.
+const NotasDaVenda = __FEAT_NFE__ ? lazy(() => import('@/components/NotasDaVenda')) : null
 
 const ITENS_POR_PAGINA = 20
 
@@ -79,6 +75,8 @@ type Venda = {
   cliente_tipo_pessoa?: 'fisica' | 'juridica' | null
   /** 1 quando a venda tem mão de obra — só então cabe nota de serviço. */
   tem_servico?: number
+  /** 1 quando a venda tem peça — só então cabe nota de mercadoria. */
+  tem_produto?: number
   vendedor_nome?: string | null
   cancelada?: number
   cancelada_em?: string | null
@@ -777,16 +775,23 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     >
                       <Printer className="w-4 h-4" />
                     </Button>
-                    {BotaoNotaFiscal && (
+                    {/* Um ícone só para as notas da venda. Ele decide sozinho o
+                        que cabe ali: peça, mão de obra, ou as duas — e nesse
+                        último caso abre um painel, porque aí existe pergunta a
+                        fazer. Ver components/NotasDaVenda.tsx. */}
+                    {NotasDaVenda && (
                       <Suspense fallback={null}>
-                        <BotaoNotaFiscal
+                        <NotasDaVenda
                           vendaId={v.id}
+                          temProduto={Boolean(v.tem_produto)}
+                          temServico={Boolean(v.tem_servico)}
                           aPrazo={v.status_pagamento !== 'pago'}
                           formaJaConhecida={v.forma_pagamento}
                           clienteTipoPessoa={v.cliente_tipo_pessoa}
                           ehDono={ehDono}
-                          nota={notas[v.id] ?? null}
-                          onMudou={(nota) =>
+                          notaMercadoria={notas[v.id] ?? null}
+                          notaServico={notasServico[v.id] ?? null}
+                          onMudouMercadoria={(nota) =>
                             setNotas((m) => {
                               if (!nota) {
                                 const { [v.id]: _, ...resto } = m
@@ -795,19 +800,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                               return { ...m, [v.id]: nota }
                             })
                           }
-                        />
-                      </Suspense>
-                    )}
-                    {/* Nota de serviço: só aparece quando houve mão de obra. Na
-                        venda mista ela fica LADO A LADO com a de mercadoria —
-                        são documentos que se somam, não alternativas. */}
-                    {BotaoNotaServico && Boolean(v.tem_servico) && (
-                      <Suspense fallback={null}>
-                        <BotaoNotaServico
-                          vendaId={v.id}
-                          ehDono={ehDono}
-                          nota={notasServico[v.id] ?? null}
-                          onMudou={(nota) =>
+                          onMudouServico={(nota) =>
                             setNotasServico((m) => {
                               if (!nota) {
                                 const { [v.id]: _, ...resto } = m
