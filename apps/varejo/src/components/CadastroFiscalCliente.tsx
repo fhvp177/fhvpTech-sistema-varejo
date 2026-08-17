@@ -1,4 +1,5 @@
 import { FC, useEffect, useState } from 'react'
+import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
@@ -95,9 +96,10 @@ const CadastroFiscalCliente: FC<Props> = ({
   /**
    * Puxa o cadastro da empresa na base da Receita a partir do CNPJ.
    *
-   * ⚠️ Cada consulta CONSOME UM CRÉDITO da conta fiscal. Por isso ela mora num
-   * BOTÃO, e não num efeito que dispara enquanto o lojista digita o CNPJ —
-   * autocompletar ao digitar gastaria uma consulta por caractere.
+   * ⚠️ Cada consulta consome 0,1 crédito da conta fiscal (medido — saldo antes
+   * e depois de uma chamada isolada). Por isso ela mora num BOTÃO, e não num
+   * efeito que dispara enquanto o lojista digita o CNPJ — autocompletar ao
+   * digitar gastaria uma consulta por caractere.
    *
    * Diferente do "Buscar" do CEP, aqui os campos são SOBRESCRITOS: quem aperta
    * este botão está pedindo o dado oficial da Receita no lugar do que estiver
@@ -204,19 +206,24 @@ const CadastroFiscalCliente: FC<Props> = ({
           <div className="flex gap-2 items-end">
         <div className="space-y-1.5 w-40">
           <Label htmlFor="cepCli">CEP</Label>
-          <Input
+          {/* `unmask` faz o campo MOSTRAR "60000-000" e ENTREGAR "60000000".
+              A máscara é do olho de quem digita; o que vai pro banco e pra nota
+              continua sendo só dígito, como sempre foi. */}
+          <IMaskInput
             id="cepCli"
+            mask="00000-000"
+            unmask
             inputMode="numeric"
-            maxLength={8}
             value={valor.cep}
-            onChange={(e) => alterar('cep', soDigitos(e.target.value).slice(0, 8))}
-            onKeyDown={(e) => {
+            onAccept={(v: string) => alterar('cep', v)}
+            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
               if (e.key === 'Enter') {
                 e.preventDefault()
                 buscarCep()
               }
             }}
-            placeholder="Somente números"
+            placeholder="00000-000"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
         </div>
         <Button type="button" variant="outline" onClick={buscarCep} disabled={buscandoCep}>
