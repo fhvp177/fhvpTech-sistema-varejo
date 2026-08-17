@@ -35,6 +35,10 @@ import PainelDiario from './pages/PainelDiario'
 import Configuracoes from './pages/Configuracoes'
 import Relatorios from './pages/Relatorios'
 import TelaRestauracao from './pages/TelaRestauracao'
+// A marca do nicho. As telas de licença e de relógio vêm do core, que é
+// compartilhado com o varejo — por isso a arte vai por prop, e não por import
+// lá dentro.
+import logoAssistencia from '@/assets/logo.png'
 import LicencaBloqueada from '@fhvptech/core/ui/LicencaBloqueada'
 import RelogioIncorreto from '@fhvptech/core/ui/RelogioIncorreto'
 import { bloqueioDeRelogio, type BloqueioRelogio } from '@fhvptech/core/lib/relogioBloqueio'
@@ -384,6 +388,7 @@ const App: FC = () => {
       <RelogioIncorreto
         {...relogio}
         subtitulo="Sistema de Gestão de Assistência Técnica"
+        logo={logoAssistencia}
         onTentarNovamente={validarLicenca}
       />
     )
@@ -398,6 +403,7 @@ const App: FC = () => {
         <LicencaBloqueada
           mensagemInicial={mensagemLicenca}
           subtitulo="Sistema de Gestão de Assistência Técnica"
+          logo={logoAssistencia}
           onAtivar={(dias) => { setEstadoLicenca('valida'); if (dias !== undefined) setDiasRestantes(dias) }}
           onRenovarComPix={abrirPagamento}
         />

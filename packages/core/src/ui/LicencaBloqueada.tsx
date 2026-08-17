@@ -6,11 +6,23 @@ type Props = {
   mensagemInicial: string
   // Subtítulo sob o logo — varia por nicho (ex.: "Sistema de Gestão Veterinária").
   subtitulo: string
+  /**
+   * Marca do nicho. Mesma ideia do `subtitulo`: cada app tem a sua arte, e esta
+   * tela é compartilhada. Sem a prop, cai na marca original — que é o que o
+   * varejo quer.
+   */
+  logo?: string
   onAtivar: (diasRestantes?: number) => void
   onRenovarComPix: () => void
 }
 
-const LicencaBloqueada: FC<Props> = ({ mensagemInicial, subtitulo, onAtivar, onRenovarComPix }) => {
+const LicencaBloqueada: FC<Props> = ({
+  mensagemInicial,
+  subtitulo,
+  logo,
+  onAtivar,
+  onRenovarComPix
+}) => {
   const [chave, setChave] = useState('')
   const [erro, setErro] = useState(mensagemInicial)
   const [carregando, setCarregando] = useState(false)
@@ -50,7 +62,7 @@ const LicencaBloqueada: FC<Props> = ({ mensagemInicial, subtitulo, onAtivar, onR
       <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl">
         <div className="text-center mb-8">
           <img
-            src={logoEmpresa}
+            src={logo ?? logoEmpresa}
             alt="FHVP Tech"
             className="w-32 h-32 mx-auto mb-3 object-contain"
           />

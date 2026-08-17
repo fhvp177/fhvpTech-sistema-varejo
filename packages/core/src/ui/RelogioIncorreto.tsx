@@ -18,6 +18,12 @@ import type { BloqueioRelogio } from '../lib/relogioBloqueio'
  */
 type Props = BloqueioRelogio & {
   subtitulo: string
+  /**
+   * Marca do nicho. Mesma ideia do `subtitulo`: cada app tem a sua arte, e esta
+   * tela é compartilhada. Sem a prop, cai na marca original — que é o que o
+   * varejo quer.
+   */
+  logo?: string
   /** Revalida a licença — usado depois de ajustar a data ou destravar. */
   onTentarNovamente: () => Promise<void> | void
 }
@@ -33,6 +39,7 @@ const RelogioIncorreto: FC<Props> = ({
   horaLocalISO,
   horaServidorISO,
   subtitulo,
+  logo,
   onTentarNovamente
 }) => {
   const [ocupado, setOcupado] = useState(false)
@@ -65,7 +72,7 @@ const RelogioIncorreto: FC<Props> = ({
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl">
         <div className="text-center mb-6">
-          <img src={logoEmpresa} alt="FHVP Tech" className="w-24 h-24 mx-auto mb-3 object-contain" />
+          <img src={logo ?? logoEmpresa} alt="FHVP Tech" className="w-24 h-24 mx-auto mb-3 object-contain" />
           <p className="text-slate-500 text-sm">{subtitulo}</p>
         </div>
 
