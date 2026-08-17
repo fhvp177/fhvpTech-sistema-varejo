@@ -348,6 +348,47 @@ export function importarNotaEntrada(dados: DadosImportacao): ResumoImportacao {
          SET produto_id = excluded.produto_id, variacao_id = excluded.variacao_id`
     )
 
+    // ── O NCM da nota vira o NCM da peça ──────────────────────────────────
+    //
+    // A nota do fornecedor já traz a classificação fiscal de cada item, e ela
+    // vale: é a mesma peça. Sem isto, o dono importa 80 itens por XML e a tela
+    // fiscal continua dizendo "80 produtos sem NCM" — com o número certo
+    // guardado logo ali, na nota que ele acabou de importar. Era o que
+    // acontecia: a migration 031 preencheu o histórico UMA VEZ, na atualização,
+    // e as importações seguintes não preenchiam mais nada.
+    //
+    // Quatro regras. As três primeiras vieram do varejo (junto com os motivos);
+    // a quarta só existe aqui, onde peça e mão de obra dividem a tabela:
+    //
+    // 1. **Só preenche o que está VAZIO.** Ajuste do contador nunca é
+    //    sobrescrito por nota nova — ele viu a peça, a Receita não.
+    // 2. **O CFOP NÃO é copiado, de propósito.** O CFOP da entrada descreve a
+    //    operação DO FORNECEDOR (a venda dele pra loja). Reaproveitá-lo na
+    //    saída gera nota que a SEFAZ autoriza e o Fisco contesta depois.
+    // 3. **Vale também na reposição**, não só em peça nova — é assim que uma
+    //    peça cadastrada à mão anos atrás finalmente ganha NCM, na primeira
+    //    vez que é recomprada por XML.
+    // 4. **SERVIÇO nunca é classificado por aqui.** Mão de obra é tributada
+    //    pelo MUNICÍPIO (item da LC 116, ISS) e peça pelo ESTADO (NCM):
+    //    carimbar o NCM da nota num serviço seria preencher o imposto do
+    //    documento errado. O `tipo != 'servico'` mora no próprio UPDATE porque
+    //    aí vale pra qualquer chamador, hoje e depois — mesmo padrão do
+    //    estoque em vendas.ts e devolucoes.ts.
+    const herdarFiscalDaNota = db.prepare(
+      `UPDATE produtos
+          SET ncm = CASE
+                      WHEN (ncm IS NULL OR TRIM(ncm) = '') AND @ncm IS NOT NULL
+                           AND TRIM(@ncm) <> '' THEN TRIM(@ncm)
+                      ELSE ncm
+                    END,
+              unidade = CASE
+                          WHEN (unidade IS NULL OR TRIM(unidade) = '') AND @unidade IS NOT NULL
+                               AND TRIM(@unidade) <> '' THEN UPPER(TRIM(@unidade))
+                          ELSE unidade
+                        END
+        WHERE id = @produto_id AND tipo != 'servico'`
+    )
+
     const registrarItem = (
       item: ItemXmlNota,
       produtoId: number,
@@ -375,6 +416,14 @@ export function importarNotaEntrada(dados: DadosImportacao): ResumoImportacao {
           variacao_id: variacaoId
         })
       }
+      // Em produto de grade este UPDATE roda uma vez por tamanho, sempre no
+      // mesmo produto-pai: da segunda em diante o campo já não está vazio e
+      // nada muda.
+      herdarFiscalDaNota.run({
+        produto_id: produtoId,
+        ncm: item.ncm,
+        unidade: item.unidade
+      })
     }
 
     let produtosNovos = 0
@@ -414,6 +463,23 @@ export function importarNotaEntrada(dados: DadosImportacao): ResumoImportacao {
       } else {
         // Reposição: soma estoque no alvo certo (tamanho ou produto simples),
         // atualiza o custo e — só se o lojista pediu — o preço de venda.
+        //
+        // Antes disso, uma pergunta que o varejo não precisa fazer: o alvo é
+        // MÃO DE OBRA? O seletor "vincular a um produto existente" da
+        // conferência lista o cadastro inteiro, então dá pra apontar uma linha
+        // da nota pra um serviço sem querer. Nota de entrada é mercadoria
+        // chegando; serviço não chega em caixa. Recusamos a nota inteira com
+        // uma mensagem que diz o que fazer — melhor que somar estoque num
+        // serviço, que é o que acontecia antes.
+        const alvo = db
+          .prepare('SELECT nome, tipo FROM produtos WHERE id = ?')
+          .get(linha.produto_id) as { nome: string; tipo: string } | undefined
+        if (alvo?.tipo === 'servico') {
+          throw new Error(
+            `"${alvo.nome}" é um serviço, e nota de entrada repõe peça. ` +
+              'Na conferência, vincule esta linha a uma peça ou deixe como "cadastrar como novo".'
+          )
+        }
         if (linha.variacao_id != null) {
           const r = db
             .prepare(
@@ -432,8 +498,11 @@ export function importarNotaEntrada(dados: DadosImportacao): ResumoImportacao {
               `"${linha.item.descricao}" repõe um produto com grade de tamanhos — escolha o tamanho na conferência.`
             )
           }
+          // O `tipo != 'servico'` repete a checagem de cima de propósito: ali
+          // ele dá a mensagem boa, aqui ele é a trava que sobrevive a um
+          // refactor que remova a checagem sem perceber.
           const r = db
-            .prepare('UPDATE produtos SET estoque = estoque + ? WHERE id = ?')
+            .prepare("UPDATE produtos SET estoque = estoque + ? WHERE id = ? AND tipo != 'servico'")
             .run(Math.round(linha.item.quantidade), linha.produto_id)
           if (r.changes === 0) throw new Error('Produto não encontrado pra reposição.')
         }

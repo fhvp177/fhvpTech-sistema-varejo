@@ -37,6 +37,7 @@ type Variacao = { id: number; tamanho: string; codigo_barras: string; estoque: n
 type ProdutoExistente = {
   id: number
   nome: string
+  tipo: 'produto' | 'servico'
   preco: number
   custo: number
   estoque: number
@@ -132,6 +133,9 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
   const inputRef = useRef<HTMLInputElement>(null)
 
   const categoriaVestuario = categorias.find((c) => !!c.usa_tamanhos)?.nome ?? ''
+  // O que uma nota de entrada pode repor. `produtos` continua inteiro porque os
+  // `find` por id abaixo precisam achar o alvo já vinculado, seja ele qual for.
+  const pecas = produtos.filter((p) => p.tipo !== 'servico')
 
   const fechar = () => {
     // Importou algo? A lista de produtos lá atrás precisa recarregar.
@@ -736,7 +740,10 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                           }
                         >
                           <option value="">— cadastrar como novo —</option>
-                          {produtos.map((p) => (
+                          {/* Só peça. Mão de obra não chega de caminhão, e
+                              deixá-la na lista era um convite a vincular a
+                              linha da nota no item errado. */}
+                          {pecas.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.nome}
                             </option>

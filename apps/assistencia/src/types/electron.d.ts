@@ -323,6 +323,34 @@ interface Window {
       listarInadimplentes: () => Promise<RespostaIPC>
       listarVencendoHoje: () => Promise<RespostaIPC>
     }
+    /**
+     * Recibos avulsos — dinheiro que entra fora do caixa.
+     *
+     * `proximoNumero` é só para a tela mostrar "nº 8" antes de salvar. O número
+     * que vale é o que o banco reserva dentro da transação de `criar`.
+     */
+    recibos: {
+      listar: (mes?: string) => Promise<RespostaIPC>
+      meses: () => Promise<RespostaIPC<string[]>>
+      proximoNumero: () => Promise<RespostaIPC<number>>
+      obter: (numero: number) => Promise<RespostaIPC>
+      criar: (dados: {
+        valor: number
+        recebedor_nome: string
+        recebedor_documento?: string | null
+        recebedor_rg?: string | null
+        pagador_nome: string
+        pagador_documento?: string | null
+        pagador_rg?: string | null
+        pagador_cliente_id?: number | null
+        referente: string
+        cidade?: string | null
+        uf?: string | null
+        data_recibo: string
+        observacao?: string | null
+      }) => Promise<RespostaIPC>
+      cancelar: (args: { numero: number; motivo: string }) => Promise<RespostaIPC>
+    }
     os: {
       listar: () => Promise<RespostaIPC>
       obter: (id: number) => Promise<RespostaIPC>
@@ -483,6 +511,32 @@ interface Window {
       >
       obterCliente: (id: number) => Promise<RespostaIPC<FiscalCliente | null>>
       salvarCliente: (id: number, dados: FiscalCliente) => Promise<RespostaIPC<null>>
+      /**
+       * Dados da empresa na base da Receita, pelo CNPJ. Preenche o cadastro
+       * fiscal do cliente — inclusive o código IBGE do município.
+       * ⚠️ Custa 0,1 crédito pré-pago por consulta (medido). Dez consultas
+       * equivalem a uma nota fiscal. Dispare num botão, nunca ao digitar.
+       */
+      buscarCnpj: (cnpj: string) => Promise<
+        RespostaIPC<{
+          cnpj: string
+          razao_social: string
+          nome_fantasia: string
+          email?: string
+          telefones?: Array<{ ddd: string; numero: string }>
+          situacao_cadastral?: { codigo: string; descricao: string }
+          endereco?: {
+            tipo_logradouro?: string
+            logradouro?: string
+            numero?: string
+            complemento?: string
+            bairro?: string
+            cep?: string
+            uf?: string
+            municipio?: { codigo_ibge?: string; descricao?: string }
+          }
+        }>
+      >
       buscarCep: (cep: string) => Promise<
         RespostaIPC<{
           logradouro: string

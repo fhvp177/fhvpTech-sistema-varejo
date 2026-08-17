@@ -106,6 +106,9 @@ const SCHEMA = `
     -- física, então tudo que entra por aqui nasce 'produto' — mas a coluna
     -- precisa existir no fixture, senão o INSERT do criarProduto não roda.
     tipo TEXT NOT NULL DEFAULT 'produto',
+    -- Colunas fiscais da migration 031. Precisam existir aqui porque a
+    -- importação passou a herdar o NCM da nota pra peça.
+    ncm TEXT, cfop TEXT, cst_csosn TEXT, origem TEXT DEFAULT '0', unidade TEXT,
     FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id)
   );
   CREATE TABLE produto_variacoes (
@@ -481,5 +484,178 @@ d('importação de NF-e (banco real via node:sqlite)', () => {
     const xmls = xmlsDoMes('2026-07')
     expect(xmls).toHaveLength(2)
     expect(xmls[0].xml).toContain('<NFe>')
+  })
+
+  // ── A classificação fiscal herdada da nota ─────────────────────────────────
+  // Pedido de cliente do varejo, que vale igual aqui: ele importa dezenas de
+  // peças por XML e a tela fiscal continua acusando "sem NCM", com o número
+  // certo guardado na própria nota que ele acabou de importar.
+  describe('classificação fiscal herdada da nota', () => {
+    it('peça NOVA nasce com o NCM e a unidade da nota', () => {
+      const p = banco!
+        .prepare('SELECT ncm, unidade FROM produtos WHERE codigo_barras = ?')
+        .get('7891234567895') as { ncm: string | null; unidade: string | null }
+      expect(p.ncm).toBe('61044400')
+      expect(p.unidade).toBe('UN')
+    })
+
+    it('o CFOP NÃO é copiado — o da entrada é a operação do FORNECEDOR', () => {
+      // Reaproveitá-lo na saída gera nota que a SEFAZ autoriza e o Fisco
+      // contesta depois. O item da nota guarda o CFOP; a peça, não.
+      const p = banco!
+        .prepare('SELECT cfop FROM produtos WHERE codigo_barras = ?')
+        .get('7891234567895') as { cfop: string | null }
+      expect(p.cfop).toBeNull()
+
+      const item = banco!
+        .prepare("SELECT cfop FROM notas_entrada_itens WHERE cprod = 'PM-889' LIMIT 1")
+        .get() as { cfop: string | null }
+      expect(item.cfop).toBe('5102')
+    })
+
+    it('a REPOSIÇÃO classifica peça antiga que estava sem NCM', () => {
+      // O "PRODUTO LEGADO" foi cadastrado à mão, antes de existir campo fiscal.
+      // A primeira recompra por XML é o que finalmente o classifica.
+      const antes = banco!
+        .prepare("SELECT id, ncm FROM produtos WHERE codigo_barras = '7890000000001'")
+        .get() as { id: number; ncm: string | null }
+      expect(antes.ncm).toBeNull()
+
+      importarNotaEntrada({
+        nota: notaBase('35261012345678000199550010000012370000012352', '1300'),
+        fornecedor: { ...fornecedorXml, id: null },
+        linhas: [
+          {
+            tipo: 'reposicao',
+            produto_id: antes.id,
+            variacao_id: null,
+            novo_custo: 5,
+            novo_preco: null,
+            item: {
+              ...itemXml('LEG-1', 'PRODUTO LEGADO', 1, 5),
+              ncm: '85044090',
+              unidade: 'PC'
+            }
+          }
+        ]
+      })
+
+      const depois = banco!
+        .prepare('SELECT ncm, unidade FROM produtos WHERE id = ?')
+        .get(antes.id) as { ncm: string; unidade: string }
+      expect(depois.ncm).toBe('85044090')
+      expect(depois.unidade).toBe('PC')
+    })
+
+    it('NUNCA sobrescreve o NCM que o contador já ajustou', () => {
+      const p = banco!
+        .prepare("SELECT id FROM produtos WHERE codigo_barras = '7890000000001'")
+        .get() as { id: number }
+      // O contador corrige na mão…
+      banco!.prepare("UPDATE produtos SET ncm = '99999999' WHERE id = ?").run(p.id)
+
+      // …e uma nota nova chega com outro NCM pra mesma peça.
+      importarNotaEntrada({
+        nota: notaBase('35261112345678000199550010000012380000012353', '1400'),
+        fornecedor: { ...fornecedorXml, id: null },
+        linhas: [
+          {
+            tipo: 'reposicao',
+            produto_id: p.id,
+            variacao_id: null,
+            novo_custo: 5,
+            novo_preco: null,
+            item: { ...itemXml('LEG-1', 'PRODUTO LEGADO', 1, 5), ncm: '11111111' }
+          }
+        ]
+      })
+
+      const depois = banco!.prepare('SELECT ncm FROM produtos WHERE id = ?').get(p.id) as {
+        ncm: string
+      }
+      expect(depois.ncm, 'ajuste do contador foi atropelado pela nota').toBe('99999999')
+    })
+  })
+
+  // ── A parte que só existe na assistência ───────────────────────────────────
+  //
+  // Aqui peça e mão de obra dividem a tabela `produtos`, e o seletor "vincular
+  // a um produto existente" da conferência é onde os dois se encontram. Uma
+  // linha da nota apontada pra um serviço faria duas besteiras: somar estoque
+  // em quem não tem estoque, e carimbar o NCM (imposto ESTADUAL, da peça) num
+  // item tributado pelo MUNICÍPIO (ISS, item da LC 116).
+  //
+  // Para ver falhar: volte notasEntrada.ts ao estado anterior ao port e 4 dos 5
+  // casos abaixo caem — inclusive "não soma estoque no serviço", com um `5`
+  // onde devia haver `0`. Esse buraco era real e já estava aberto.
+  //
+  // Uma honestidade sobre a cobertura: são TRÊS travas em fila (a lista da tela
+  // só mostra peça, a checagem abaixo recusa com mensagem, e os dois UPDATEs
+  // carregam `tipo != 'servico'`), e um teste de fora só consegue provar a
+  // primeira que dispara. A guarda do UPDATE do NCM, em particular, nunca chega
+  // a ser exercitada: a do estoque barra antes. Ela fica assim mesmo — é a que
+  // sobrevive a um refactor que apague as outras duas sem perceber.
+  describe('serviço não é reposto por nota de entrada', () => {
+    const idServico = (): number =>
+      (
+        banco!.prepare("SELECT id FROM produtos WHERE nome = 'MAO DE OBRA BANCADA'").get() as {
+          id: number
+        }
+      ).id
+
+    beforeAll(() => {
+      banco!.exec(
+        "INSERT INTO produtos (codigo_barras, nome, preco, custo, estoque, tipo) " +
+          "VALUES (NULL, 'MAO DE OBRA BANCADA', 80, 0, 0, 'servico')"
+      )
+    })
+
+    const importarContraOServico = (chave: string): void => {
+      importarNotaEntrada({
+        nota: notaBase(chave, '1500'),
+        fornecedor: { ...fornecedorXml, id: null },
+        linhas: [
+          {
+            tipo: 'reposicao',
+            produto_id: idServico(),
+            variacao_id: null,
+            novo_custo: 30,
+            novo_preco: null,
+            item: itemXml('SRV-1', 'ITEM QUALQUER DA NOTA', 5, 30)
+          }
+        ]
+      })
+    }
+
+    it('recusa a nota inteira, dizendo o que fazer', () => {
+      expect(() =>
+        importarContraOServico('35261212345678000199550010000012390000012354')
+      ).toThrow(/serviço.*nota de entrada repõe peça/i)
+    })
+
+    it('não soma estoque no serviço', () => {
+      const s = banco!.prepare('SELECT estoque FROM produtos WHERE id = ?').get(idServico()) as {
+        estoque: number
+      }
+      expect(s.estoque, 'mão de obra ganhou estoque pela nota de entrada').toBe(0)
+    })
+
+    it('não carimba NCM de peça no serviço', () => {
+      const s = banco!
+        .prepare('SELECT ncm, unidade FROM produtos WHERE id = ?')
+        .get(idServico()) as { ncm: string | null; unidade: string | null }
+      expect(s.ncm, 'serviço recebeu NCM — imposto estadual em item municipal').toBeNull()
+      expect(s.unidade).toBeNull()
+    })
+
+    it('a nota recusada não deixa rastro', () => {
+      // A importação é tudo-ou-nada: se a transação não voltou atrás, a nota
+      // ficaria no histórico e uma segunda tentativa esbarraria em "já
+      // importada" — com o estoque nunca tendo entrado.
+      const n = banco!
+        .prepare('SELECT COUNT(*) AS n FROM notas_entrada WHERE numero = ?')
+        .get('1500') as { n: number }
+      expect(n.n).toBe(0)
+    })
   })
 })

@@ -253,9 +253,10 @@ export function consultarCep(cep: string): Promise<EnderecoPorCep> {
 // social, endereço completo e — o que mais importa — o CÓDIGO IBGE do
 // município, que a NF-e exige e que ninguém sabe de cabeça.
 //
-// ⚠️ CUSTA 1 CRÉDITO por consulta (cota separada da de notas). Por isso a tela
-// tem que disparar isto num BOTÃO, nunca a cada tecla digitada no campo de
-// CNPJ: autocompletar enquanto digita gastaria uma consulta por caractere.
+// ⚠️ Custa 0,1 crédito por consulta — MEDIDO (saldo antes e depois de uma
+// chamada isolada), não estimado. Dez consultas equivalem a uma nota fiscal.
+// Por isso a tela dispara isto num BOTÃO, nunca a cada tecla digitada no campo
+// de CNPJ: autocompletar enquanto digita gastaria uma consulta por caractere.
 export type DadosCnpj = {
   cnpj: string
   razao_social: string

@@ -916,6 +916,26 @@ function registrarHandlersFiscalRemoto(): void {
     }
   })
 
+  // Dados da empresa na base da Receita, a partir do CNPJ. É rotina de
+  // cadastro (requerSessao), não de configuração fiscal.
+  //
+  // ⚠️ Custa 0,1 crédito pré-pago por consulta — MEDIDO, não estimado (saldo
+  // antes e depois de uma chamada isolada). Dez consultas = 1 crédito, o mesmo
+  // que uma nota fiscal. Barato, mas não de graça: por isso a tela dispara num
+  // botão e não a cada tecla digitada. Há também um teto mensal de consultas,
+  // separado, folgado o bastante para não pesar no dia a dia.
+  registrarCanal('fiscal:buscarCnpj', async (cnpj: string) => {
+    try {
+      requerSessao()
+      const limpo = (cnpj ?? '').replace(/\D/g, '')
+      if (limpo.length !== 14) throw new Error('CNPJ inválido — são 14 números.')
+      const r = await chamarBackendFiscal(`/fiscal/cnpj/${limpo}`)
+      return { success: true, data: r.empresa }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
   // Endereço a partir do CEP (traz o código IBGE do município, obrigatório na
   // nota). Usado no cadastro fiscal do cliente pra não fazer ninguém procurar
   // esse número.

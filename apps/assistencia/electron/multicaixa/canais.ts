@@ -133,6 +133,13 @@ export const CANAIS_REDE = [
   'etiquetas:gerarPDF',
   'fiscal:aplicarEmLote',
   'fiscal:buscarCep',
+  // Consulta de CNPJ. Atende o segundo posto (é cadastro de cliente), mas de
+  // propósito NÃO entra em CANAIS_REPETIVEIS logo abaixo: apesar de ser uma
+  // leitura, ela CONSOME 0,1 crédito da conta fiscal (medido — saldo antes e
+  // depois de uma chamada isolada). Repetir sozinha depois de falha de rede
+  // gastaria crédito sem o dono pedir — aqui a regra de ouro da lista ("só
+  // entra quem não muda nada") vale por causa do custo, não do banco.
+  'fiscal:buscarCnpj',
   'fiscal:cadastrarEmpresa',
   'fiscal:cancelarNfce',
   'fiscal:cancelarNfse',
@@ -210,6 +217,16 @@ export const CANAIS_REDE = [
   'os:mudarStatus',
   'os:obter',
   'os:removerFoto',
+  // Recibos avulsos. São dados da loja, então o segundo posto emite igual ao
+  // balcão. `recibos:criar` NUNCA entra em CANAIS_REPETIVEIS logo abaixo:
+  // repetir depois de uma falha de rede queimaria um número da sequência e
+  // deixaria dois papéis diferentes para o mesmo recebimento.
+  'recibos:cancelar',
+  'recibos:criar',
+  'recibos:listar',
+  'recibos:meses',
+  'recibos:obter',
+  'recibos:proximoNumero',
   'produtos:atualizar',
   'produtos:buscarPorCodigoBarras',
   'produtos:criar',
@@ -298,6 +315,14 @@ export const CANAIS_REPETIVEIS = [
   'os:listar',
   'os:listarFotos',
   'os:obter',
+  // Só as LEITURAS. `recibos:criar` fica de fora de propósito: repetir sozinho
+  // depois de uma falha de rede queimaria um número da sequência e geraria dois
+  // papéis diferentes para o mesmo recebimento. `recibos:cancelar` também
+  // escreve.
+  'recibos:listar',
+  'recibos:meses',
+  'recibos:obter',
+  'recibos:proximoNumero',
   'produtos:buscarPorCodigoBarras',
   'produtos:listar',
   'vendas:aReceberDoMes',
