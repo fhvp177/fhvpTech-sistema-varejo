@@ -39,6 +39,27 @@ export type Revendedor = {
   /** Preço de atacado por cliente ativo, em centavos. Por plano. */
   precoCentavosBasico?: number
   precoCentavosPro?: number
+  /**
+   * Piso da mensalidade dele, em centavos.
+   *
+   * Existe para destravar a armadilha do recomeço: quem deixa a assinatura
+   * vencer perde os clientes um a um, e chega ao ponto de ter ZERO ativos — aí
+   * a conta por cliente daria R$0 e não há PIX de zero real para gerar. Sem
+   * piso, ele ficaria impedido de voltar justamente por estar parado.
+   */
+  precoCentavosMinimo?: number
+  /** Hash da senha do painel (formato do revendaAuth). Ausente = ele ainda não
+   *  tem acesso — a FHVP define a primeira. NUNCA sai em resposta de rota. */
+  senhaHash?: string
+  /**
+   * Para onde vai o código quando ele esquece a senha.
+   *
+   * Exigido na CRIAÇÃO (`POST /admin/revendedor`), mas opcional no tipo de
+   * propósito: os revendedores cadastrados antes desta regra existem sem ele,
+   * e tratar essa ausência como impossível quebraria a leitura deles. Quem
+   * está sem aparece marcado na listagem e leva aviso permanente no painel.
+   */
+  email?: string
 }
 
 export type EstadoRevendedor = 'ativo' | 'em_graca' | 'vencido' | 'bloqueado'

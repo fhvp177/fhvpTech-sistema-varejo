@@ -35,6 +35,13 @@ export type StatusCobranca = 'pendente' | 'paga' | 'expirada'
 
 export type Cobranca = {
   txid: string
+  // Quem está pagando. AUSENTE = cliente, que é o que toda cobrança gravada
+  // antes da revenda existir é — inclusive as em voo no momento do deploy.
+  // Por isso é opcional: "sem o campo" tem que continuar significando o
+  // comportamento antigo, nunca uma restrição nova.
+  alvo?: 'cliente' | 'revendedor'
+  // Para `alvo: 'revendedor'` este campo guarda o revendedorId. O nome ficou
+  // por compatibilidade com as cobranças já gravadas.
   clienteId: string
   valorCentavos: number
   diasContratados: number

@@ -16,6 +16,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
+import { readFile } from 'node:fs/promises'
 import type { Cliente, Cobranca, Config } from './tipos.ts'
 import { proxyChat, type ChatRequest } from './chat.ts'
 import {
@@ -30,7 +31,8 @@ import {
   obterRevendedor,
   gravarRevendedor,
   listarRevendedores,
-  listarClientesDoRevendedor
+  listarClientesDoRevendedor,
+  apagarSessoesDoRevendedor
 } from './db.ts'
 import {
   clienteBloqueado,
@@ -52,6 +54,8 @@ import {
 import { licencaAtiva } from './licencaGuard.ts'
 import { registrarRotasRelay } from './relay.ts'
 import { registrarRotasFiscais } from './rotasFiscais.ts'
+import { registrarRotasRevenda } from './rotasRevenda.ts'
+import { gerarHashSenha, senhaAceitavel, emailAceitavel } from './revendaAuth.ts'
 function obrigatoria(chave: string): string {
   const v = process.env[chave]
   if (!v) throw new Error(`env ${chave} obrigatória`)
@@ -77,6 +81,28 @@ app.use('*', cors())
 
 app.get('/', (c) => c.text('FHVP Tech — licenca API ok'))
 
+// Painel do revendedor: página única, servida pelo próprio backend.
+//
+// Mesma origem da API de propósito — sem CORS, sem token viajando entre
+// domínios, e sem um segundo alvo de deploy pra manter em sincronia. Lida do
+// disco a cada pedido: o arquivo é pequeno e assim editar o painel não exige
+// reiniciar o processo em desenvolvimento.
+//
+// Fora do prefixo `/revenda` porque a portaria de lá exige sessão — a página
+// que DESENHA o login não pode exigir estar logado pra carregar.
+const CAMINHO_PAINEL = new URL('./painel.html', import.meta.url)
+app.get('/painel', async (c) => {
+  const html = await readFile(CAMINHO_PAINEL, 'utf8')
+  return c.html(html, 200, {
+    // Nada nesta página vem de fora, então travar as origens é de graça e
+    // fecha a porta pra injeção de script de terceiro.
+    'Content-Security-Policy':
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff'
+  })
+})
+
 // Ponto de encontro do multicaixa: liga o computador principal de uma loja a um
 // caixa adicional que está fora dela. O conteúdo passa cifrado ponta a ponta —
 // este servidor encaminha bytes que não consegue interpretar. Ver relay.ts.
@@ -84,6 +110,10 @@ registrarRotasRelay(app, config.CHAVE_HMAC)
 
 // Rotas da nota fiscal (NFC-e via ACBr). Protegidas por licença lá dentro.
 registrarRotasFiscais(app)
+
+// Painel do revendedor. Registrado ANTES do guarda do /admin/* de propósito:
+// são portarias independentes, e nenhuma rota /revenda/* aceita o ADMIN_TOKEN.
+registrarRotasRevenda(app, config.CHAVE_HMAC, criarCobrancaPIX)
 
 // ───── Admin ─────────────────────────────────────────────────────────
 // Protege rotas /admin/* com Bearer token (vem do env ADMIN_TOKEN).
@@ -242,6 +272,11 @@ app.get('/admin/revendedores', (c) => {
       estado: estadoRevendedor(r),
       bloqueado: !!r.bloqueado,
       motivoBloqueio: r.motivoBloqueio,
+      // Sem e-mail ele NÃO recupera a senha sozinho — toda vez que esquecer
+      // vira ligação para a FHVP. Aparece na listagem para o buraco ser
+      // visível ANTES de alguém precisar dele.
+      email: r.email ?? null,
+      podeRecuperarSenha: !!r.email,
       // A cunhagem É a medição: como toda chave passa por aqui, isto é a base
       // de faturamento dele. Ele não tem como subdeclarar.
       clientes: clientes.length,
@@ -259,10 +294,23 @@ app.post('/admin/revendedor', async (c) => {
     dias?: number
     precoCentavosBasico?: number
     precoCentavosPro?: number
+    precoCentavosMinimo?: number
+    // OBRIGATÓRIO. Sem e-mail não existe "esqueci minha senha", e todo
+    // revendedor cadastrado sem ele é um telefonema futuro garantido para a
+    // FHVP. Exigir na criação custa zero; correr atrás depois custa tempo.
+    email: string
   }>()
   if (!body.revendedorId || !body.nome) {
     return c.json({ erro: 'revendedorId e nome são obrigatórios' }, 400)
   }
+  const email = (body.email ?? '').trim().toLowerCase()
+  if (!email) {
+    return c.json(
+      { erro: 'email é obrigatório — sem ele o revendedor não consegue recuperar a senha sozinho' },
+      400
+    )
+  }
+  if (!emailAceitavel(email)) return c.json({ erro: 'e-mail inválido' }, 400)
   if (!idValido(body.revendedorId)) {
     return c.json({ erro: 'revendedorId deve ter 2-20 letras/números, sem hífen' }, 400)
   }
@@ -276,10 +324,71 @@ app.post('/admin/revendedor', async (c) => {
     criadoEm: new Date().toISOString(),
     validade: calcularExpiracao(body.dias ?? DIAS_PADRAO_LICENCA),
     precoCentavosBasico: body.precoCentavosBasico,
-    precoCentavosPro: body.precoCentavosPro
+    precoCentavosPro: body.precoCentavosPro,
+    precoCentavosMinimo: body.precoCentavosMinimo,
+    email
   }
   gravarRevendedor(revendedor)
   return c.json({ revendedor })
+})
+
+// Define (ou redefine) a senha do painel do revendedor. A PRIMEIRA senha sai
+// daqui, da mão da FHVP — não existe autocadastro. Redefinir também serve de
+// socorro para quem esqueceu, e derruba as sessões abertas junto: senha nova
+// com sessão velha de pé não expulsa ninguém.
+app.post('/admin/revendedor/:revendedorId/senha', async (c) => {
+  const revendedor = obterRevendedor(c.req.param('revendedorId'))
+  if (!revendedor) return c.json({ erro: 'revendedor não encontrado' }, 404)
+  const body = ((await c.req.json().catch(() => ({}))) ?? {}) as { senha?: string }
+  const senha = body.senha ?? ''
+  const ok = senhaAceitavel(senha)
+  if (!ok.ok) return c.json({ erro: ok.erro }, 400)
+
+  gravarRevendedor({ ...revendedor, senhaHash: await gerarHashSenha(senha) })
+  return c.json({ ok: true, sessoesDerrubadas: apagarSessoesDoRevendedor(revendedor.revendedorId) })
+})
+
+// E-mail do revendedor: é para onde vai o código quando ele esquece a senha.
+// Sem e-mail cadastrado, recuperar só por telefonema para a FHVP.
+app.post('/admin/revendedor/:revendedorId/email', async (c) => {
+  const revendedor = obterRevendedor(c.req.param('revendedorId'))
+  if (!revendedor) return c.json({ erro: 'revendedor não encontrado' }, 404)
+  const body = ((await c.req.json().catch(() => ({}))) ?? {}) as { email?: string }
+  const email = (body.email ?? '').trim().toLowerCase()
+  if (!emailAceitavel(email)) return c.json({ erro: 'e-mail inválido' }, 400)
+
+  gravarRevendedor({ ...revendedor, email })
+  const sessoesDerrubadas = apagarSessoesDoRevendedor(revendedor.revendedorId)
+  return c.json({ ok: true, sessoesDerrubadas })
+})
+
+// Ajusta os preços de atacado do revendedor. `precoCentavosMinimo` é o piso da
+// mensalidade dele — sem ele, quem chega a zero clientes ativos não consegue
+// gerar cobrança nenhuma e fica impedido de voltar por estar parado.
+app.post('/admin/revendedor/:revendedorId/precos', async (c) => {
+  const revendedor = obterRevendedor(c.req.param('revendedorId'))
+  if (!revendedor) return c.json({ erro: 'revendedor não encontrado' }, 404)
+  const body = ((await c.req.json().catch(() => ({}))) ?? {}) as {
+    precoCentavosBasico?: number | null
+    precoCentavosPro?: number | null
+    precoCentavosMinimo?: number | null
+  }
+  // Só mexe no que veio: `undefined` mantém o valor atual, `null` apaga.
+  const ajustar = (atual: number | undefined, novo: number | null | undefined) =>
+    novo === undefined ? atual : typeof novo === 'number' && novo > 0 ? novo : undefined
+  const atualizado: Revendedor = {
+    ...revendedor,
+    precoCentavosBasico: ajustar(revendedor.precoCentavosBasico, body.precoCentavosBasico),
+    precoCentavosPro: ajustar(revendedor.precoCentavosPro, body.precoCentavosPro),
+    precoCentavosMinimo: ajustar(revendedor.precoCentavosMinimo, body.precoCentavosMinimo)
+  }
+  gravarRevendedor(atualizado)
+  return c.json({
+    ok: true,
+    precoCentavosBasico: atualizado.precoCentavosBasico ?? null,
+    precoCentavosPro: atualizado.precoCentavosPro ?? null,
+    precoCentavosMinimo: atualizado.precoCentavosMinimo ?? null
+  })
 })
 
 // Estende a coleira do revendedor. É o que o PIX dele vai chamar depois.
@@ -305,10 +414,18 @@ app.post('/admin/revendedor/:revendedorId/bloqueio', async (c) => {
     bloqueado: body.bloquear,
     motivoBloqueio: body.bloquear ? body.motivo : undefined
   })
+  // Derruba as sessões abertas dele NA HORA. Sem isto, o bloqueio só valeria
+  // quando a sessão vencesse (até 12h) — e quem acabou de ser bloqueado é
+  // exatamente quem não vai deslogar por educação. É por causa desta linha que
+  // a sessão é opaca em banco, e não um JWT auto-contido.
+  const sessoesDerrubadas = body.bloquear
+    ? apagarSessoesDoRevendedor(revendedor.revendedorId)
+    : 0
   const clientes = listarClientesDoRevendedor(revendedor.revendedorId)
   return c.json({
     ok: true,
     bloqueado: body.bloquear,
+    sessoesDerrubadas,
     // Deixa explícito que as lojas continuam de pé, pra ninguém achar que
     // cascateou e ir dormir tranquilo achando que cortou.
     lojasIntactas: clientes.length,
@@ -519,6 +636,24 @@ app.post('/cobranca', async (c) => {
     )
   }
 
+  // ★ Loja de REVENDEDOR não paga a FHVP: quem cobra ela é o revendedor.
+  // Esta rota manda o PIX para a conta da FHVP, então deixá-la aberta desviaria
+  // o dinheiro do revendedor — e ainda furava o teto de validade dele, porque
+  // o pagamento estende a licença sem consultar ninguém.
+  //
+  // ⚠️ A condição é a PRESENÇA de `revendedorId`. Cliente direto da FHVP não
+  // tem esse campo (nenhum dos que já estão em produção tem), então para eles
+  // nada muda — esta rota segue exatamente como sempre foi.
+  if (cliente.revendedorId) {
+    return c.json(
+      {
+        erro: 'Sua renovação é feita por quem lhe vendeu o sistema. Procure seu revendedor.',
+        viaRevendedor: true
+      },
+      403
+    )
+  }
+
   const diasContratados = body.diasContratados ?? DIAS_PADRAO_LICENCA
   // Preço fixo do cliente (cadastrado por admin) sobrescreve o que o app
   // manda. Permite cobrar valores diferentes por cliente sem release do app.
@@ -611,6 +746,45 @@ type ResultadoPagamento =
   | { ok: true; cobranca: Cobranca; chave: string }
   | { ok: false; mensagem: string }
 
+/**
+ * Pagamento do REVENDEDOR à FHVP — a seta de baixo do ciclo.
+ *
+ * Diferente do cliente, aqui não sai chave nenhuma: o que ele compra é o
+ * direito de continuar operando o painel, e isso é a `validade` dele. É essa
+ * data que serve de TETO para tudo que ele emite, então estendê-la é
+ * literalmente o que devolve a capacidade de trabalhar.
+ *
+ * ⚠️ Pagar NÃO desbloqueia. Bloqueio e validade são chaves separadas: o
+ * dinheiro entra e conta, mas quem foi bloqueado pela FHVP continua bloqueado
+ * até ela destravar. Sem isso, R$100 desfariam qualquer decisão sua.
+ */
+async function confirmarPagamentoRevendedor(cobranca: Cobranca): Promise<ResultadoPagamento> {
+  const revendedor = obterRevendedor(cobranca.clienteId)
+  if (!revendedor) return { ok: false, mensagem: 'revendedor não encontrado' }
+
+  const validade = somarDiasNaExpiracao(revendedor.validade, cobranca.diasContratados)
+  const agora = new Date().toISOString()
+  gravarRevendedor({ ...revendedor, validade })
+  // `chaveLicencaGerada` fica com um marcador, não com uma chave: é o que faz a
+  // idempotência lá em cima reconhecer a cobrança já processada e não somar
+  // dias duas vezes se o webhook repetir.
+  const paga: Cobranca = {
+    ...cobranca,
+    status: 'paga',
+    pagaEm: agora,
+    chaveLicencaGerada: `revendedor:${revendedor.revendedorId}:${validade}`
+  }
+  gravarCobranca(paga)
+
+  if (revendedor.bloqueado) {
+    return {
+      ok: false,
+      mensagem: 'pagamento recebido e validade estendida, mas a conta segue bloqueada — fale com a FHVP Tech'
+    }
+  }
+  return { ok: true, cobranca: paga, chave: paga.chaveLicencaGerada as string }
+}
+
 async function confirmarPagamento(txid: string): Promise<ResultadoPagamento> {
   const cobranca = obterCobranca(txid)
   if (!cobranca) return { ok: false, mensagem: 'cobrança não encontrada' }
@@ -622,6 +796,11 @@ async function confirmarPagamento(txid: string): Promise<ResultadoPagamento> {
     return { ok: false, mensagem: 'cobrança expirada' }
   }
 
+  // Cobrança de REVENDEDOR renova a assinatura do painel dele, não a licença de
+  // uma loja. `alvo` ausente = cobrança de cliente, que é o que TODA cobrança
+  // gravada antes desta mudança é — inclusive as em voo no momento do deploy.
+  if (cobranca.alvo === 'revendedor') return confirmarPagamentoRevendedor(cobranca)
+
   const cliente = obterCliente(cobranca.clienteId)
   if (!cliente) return { ok: false, mensagem: 'cliente não encontrado' }
 
@@ -631,10 +810,20 @@ async function confirmarPagamento(txid: string): Promise<ResultadoPagamento> {
   // duas, estar em dia E não estar bloqueado. Sem isto, quem foi bloqueado paga
   // o PIX de sempre e se restaura sozinho — o botão de bloquear não valeria
   // nada contra alguém com R$100 e a chave PIX.
-  const novaExpiracao = somarDiasNaExpiracao(
-    cliente.validadeAtual,
-    cobranca.diasContratados
-  )
+  const pedida = somarDiasNaExpiracao(cliente.validadeAtual, cobranca.diasContratados)
+
+  // ★ O TETO também vale aqui. `/cobranca` já recusa loja de revendedor, então
+  // esta é a segunda camada — cobre a corrida em que a cobrança foi criada
+  // ANTES daquela trava existir e só é paga depois. Sem ela, um pagamento
+  // antigo ainda furaria a validade do revendedor.
+  //
+  // ⚠️ Cliente direto (sem `revendedorId`) passa por `limitarAoTeto` com
+  // revendedor `null`, que devolve a data pedida intacta. Nada muda para quem
+  // já está em produção.
+  const revendedorDoCliente = cliente.revendedorId ? obterRevendedor(cliente.revendedorId) : null
+  const teto = limitarAoTeto(pedida, revendedorDoCliente)
+  if (!teto.ok) return { ok: false, mensagem: teto.erro }
+  const novaExpiracao = teto.expiracao
   const agora0 = new Date().toISOString()
   if (clienteBloqueado(cliente)) {
     gravarCobranca({ ...cobranca, status: 'paga', pagaEm: agora0 })

@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Painel do Revendedor — FHVP Tech</title>
+<!--
+  Painel do revendedor. Página ÚNICA, sem framework e sem nada vindo de fora.
+
+  Por que assim, e não um React em outro domínio:
+    • zero build — o que está aqui é o que roda, e sobe junto com a API;
+    • mesma origem da API — sem CORS, sem token viajando entre domínios;
+    • nada de CDN — uma página que administra licença não deve depender de um
+      servidor de terceiros para carregar.
+
+  Regra de ouro do arquivo: NENHUM dado vindo do servidor entra por innerHTML.
+  Nome de loja é texto que o revendedor digitou; se ele colar uma tag ali, ela
+  tem que aparecer como texto. Tudo passa por textContent.
+-->
+<style>
+  :root {
+    --tinta: #1a1d23; --tinta-fraca: #5c6470; --linha: #e3e6ea;
+    --fundo: #f6f7f9; --papel: #ffffff; --marca: #1f6feb; --marca-escura: #1a5fd0;
+    --ok: #12805c; --ok-fundo: #e6f5ef; --alerta: #9a6700; --alerta-fundo: #fff8e5;
+    --erro: #b42318; --erro-fundo: #fdeceb; --raio: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fundo); color: var(--tinta);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .oculto { display: none !important; }
+  /* O atributo `hidden` esconde por `display:none` da folha padrão do
+     navegador — e QUALQUER `display` declarado aqui vence essa regra. Foi
+     assim que o aviso de Caps Lock (um `display:flex`) apareceu com o campo
+     vazio. Reforçado aqui, uma vez, para todo elemento presente e futuro. */
+  [hidden] { display: none !important; }
+
+  /* ── Login ── */
+  #telaLogin { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+  .cartao-login { background: var(--papel); border: 1px solid var(--linha); border-radius: var(--raio);
+    padding: 32px; width: 100%; max-width: 380px; }
+  .marca { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
+  .marca span { color: var(--marca); }
+  .sub { color: var(--tinta-fraca); font-size: 14px; margin: 4px 0 24px; }
+
+  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+  input, select {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--linha);
+    border-radius: 8px; font: inherit; background: var(--papel); color: var(--tinta);
+  }
+  input:focus, select:focus { outline: 2px solid var(--marca); outline-offset: -1px; border-color: var(--marca); }
+
+  button {
+    font: inherit; font-weight: 600; border-radius: 8px; border: 1px solid transparent;
+    padding: 10px 16px; cursor: pointer; background: var(--marca); color: #fff;
+  }
+  button:hover:not(:disabled) { background: var(--marca-escura); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  button.neutro { background: var(--papel); color: var(--tinta); border-color: var(--linha); }
+  button.neutro:hover:not(:disabled) { background: var(--fundo); }
+  button.perigo { background: var(--papel); color: var(--erro); border-color: #f3c3bf; }
+  button.perigo:hover:not(:disabled) { background: var(--erro-fundo); }
+  button.largo { width: 100%; margin-top: 20px; }
+  button.pequeno { padding: 6px 10px; font-size: 13px; }
+
+  /* ── Estrutura ── */
+  header {
+    background: var(--papel); border-bottom: 1px solid var(--linha);
+    padding: 14px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  header .cresce { flex: 1; }
+  main { max-width: 1020px; margin: 0 auto; padding: 24px 20px 64px; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .card { background: var(--papel); border: 1px solid var(--linha); border-radius: var(--raio); padding: 16px; }
+  .card .rotulo { font-size: 12px; color: var(--tinta-fraca); text-transform: uppercase; letter-spacing: .04em; }
+  .card .valor { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .card .nota { font-size: 12px; color: var(--tinta-fraca); margin-top: 2px; }
+
+  .painel { background: var(--papel); border: 1px solid var(--linha); border-radius: var(--raio); margin-top: 24px; }
+  .painel > h2 { font-size: 15px; margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--linha);
+    display: flex; align-items: center; gap: 12px; }
+  .painel > h2 .cresce { flex: 1; }
+  .corpo { padding: 16px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--linha); font-size: 14px; }
+  th { font-size: 12px; color: var(--tinta-fraca); text-transform: uppercase; letter-spacing: .04em; }
+  tr:last-child td { border-bottom: 0; }
+  td.acoes { text-align: right; white-space: nowrap; }
+  td.acoes button { margin-left: 6px; }
+  .vazio { padding: 32px 16px; text-align: center; color: var(--tinta-fraca); }
+
+  .etiqueta { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .etiqueta.ok { background: var(--ok-fundo); color: var(--ok); }
+  .etiqueta.alerta { background: var(--alerta-fundo); color: var(--alerta); }
+  .etiqueta.erro { background: var(--erro-fundo); color: var(--erro); }
+  .etiqueta.neutra { background: var(--fundo); color: var(--tinta-fraca); }
+
+  .aviso { border-radius: 8px; padding: 12px 14px; font-size: 14px; margin-bottom: 16px; }
+  .aviso.erro { background: var(--erro-fundo); color: var(--erro); }
+  .aviso.alerta { background: var(--alerta-fundo); color: var(--alerta); }
+  .aviso.ok { background: var(--ok-fundo); color: var(--ok); }
+
+  /* ── Diálogo: UM lugar só ──────────────────────────────────────────────
+     A proteção de layout mora AQUI, nunca em quem chama. Foi a lição que
+     custou três reincidências no app: corrigir a tela que quebrou faz toda
+     tela nova nascer desprotegida.
+       • max-height + overflow-y — a caixa é centralizada por translate, então
+         cresce para os DOIS lados; sem teto ela come o título e os botões.
+       • min-width: 0 nos filhos — item de grid nasce "não encolha abaixo do
+         meu conteúdo", e é assim que texto longo vaza para fora da caixa. */
+  #sobreposicao { position: fixed; inset: 0; background: rgba(20,24,31,.55);
+    display: grid; place-items: center; padding: 20px; z-index: 50; }
+  #dialogo {
+    background: var(--papel); border-radius: var(--raio); padding: 26px;
+    width: 100%; max-width: 520px;
+    max-height: 90vh; overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  #dialogo > * { min-width: 0; }
+  #dialogo h2 { margin: 0 0 4px; font-size: 18px; }
+  .chave {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 17px;
+    background: var(--fundo); border: 1px dashed var(--linha); border-radius: 8px;
+    padding: 16px; margin: 16px 0; word-break: break-all; user-select: all; text-align: center;
+  }
+  .linha-botoes { display: flex; gap: 8px; margin-top: 22px; }
+  .linha-botoes button { flex: 1; }
+  .form-linha { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .form-linha { grid-template-columns: 1fr; } }
+  .erro-campo { color: var(--erro); font-size: 12px; margin-top: 5px; }
+  input[aria-invalid="true"] { border-color: var(--erro); }
+  .dica { color: var(--tinta-fraca); font-size: 12px; margin-top: 5px; }
+
+  /* ── Campo de senha: olhinho + aviso de Caps Lock ──────────────────────
+     Os dois existem pelo mesmo motivo — senha é o único campo que a pessoa
+     digita às cegas. Sem eles, errar o Caps Lock é indistinguível de
+     esquecer a senha, e o caminho vira "pedir recuperação" por engano. */
+  .campo-senha { position: relative; }
+  .campo-senha input { padding-right: 44px; }
+  .olho {
+    position: absolute; top: 0; right: 0; height: 100%; width: 40px;
+    display: grid; place-items: center;
+    background: none; border: none; padding: 0; cursor: pointer; color: var(--tinta-fraca);
+  }
+  .olho:hover:not(:disabled) { background: none; color: var(--tinta); }
+  .olho svg { width: 19px; height: 19px; display: block; }
+  .aviso-capslock {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--alerta); background: var(--alerta-fundo);
+    border-radius: 6px; padding: 6px 9px; font-size: 12px; font-weight: 600; margin-top: 6px;
+  }
+  .link {
+    background: none; border: none; padding: 0; color: var(--marca);
+    font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: underline;
+  }
+  .link:hover { background: none; color: var(--marca-escura); }
+  .rodape-login { margin-top: 14px; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- ───────────── Login ───────────── -->
+<div id="telaLogin">
+  <form class="cartao-login" id="formLogin">
+    <div class="marca">FHVP <span>Tech</span></div>
+    <p class="sub">Painel do revendedor</p>
+    <div id="erroLogin" class="aviso erro oculto"></div>
+    <label for="campoId">Código do revendedor</label>
+    <input id="campoId" autocomplete="username" autocapitalize="characters" required>
+    <label for="campoSenha">Senha</label>
+    <input id="campoSenha" type="password" autocomplete="current-password" required>
+    <button class="largo" id="botaoEntrar">Entrar</button>
+    <div class="rodape-login">
+      <button type="button" class="link" id="botaoEsqueci">Esqueci minha senha</button>
+    </div>
+  </form>
+</div>
+
+<!-- ───────────── Painel ───────────── -->
+<div id="telaPainel" class="oculto">
+  <header>
+    <div class="marca">FHVP <span>Tech</span></div>
+    <div class="cresce">
+      <div id="nomeRevendedor" style="font-weight:600"></div>
+      <div class="sub" style="margin:0" id="estadoRevendedor"></div>
+    </div>
+    <button class="neutro pequeno" id="botaoEmail">E-mail</button>
+    <button class="neutro pequeno" id="botaoSenha">Trocar senha</button>
+    <button class="neutro pequeno" id="botaoSair">Sair</button>
+  </header>
+
+  <main>
+    <div id="avisoConta" class="aviso erro oculto"></div>
+    <div id="avisoEmail" class="aviso alerta oculto"></div>
+    <div id="avisoTopo" class="aviso ok oculto"></div>
+
+    <div class="cards">
+      <div class="card"><div class="rotulo">Clientes ativos</div><div class="valor" id="numAtivos">–</div>
+        <div class="nota" id="notaAtivos"></div></div>
+      <div class="card"><div class="rotulo">Total cadastrado</div><div class="valor" id="numTotal">–</div>
+        <div class="nota" id="notaInativos"></div></div>
+      <div class="card"><div class="rotulo">Sua assinatura vence</div><div class="valor" id="validadeRev" style="font-size:20px">–</div>
+        <div class="nota" id="notaValidade"></div></div>
+      <div class="card"><div class="rotulo">Mensalidade estimada</div><div class="valor" id="mensalidade" style="font-size:20px">–</div>
+        <div class="nota" id="notaMensalidade"></div></div>
+    </div>
+
+    <section class="painel">
+      <h2><span class="cresce">Seus clientes</span>
+        <button class="pequeno" id="botaoNovo">Novo cliente</button></h2>
+
+      <div class="corpo oculto" id="formNovoBox">
+        <div id="erroNovo" class="aviso erro oculto"></div>
+        <div class="form-linha">
+          <div><label for="novoId">Código da loja</label>
+            <input id="novoId" placeholder="LOJA001" autocapitalize="characters" maxlength="20">
+            <div class="sub" style="margin:6px 0 0" id="previaId"></div></div>
+          <div><label for="novoNome">Nome da loja</label>
+            <input id="novoNome" placeholder="Mercadinho da Ana" maxlength="80"></div>
+        </div>
+        <div class="form-linha">
+          <div><label for="novoPlano">Plano</label>
+            <select id="novoPlano"><option value="basico">Básico</option><option value="pro">Pro (com nota fiscal)</option></select></div>
+          <div><label for="novoContato">Contato (opcional)</label>
+            <input id="novoContato" placeholder="(88) 9 9999-9999" maxlength="60"></div>
+        </div>
+        <div class="linha-botoes" style="margin-top:20px">
+          <button id="botaoCriar">Criar e gerar chave</button>
+          <button class="neutro" id="botaoCancelarNovo">Cancelar</button>
+        </div>
+      </div>
+
+      <div id="listaClientes"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Diálogo único do painel. O conteúdo é montado em JS; a caixa é sempre esta. -->
+<div id="sobreposicao" class="oculto" role="dialog" aria-modal="true" aria-labelledby="dialogoTitulo">
+  <div id="dialogo"></div>
+</div>
+
+<script>
+(() => {
+  'use strict'
+  const $ = (id) => document.getElementById(id)
+  const CHAVE_SESSAO = 'fhvp_revenda_token'
+  // sessionStorage e não localStorage: a sessão morre quando ele fecha a aba.
+  // Painel que cria licença não deve ficar destrancado num PC compartilhado.
+  let token = sessionStorage.getItem(CHAVE_SESSAO)
+  let eu = null
+
+  // ── Utilidades ──────────────────────────────────────────────────────────
+  const dataBR = (iso) => {
+    if (!iso) return '—'
+    const p = String(iso).slice(0, 10).split('-')
+    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso
+  }
+  const diasAte = (iso) => {
+    if (!iso) return null
+    const alvo = Date.parse(iso + 'T23:59:59Z')
+    return isNaN(alvo) ? null : Math.ceil((alvo - Date.now()) / 86400000)
+  }
+  const reais = (centavos) =>
+    'R$ ' + (centavos / 100).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+
+  function mostrar(el, ligado) { el.classList.toggle('oculto', !ligado) }
+  function texto(el, valor) { el.textContent = valor == null ? '' : String(valor) }
+  function avisar(el, mensagem, tipo) {
+    el.className = 'aviso ' + (tipo || 'erro')
+    texto(el, mensagem)
+    mostrar(el, !!mensagem)
+  }
+
+  // ── Máscaras ────────────────────────────────────────────────────────────
+  // Campo formatado não é enfeite: sem ele o revendedor digita "ligar de
+  // manhã" no telefone e o dado nasce inútil. A máscara é o próprio contrato
+  // do campo — o que não couber, não entra.
+
+  /** Telefone brasileiro. Fixo (10 dígitos) e celular (11) têm formatos
+   *  diferentes, e a troca acontece quando o 11º dígito chega. */
+  function mascararTelefone(bruto) {
+    const d = String(bruto).replace(/\D/g, '').slice(0, 11)
+    if (d.length === 0) return ''
+    if (d.length <= 2) return '(' + d
+    if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2)
+    if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6)
+    return '(' + d.slice(0, 2) + ') ' + d.slice(2, 3) + ' ' + d.slice(3, 7) + '-' + d.slice(7)
+  }
+
+  /** Código de loja: só letra e número, sempre maiúsculo. É a MESMA regra que
+   *  o servidor aplica — repetida aqui pra ele descobrir na hora de digitar,
+   *  e não depois de apertar o botão. Hífen fica de fora de propósito: ele
+   *  separa o prefixo do revendedor e não pode aparecer no sufixo. */
+  function mascararCodigo(bruto) {
+    return String(bruto).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20)
+  }
+
+  /**
+   * Liga uma máscara a um campo preservando a posição do cursor.
+   *
+   * Sem isto o cursor pula para o fim a cada tecla, e corrigir um dígito no
+   * meio do número vira briga. A conta é: quantos caracteres que importam
+   * existiam antes do cursor? Depois de formatar, recoloca o cursor depois da
+   * mesma quantidade.
+   *
+   * ⚠️ `relevante` é testado contra o texto CRU, do jeito que a pessoa digitou
+   * — nunca contra o formatado. Um filtro só de maiúsculas (`/[A-Z0-9]/`) num
+   * campo que a pessoa digita em minúsculas conta ZERO relevantes, joga o
+   * cursor para o começo a cada tecla e EMBARALHA o que foi digitado:
+   * "rv-03 zz" virava "03ZZVR". Se a máscara muda a caixa, o filtro tem que
+   * aceitar as duas.
+   */
+  function aplicarMascara(campo, formatar, relevante) {
+    campo.addEventListener('input', () => {
+      const antes = campo.value
+      const posicao = campo.selectionStart == null ? antes.length : campo.selectionStart
+      let importantesAntes = 0
+      for (let i = 0; i < posicao; i++) if (relevante.test(antes[i])) importantesAntes++
+      const depois = formatar(antes)
+      if (depois === antes) return
+      campo.value = depois
+      let i = 0
+      let vistos = 0
+      while (i < depois.length && vistos < importantesAntes) {
+        if (relevante.test(depois[i])) vistos++
+        i++
+      }
+      campo.setSelectionRange(i, i)
+    })
+  }
+
+  /** Telefone preenchido tem que estar completo. Vazio é aceito — contato é
+   *  opcional; pela metade não é, porque ninguém liga para meio número. */
+  function erroDeTelefone(valor) {
+    const d = String(valor || '').replace(/\D/g, '')
+    if (d.length === 0) return null
+    if (d.length < 10) return 'Telefone incompleto — faltam dígitos.'
+    return null
+  }
+
+  // ── Campo de senha: olhinho + Caps Lock ─────────────────────────────────
+  // Uma função só, aplicada a TODO campo de senha do painel (login e
+  // diálogos). Mesmo princípio do diálogo: se cada tela montasse o seu, a
+  // próxima nasceria sem.
+  //
+  // O aviso de Caps Lock não é enfeite — foi ele que faltou quando uma senha
+  // foi cadastrada com a tecla ligada sem querer e ficou impossível de repetir.
+  // Senha é o único campo digitado às cegas; sem o aviso, "Caps Lock ligado" e
+  // "esqueci a senha" são indistinguíveis para quem está do lado de cá.
+
+  const OLHO_ABERTO =
+    '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>'
+  const OLHO_FECHADO =
+    '<path d="M2 12s3.6-7 10-7c2 0 3.7.7 5.1 1.6M22 12s-3.6 7-10 7c-2 0-3.7-.7-5.1-1.6"/><path d="m4 4 16 16"/>'
+
+  function iconeOlho(aberto) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('viewBox', '0 0 24 24')
+    svg.setAttribute('fill', 'none')
+    svg.setAttribute('stroke', 'currentColor')
+    svg.setAttribute('stroke-width', '2')
+    svg.setAttribute('stroke-linecap', 'round')
+    svg.setAttribute('aria-hidden', 'true')
+    // innerHTML aqui é seguro e proposital: o conteúdo é constante deste
+    // arquivo, não dado de ninguém. A regra do arquivo proíbe DADO em
+    // innerHTML, não marcação fixa.
+    svg.innerHTML = aberto ? OLHO_ABERTO : OLHO_FECHADO
+    return svg
+  }
+
+  /**
+   * Embrulha um <input type="password"> com o olhinho e o aviso de Caps Lock.
+   * Devolve o próprio campo, para encadear.
+   */
+  function prepararCampoSenha(inp) {
+    const pai = inp.parentNode
+    const caixa = document.createElement('div')
+    caixa.className = 'campo-senha'
+    pai.insertBefore(caixa, inp)
+    caixa.appendChild(inp)
+
+    const olho = document.createElement('button')
+    olho.type = 'button'
+    olho.className = 'olho'
+    olho.setAttribute('aria-label', 'Mostrar senha')
+    olho.setAttribute('aria-pressed', 'false')
+    olho.title = 'Mostrar senha'
+    olho.appendChild(iconeOlho(true))
+    olho.addEventListener('click', () => {
+      const revelando = inp.type === 'password'
+      inp.type = revelando ? 'text' : 'password'
+      olho.setAttribute('aria-pressed', String(revelando))
+      olho.setAttribute('aria-label', revelando ? 'Ocultar senha' : 'Mostrar senha')
+      olho.title = olho.getAttribute('aria-label')
+      olho.replaceChildren(iconeOlho(!revelando))
+      // Devolve o cursor ao fim do campo: clicar no olho não pode custar o
+      // lugar de quem estava digitando.
+      inp.focus()
+      const fim = inp.value.length
+      try { inp.setSelectionRange(fim, fim) } catch (e) { /* type=text recém-trocado */ }
+    })
+    caixa.appendChild(olho)
+
+    const aviso = document.createElement('div')
+    aviso.className = 'aviso-capslock'
+    aviso.hidden = true
+    aviso.textContent = '⚠ Caps Lock está ligado'
+    pai.insertBefore(aviso, caixa.nextSibling)
+
+    const conferir = (ev) => {
+      // getModifierState só responde durante um evento de teclado/mouse.
+      if (typeof ev.getModifierState !== 'function') return
+      aviso.hidden = !ev.getModifierState('CapsLock')
+    }
+    inp.addEventListener('keydown', conferir)
+    inp.addEventListener('keyup', conferir)
+    inp.addEventListener('blur', () => { aviso.hidden = true })
+    return inp
+  }
+
+  // ── O diálogo: UM lugar só ──────────────────────────────────────────────
+  // Toda caixa do painel passa por aqui. Nada de prompt/alert/confirm do
+  // navegador: eles ignoram a identidade do sistema, travam a página e não
+  // aceitam validação nenhuma.
+  //
+  // A proteção de layout mora nesta função e no CSS de #dialogo, NUNCA em
+  // quem chama — regra que o app pagou caro para aprender: corrigir a tela
+  // que quebrou faz toda tela nova nascer desprotegida.
+  //
+  // Devolve os valores dos campos ao confirmar, ou null ao cancelar.
+  function abrirModal(opcoes) {
+    const o = opcoes || {}
+    return new Promise((resolver) => {
+      const focoAnterior = document.activeElement
+      const caixa = $('dialogo')
+      caixa.replaceChildren()
+
+      const titulo = document.createElement('h2')
+      titulo.id = 'dialogoTitulo'
+      titulo.textContent = o.titulo || ''
+      caixa.appendChild(titulo)
+
+      if (o.subtitulo) {
+        const p = document.createElement('p')
+        p.className = 'sub'; p.style.margin = '0'
+        p.textContent = o.subtitulo
+        caixa.appendChild(p)
+      }
+      if (o.aviso) {
+        const a = document.createElement('div')
+        a.className = 'aviso ' + (o.avisoTipo || 'alerta')
+        a.style.marginTop = '16px'
+        a.textContent = o.aviso
+        caixa.appendChild(a)
+      }
+      if (o.corpo) caixa.appendChild(o.corpo)
+
+      // Campos
+      const campos = o.campos || []
+      const entradas = {}
+      const errosEl = {}
+      for (const c of campos) {
+        const rot = document.createElement('label')
+        rot.textContent = c.rotulo
+        rot.htmlFor = 'campo_' + c.id
+        const inp = document.createElement('input')
+        inp.id = 'campo_' + c.id
+        inp.type = c.tipo === 'senha' ? 'password' : 'text'
+        if (c.tipo === 'senha') inp.autocomplete = 'off'
+        if (c.placeholder) inp.placeholder = c.placeholder
+        if (c.valor) inp.value = c.valor
+        if (c.maximo) inp.maxLength = c.maximo
+        if (c.mascara) aplicarMascara(inp, c.mascara, c.relevante || /[\s\S]/)
+        const err = document.createElement('div')
+        err.className = 'erro-campo'; err.hidden = true
+        caixa.append(rot, inp)
+        // Todo campo de senha do painel ganha olhinho e aviso de Caps Lock,
+        // sem quem chama precisar pedir.
+        if (c.tipo === 'senha') prepararCampoSenha(inp)
+        if (c.dica) {
+          const d = document.createElement('div')
+          d.className = 'dica'; d.textContent = c.dica
+          caixa.appendChild(d)
+        }
+        caixa.appendChild(err)
+        entradas[c.id] = inp
+        errosEl[c.id] = err
+        // Enter confirma, como em qualquer formulário.
+        inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') confirmar() })
+      }
+
+      // Botões
+      const linha = document.createElement('div')
+      linha.className = 'linha-botoes'
+      for (const extra of (o.extras || [])) {
+        const b = document.createElement('button')
+        b.textContent = extra.rotulo
+        b.addEventListener('click', () => extra.aoClicar(b))
+        linha.appendChild(b)
+      }
+      let botaoOk = null
+      if (o.confirmar !== null) {
+        botaoOk = document.createElement('button')
+        botaoOk.textContent = o.confirmar || 'Confirmar'
+        if (o.perigo) botaoOk.className = 'perigo'
+        if (o.extras && o.extras.length) botaoOk.classList.add('neutro')
+        botaoOk.addEventListener('click', confirmar)
+        linha.appendChild(botaoOk)
+      }
+      if (o.cancelar !== null) {
+        const bc = document.createElement('button')
+        bc.className = 'neutro'
+        bc.textContent = o.cancelar || 'Cancelar'
+        bc.addEventListener('click', () => fechar(null))
+        linha.appendChild(bc)
+      }
+      caixa.appendChild(linha)
+
+      function confirmar() {
+        const valores = {}
+        let primeiroRuim = null
+        for (const c of campos) {
+          const v = entradas[c.id].value.trim()
+          let erro = null
+          if (c.obrigatorio && !v) erro = 'Campo obrigatório.'
+          else if (c.validar) erro = c.validar(v)
+          entradas[c.id].setAttribute('aria-invalid', erro ? 'true' : 'false')
+          errosEl[c.id].hidden = !erro
+          errosEl[c.id].textContent = erro || ''
+          if (erro && !primeiroRuim) primeiroRuim = entradas[c.id]
+          valores[c.id] = v
+        }
+        // Erro NÃO fecha e devolve o cursor ao campo culpado — o irmão do bug
+        // de foco perdido que já mordeu quatro telas do app.
+        if (primeiroRuim) { primeiroRuim.focus(); primeiroRuim.select(); return }
+        fechar(valores)
+      }
+
+      function aoTeclar(ev) {
+        if (ev.key === 'Escape') { ev.preventDefault(); fechar(null) }
+      }
+      function aoClicarFora(ev) {
+        if (ev.target === $('sobreposicao')) fechar(null)
+      }
+
+      function fechar(valor) {
+        document.removeEventListener('keydown', aoTeclar, true)
+        $('sobreposicao').removeEventListener('mousedown', aoClicarFora)
+        mostrar($('sobreposicao'), false)
+        document.body.style.overflow = ''
+        // Devolve o foco a quem abriu: quem usa teclado não fica perdido no
+        // topo da página depois de fechar.
+        if (focoAnterior && focoAnterior.focus) focoAnterior.focus()
+        resolver(valor)
+      }
+
+      document.addEventListener('keydown', aoTeclar, true)
+      $('sobreposicao').addEventListener('mousedown', aoClicarFora)
+      document.body.style.overflow = 'hidden'
+      mostrar($('sobreposicao'), true)
+      const primeiro = campos.length ? entradas[campos[0].id] : botaoOk
+      if (primeiro) primeiro.focus()
+    })
+  }
+
+  /** Caixa de recado — substitui o alert(). */
+  const avisoModal = (titulo, subtitulo, tipo) =>
+    abrirModal({ titulo, subtitulo, cancelar: null, confirmar: 'Entendi', avisoTipo: tipo })
+
+  // ── API ─────────────────────────────────────────────────────────────────
+  async function api(caminho, opcoes) {
+    const o = opcoes || {}
+    const cab = { 'Content-Type': 'application/json' }
+    if (token) cab.Authorization = 'Bearer ' + token
+    let resp
+    try {
+      resp = await fetch('/revenda' + caminho, { method: o.metodo || 'GET', headers: cab,
+        body: o.corpo ? JSON.stringify(o.corpo) : undefined })
+    } catch (e) {
+      return { ok: false, erro: 'sem conexão com o servidor' }
+    }
+    let dados = {}
+    try { dados = await resp.json() } catch (e) { /* resposta sem corpo */ }
+    if (resp.status === 401 && caminho !== '/login') { sair(dados.erro); return { ok: false, erro: dados.erro } }
+    return resp.ok ? { ok: true, dados } : { ok: false, erro: dados.erro || ('erro ' + resp.status) }
+  }
+
+  // ── Login ───────────────────────────────────────────────────────────────
+  aplicarMascara($('campoId'), mascararCodigo, /[A-Za-z0-9]/)
+  prepararCampoSenha($('campoSenha'))
+
+  $('formLogin').addEventListener('submit', async (ev) => {
+    ev.preventDefault()
+    const botao = $('botaoEntrar')
+    botao.disabled = true
+    texto(botao, 'Entrando…')
+    mostrar($('erroLogin'), false)
+    const r = await api('/login', { metodo: 'POST',
+      corpo: { revendedorId: $('campoId').value, senha: $('campoSenha').value } })
+    botao.disabled = false
+    texto(botao, 'Entrar')
+    if (!r.ok) {
+      avisar($('erroLogin'), r.erro, 'erro')
+      // Devolve o cursor à senha: sem isto ele teria que clicar de novo a
+      // cada tentativa errada.
+      $('campoSenha').focus()
+      $('campoSenha').select()
+      return
+    }
+    token = r.dados.token
+    sessionStorage.setItem(CHAVE_SESSAO, token)
+    $('campoSenha').value = ''
+    await abrirPainel()
+  })
+
+  function sair(motivo) {
+    token = null
+    eu = null
+    sessionStorage.removeItem(CHAVE_SESSAO)
+    mostrar($('telaPainel'), false)
+    mostrar($('telaLogin'), true)
+    if (motivo) avisar($('erroLogin'), motivo, 'alerta')
+  }
+
+  $('botaoSair').addEventListener('click', async () => { await api('/logout', { metodo: 'POST' }); sair() })
+
+  // ── Esqueci minha senha ─────────────────────────────────────────────────
+  // Duas etapas: pede o código por e-mail, depois troca a senha com ele.
+  //
+  // ⚠️ A primeira etapa responde a MESMA coisa sempre, mesmo para código de
+  // revendedor que não existe. É de propósito, e o servidor faz igual: se a
+  // resposta variasse, esta tela viraria um verificador de quais revendedores
+  // são reais para quem quisesse testar.
+  $('botaoEsqueci').addEventListener('click', async () => {
+    const pedido = await abrirModal({
+      titulo: 'Esqueci minha senha',
+      subtitulo: 'Enviamos um código de 6 dígitos para o e-mail cadastrado na sua conta.',
+      campos: [{
+        id: 'revendedorId', rotulo: 'Código do revendedor', maximo: 20,
+        valor: $('campoId').value.trim(), obrigatorio: true,
+        mascara: mascararCodigo, relevante: /[A-Za-z0-9]/,
+        dica: 'É o mesmo código que você usa para entrar.'
+      }],
+      confirmar: 'Enviar código'
+    })
+    if (!pedido) return
+
+    const r = await api('/recuperacao/pedir', { metodo: 'POST',
+      corpo: { revendedorId: pedido.revendedorId } })
+    // Falha de rede é o único erro que aparece aqui; o resto é sempre genérico.
+    if (!r.ok) { await avisoModal('Não foi possível pedir o código', r.erro); return }
+
+    const troca = await abrirModal({
+      titulo: 'Digite o código',
+      subtitulo: r.dados.mensagem,
+      aviso: 'O código vale por 15 minutos e só pode ser errado 5 vezes.',
+      avisoTipo: 'alerta',
+      campos: [
+        { id: 'codigo', rotulo: 'Código de 6 dígitos', maximo: 6, obrigatorio: true,
+          mascara: (v) => String(v).replace(/\D/g, '').slice(0, 6), relevante: /\d/,
+          validar: (v) => /^\d{6}$/.test(v) ? null : 'O código tem 6 dígitos.' },
+        { id: 'nova', rotulo: 'Nova senha', tipo: 'senha', obrigatorio: true,
+          dica: 'Mínimo de 10 caracteres e não pode ser só números.',
+          validar: (v) => v.length < 10 ? 'Precisa de pelo menos 10 caracteres.'
+                 : /^\d+$/.test(v) ? 'Senha só de números é fácil demais de adivinhar.' : null },
+        { id: 'repetir', rotulo: 'Repita a nova senha', tipo: 'senha', obrigatorio: true }
+      ],
+      confirmar: 'Trocar senha'
+    })
+    if (!troca) return
+    if (troca.nova !== troca.repetir) {
+      await avisoModal('As senhas não conferem', 'A nova senha e a repetição precisam ser iguais. Peça um novo código se precisar.')
+      return
+    }
+
+    const resp = await api('/recuperacao/redefinir', { metodo: 'POST',
+      corpo: { revendedorId: pedido.revendedorId, codigo: troca.codigo, nova: troca.nova } })
+    if (!resp.ok) { await avisoModal('Não foi possível trocar', resp.erro); return }
+    await avisoModal('Senha redefinida', 'Pronto. Entre com a senha nova.')
+    $('campoId').value = pedido.revendedorId
+    $('campoSenha').value = ''
+    $('campoSenha').focus()
+  })
+
+  // ── Painel ──────────────────────────────────────────────────────────────
+  async function abrirPainel() {
+    const r = await api('/eu')
+    if (!r.ok) { sair(r.erro); return }
+    eu = r.dados
+    mostrar($('telaLogin'), false)
+    mostrar($('telaPainel'), true)
+    pintarCabecalho()
+    await carregarClientes()
+  }
+
+  function pintarCabecalho() {
+    const rev = eu.revendedor
+    const res = eu.resumo
+    texto($('nomeRevendedor'), rev.nome)
+    texto($('estadoRevendedor'), 'Código ' + rev.revendedorId)
+
+    // Conta bloqueada ou vencida: explica na cara, com o motivo quando houver.
+    // Painel que só recusa clique, sem dizer por quê, vira ligação pro suporte.
+    if (!eu.podeEmitir) {
+      const base = rev.estado === 'bloqueado'
+        ? 'Sua conta está bloqueada. Você continua vendo seus clientes, mas não pode cadastrar nem renovar.'
+        : 'Sua assinatura venceu. Renove com a FHVP Tech para voltar a cadastrar e renovar clientes.'
+      avisar($('avisoConta'), eu.motivoBloqueio ? base + ' Motivo: ' + eu.motivoBloqueio : base, 'erro')
+    } else {
+      mostrar($('avisoConta'), false)
+    }
+
+    texto($('numAtivos'), res.ativos)
+    texto($('notaAtivos'), res.ativosBasico + ' Básico · ' + res.ativosPro + ' Pro')
+    texto($('numTotal'), res.clientes)
+    const inativos = res.clientes - res.ativos
+    texto($('notaInativos'), inativos > 0 ? inativos + ' sem licença ativa' : 'todos ativos')
+
+    texto($('validadeRev'), dataBR(rev.validade))
+    const dias = diasAte(rev.validade)
+    texto($('notaValidade'), dias == null ? '' : dias < 0 ? 'vencida' : dias + ' dia(s)')
+
+    // A conta que ele paga à FHVP. Só aparece quando os preços dele estão
+    // cadastrados — número inventado aqui seria pior que número nenhum.
+    const pb = rev.precoCentavosBasico, pp = rev.precoCentavosPro
+    if (pb || pp) {
+      texto($('mensalidade'), reais((pb || 0) * res.ativosBasico + (pp || 0) * res.ativosPro))
+      texto($('notaMensalidade'), 'estimativa pelos ativos de hoje')
+    } else {
+      texto($('mensalidade'), '—')
+      texto($('notaMensalidade'), 'preços não cadastrados')
+    }
+
+    $('botaoNovo').disabled = !eu.podeEmitir
+
+    // Sem e-mail ele não recupera a senha sozinho — e só descobriria isso no
+    // dia em que esquecesse, que é tarde demais. O aviso fica de pé até
+    // resolver, de propósito.
+    if (!eu.podeRecuperarSenha) {
+      avisar($('avisoEmail'),
+        'Você ainda não cadastrou um e-mail. Sem ele, não dá para usar "Esqueci minha senha" — ' +
+        'a única saída seria pedir à FHVP Tech. Clique em "E-mail" aqui em cima para cadastrar.',
+        'alerta')
+    } else {
+      mostrar($('avisoEmail'), false)
+    }
+    $('botaoEmail').textContent = eu.podeRecuperarSenha ? 'E-mail' : 'Cadastrar e-mail'
+  }
+
+  // ── E-mail de recuperação ───────────────────────────────────────────────
+  $('botaoEmail').addEventListener('click', async () => {
+    const r = await abrirModal({
+      titulo: eu.email ? 'Trocar e-mail de recuperação' : 'Cadastrar e-mail de recuperação',
+      subtitulo: eu.email
+        ? 'Hoje seu e-mail é ' + eu.email + '. É para lá que vai o código quando você esquece a senha.'
+        : 'É para este endereço que vai o código quando você esquecer a senha.',
+      campos: [
+        { id: 'email', rotulo: 'E-mail', valor: eu.email || '', obrigatorio: true, maximo: 120,
+          placeholder: 'voce@seudominio.com',
+          validar: (v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? null : 'E-mail inválido.' },
+        // Pedir a senha aqui não é burocracia: sem ela, uma sessão roubada
+        // vira tomada permanente da conta — o invasor trocaria o e-mail para
+        // o dele e passaria a recuperar a senha quando quisesse.
+        { id: 'atual', rotulo: 'Sua senha (para confirmar)', tipo: 'senha', obrigatorio: true,
+          dica: 'Confirma que é você, e não alguém usando sua sessão.' }
+      ],
+      confirmar: 'Salvar'
+    })
+    if (!r) return
+    const resp = await api('/email', { metodo: 'POST', corpo: { email: r.email, atual: r.atual } })
+    if (!resp.ok) { await avisoModal('Não foi possível salvar', resp.erro); return }
+    await recarregar()
+    avisar($('avisoTopo'), 'E-mail salvo: ' + resp.dados.email, 'ok')
+  })
+
+  // ── Lista ───────────────────────────────────────────────────────────────
+  function etiquetaDoCliente(c) {
+    const span = document.createElement('span')
+    span.className = 'etiqueta '
+    if (c.bloqueadoPor === 'fhvp') { span.className += 'erro'; span.textContent = 'bloqueada pela FHVP' }
+    else if (c.bloqueadoPor === 'revendedor') { span.className += 'alerta'; span.textContent = 'bloqueada por você' }
+    else if (c.ativo) { span.className += 'ok'; span.textContent = 'ativa' }
+    else { span.className += 'neutra'; span.textContent = 'vencida' }
+    return span
+  }
+
+  function botao(rotulo, classe, aoClicar) {
+    const b = document.createElement('button')
+    b.className = 'pequeno ' + classe
+    b.textContent = rotulo
+    b.addEventListener('click', aoClicar)
+    return b
+  }
+
+  async function carregarClientes() {
+    const r = await api('/clientes')
+    if (!r.ok) return
+    const alvo = $('listaClientes')
+    alvo.replaceChildren()
+
+    const lista = r.dados.clientes.slice().sort((a, b) => a.clienteId.localeCompare(b.clienteId))
+    if (lista.length === 0) {
+      const vazio = document.createElement('div')
+      vazio.className = 'vazio'
+      vazio.textContent = 'Nenhum cliente ainda. Use "Novo cliente" para cadastrar o primeiro.'
+      alvo.appendChild(vazio)
+      return
+    }
+
+    const tabela = document.createElement('table')
+    const cab = document.createElement('tr')
+    for (const t of ['Loja', 'Plano', 'Licença até', 'Situação', '']) {
+      const th = document.createElement('th'); th.textContent = t; cab.appendChild(th)
+    }
+    tabela.appendChild(cab)
+
+    for (const c of lista) {
+      const tr = document.createElement('tr')
+
+      const tdNome = document.createElement('td')
+      const nome = document.createElement('div')
+      nome.style.fontWeight = '600'
+      nome.textContent = c.nome                    // textContent: nome é texto digitado por ele
+      const cod = document.createElement('div')
+      cod.className = 'sub'; cod.style.margin = '0'
+      cod.textContent = c.clienteId
+      tdNome.append(nome, cod)
+      if (c.contato) {
+        const tel = document.createElement('div')
+        tel.className = 'sub'; tel.style.margin = '0'
+        tel.textContent = c.contato
+        tdNome.appendChild(tel)
+      }
+
+      const tdPlano = document.createElement('td')
+      tdPlano.textContent = c.plano === 'pro' ? 'Pro' : 'Básico'
+
+      const tdVal = document.createElement('td')
+      const d = diasAte(c.validadeAtual)
+      tdVal.textContent = dataBR(c.validadeAtual)
+      if (d != null && d >= 0 && d <= 7) {
+        const alerta = document.createElement('div')
+        alerta.className = 'sub'; alerta.style.margin = '0'; alerta.style.color = 'var(--alerta)'
+        alerta.textContent = 'vence em ' + d + ' dia(s)'
+        tdVal.appendChild(alerta)
+      }
+
+      const tdSit = document.createElement('td')
+      tdSit.appendChild(etiquetaDoCliente(c))
+      if (c.motivoBloqueio) {
+        const m = document.createElement('div')
+        m.className = 'sub'; m.style.margin = '0'
+        m.textContent = c.motivoBloqueio
+        tdSit.appendChild(m)
+      }
+
+      const tdAcoes = document.createElement('td')
+      tdAcoes.className = 'acoes'
+      if (eu.podeEmitir) {
+        if (!c.bloqueadoPor) {
+          tdAcoes.appendChild(botao('Renovar', '', () => renovar(c)))
+          tdAcoes.appendChild(botao('Bloquear', 'perigo', () => bloquear(c)))
+        } else if (c.bloqueadoPor === 'revendedor') {
+          tdAcoes.appendChild(botao('Desbloquear', 'neutro', () => desbloquear(c)))
+        } else {
+          const nota = document.createElement('span')
+          nota.className = 'sub'
+          nota.textContent = 'fale com a FHVP Tech'
+          tdAcoes.appendChild(nota)
+        }
+      }
+
+      tr.append(tdNome, tdPlano, tdVal, tdSit, tdAcoes)
+      tabela.appendChild(tr)
+    }
+    alvo.appendChild(tabela)
+  }
+
+  // ── Ações ───────────────────────────────────────────────────────────────
+  async function renovar(c) {
+    const r = await api('/cliente/' + encodeURIComponent(c.clienteId) + '/renovar',
+      { metodo: 'POST', corpo: {} })
+    if (!r.ok) { avisar($('avisoTopo'), r.erro, 'erro'); return }
+    mostrar($('avisoTopo'), false)
+    await recarregar()
+    await mostrarChave(r.dados.chave, c.nome, r.dados.validade, r.dados.validadeCortadaNoTeto, 'Licença renovada')
+  }
+
+  async function bloquear(c) {
+    const resposta = await abrirModal({
+      titulo: 'Bloquear ' + c.nome,
+      subtitulo: 'Código ' + c.clienteId,
+      // O aviso é o ponto mais importante desta caixa: bloquear NÃO desliga a
+      // loja agora. Sem dizer isso, ele bloqueia, vê a loja funcionando e
+      // acha que o painel não fez nada.
+      aviso: 'A loja continua funcionando até ' + dataBR(c.validadeAtual) +
+             '. O bloqueio impede a RENOVAÇÃO a partir daí.',
+      campos: [{ id: 'motivo', rotulo: 'Motivo (opcional)', maximo: 80,
+                 placeholder: 'Ex.: mensalidade em atraso',
+                 dica: 'Fica registrado para você lembrar depois.' }],
+      confirmar: 'Bloquear',
+      perigo: true
+    })
+    if (!resposta) return
+    const r = await api('/cliente/' + encodeURIComponent(c.clienteId) + '/bloqueio',
+      { metodo: 'POST', corpo: { bloquear: true, motivo: resposta.motivo || undefined } })
+    if (!r.ok) { avisar($('avisoTopo'), r.erro, 'erro'); return }
+    avisar($('avisoTopo'), r.dados.aviso || 'Cliente bloqueado.', 'alerta')
+    await recarregar()
+  }
+
+  async function desbloquear(c) {
+    const ok = await abrirModal({
+      titulo: 'Desbloquear ' + c.nome,
+      subtitulo: 'Ele volta a poder ser renovado normalmente.',
+      confirmar: 'Desbloquear'
+    })
+    if (!ok) return
+    const r = await api('/cliente/' + encodeURIComponent(c.clienteId) + '/bloqueio',
+      { metodo: 'POST', corpo: { bloquear: false } })
+    if (!r.ok) { avisar($('avisoTopo'), r.erro, 'erro'); return }
+    avisar($('avisoTopo'), 'Cliente desbloqueado.', 'ok')
+    await recarregar()
+  }
+
+  async function recarregar() {
+    const r = await api('/eu')
+    if (r.ok) { eu = r.dados; pintarCabecalho() }
+    await carregarClientes()
+  }
+
+  // ── Novo cliente ────────────────────────────────────────────────────────
+  const caixaNovo = $('formNovoBox')
+  aplicarMascara($('novoId'), mascararCodigo, /[A-Za-z0-9]/)
+  aplicarMascara($('novoContato'), mascararTelefone, /\d/)
+  $('novoContato').inputMode = 'tel'
+
+  $('botaoNovo').addEventListener('click', () => {
+    mostrar(caixaNovo, caixaNovo.classList.contains('oculto'))
+    mostrar($('erroNovo'), false)
+    if (!caixaNovo.classList.contains('oculto')) $('novoId').focus()
+  })
+  $('botaoCancelarNovo').addEventListener('click', () => mostrar(caixaNovo, false))
+
+  // Prévia do código final: ele digita LOJA001 e o sistema entrega
+  // RV03-LOJA001. Mostrar antes evita a surpresa depois de criar.
+  $('novoId').addEventListener('input', () => {
+    const bruto = $('novoId').value.trim()
+    texto($('previaId'), bruto ? 'Código final: ' + eu.revendedor.revendedorId + '-' + bruto : '')
+  })
+
+  $('botaoCriar').addEventListener('click', async () => {
+    const codigo = $('novoId').value.trim()
+    const nome = $('novoNome').value.trim()
+    const contato = $('novoContato').value.trim()
+
+    // Valida ANTES de ir ao servidor: erro que dá pra pegar aqui não deve
+    // custar uma ida e volta na rede.
+    if (codigo.length < 2) {
+      avisar($('erroNovo'), 'O código da loja precisa de pelo menos 2 caracteres.', 'erro')
+      $('novoId').focus(); return
+    }
+    if (!nome) {
+      avisar($('erroNovo'), 'Informe o nome da loja.', 'erro')
+      $('novoNome').focus(); return
+    }
+    const erroTel = erroDeTelefone(contato)
+    if (erroTel) {
+      avisar($('erroNovo'), erroTel, 'erro')
+      $('novoContato').focus(); return
+    }
+
+    const botaoCriar = $('botaoCriar')
+    botaoCriar.disabled = true
+    texto(botaoCriar, 'Criando…')
+    const r = await api('/cliente', { metodo: 'POST', corpo: {
+      clienteId: codigo, nome, contato: contato || undefined, plano: $('novoPlano').value
+    }})
+    botaoCriar.disabled = false
+    texto(botaoCriar, 'Criar e gerar chave')
+    if (!r.ok) { avisar($('erroNovo'), r.erro, 'erro'); $('novoId').focus(); return }
+    mostrar($('erroNovo'), false)
+    mostrar(caixaNovo, false)
+    $('novoId').value = ''; $('novoNome').value = ''; $('novoContato').value = ''; texto($('previaId'), '')
+    await recarregar()
+    await mostrarChave(r.dados.chave, r.dados.cliente.nome, r.dados.cliente.validadeAtual,
+      r.dados.validadeCortadaNoTeto, 'Cliente criado')
+  })
+
+  // ── A chave ─────────────────────────────────────────────────────────────
+  // Ela é o produto: sem ela o lojista não abre o sistema. Por isso ocupa a
+  // tela inteira e não fecha sozinha — perder a chave custa um ciclo.
+  async function mostrarChave(chave, nomeLoja, validade, cortada, titulo) {
+    const corpo = document.createElement('div')
+    const caixaTexto = document.createElement('div')
+    caixaTexto.className = 'chave'
+    caixaTexto.textContent = chave
+    const rodape = document.createElement('p')
+    rodape.className = 'sub'; rodape.style.margin = '0'
+    rodape.textContent = nomeLoja + ' — válida até ' + dataBR(validade)
+    corpo.append(caixaTexto, rodape)
+
+    await abrirModal({
+      titulo,
+      subtitulo: 'Envie esta chave ao lojista. Ele a digita na tela de licença do sistema.',
+      aviso: cortada
+        ? 'A validade foi limitada ao vencimento da SUA assinatura (' + dataBR(eu.revendedor.validade) +
+          '). Renove a sua para poder dar prazo maior aos seus clientes.'
+        : null,
+      corpo,
+      extras: [{ rotulo: 'Copiar chave', aoClicar: async (b) => {
+        const rotuloOriginal = 'Copiar chave'
+        try {
+          await navigator.clipboard.writeText(chave)
+          texto(b, 'Copiada!')
+        } catch (e) {
+          // Área de transferência bloqueada (sem TLS, permissão negada):
+          // seleciona o texto pro usuário copiar na mão em vez de falhar mudo.
+          const faixa = document.createRange()
+          faixa.selectNodeContents(caixaTexto)
+          const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(faixa)
+          texto(b, 'Copie com Ctrl+C')
+        }
+        setTimeout(() => texto(b, rotuloOriginal), 2500)
+      }}],
+      confirmar: 'Fechar',
+      cancelar: null
+    })
+  }
+
+  // ── Trocar senha ────────────────────────────────────────────────────────
+  $('botaoSenha').addEventListener('click', async () => {
+    const r = await abrirModal({
+      titulo: 'Trocar senha',
+      subtitulo: 'Ao trocar, todas as sessões abertas são encerradas — inclusive esta.',
+      campos: [
+        { id: 'atual', rotulo: 'Senha atual', tipo: 'senha', obrigatorio: true },
+        { id: 'nova', rotulo: 'Nova senha', tipo: 'senha', obrigatorio: true,
+          dica: 'Mínimo de 10 caracteres e não pode ser só números.',
+          // Mesma regra do servidor, conferida aqui pra ele descobrir antes
+          // de mandar. Quem manda continua sendo o servidor.
+          validar: (v) => v.length < 10 ? 'Precisa de pelo menos 10 caracteres.'
+                 : /^\d+$/.test(v) ? 'Senha só de números é fácil demais de adivinhar.' : null },
+        { id: 'repetir', rotulo: 'Repita a nova senha', tipo: 'senha', obrigatorio: true }
+      ],
+      confirmar: 'Trocar senha'
+    })
+    if (!r) return
+    if (r.nova !== r.repetir) {
+      await avisoModal('As senhas não conferem', 'A nova senha e a repetição precisam ser iguais. Tente de novo.')
+      return
+    }
+    const resp = await api('/senha', { metodo: 'POST', corpo: { atual: r.atual, nova: r.nova } })
+    if (!resp.ok) { await avisoModal('Não foi possível trocar', resp.erro); return }
+    await avisoModal('Senha alterada', 'Todas as sessões foram encerradas. Entre novamente com a senha nova.')
+    sair()
+  })
+
+  // ── Boot ────────────────────────────────────────────────────────────────
+  if (token) abrirPainel(); else mostrar($('telaLogin'), true)
+})()
+</script>
+</body>
+</html>

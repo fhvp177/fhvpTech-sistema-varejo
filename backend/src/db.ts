@@ -10,6 +10,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Cliente, Cobranca } from './tipos.ts'
 import type { Revendedor } from './revenda.ts'
+import type { SessaoRevenda, PedidoRecuperacao } from './revendaAuth.ts'
 
 const DB_PATH = process.env.DB_PATH ?? './data/licenca.db'
 
@@ -38,6 +39,51 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS revendedores (
     revendedorId TEXT PRIMARY KEY,
     data TEXT NOT NULL
+  );
+
+  -- Sessões do painel do revendedor. Guardamos o HASH do token, nunca o token
+  -- — se este banco vazar, o que está aqui não abre nada.
+  --
+  -- Sessão em banco (e não JWT) é escolha deliberada: bloquear um revendedor
+  -- tem que derrubar o acesso dele NA HORA. Como toda requisição já passa por
+  -- aqui para saber quem é, conferir se ele ainda pode sai no mesmo passo.
+  CREATE TABLE IF NOT EXISTS revenda_sessoes (
+    tokenHash TEXT PRIMARY KEY,
+    revendedorId TEXT NOT NULL,
+    criadaEm TEXT NOT NULL,
+    expiraEm TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_revenda_sessoes_dono ON revenda_sessoes (revendedorId);
+
+  -- Tentativas de login por revendedor e hora. Mesmo padrão do
+  -- recuperacao_uso: freia força bruta sem precisar de infra nova.
+  CREATE TABLE IF NOT EXISTS revenda_login_tentativas (
+    revendedorId TEXT NOT NULL,
+    hora TEXT NOT NULL,
+    total INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (revendedorId, hora)
+  );
+
+  -- Código de recuperação de senha em aberto. UM por revendedor (a chave
+  -- primária garante): pedir de novo substitui o anterior, então dois códigos
+  -- nunca valem ao mesmo tempo.
+  --
+  -- Guardamos o HASH do código, não o código — mesma razão da senha e do
+  -- token: banco vazado não pode virar acesso.
+  CREATE TABLE IF NOT EXISTS revenda_recuperacao (
+    revendedorId TEXT PRIMARY KEY,
+    codigoHash TEXT NOT NULL,
+    expiraEm TEXT NOT NULL,
+    chutes INTEGER NOT NULL DEFAULT 0
+  );
+
+  -- Pedidos de código por hora. Impede que o botão "esqueci a senha" vire
+  -- metralhadora de email contra a caixa de entrada de alguém.
+  CREATE TABLE IF NOT EXISTS revenda_recuperacao_pedidos (
+    revendedorId TEXT NOT NULL,
+    hora TEXT NOT NULL,
+    total INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (revendedorId, hora)
   );
   CREATE TABLE IF NOT EXISTS chat_custo (
     cliente_id TEXT NOT NULL,
@@ -143,6 +189,42 @@ const stmts = {
   listRevendedores: db.prepare('SELECT data FROM revendedores'),
   setRevendedor: db.prepare(
     'INSERT INTO revendedores (revendedorId, data) VALUES (?, ?) ON CONFLICT(revendedorId) DO UPDATE SET data = excluded.data'
+  ),
+  getSessaoRevenda: db.prepare('SELECT * FROM revenda_sessoes WHERE tokenHash = ?'),
+  setSessaoRevenda: db.prepare(
+    `INSERT INTO revenda_sessoes (tokenHash, revendedorId, criadaEm, expiraEm)
+     VALUES (@tokenHash, @revendedorId, @criadaEm, @expiraEm)`
+  ),
+  apagarSessaoRevenda: db.prepare('DELETE FROM revenda_sessoes WHERE tokenHash = ?'),
+  apagarSessoesDoRevendedor: db.prepare('DELETE FROM revenda_sessoes WHERE revendedorId = ?'),
+  limparSessoesVencidas: db.prepare('DELETE FROM revenda_sessoes WHERE expiraEm <= ?'),
+  getTentativasLogin: db.prepare(
+    'SELECT total FROM revenda_login_tentativas WHERE revendedorId = ? AND hora = ?'
+  ),
+  incTentativasLogin: db.prepare(
+    `INSERT INTO revenda_login_tentativas (revendedorId, hora, total) VALUES (?, ?, 1)
+     ON CONFLICT(revendedorId, hora) DO UPDATE SET total = total + 1`
+  ),
+  zerarTentativasLogin: db.prepare(
+    'DELETE FROM revenda_login_tentativas WHERE revendedorId = ? AND hora = ?'
+  ),
+  getRecuperacao: db.prepare('SELECT * FROM revenda_recuperacao WHERE revendedorId = ?'),
+  setRecuperacao: db.prepare(
+    `INSERT INTO revenda_recuperacao (revendedorId, codigoHash, expiraEm, chutes)
+     VALUES (@revendedorId, @codigoHash, @expiraEm, @chutes)
+     ON CONFLICT(revendedorId) DO UPDATE SET
+       codigoHash = excluded.codigoHash, expiraEm = excluded.expiraEm, chutes = excluded.chutes`
+  ),
+  apagarRecuperacao: db.prepare('DELETE FROM revenda_recuperacao WHERE revendedorId = ?'),
+  incChutesRecuperacao: db.prepare(
+    'UPDATE revenda_recuperacao SET chutes = chutes + 1 WHERE revendedorId = ?'
+  ),
+  getPedidosRecuperacao: db.prepare(
+    'SELECT total FROM revenda_recuperacao_pedidos WHERE revendedorId = ? AND hora = ?'
+  ),
+  incPedidosRecuperacao: db.prepare(
+    `INSERT INTO revenda_recuperacao_pedidos (revendedorId, hora, total) VALUES (?, ?, 1)
+     ON CONFLICT(revendedorId, hora) DO UPDATE SET total = total + 1`
   ),
   getCobranca: db.prepare('SELECT data FROM cobrancas WHERE txid = ?'),
   setCobranca: db.prepare(
@@ -329,6 +411,79 @@ export function listarRevendedores(): Revendedor[] {
 // como toda chave passa por aqui, esta consulta É a medição do que ele deve.
 export function listarClientesDoRevendedor(revendedorId: string): Cliente[] {
   return listarClientes().filter((c) => c.revendedorId === revendedorId)
+}
+
+// ── Sessões do painel do revendedor ────────────────────────────────────────
+
+export function gravarSessaoRevenda(sessao: SessaoRevenda): void {
+  stmts.setSessaoRevenda.run(sessao)
+}
+
+export function obterSessaoRevenda(tokenHash: string): SessaoRevenda | null {
+  return (stmts.getSessaoRevenda.get(tokenHash) as SessaoRevenda | undefined) ?? null
+}
+
+export function apagarSessaoRevenda(tokenHash: string): void {
+  stmts.apagarSessaoRevenda.run(tokenHash)
+}
+
+/**
+ * Derruba TODAS as sessões de um revendedor.
+ *
+ * Chamado ao bloquear e ao trocar a senha. Sem isto, o bloqueio só valeria na
+ * próxima vez que ele fizesse login — e quem acabou de ser bloqueado é
+ * justamente quem não vai deslogar por educação.
+ */
+export function apagarSessoesDoRevendedor(revendedorId: string): number {
+  const r = stmts.apagarSessoesDoRevendedor.run(revendedorId) as { changes: number }
+  return r.changes
+}
+
+/** Faxina de sessões vencidas. Roda no login: barato e sem tarefa agendada. */
+export function limparSessoesVencidas(agora: string = new Date().toISOString()): void {
+  stmts.limparSessoesVencidas.run(agora)
+}
+
+export function tentativasDeLogin(revendedorId: string, hora: string): number {
+  const row = stmts.getTentativasLogin.get(revendedorId, hora) as { total: number } | undefined
+  return row?.total ?? 0
+}
+
+export function registrarTentativaDeLogin(revendedorId: string, hora: string): void {
+  stmts.incTentativasLogin.run(revendedorId, hora)
+}
+
+export function zerarTentativasDeLogin(revendedorId: string, hora: string): void {
+  stmts.zerarTentativasLogin.run(revendedorId, hora)
+}
+
+// ── Recuperação de senha do revendedor ─────────────────────────────────────
+
+export function gravarPedidoRecuperacao(pedido: PedidoRecuperacao): void {
+  stmts.setRecuperacao.run(pedido)
+}
+
+export function obterPedidoRecuperacao(revendedorId: string): PedidoRecuperacao | null {
+  return (stmts.getRecuperacao.get(revendedorId) as PedidoRecuperacao | undefined) ?? null
+}
+
+export function apagarPedidoRecuperacao(revendedorId: string): void {
+  stmts.apagarRecuperacao.run(revendedorId)
+}
+
+/** Conta o chute ANTES de responder se acertou. Se contássemos depois, um
+ *  script que derruba a conexão a cada tentativa nunca gastaria chute. */
+export function registrarChuteNoCodigo(revendedorId: string): void {
+  stmts.incChutesRecuperacao.run(revendedorId)
+}
+
+export function pedidosDeRecuperacao(revendedorId: string, hora: string): number {
+  const row = stmts.getPedidosRecuperacao.get(revendedorId, hora) as { total: number } | undefined
+  return row?.total ?? 0
+}
+
+export function registrarPedidoDeRecuperacao(revendedorId: string, hora: string): void {
+  stmts.incPedidosRecuperacao.run(revendedorId, hora)
 }
 
 export function obterCobranca(txid: string): Cobranca | null {
