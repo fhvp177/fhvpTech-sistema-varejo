@@ -43,6 +43,7 @@ import { aplicar031OsFotos } from './os/031_os_fotos'
 import { aplicarAt001NfseServico } from './os/at_001_nfse_servico'
 import { aplicarAt002Recibos } from './os/at_002_recibos'
 import { aplicarAt003ReciboUf } from './os/at_003_recibo_uf'
+import { aplicarAt004SenhaRestauracao } from './os/at_004_senha_restauracao'
 
 // Lista de migrations, na ordem de aplicação — herdadas do varejo e mantidas
 // IDÊNTICAS de propósito: o backup de um cliente do varejo restaura direto
@@ -119,4 +120,5 @@ export const MIGRATIONS: Migration[] = [
   { nome: 'at_001_nfse_servico', aplicar: aplicarAt001NfseServico },
   { nome: 'at_002_recibos', aplicar: aplicarAt002Recibos },
   { nome: 'at_003_recibo_uf', aplicar: aplicarAt003ReciboUf },
+  { nome: 'at_004_senha_restauracao', aplicar: aplicarAt004SenhaRestauracao },
 ]
