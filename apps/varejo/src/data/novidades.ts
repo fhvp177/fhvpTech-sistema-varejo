@@ -7,6 +7,30 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.36.1',
+    itens: [
+      // O atalho de configurar a máquina só existe no plano Pro — mesmo portão
+      // do anúncio do Multicaixa na 1.32.0. Sem ele, a loja do Básico leria
+      // sobre uma opção que o pacote dela não tem.
+      ...(__FEAT_MULTICAIXA__
+        ? [
+            {
+              emoji: '🖥️',
+              titulo: 'Configuração do caixa adicional',
+              descricao:
+                'Foi corrigida uma situação em que a opção "Configurar este computador", da tela de acesso, não era exibida nas lojas com apenas um usuário cadastrado, condição em que se encontra todo computador recém-instalado. A opção, necessária para conectar a máquina como caixa adicional ou para trazer os dados de outro computador, passa a ser exibida também nesses casos.'
+            }
+          ]
+        : []),
+      {
+        emoji: '🛠️',
+        titulo: 'Correção de bugs',
+        descricao:
+          'Foi corrigida uma situação em que o telefone do suporte deixava de ser exibido na tela de acesso das lojas com apenas um usuário cadastrado.'
+      }
+    ]
+  },
+  {
     versao: '1.36.0',
     itens: [
       {
