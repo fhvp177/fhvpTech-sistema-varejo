@@ -4,6 +4,7 @@ import logoEmpresa from '@/assets/logo.png'
 import ModalRecuperacaoPin from '@/components/ModalRecuperacaoPin'
 import ModalConfigurarMaquina from '@/components/ModalConfigurarMaquina'
 import { useFocoAoLiberar } from '@fhvptech/core/lib/useFocoAoLiberar'
+import { deveMostrarRodapeDoLogin } from '@fhvptech/core/lib/rodapeDoLogin'
 
 type VendedorLogin = {
   id: number
@@ -157,6 +158,12 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
 
   const acao = modoCadastro ? cadastrarPrimeiroPin : entrar
   const travado = segundosTravado > 0
+  // Suporte e "Configurar este computador" aparecem juntos, pela mesma regra:
+  // são a saída de quem não consegue entrar.
+  const mostrarRodape = deveMostrarRodapeDoLogin({
+    alguemSelecionado: Boolean(selecionado),
+    totalDeContas: vendedores.length
+  })
 
   /**
    * Confirma sozinho ao completar o PIN, como faz o Windows — sem Enter.
@@ -383,27 +390,38 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
 
         {conteudo}
 
-        {!selecionado && (
+        {/* O telefone do suporte é para quem NÃO consegue entrar, então ele
+            também precisa sobreviver à loja de uma conta só — ver
+            `deveMostrarRodapeDoLogin`. Na etapa do PIN o texto encurta: o
+            "Esqueci meu PIN" já está logo acima, e repeti-lo aqui só faria a
+            pessoa ler duas vezes a mesma saída. */}
+        {mostrarRodape && (
           <p className="text-center text-xs text-slate-400 mt-6">
-            Esqueceu o PIN?{' '}
-            <button
-              onClick={() => setMostrarRecuperacao(true)}
-              className="font-medium text-blue-600 hover:text-blue-700 hover:underline"
-            >
-              Recupere por e-mail
-            </button>{' '}
-            ou fale com o suporte:{' '}
+            {selecionado ? (
+              'Precisa de ajuda? Fale com o suporte: '
+            ) : (
+              <>
+                Esqueceu o PIN?{' '}
+                <button
+                  onClick={() => setMostrarRecuperacao(true)}
+                  className="font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                >
+                  Recupere por e-mail
+                </button>{' '}
+                ou fale com o suporte:{' '}
+              </>
+            )}
             <span className="font-semibold text-slate-600 whitespace-nowrap">
               (85) 9.2187-1975
             </span>
           </p>
         )}
 
-        {/* Precisa estar ANTES do login: um computador recém-instalado não tem
-            vendedores para listar, então ninguém consegue entrar nele para
-            chegar às Configurações. Discreto de propósito — a loja com um caixa
-            só nunca vai precisar disto. */}
-        {__FEAT_MULTICAIXA__ && !selecionado && (
+        {/* Precisa estar ANTES do login: numa instalação nova ninguém sabe o PIN
+            do vendedor que veio junto, então não dá pra entrar e chegar às
+            Configurações. Discreto de propósito — a loja com um caixa só nunca
+            vai precisar disto. */}
+        {__FEAT_MULTICAIXA__ && mostrarRodape && (
           <p className="text-center text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
             <button
               onClick={() => setMostrarConfigurarMaquina(true)}
