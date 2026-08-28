@@ -5,6 +5,9 @@ import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { useImprimir } from '@/components/ImpressaoProvider'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import EstadoVazio from '@fhvptech/core/ui/EstadoVazio'
+import { useSaidaDeLinha } from '@fhvptech/core/ui/animacoes'
+import { Select } from '@fhvptech/core/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -412,6 +415,8 @@ const Produtos: FC = () => {
   const confirmar = useConfirm()
   const imprimir = useImprimir()
 
+  const saidaLinha = useSaidaDeLinha()
+
   const excluir = async (p: Produto) => {
     const rotulo = p.tipo === 'servico' ? 'serviço' : 'produto'
     if (
@@ -423,7 +428,9 @@ const Produtos: FC = () => {
     )
       return
     const resp = await window.api.produtos.deletar(p.id)
-    if (resp.success) await carregar()
+    // A linha só sai da tela DEPOIS de sair do banco: animar antes faria ela
+    // deslizar pra fora e voltar piscando se a exclusão desse erro.
+    if (resp.success) saidaLinha.sairEntao(String(p.id), () => void carregar())
     else alert(`Erro: ${resp.error}`)
   }
 
@@ -555,8 +562,13 @@ const Produtos: FC = () => {
           <tbody>
             {listaFiltrada.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-muted-foreground">
-                  {busca ? 'Nenhum item encontrado.' : 'Nenhum item cadastrado.'}
+                <td colSpan={8}>
+                  <EstadoVazio
+                    icone={<Package className="w-9 h-9" />}
+                    dica={busca ? 'Tente outro nome, código ou referência.' : 'Cadastre uma peça ou um serviço para começar.'}
+                  >
+                    {busca ? 'Nenhum item encontrado.' : 'Nenhum item cadastrado.'}
+                  </EstadoVazio>
                 </td>
               </tr>
             )}
@@ -567,6 +579,8 @@ const Produtos: FC = () => {
               <Fragment key={p.id}>
               <tr
                 className={`border-b border-border last:border-b-0 ${
+                  saidaLinha.estaSaindo(String(p.id)) ? 'anim-linha-sai' : ''
+                } ${
                   i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
                 }`}
               >
@@ -775,19 +789,16 @@ const Produtos: FC = () => {
               <div className="grid gap-1.5">
                 <Label htmlFor="categoria">Categoria</Label>
                 <div className="flex gap-2">
-                  <select
+                  <Select
                     id="categoria"
                     value={form.categoria}
-                    onChange={setF('categoria')}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">— Sem categoria —</option>
-                    {categorias.map((c) => (
-                      <option key={c.id} value={c.nome}>
-                        {c.nome}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm((f) => ({ ...f, categoria: v }))}
+                    placeholder="— Sem categoria —"
+                    opcoes={[
+                      { valor: '', rotulo: '— Sem categoria —' },
+                      ...categorias.map((c) => ({ valor: c.nome, rotulo: c.nome }))
+                    ]}
+                  />
                   <Button
                     type="button"
                     variant="outline"
@@ -804,19 +815,16 @@ const Produtos: FC = () => {
               <div className="grid gap-1.5">
                 <Label htmlFor="fornecedor">Fornecedor</Label>
                 <div className="flex gap-2">
-                  <select
+                  <Select
                     id="fornecedor"
                     value={form.fornecedor_id}
-                    onChange={setF('fornecedor_id')}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">— Nenhum —</option>
-                    {fornecedores.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.nome}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm((f) => ({ ...f, fornecedor_id: v }))}
+                    placeholder="— Nenhum —"
+                    opcoes={[
+                      { valor: '', rotulo: '— Nenhum —' },
+                      ...fornecedores.map((f) => ({ valor: String(f.id), rotulo: f.nome }))
+                    ]}
+                  />
                   <Button
                     type="button"
                     variant="outline"

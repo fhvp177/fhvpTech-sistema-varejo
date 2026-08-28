@@ -1,6 +1,7 @@
 import { FC, ReactNode, Suspense, lazy, useEffect, useState } from 'react'
 import { FileDown, Printer, FolderDown, ShoppingCart, Package, BookOpen, FileText, Receipt } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
+import { Select } from '@fhvptech/core/ui/select'
 import { Label } from '@fhvptech/core/ui/label'
 import { useImprimir } from '@/components/ImpressaoProvider'
 import { nomeImpressao } from '@/utils/nomeImpressao'
@@ -306,18 +307,14 @@ const Relatorios: FC = () => {
                 <Label htmlFor="mes-entradas" className="text-xs shrink-0">
                   Mês
                 </Label>
-                <select
+                <Select
                   id="mes-entradas"
                   value={mesEntradas}
-                  onChange={(e) => setMesEntradas(e.target.value)}
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                  {mesesEntradas.map((m) => (
-                    <option key={m} value={m}>
-                      {rotuloMesEntradas(m)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setMesEntradas}
+                  className="h-9 text-sm"
+                  classNameContainer="w-44"
+                  opcoes={mesesEntradas.map((m) => ({ valor: m, rotulo: rotuloMesEntradas(m) }))}
+                />
                 <span className="text-xs text-muted-foreground ml-auto">
                   {notasDoMes.length} nota(s) · {dinheiro(totalEntradas)}
                 </span>

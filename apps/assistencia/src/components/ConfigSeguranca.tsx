@@ -2,6 +2,7 @@ import { FC, useEffect, useState } from 'react'
 import { KeyRound, Clock, Percent } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Label } from '@fhvptech/core/ui/label'
+import { Select } from '@fhvptech/core/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -152,15 +153,12 @@ const ConfigSeguranca: FC = () => {
           <Clock className="w-4 h-4 text-muted-foreground" />
           <Label className="text-sm font-medium">Bloquear automaticamente após inatividade</Label>
         </div>
-        <select
-          value={autoLockMinutos}
-          onChange={(e) => salvarAutoLock(parseInt(e.target.value, 10))}
-          className="flex h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {OPCOES_AUTO_LOCK.map((op) => (
-            <option key={op.valor} value={op.valor}>{op.label}</option>
-          ))}
-        </select>
+        <Select
+          value={String(autoLockMinutos)}
+          onChange={(v) => salvarAutoLock(parseInt(v, 10))}
+          classNameContainer="max-w-xs"
+          opcoes={OPCOES_AUTO_LOCK.map((op) => ({ valor: String(op.valor), rotulo: op.label }))}
+        />
         <p className="text-xs text-muted-foreground mt-1">
           Quando o sistema ficar sem uso por este período, o PIN será exigido novamente.
         </p>

@@ -1,5 +1,6 @@
 import { FC, useEffect, useRef, useState } from 'react'
 import { CalendarDays, RotateCcw } from 'lucide-react'
+import { Select } from '@fhvptech/core/ui/select'
 
 const MESES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -173,9 +174,6 @@ type SeletorProps = {
   mesMax: number
 }
 
-const SELECT_CLS =
-  'h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-
 const SeletorMesAno: FC<SeletorProps> = ({ label, mes, onChange, anos, anoMax, mesMax }) => {
   const [ano, mesNum] = mes.split('-').map(Number)
 
@@ -190,26 +188,22 @@ const SeletorMesAno: FC<SeletorProps> = ({ label, mes, onChange, anos, anoMax, m
     <div>
       <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{label}</label>
       <div className="flex gap-2">
-        <select
-          className={`${SELECT_CLS} flex-1`}
-          value={mesNum}
-          onChange={(e) => trocarMes(Number(e.target.value))}
-        >
-          {MESES.map((nome, i) => (
-            <option key={nome} value={i + 1} disabled={ano === anoMax && i + 1 > mesMax}>
-              {nome}
-            </option>
-          ))}
-        </select>
-        <select
-          className={`${SELECT_CLS} w-24`}
-          value={ano}
-          onChange={(e) => trocarAno(Number(e.target.value))}
-        >
-          {anos.map((a) => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
+        <Select
+          value={String(mesNum)}
+          onChange={(v) => trocarMes(Number(v))}
+          classNameContainer="flex-1"
+          opcoes={MESES.map((nome, i) => ({
+            valor: String(i + 1),
+            rotulo: nome,
+            desabilitada: ano === anoMax && i + 1 > mesMax
+          }))}
+        />
+        <Select
+          value={String(ano)}
+          onChange={(v) => trocarAno(Number(v))}
+          classNameContainer="w-24"
+          opcoes={anos.map((a) => ({ valor: String(a), rotulo: String(a) }))}
+        />
       </div>
     </div>
   )

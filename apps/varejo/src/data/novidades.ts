@@ -7,6 +7,29 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.37.0',
+    itens: [
+      {
+        emoji: '🎛️',
+        titulo: 'Listas de seleção com a aparência do sistema',
+        descricao:
+          'As listas de escolha do sistema — cliente, fornecedor, categoria, unidade, impressora, mês e demais — passam a ser desenhadas pelo próprio programa, seguindo a mesma identidade visual do restante das telas, em lugar da lista padrão do Windows. A navegação por teclado foi preservada: setas para percorrer, Enter para escolher, Esc para fechar e digitação para localizar a opção desejada.'
+      },
+      {
+        emoji: '✨',
+        titulo: 'Sinalizações visuais no uso diário',
+        descricao:
+          'O item ativo do menu lateral passa a ser destacado também pela cor do texto. No caixa, o item recém-lido é realçado na lista e o total ganha destaque quando muda de valor. Itens excluídos deixam a lista de forma perceptível, e as telas sem registros passam a orientar o próximo passo.'
+      },
+      {
+        emoji: '🛠️',
+        titulo: 'Correção de bugs',
+        descricao:
+          'Foi corrigida uma situação em que as listas de seleção de cliente e de cidade, quando abertas dentro de uma janela do sistema, não respondiam ao clique do mouse, sendo possível escolher a opção apenas pelo teclado.'
+      }
+    ]
+  },
+  {
     versao: '1.36.1',
     itens: [
       // O atalho de configurar a máquina só existe no plano Pro — mesmo portão

@@ -5,6 +5,8 @@ import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import EstadoVazio from '@fhvptech/core/ui/EstadoVazio'
+import { useSaidaDeLinha } from '@fhvptech/core/ui/animacoes'
 import {
   Dialog,
   DialogContent,
@@ -348,6 +350,8 @@ const Clientes: FC = () => {
 
   const confirmar = useConfirm()
 
+  const saidaLinha = useSaidaDeLinha()
+
   const excluir = async (id: number, nome: string) => {
     if (
       !(await confirmar({
@@ -358,7 +362,7 @@ const Clientes: FC = () => {
     )
       return
     const resp = await window.api.clientes.deletar(id)
-    if (resp.success) await carregarClientes()
+    if (resp.success) saidaLinha.sairEntao(String(id), () => void carregarClientes())
     else alert(`Erro: ${resp.error}`)
   }
 
@@ -401,8 +405,13 @@ const Clientes: FC = () => {
           <tbody>
             {listaFiltrada.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-muted-foreground">
-                  {busca ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}
+                <td colSpan={7}>
+                  <EstadoVazio
+                    icone={<User className="w-9 h-9" />}
+                    dica={busca ? 'Tente outro nome, telefone ou documento.' : 'Use o botão "Novo cliente" para começar.'}
+                  >
+                    {busca ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}
+                  </EstadoVazio>
                 </td>
               </tr>
             )}
@@ -410,6 +419,8 @@ const Clientes: FC = () => {
               <tr
                 key={c.id}
                 className={`border-b border-border last:border-b-0 ${
+                  saidaLinha.estaSaindo(String(c.id)) ? 'anim-linha-sai' : ''
+                } ${
                   i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
                 }`}
               >

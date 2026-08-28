@@ -2,7 +2,8 @@ import { FC, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
+import { Select } from '@fhvptech/core/ui/select'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone, Blocks } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import CadastroPixLoja from '@/components/CadastroPixLoja'
@@ -11,7 +12,8 @@ import ConfigImpressao from '@/components/ConfigImpressao'
 import ConfigMulticaixa from '@/components/ConfigMulticaixa'
 import CidadeSeletor from '@/components/CidadeSeletor'
 import SecaoConfig from '@/components/SecaoConfig'
-import { useOnboarding, useNovidades, useTour, useLock } from '@/App'
+import ConfigModulos from '@/components/ConfigModulos'
+import { useOnboarding, useNovidades, useTour, useLock, useModulos } from '@/App'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
 import type { EstadoMulticaixa } from '@/types/multicaixa'
 import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
@@ -79,6 +81,7 @@ const Configuracoes: FC = () => {
   const [loja, setLoja] = useState<DadosLoja | null>(null)
   // Resumos das seções fechadas — é o que permite ler a tela sem abrir nada.
   const { autoLockMinutos } = useLock()
+  const modulos = useModulos()
   const [totalVendedores, setTotalVendedores] = useState<number | null>(null)
   const [estadoMulticaixa, setEstadoMulticaixa] = useState<EstadoMulticaixa | null>(null)
   const { ehCaixaAdicional } = useSituacaoMulticaixa()
@@ -264,6 +267,7 @@ const Configuracoes: FC = () => {
     totalVendedores === null
       ? null
       : `${totalVendedores} ${totalVendedores === 1 ? 'cadastrado' : 'cadastrados'}`
+  const resumoModulos = modulos.emprestimos ? 'Empréstimos ligado' : 'nenhum ligado'
   const impressoraCupom = prefsImpressao?.cupom?.printer
   const resumoImpressao = impressoraCupom || 'nenhuma escolhida'
   const resumoMulticaixa =
@@ -559,18 +563,15 @@ const Configuracoes: FC = () => {
               </div>
               <div>
                 <Label className="text-sm mb-1.5 block">UF</Label>
-                <select
+                <Select
                   value={loja.uf}
-                  onChange={(e) => atualizarLoja('uf', e.target.value)}
-                  className={CLASSE_INPUT}
-                >
-                  <option value="">—</option>
-                  {UFS.map((u) => (
-                    <option key={u.sigla} value={u.sigla}>
-                      {u.sigla} — {u.nome}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => atualizarLoja('uf', v)}
+                  placeholder="—"
+                  opcoes={[
+                    { valor: '', rotulo: '—' },
+                    ...UFS.map((u) => ({ valor: u.sigla, rotulo: `${u.sigla} — ${u.nome}` }))
+                  ]}
+                />
               </div>
               <div>
                 <Label className="text-sm mb-1.5 block">CEP</Label>
@@ -619,6 +620,21 @@ const Configuracoes: FC = () => {
           permitindo acompanhar produção individual no histórico.
         </p>
         <CadastroVendedores />
+        </div>
+      </SecaoConfig>
+
+      <SecaoConfig
+        id="modulos"
+        titulo="Módulos"
+        icone={<Blocks className="w-4 h-4" />}
+        resumo={resumoModulos}
+      >
+        <div className="space-y-4">
+        <p className="text-sm text-muted-foreground -mt-1">
+          Funcionalidades que só aparecem em quem usa. Ligar ou desligar aqui muda apenas o que
+          o menu mostra — nenhum dado é criado ou apagado.
+        </p>
+        <ConfigModulos />
         </div>
       </SecaoConfig>
 
@@ -708,18 +724,19 @@ const Configuracoes: FC = () => {
         {/* Frequência */}
         <div>
           <Label className="text-sm font-medium mb-1.5 block">Frequência do backup automático</Label>
-          <select
+          <Select
             value={frequencia}
-            onChange={(e) => setFrequencia(e.target.value)}
-            className="flex h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="1">A cada 1 hora</option>
-            <option value="2">A cada 2 horas</option>
-            <option value="4">A cada 4 horas</option>
-            <option value="8">A cada 8 horas</option>
-            <option value="24">A cada 24 horas</option>
-            <option value="desativado">Desativado</option>
-          </select>
+            onChange={setFrequencia}
+            classNameContainer="max-w-xs"
+            opcoes={[
+              { valor: '1', rotulo: 'A cada 1 hora' },
+              { valor: '2', rotulo: 'A cada 2 horas' },
+              { valor: '4', rotulo: 'A cada 4 horas' },
+              { valor: '8', rotulo: 'A cada 8 horas' },
+              { valor: '24', rotulo: 'A cada 24 horas' },
+              { valor: 'desativado', rotulo: 'Desativado' }
+            ]}
+          />
         </div>
 
         {/* Backup a cada venda */}
@@ -747,15 +764,16 @@ const Configuracoes: FC = () => {
         {/* Ao fechar */}
         <div>
           <Label className="text-sm font-medium mb-1.5 block">Backup ao fechar o sistema</Label>
-          <select
+          <Select
             value={aoFechar}
-            onChange={(e) => setAoFechar(e.target.value)}
-            className="flex h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="perguntar">Perguntar se houve alterações</option>
-            <option value="sempre">Sempre fazer automaticamente</option>
-            <option value="nunca">Nunca</option>
-          </select>
+            onChange={setAoFechar}
+            classNameContainer="max-w-xs"
+            opcoes={[
+              { valor: 'perguntar', rotulo: 'Perguntar se houve alterações' },
+              { valor: 'sempre', rotulo: 'Sempre fazer automaticamente' },
+              { valor: 'nunca', rotulo: 'Nunca' }
+            ]}
+          />
         </div>
 
         {/* Pasta padrão */}

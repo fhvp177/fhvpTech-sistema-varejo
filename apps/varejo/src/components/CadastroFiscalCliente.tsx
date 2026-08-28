@@ -3,6 +3,7 @@ import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import { Select } from '@fhvptech/core/ui/select'
 import { Building2, ChevronDown, Search } from 'lucide-react'
 import { UFS } from '@/data/ufs'
 
@@ -16,9 +17,6 @@ import { UFS } from '@/data/ufs'
 // A busca por CEP existe por um motivo específico: a nota exige o CÓDIGO IBGE
 // do município, que ninguém sabe de cabeça e que não está em documento nenhum
 // que o lojista tenha à mão.
-
-const CLASSE_SELECT =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 const soDigitos = (v: string) => (v ?? '').replace(/\D/g, '')
 
@@ -287,35 +285,29 @@ const CadastroFiscalCliente: FC<Props> = ({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ufCli">Estado</Label>
-          <select
+          <Select
             id="ufCli"
-            className={CLASSE_SELECT}
             value={valor.uf}
-            onChange={(e) => alterar('uf', e.target.value)}
-          >
-            <option value="">—</option>
-            {UFS.map((u) => (
-              <option key={u.sigla} value={u.sigla}>
-                {u.sigla}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => alterar('uf', v)}
+            placeholder="—"
+            opcoes={[{ valor: '', rotulo: '—' }, ...UFS.map((u) => ({ valor: u.sigla, rotulo: u.sigla }))]}
+          />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="indIe">Este cliente é…</Label>
-          <select
+          <Select
             id="indIe"
-            className={CLASSE_SELECT}
             value={valor.indicador_ie}
-            onChange={(e) => alterar('indicador_ie', e.target.value)}
-          >
-            <option value="9">Não contribuinte (não revende)</option>
-            <option value="1">Contribuinte de ICMS (revende)</option>
-            <option value="2">Isento de inscrição</option>
-          </select>
+            onChange={(v) => alterar('indicador_ie', v)}
+            opcoes={[
+              { valor: '9', rotulo: 'Não contribuinte (não revende)' },
+              { valor: '1', rotulo: 'Contribuinte de ICMS (revende)' },
+              { valor: '2', rotulo: 'Isento de inscrição' }
+            ]}
+          />
           <p className="text-xs text-muted-foreground">
             Na dúvida, o contador do cliente sabe.
           </p>

@@ -1,14 +1,12 @@
 import { FC, useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import { Label } from '@fhvptech/core/ui/label'
+import { Select } from '@fhvptech/core/ui/select'
 
 type Impressora = { name: string; displayName: string; isDefault: boolean }
 type Pref = { printer: string; direto: boolean }
 type Prefs = { cupom: Pref; documento: Pref }
 type Categoria = 'cupom' | 'documento'
-
-const CLASSE_SELECT =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50'
 
 const ConfigImpressao: FC = () => {
   const [impressoras, setImpressoras] = useState<Impressora[]>([])
@@ -53,18 +51,14 @@ const ConfigImpressao: FC = () => {
       <div className="space-y-2">
         <Label className="font-medium">{titulo}</Label>
         <p className="text-xs text-muted-foreground -mt-1">{descricao}</p>
-        <select
+        <Select
           value={valor}
-          onChange={(e) => atualizar(cat, { printer: e.target.value })}
-          className={CLASSE_SELECT}
-        >
-          {impressoras.map((i) => (
-            <option key={i.name} value={i.name}>
-              {i.displayName || i.name}
-              {i.isDefault ? ' (padrão)' : ''}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => atualizar(cat, { printer: v })}
+          opcoes={impressoras.map((i) => ({
+            valor: i.name,
+            rotulo: `${i.displayName || i.name}${i.isDefault ? ' (padrão)' : ''}`
+          }))}
+        />
         <label className="flex items-center gap-2 text-sm cursor-pointer select-none pt-0.5">
           <input
             type="checkbox"

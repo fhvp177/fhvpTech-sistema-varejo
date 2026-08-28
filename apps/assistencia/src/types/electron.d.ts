@@ -306,6 +306,70 @@ type ResumoContasPagar = {
   pago_mes: number
 }
 
+type SituacaoEmprestimo = 'aberto' | 'vencido' | 'quitado' | 'cancelado'
+
+type Emprestimo = {
+  id: number
+  cliente_id: number | null
+  devedor_nome: string
+  devedor_documento: string | null
+  valor_principal: number
+  valor_acordado: number
+  valor_devido: number
+  valor_pago: number
+  modo: 'unico' | 'carne'
+  data_emprestimo: string
+  vencimento: string | null
+  observacao: string | null
+  quitado_em: string | null
+  cancelado: number
+  cancelado_em: string | null
+  cancelado_motivo: string | null
+  criado_em: string
+  criado_por: string | null
+  restante: number
+  situacao: SituacaoEmprestimo
+  proximo_vencimento: string | null
+}
+
+type LancamentoEmprestimo = {
+  id: number
+  emprestimo_id: number
+  tipo: 'pagamento' | 'acrescimo' | 'desconto'
+  valor: number
+  data: string
+  forma_pagamento: string | null
+  observacao: string | null
+  parcela_id: number | null
+  estornado: number
+  estornado_em: string | null
+  criado_em: string
+  criado_por: string | null
+}
+
+type ParcelaEmprestimo = {
+  id: number
+  emprestimo_id: number
+  numero: number
+  valor: number
+  vencimento: string
+  paga: number
+  paga_em: string | null
+}
+
+type EmprestimoDetalhado = Emprestimo & {
+  lancamentos: LancamentoEmprestimo[]
+  parcelas: ParcelaEmprestimo[]
+}
+
+type ResumoEmprestimos = {
+  total_a_receber: number
+  vencido: number
+  vence_7d: number
+  recebido_mes: number
+  principal_em_aberto: number
+}
+
 interface Window {
   api: {
     produtos: {
@@ -379,6 +443,23 @@ interface Window {
       deletar: (id: number) => Promise<RespostaIPC>
       registrarPagamento: (id: number, valor: number) => Promise<RespostaIPC>
       estornarPagamento: (id: number) => Promise<RespostaIPC>
+    }
+    emprestimos: {
+      moduloAtivo: () => Promise<RespostaIPC<boolean>>
+      definirModulo: (ativo: boolean) => Promise<RespostaIPC>
+      listar: (filtro?: 'aberto' | 'quitado' | 'todos') => Promise<RespostaIPC<Emprestimo[]>>
+      obter: (id: number) => Promise<RespostaIPC<EmprestimoDetalhado>>
+      resumo: () => Promise<RespostaIPC<ResumoEmprestimos>>
+      criar: (dados: unknown) => Promise<RespostaIPC<EmprestimoDetalhado>>
+      registrarPagamento: (id: number, dados: unknown) => Promise<RespostaIPC>
+      pagarParcela: (parcelaId: number, dados: unknown) => Promise<RespostaIPC>
+      lancarAjuste: (
+        id: number,
+        tipo: 'acrescimo' | 'desconto',
+        dados: unknown
+      ) => Promise<RespostaIPC>
+      estornarLancamento: (lancamentoId: number) => Promise<RespostaIPC>
+      cancelar: (id: number, motivo: string) => Promise<RespostaIPC>
     }
     notasEntrada: {
       analisar: (

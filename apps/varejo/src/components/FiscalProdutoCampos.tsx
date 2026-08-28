@@ -1,6 +1,7 @@
 import { FC, useEffect, useState } from 'react'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import { Select } from '@fhvptech/core/ui/select'
 import { ChevronDown } from 'lucide-react'
 
 // Classificação fiscal de UM produto, dentro do cadastro dele.
@@ -13,9 +14,6 @@ import { ChevronDown } from 'lucide-react'
 // Fica RECOLHIDO por padrão: a maioria dos cadastros não mexe nisso, e abrir a
 // tela de produto já cheia de campo fiscal assustaria quem só quer cadastrar
 // uma camiseta.
-
-const CLASSE_SELECT =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 const soDigitos = (v: string) => (v ?? '').replace(/\D/g, '')
 
@@ -115,31 +113,25 @@ const FiscalProdutoCampos: FC<Props> = ({ produtoId, valor, onChange }) => {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label htmlFor="porig">Origem</Label>
-              <select
+              <Select
                 id="porig"
-                className={CLASSE_SELECT}
                 value={valor.origem || '0'}
-                onChange={(e) => alterar('origem', e.target.value)}
-              >
-                <option value="0">Nacional</option>
-                <option value="1">Importado direto</option>
-                <option value="2">Importado no mercado interno</option>
-              </select>
+                onChange={(v) => alterar('origem', v)}
+                opcoes={[
+                  { valor: '0', rotulo: 'Nacional' },
+                  { valor: '1', rotulo: 'Importado direto' },
+                  { valor: '2', rotulo: 'Importado no mercado interno' }
+                ]}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pun">Unidade</Label>
-              <select
+              <Select
                 id="pun"
-                className={CLASSE_SELECT}
                 value={valor.unidade || 'UN'}
-                onChange={(e) => alterar('unidade', e.target.value)}
-              >
-                {UNIDADES.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => alterar('unidade', v)}
+                opcoes={UNIDADES.map((u) => ({ valor: u, rotulo: u }))}
+              />
             </div>
           </div>
         </div>

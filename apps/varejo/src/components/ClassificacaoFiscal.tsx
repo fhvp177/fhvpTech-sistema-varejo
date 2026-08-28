@@ -2,6 +2,7 @@ import { FC, useCallback, useEffect, useState } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import { Select } from '@fhvptech/core/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@fhvptech/core/ui/dialog'
 import { AlertTriangle, Check, Layers, Search } from 'lucide-react'
 
@@ -16,9 +17,6 @@ import { AlertTriangle, Check, Layers, Search } from 'lucide-react'
 // O que a tela NÃO faz: adivinhar. NCM é decisão fiscal do contador; aqui só
 // existe o meio de registrar o que ele disser. Um NCM chutado passa pela SEFAZ
 // e vira problema do lojista numa fiscalização — não dá erro nenhum na hora.
-
-const CLASSE_SELECT =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 const soDigitos = (v: string) => (v ?? '').replace(/\D/g, '')
 
@@ -152,34 +150,29 @@ const ClassificacaoFiscal: FC<Props> = ({ aberta, onFechar, onMudou }) => {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="lun">Unidade</Label>
-              <select
+              <Select
                 id="lun"
-                className={CLASSE_SELECT}
                 value={unidade}
-                onChange={(e) => setUnidade(e.target.value)}
-              >
-                <option value="">—</option>
-                {UNIDADES.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
+                onChange={setUnidade}
+                placeholder="—"
+                opcoes={[{ valor: '', rotulo: '—' }, ...UNIDADES.map((u) => ({ valor: u, rotulo: u }))]}
+              />
             </div>
           </div>
           <div className="space-y-1.5 max-w-xs">
             <Label htmlFor="lorig">Origem</Label>
-            <select
+            <Select
               id="lorig"
-              className={CLASSE_SELECT}
               value={origem}
-              onChange={(e) => setOrigem(e.target.value)}
-            >
-              <option value="">— não alterar —</option>
-              <option value="0">Nacional</option>
-              <option value="1">Importado direto</option>
-              <option value="2">Importado no mercado interno</option>
-            </select>
+              onChange={setOrigem}
+              placeholder="— não alterar —"
+              opcoes={[
+                { valor: '', rotulo: '— não alterar —' },
+                { valor: '0', rotulo: 'Nacional' },
+                { valor: '1', rotulo: 'Importado direto' },
+                { valor: '2', rotulo: 'Importado no mercado interno' }
+              ]}
+            />
           </div>
           <p className="text-xs text-muted-foreground">
             Campo em branco não é alterado nos produtos.

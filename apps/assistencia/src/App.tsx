@@ -13,6 +13,7 @@ import {
   Tags,
   Receipt,
   ReceiptText,
+  HandCoins,
   Settings,
   FileText,
   DatabaseBackup,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react'
 import Fornecedores from './pages/Fornecedores'
 import ContasPagar from './pages/ContasPagar'
+import Emprestimos from './pages/Emprestimos'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
@@ -144,6 +146,24 @@ export const useTour = () => useContext(TourContext)
 type CalculadoraCtx = { aberta: boolean; alternar: () => void }
 const CalculadoraContext = createContext<CalculadoraCtx>({ aberta: false, alternar: () => {} })
 export const useCalculadora = () => useContext(CalculadoraContext)
+
+// Módulos OPCIONAIS — funcionalidades que existem no binário mas só aparecem em
+// quem contratou. Diferente das flags __FEAT_*, que são decididas na hora de
+// gerar o instalador e valem pra edição inteira, este interruptor é POR LOJA e
+// pode ser ligado no próprio app, em Configurações.
+//
+// Por que assim: Empréstimos nasceu de um pedido de UM cliente. Uma edição de
+// build só pra ele viraria um terceiro canal de atualização publicado em toda
+// release, pra sempre; uma capacidade na chave de licença mexeria no
+// licenciador. O interruptor por loja custa quase nada e mantém o ponto de
+// decisão num lugar só — se um dia virar item de plano, é aqui que a resposta
+// passa a vir da flag de build ou da licença, sem tocar no módulo.
+type ModulosCtx = { emprestimos: boolean; recarregar: () => Promise<void> }
+const ModulosContext = createContext<ModulosCtx>({
+  emprestimos: false,
+  recarregar: async () => {}
+})
+export const useModulos = () => useContext(ModulosContext)
 export const useNovidades = () => useContext(NovidadesContext)
 
 // MemoryRouter é necessário no Electron: não existe servidor HTTP nem hash routing
@@ -169,6 +189,8 @@ const App: FC = () => {
   const [guiaAberto, setGuiaAberto] = useState(false)
   const [calculadoraAberta, setCalculadoraAberta] = useState(false)
   const slidesGuia = useMemo(() => construirSlidesGuia(), [])
+  // Módulos opcionais ligados nesta loja (ver ModulosContext).
+  const [emprestimosAtivo, setEmprestimosAtivo] = useState(false)
   // "O que há de novo" — destaques exibidos uma vez após uma atualização.
   const [novidades, setNovidades] = useState<{ versao: string; itens: ItemNovidade[] } | null>(null)
   const novidadesChecadas = useRef(false)
@@ -254,6 +276,25 @@ const App: FC = () => {
     }
     recarregarOnboarding()
   }, [estadoAuth, vendedor, recarregarOnboarding])
+
+  // Quais módulos opcionais esta loja usa. Vale pra qualquer papel: o menu é
+  // montado antes de saber quem entrou, e a resposta ("esta loja usa
+  // empréstimos") não conta nada sobre ninguém — quem protege o conteúdo é o
+  // requerDono() de cada canal.
+  const recarregarModulos = useCallback(async () => {
+    const resp = await window.api.emprestimos.moduloAtivo()
+    setEmprestimosAtivo(resp.success ? resp.data === true : false)
+  }, [])
+
+  useEffect(() => {
+    if (estadoAuth !== 'desbloqueado') return
+    recarregarModulos()
+  }, [estadoAuth, recarregarModulos])
+
+  const modulos = useMemo<ModulosCtx>(
+    () => ({ emprestimos: emprestimosAtivo, recarregar: recarregarModulos }),
+    [emprestimosAtivo, recarregarModulos]
+  )
 
   // Primeira abertura do gerente → abre o guia antes de tudo.
   useEffect(() => {
@@ -451,6 +492,7 @@ const App: FC = () => {
            <CalculadoraContext.Provider
              value={{ aberta: calculadoraAberta, alternar: () => setCalculadoraAberta((v) => !v) }}
            >
+            <ModulosContext.Provider value={modulos}>
             <MemoryRouter>
               <div className="flex h-screen bg-background">
                 {!pdvAtivo && (
@@ -460,6 +502,7 @@ const App: FC = () => {
                     onAbrirCalculadora={() => setCalculadoraAberta((v) => !v)}
                     onRenovarComPix={abrirPagamento}
                     vendedor={vendedor}
+                    modulos={modulos}
                   />
                 )}
                 <div className="flex-1 flex flex-col overflow-hidden">
@@ -530,6 +573,19 @@ const App: FC = () => {
                           </RotaSomenteDono>
                         }
                       />
+                      {/* Módulo opcional: a rota só existe onde a loja ligou.
+                          Sem isso, quem soubesse o caminho chegaria numa tela
+                          vazia e confusa — e o backend recusaria tudo. */}
+                      {modulos.emprestimos && (
+                        <Route
+                          path="/emprestimos"
+                          element={
+                            <RotaSomenteDono titulo="Empréstimos">
+                              <Emprestimos />
+                            </RotaSomenteDono>
+                          }
+                        />
+                      )}
                       <Route path="/produtos" element={<Produtos />} />
                       <Route path="/clientes" element={<Clientes />} />
                       <Route path="/vendas" element={<Vendas />} />
@@ -612,6 +668,7 @@ const App: FC = () => {
                 onLicencaRenovada={aoRenovar}
               />
             </MemoryRouter>
+            </ModulosContext.Provider>
            </CalculadoraContext.Provider>
           </PdvModeContext.Provider>
         </LockContext.Provider>
@@ -670,7 +727,14 @@ const ToastInicial: FC<{ aviso: string | null; onMostrado: () => void }> = ({
   return null
 }
 
-type ItemSidebar = { to: string; label: string; icon: LucideIcon; somenteDono?: boolean }
+type ItemSidebar = {
+  to: string
+  label: string
+  icon: LucideIcon
+  somenteDono?: boolean
+  /** Módulo opcional que precisa estar ligado nesta loja pro item existir. */
+  requerModulo?: keyof Omit<ModulosCtx, 'recarregar'>
+}
 const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Visão geral',
@@ -707,6 +771,14 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
     titulo: 'Financeiro',
     itens: [
       { to: '/contas-pagar', label: 'Contas a Pagar', icon: Receipt, somenteDono: true },
+      // Módulo opcional — só aparece na loja que ligou (ver ModulosContext).
+      {
+        to: '/emprestimos',
+        label: 'Empréstimos',
+        icon: HandCoins,
+        somenteDono: true,
+        requerModulo: 'emprestimos'
+      },
       // Recibo é do balcão, não só do dono: quem recebe o dinheiro é quem
       // precisa entregar o papel na hora.
       { to: '/recibos', label: 'Recibos', icon: ReceiptText }
@@ -800,7 +872,8 @@ const Sidebar: FC<{
   onRenovarComPix: () => void
   onAbrirCalculadora: () => void
   vendedor: SessaoVendedor | null
-}> = ({ diasRestantes, onBloquear, onRenovarComPix, onAbrirCalculadora, vendedor }) => (
+  modulos: ModulosCtx
+}> = ({ diasRestantes, onBloquear, onRenovarComPix, onAbrirCalculadora, vendedor, modulos }) => (
   <nav data-tour="menu" className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
     <div className="mb-4">
       <h1 className="text-lg font-bold text-white">FHVP Tech</h1>
@@ -810,13 +883,19 @@ const Sidebar: FC<{
     {vendedor && <UserMenu vendedor={vendedor} onSair={onBloquear} />}
 
     <div className="flex-1 overflow-y-auto -mr-2 pr-2 space-y-4">
-      {CATEGORIAS_SIDEBAR.map((cat) => (
+      {CATEGORIAS_SIDEBAR.map((cat) => {
+        // Módulo desligado não vira item bloqueado com cadeado: ele simplesmente
+        // não existe pra essa loja. Cadeado sugere "peça acesso"; ausência é o
+        // recado certo.
+        const itens = cat.itens.filter((i) => !i.requerModulo || modulos[i.requerModulo])
+        if (itens.length === 0) return null
+        return (
         <div key={cat.titulo}>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-3 mb-1">
             {cat.titulo}
           </p>
           <div className="flex flex-col gap-1">
-            {cat.itens.map(({ to, label, icon: Icon, somenteDono }) => {
+            {itens.map(({ to, label, icon: Icon, somenteDono }) => {
               const bloqueado = somenteDono && vendedor?.papel !== 'dono'
               return (
                 <NavLink
@@ -825,9 +904,15 @@ const Sidebar: FC<{
                   end={to === '/'}
                   title={bloqueado ? 'Restrito ao gerente' : undefined}
                   className={({ isActive }) =>
-                    `anim-gatilho flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+                    // A borda de 2px existe em TODOS os estados, transparente
+                    // quando o item não está ativo. Se ela só aparecesse no
+                    // ativo, o texto pularia 2px pro lado a cada troca de tela.
+                    // `blue` aqui não é azul: cada app remapeia a escala no seu
+                    // tailwind.config (petróleo na assistência, azul no varejo),
+                    // então a mesma classe sai certa nos dois.
+                    `anim-gatilho flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors border-l-2 border-transparent ${
                       isActive
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-blue-600/15 text-blue-300 border-blue-300 font-medium'
                         : bloqueado
                           ? 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-400'
                           : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -842,7 +927,8 @@ const Sidebar: FC<{
             })}
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
 
     <div className="mt-4 pt-3 border-t border-slate-800 space-y-2">

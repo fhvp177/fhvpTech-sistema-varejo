@@ -15,6 +15,7 @@ import {
 import Paginacao from '@fhvptech/core/ui/paginacao'
 import { useImprimir } from '@/components/ImpressaoProvider'
 import { CampoCpfCnpj, CampoRg } from '@/components/CamposDocumento'
+import { Select } from '@fhvptech/core/ui/select'
 import CidadeSeletor from '@/components/CidadeSeletor'
 import { obterDadosLoja } from '@/utils/dadosLoja'
 import { montarRecibo } from '@/utils/documentoRecibo'
@@ -316,21 +317,19 @@ const Recibos: FC = () => {
             className="pl-9"
           />
         </div>
-        <select
+        <Select
           value={mes}
-          onChange={(e) => {
-            setMes(e.target.value)
-            carregar(e.target.value)
+          onChange={(v) => {
+            setMes(v)
+            carregar(v)
           }}
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="">Últimos emitidos</option>
-          {meses.map((m) => (
-            <option key={m} value={m}>
-              {m.slice(5, 7)}/{m.slice(0, 4)}
-            </option>
-          ))}
-        </select>
+          placeholder="Últimos emitidos"
+          className="w-48"
+          opcoes={[
+            { valor: '', rotulo: 'Últimos emitidos' },
+            ...meses.map((m) => ({ valor: m, rotulo: `${m.slice(5, 7)}/${m.slice(0, 4)}` }))
+          ]}
+        />
       </div>
 
       {listaFiltrada.length === 0 ? (
@@ -487,19 +486,20 @@ const Recibos: FC = () => {
               <p className="text-sm font-medium">Quem está pagando</p>
               <div className="grid gap-1.5">
                 <Label htmlFor="pagador_cliente">Cliente cadastrado (opcional)</Label>
-                <select
+                <Select
                   id="pagador_cliente"
                   value={form.pagador_cliente_id}
-                  onChange={(e) => escolherCliente(e.target.value)}
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">— digitar à mão —</option>
-                  {clientes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}
-                    </option>
-                  ))}
-                </select>
+                  onChange={escolherCliente}
+                  placeholder="— digitar à mão —"
+                  opcoes={[
+                    { valor: '', rotulo: '— digitar à mão —' },
+                    ...clientes.map((c) => ({
+                      valor: String(c.id),
+                      rotulo: c.nome,
+                      detalhe: c.cpf || c.cnpj || undefined
+                    }))
+                  ]}
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="pagador_nome">

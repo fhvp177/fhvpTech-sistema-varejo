@@ -2,6 +2,7 @@ import { FC, Suspense, lazy, useCallback, useEffect, useRef, useState } from 're
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import { Select } from '@fhvptech/core/ui/select'
 import {
   AlertTriangle,
   Building2,
@@ -50,9 +51,6 @@ const REGIMES: { valor: '1' | '2' | '3'; rotulo: string }[] = [
   { valor: '2', rotulo: 'Simples Nacional — excesso de sublimite' },
   { valor: '3', rotulo: 'Regime Normal (Lucro Presumido ou Real)' }
 ]
-
-const CLASSE_SELECT =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
 
 // Erro só aparece depois que o campo foi visitado — ninguém gosta de abrir a
 // tela e já encontrar tudo vermelho.
@@ -598,23 +596,20 @@ const ConfiguracaoFiscal: FC = () => {
 
           <div className="space-y-1.5">
             <Label htmlFor="regime">Regime tributário</Label>
-            <select
+            <Select
               id="regime"
-              className={CLASSE_SELECT}
               value={config.regime_tributario}
               onBlur={() => tocar('regime')}
-              onChange={(e) => {
+              onChange={(v) => {
                 tocar('regime')
-                alterar('regime_tributario', e.target.value as ConfigFiscal['regime_tributario'])
+                alterar('regime_tributario', v as ConfigFiscal['regime_tributario'])
               }}
-            >
-              <option value="">Selecione…</option>
-              {REGIMES.map((r) => (
-                <option key={r.valor} value={r.valor}>
-                  {r.rotulo}
-                </option>
-              ))}
-            </select>
+              placeholder="Selecione…"
+              opcoes={[
+                { valor: '', rotulo: 'Selecione…' },
+                ...REGIMES.map((r) => ({ valor: r.valor, rotulo: r.rotulo }))
+              ]}
+            />
             <p className="text-xs text-muted-foreground">
               Muda a forma como o imposto é calculado na nota.{' '}
               <strong>Confirme com o seu contador</strong> — errar aqui erra todas as notas.
@@ -666,15 +661,15 @@ const ConfiguracaoFiscal: FC = () => {
 
             <div className="space-y-1.5">
               <Label htmlFor="bobina">Largura da bobina</Label>
-              <select
+              <Select
                 id="bobina"
-                className={CLASSE_SELECT}
                 value={String(config.largura_bobina)}
-                onChange={(e) => alterar('largura_bobina', Number(e.target.value))}
-              >
-                <option value="80">80mm (padrão)</option>
-                <option value="58">58mm (estreita)</option>
-              </select>
+                onChange={(v) => alterar('largura_bobina', Number(v))}
+                opcoes={[
+                  { valor: '80', rotulo: '80mm (padrão)' },
+                  { valor: '58', rotulo: '58mm (estreita)' }
+                ]}
+              />
               <p className="text-xs text-muted-foreground">
                 Papel da sua impressora térmica — vale para a NFC-e. A NF-e sai em A4.
               </p>
@@ -684,17 +679,15 @@ const ConfiguracaoFiscal: FC = () => {
           {/* Ambiente — o interruptor que separa teste de nota de verdade. */}
           <div className="space-y-1.5 rounded-md border p-3 bg-muted/10">
             <Label htmlFor="ambiente">Ambiente de emissão</Label>
-            <select
+            <Select
               id="ambiente"
-              className={CLASSE_SELECT}
               value={config.ambiente}
-              onChange={(e) =>
-                alterar('ambiente', e.target.value as ConfigFiscal['ambiente'])
-              }
-            >
-              <option value="homologacao">Teste (as notas não valem fiscalmente)</option>
-              <option value="producao">Produção (notas válidas de verdade)</option>
-            </select>
+              onChange={(v) => alterar('ambiente', v as ConfigFiscal['ambiente'])}
+              opcoes={[
+                { valor: 'homologacao', rotulo: 'Teste (as notas não valem fiscalmente)' },
+                { valor: 'producao', rotulo: 'Produção (notas válidas de verdade)' }
+              ]}
+            />
             {config.ambiente === 'homologacao' ? (
               <p className="text-xs text-amber-700">
                 Em teste, as notas emitidas <strong>não têm valor fiscal</strong> — servem só pra

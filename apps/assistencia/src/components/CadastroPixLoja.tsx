@@ -18,6 +18,7 @@ import { FC } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import { Select } from '@fhvptech/core/ui/select'
 import { QrCode, CheckCircle2, AlertTriangle } from 'lucide-react'
 import {
   analisarChavePix,
@@ -33,11 +34,6 @@ type Props = {
   cidadeLoja: string
   onChange: (campo: 'pix_chave' | 'pix_tipo', valor: string) => void
 }
-
-const CLASSE_SELECT =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ' +
-  'ring-offset-background focus-visible:outline-none focus-visible:ring-2 ' +
-  'focus-visible:ring-ring focus-visible:ring-offset-2'
 
 /** Valor do QR de teste. Baixo de propósito: é pra conferir, não pra pagar. */
 const VALOR_DA_PREVIA = 1
@@ -84,21 +80,21 @@ const CadastroPixLoja: FC<Props> = ({ chave, tipo, nomeLoja, cidadeLoja, onChang
         </div>
         <div>
           <Label className="text-sm mb-1.5 block">Tipo</Label>
-          <select
-            className={CLASSE_SELECT}
+          <Select
             value={tipo}
-            onChange={(e) => onChange('pix_tipo', e.target.value)}
-          >
-            {/* CPF e celular têm os mesmos 11 dígitos. Quase sempre dá pra
-                deduzir pelos dígitos verificadores, mas quando não dá, quem
-                decide é o dono da chave. */}
-            <option value="">Detectar sozinho</option>
-            {(Object.keys(ROTULO_TIPO_CHAVE) as TipoChavePix[]).map((t) => (
-              <option key={t} value={t}>
-                {ROTULO_TIPO_CHAVE[t]}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => onChange('pix_tipo', v)}
+            placeholder="Detectar sozinho"
+            opcoes={[
+              // CPF e celular têm os mesmos 11 dígitos. Quase sempre dá pra deduzir
+              // pelos dígitos verificadores, mas quando não dá, quem decide é o dono
+              // da chave.
+              { valor: '', rotulo: 'Detectar sozinho' },
+              ...(Object.keys(ROTULO_TIPO_CHAVE) as TipoChavePix[]).map((t) => ({
+                valor: t,
+                rotulo: ROTULO_TIPO_CHAVE[t]
+              }))
+            ]}
+          />
         </div>
       </div>
 

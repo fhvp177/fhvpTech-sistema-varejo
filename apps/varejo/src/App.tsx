@@ -780,9 +780,15 @@ const Sidebar: FC<{
                   end={to === '/'}
                   title={bloqueado ? 'Restrito ao gerente' : undefined}
                   className={({ isActive }) =>
-                    `anim-gatilho flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+                    // A borda de 2px existe em TODOS os estados, transparente
+                    // quando o item não está ativo. Se ela só aparecesse no
+                    // ativo, o texto pularia 2px pro lado a cada troca de tela.
+                    // `blue` aqui não é azul: cada app remapeia a escala no seu
+                    // tailwind.config (petróleo na assistência, azul no varejo),
+                    // então a mesma classe sai certa nos dois.
+                    `anim-gatilho flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors border-l-2 border-transparent ${
                       isActive
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-blue-600/15 text-blue-300 border-blue-300 font-medium'
                         : bloqueado
                           ? 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-400'
                           : 'text-slate-300 hover:bg-slate-800 hover:text-white'

@@ -162,13 +162,35 @@ export default function CidadeSeletor({ cidade, uf, onSelecionar, onDigitar }: P
         municipios &&
         posicaoLista &&
         createPortal(
+          /*
+            ⚠️ pointerEvents e stopPropagation NÃO são enfeite — sem eles a lista
+            fica visível e INCLICÁVEL dentro de um diálogo.
+
+            O diálogo modal do Radix põe `pointer-events: none` no <body> e devolve
+            `auto` só para o painel dele (react-dismissable-layer/dist/index.js:111 e
+            142). Como esta lista mora num portal em document.body, ela herda o
+            `none`: o mouse atravessa, e só o teclado (setas + Enter) seleciona. É um
+            defeito que passa despercebido porque a lista APARECE e o hover do
+            teclado até destaca a linha.
+
+            E o `stopPropagation` no pointerdown é o par obrigatório do primeiro: a
+            mesma camada do Radix escuta `pointerdown` no document (linha 204) e
+            fecha o diálogo ao ver um clique "fora" — que é como este portal parece
+            para ela. Sem barrar aqui, arrumar o clique fecharia o modal inteiro.
+
+            Vale para QUALQUER dropdown portado a document.body. Guardado por
+            `dropdownDentroDeModal.test.ts`.
+          */
           <div
             className="fixed z-[60] mt-1 bg-popover border rounded-md shadow-lg overflow-hidden"
             style={{
               left: posicaoLista.left,
               top: posicaoLista.top,
-              width: posicaoLista.width
+              width: posicaoLista.width,
+              pointerEvents: 'auto'
             }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           >
           <ul ref={listaRef} className="max-h-72 overflow-y-auto py-1">
             {sugestoes.length === 0 ? (

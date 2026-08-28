@@ -9,6 +9,7 @@ import {
 } from '@fhvptech/core/ui/dialog'
 import { Button } from '@fhvptech/core/ui/button'
 import { Label } from '@fhvptech/core/ui/label'
+import { Select } from '@fhvptech/core/ui/select'
 import { useToast } from '@fhvptech/core/ui/toast'
 
 type Impressora = { name: string; displayName: string; isDefault: boolean }
@@ -190,19 +191,15 @@ export const ImpressaoProvider: FC<{ children: ReactNode }> = ({ children }) => 
                   Nenhuma impressora encontrada. Verifique se há uma instalada no Windows.
                 </p>
               ) : (
-                <select
+                <Select
                   value={selecionada}
-                  onChange={(e) => setSelecionada(e.target.value)}
+                  onChange={setSelecionada}
                   disabled={imprimindo}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                >
-                  {impressoras.map((i) => (
-                    <option key={i.name} value={i.name}>
-                      {i.displayName || i.name}
-                      {i.isDefault ? ' (padrão)' : ''}
-                    </option>
-                  ))}
-                </select>
+                  opcoes={impressoras.map((i) => ({
+                    valor: i.name,
+                    rotulo: `${i.displayName || i.name}${i.isDefault ? ' (padrão)' : ''}`
+                  }))}
+                />
               )}
             </div>
             <DialogFooter>

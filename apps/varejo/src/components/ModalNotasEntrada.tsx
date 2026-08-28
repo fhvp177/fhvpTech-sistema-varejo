@@ -1,6 +1,7 @@
 import { FC, useEffect, useState } from 'react'
 import { FileDown, Printer, FolderDown, FileText } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
+import { Select } from '@fhvptech/core/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -115,17 +116,13 @@ const ModalNotasEntrada: FC<Props> = ({ aberto, onFechar }) => {
         ) : (
           <div className="space-y-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <select
+              <Select
                 value={mes}
-                onChange={(e) => setMes(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-              >
-                {meses.map((m) => (
-                  <option key={m} value={m}>
-                    {rotuloMes(m)}
-                  </option>
-                ))}
-              </select>
+                onChange={setMes}
+                className="h-9 text-sm"
+                classNameContainer="w-44"
+                opcoes={meses.map((m) => ({ valor: m, rotulo: rotuloMes(m) }))}
+              />
               <span className="text-sm text-muted-foreground">
                 {notas.length} nota(s) · {dinheiro(total)}
               </span>

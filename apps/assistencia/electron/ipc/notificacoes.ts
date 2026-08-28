@@ -18,6 +18,7 @@ import {
   type ProdutoAlertaDetalhe
 } from '../db/queries/alertasDetalhe'
 import { alertasContasPagar } from '../db/queries/contasPagar'
+import { alertasEmprestimos } from '../db/queries/emprestimos'
 
 // Detalhe que abre no popup ao clicar numa notificação (estado de AGORA).
 export type DetalheNotificacao =
@@ -163,7 +164,14 @@ function alertasDoSistema(): AlertaVivo[] {
 }
 
 function computarESincronizar(): void {
-  sincronizar([...alertasDoBanco(), ...alertasContasPagar(), ...alertasDoSistema()])
+  sincronizar([
+    ...alertasDoBanco(),
+    ...alertasContasPagar(),
+    // Devolve [] quando o módulo está desligado — loja sem empréstimos não
+    // recebe alerta de empréstimo.
+    ...alertasEmprestimos(),
+    ...alertasDoSistema()
+  ])
 }
 
 export function registrarHandlersNotificacoes(): void {

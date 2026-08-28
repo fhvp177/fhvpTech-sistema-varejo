@@ -15,6 +15,8 @@ import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { useToast } from '@fhvptech/core/ui/toast'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import EstadoVazio from '@fhvptech/core/ui/EstadoVazio'
+import { useSaidaDeLinha, useValorMudou } from '@fhvptech/core/ui/animacoes'
 import {
   Dialog,
   DialogContent,
@@ -23,6 +25,7 @@ import {
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
 import Paginacao from '@fhvptech/core/ui/paginacao'
+import { Select } from '@fhvptech/core/ui/select'
 import { useSessao } from '@/App'
 
 const ITENS_POR_PAGINA = 20
@@ -221,6 +224,8 @@ const ContasPagar: FC = () => {
     setSalvando(false)
   }
 
+  const saidaLinha = useSaidaDeLinha()
+
   const excluir = async (c: ContaPagar) => {
     if (
       !(await confirmar({
@@ -232,7 +237,7 @@ const ContasPagar: FC = () => {
       return
     const resp = await window.api.contasPagar.deletar(c.id)
     if (resp.success) {
-      await carregar()
+      saidaLinha.sairEntao(String(c.id), () => void carregar())
       showToast({ message: 'Conta excluída.', variant: 'success' })
     } else {
       showToast({ message: resp.error, variant: 'destructive' })
@@ -386,12 +391,21 @@ const ContasPagar: FC = () => {
           <tbody>
             {listaFiltrada.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center py-12 text-muted-foreground">
-                  {busca
-                    ? 'Nenhuma conta encontrada para a busca.'
-                    : filtro === 'aberto'
-                      ? 'Nenhuma conta em aberto. Tudo pago por aqui! 🎉'
-                      : 'Nenhuma conta cadastrada.'}
+                <td colSpan={5}>
+                  <EstadoVazio
+                    icone={<Wallet className="w-9 h-9" />}
+                    dica={
+                      busca || filtro === 'aberto'
+                        ? undefined
+                        : 'Registre aluguel, luz, salário ou a duplicata do fornecedor.'
+                    }
+                  >
+                    {busca
+                      ? 'Nenhuma conta encontrada para a busca.'
+                      : filtro === 'aberto'
+                        ? 'Nenhuma conta em aberto. Tudo pago por aqui!'
+                        : 'Nenhuma conta cadastrada.'}
+                  </EstadoVazio>
                 </td>
               </tr>
             )}
@@ -401,6 +415,8 @@ const ContasPagar: FC = () => {
                 <tr
                   key={c.id}
                   className={`border-b border-border last:border-b-0 ${
+                    saidaLinha.estaSaindo(String(c.id)) ? 'anim-linha-sai' : ''
+                  } ${
                     i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
                   }`}
                 >
@@ -556,19 +572,16 @@ const ContasPagar: FC = () => {
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="fornecedor">Fornecedor</Label>
-                <select
+                <Select
                   id="fornecedor"
                   value={form.fornecedor_id}
-                  onChange={(e) => setCampo('fornecedor_id')(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="">— Nenhum —</option>
-                  {fornecedores.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nome}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setCampo('fornecedor_id')}
+                  placeholder="— Nenhum —"
+                  opcoes={[
+                    { valor: '', rotulo: '— Nenhum —' },
+                    ...fornecedores.map((f) => ({ valor: String(f.id), rotulo: f.nome }))
+                  ]}
+                />
               </div>
             </div>
 
@@ -701,16 +714,22 @@ const CartaoResumo: FC<{
   valor: number | undefined
   destaque?: string
   icone: ReactNode
-}> = ({ rotulo, valor, destaque, icone }) => (
-  <div className="border rounded-xl p-3 bg-card">
-    <div className="flex items-center gap-1.5 text-muted-foreground mb-1.5">
-      {icone}
-      <span className="text-xs font-medium">{rotulo}</span>
+}> = ({ rotulo, valor, destaque, icone }) => {
+  // O pulso vive AQUI, e não em quem usa o cartão: quem registra um pagamento
+  // não deveria precisar lembrar de avisar quatro cartões de que o número deles
+  // mudou. O cartão descobre sozinho.
+  const mudou = useValorMudou(valor)
+  return (
+    <div className="border rounded-xl p-3 bg-card">
+      <div className="flex items-center gap-1.5 text-muted-foreground mb-1.5">
+        {icone}
+        <span className="text-xs font-medium">{rotulo}</span>
+      </div>
+      <p className={`text-xl font-bold ${destaque ?? ''} ${mudou ? 'anim-valor-muda' : ''}`}>
+        {valor == null ? '...' : fmt(valor)}
+      </p>
     </div>
-    <p className={`text-xl font-bold ${destaque ?? ''}`}>
-      {valor == null ? '...' : fmt(valor)}
-    </p>
-  </div>
-)
+  )
+}
 
 export default ContasPagar

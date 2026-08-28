@@ -59,6 +59,35 @@ const api = {
       ipcRenderer.invoke('contasPagar:estornarPagamento', id)
   },
 
+  // Empréstimos de dinheiro do dono para clientes. Módulo OPCIONAL: só aparece
+  // na loja que ligou (`moduloAtivo`). Todos os outros canais exigem sessão de
+  // gerente no processo principal — a lista de devedores não sai daqui pra um
+  // técnico nem que a tela seja alcançada por outro caminho.
+  emprestimos: {
+    moduloAtivo: (): Promise<RespostaIPC> => ipcRenderer.invoke('emprestimos:moduloAtivo'),
+    definirModulo: (ativo: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('emprestimos:definirModulo', ativo),
+    listar: (filtro?: 'aberto' | 'quitado' | 'todos'): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('emprestimos:listar', filtro),
+    obter: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('emprestimos:obter', id),
+    resumo: (): Promise<RespostaIPC> => ipcRenderer.invoke('emprestimos:resumo'),
+    criar: (dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('emprestimos:criar', dados),
+    registrarPagamento: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('emprestimos:registrarPagamento', id, dados),
+    pagarParcela: (parcelaId: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('emprestimos:pagarParcela', parcelaId, dados),
+    lancarAjuste: (
+      id: number,
+      tipo: 'acrescimo' | 'desconto',
+      dados: unknown
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('emprestimos:lancarAjuste', id, tipo, dados),
+    estornarLancamento: (lancamentoId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('emprestimos:estornarLancamento', lancamentoId),
+    cancelar: (id: number, motivo: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('emprestimos:cancelar', id, motivo)
+  },
+
   // Notas de entrada (importação de NF-e via XML)
   notasEntrada: {
     analisar: (

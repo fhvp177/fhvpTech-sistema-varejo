@@ -1,5 +1,6 @@
 import { FC, useCallback, useEffect, useState } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
+import { Select } from '@fhvptech/core/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@fhvptech/core/ui/dialog'
 import { Check, Clock, Download, FileText, Ban, AlertTriangle } from 'lucide-react'
 
@@ -111,18 +112,13 @@ const RelatorioNotasFiscais: FC<Props> = ({ aberta, onFechar }) => {
                 <label className="text-sm font-medium" htmlFor="mesNf">
                   Mês
                 </label>
-                <select
+                <Select
                   id="mesNf"
-                  className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={mes}
-                  onChange={(e) => setMes(e.target.value)}
-                >
-                  {meses.map((m) => (
-                    <option key={m} value={m}>
-                      {rotuloMes(m)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setMes}
+                  classNameContainer="w-48"
+                  opcoes={meses.map((m) => ({ valor: m, rotulo: rotuloMes(m) }))}
+                />
               </div>
               <div className="flex-1 text-sm text-muted-foreground">
                 <p>

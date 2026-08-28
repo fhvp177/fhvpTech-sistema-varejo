@@ -10,6 +10,7 @@ import {
   PackageCheck
 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
+import { Select } from '@fhvptech/core/ui/select'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
 import {
@@ -646,15 +647,16 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                     className="w-28"
                     placeholder="30"
                   />
-                  <select
+                  <Select
                     value={margemGeralTipo}
-                    onChange={(e) => setMargemGeralTipo(e.target.value as 'pct' | 'reais')}
-                    className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+                    onChange={(v) => setMargemGeralTipo(v as 'pct' | 'reais')}
+                    classNameContainer="w-44"
                     title="Em % o lucro é em cima do custo: 30% sobre R$ 100 = vende a R$ 130"
-                  >
-                    <option value="pct">% sobre o custo</option>
-                    <option value="reais">R$ por unidade</option>
-                  </select>
+                    opcoes={[
+                      { valor: 'pct', rotulo: '% sobre o custo' },
+                      { valor: 'reais', rotulo: 'R$ por unidade' }
+                    ]}
+                  />
                   <Button type="button" variant="outline" onClick={aplicarMargemGeral}>
                     Aplicar em todos
                   </Button>
@@ -724,24 +726,29 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
 
                       {/* Vincular / desvincular (linha de item único) */}
                       {!l.grade && (
-                        <select
-                          value={l.origem === 'ean' || l.origem === 'vinculo' ? String(l.produtoId) : l.acao === 'reposicao' ? String(l.produtoId) : ''}
-                          onChange={(e) => vincular(l, e.target.value)}
+                        <Select
+                          value={
+                            l.origem === 'ean' || l.origem === 'vinculo'
+                              ? String(l.produtoId)
+                              : l.acao === 'reposicao'
+                                ? String(l.produtoId)
+                                : ''
+                          }
+                          onChange={(v) => vincular(l, v)}
                           disabled={l.origem === 'ean' || l.origem === 'vinculo'}
-                          className="h-8 w-44 shrink-0 rounded-md border border-input bg-background px-2 text-xs disabled:opacity-60"
+                          className="h-8 px-2 text-xs"
+                          classNameContainer="w-44 shrink-0"
+                          placeholder="— cadastrar como novo —"
                           title={
                             l.origem === 'ean' || l.origem === 'vinculo'
                               ? 'Reconhecido automaticamente'
                               : 'É um produto que você já tem? Vincule aqui em vez de cadastrar de novo.'
                           }
-                        >
-                          <option value="">— cadastrar como novo —</option>
-                          {produtos.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.nome}
-                            </option>
-                          ))}
-                        </select>
+                          opcoes={[
+                            { valor: '', rotulo: '— cadastrar como novo —' },
+                            ...produtos.map((p) => ({ valor: String(p.id), rotulo: p.nome }))
+                          ]}
+                        />
                       )}
                       {l.grade && (
                         <Button
@@ -761,19 +768,18 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                     {/* Detalhe da linha */}
                     {l.incluir && l.acao === 'novo' && (
                       <div className="mt-2 ml-6 flex flex-wrap items-center gap-2">
-                        <select
+                        <Select
                           value={l.categoria}
-                          onChange={(e) => setLinha(l.id, { categoria: e.target.value })}
-                          className="h-8 w-36 rounded-md border border-input bg-background px-2 text-xs"
+                          onChange={(v) => setLinha(l.id, { categoria: v })}
+                          className="h-8 px-2 text-xs"
+                          classNameContainer="w-36"
+                          placeholder="— sem categoria —"
                           title="Categoria"
-                        >
-                          <option value="">— sem categoria —</option>
-                          {categorias.map((c) => (
-                            <option key={c.id} value={c.nome}>
-                              {c.nome}
-                            </option>
-                          ))}
-                        </select>
+                          opcoes={[
+                            { valor: '', rotulo: '— sem categoria —' },
+                            ...categorias.map((c) => ({ valor: c.nome, rotulo: c.nome }))
+                          ]}
+                        />
 
                         {!l.grade && (
                           <div className="flex items-center gap-1">
@@ -810,16 +816,16 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                             onChange={(e) => setMargemLinha(l, e.target.value)}
                             className="h-8 w-20 text-right"
                           />
-                          <select
+                          <Select
                             value={l.margemTipo}
-                            onChange={(e) =>
-                              setMargemLinha(l, l.margem, e.target.value as 'pct' | 'reais')
-                            }
-                            className="h-8 rounded-md border border-input bg-background px-1 text-xs"
-                          >
-                            <option value="pct">%</option>
-                            <option value="reais">R$</option>
-                          </select>
+                            onChange={(v) => setMargemLinha(l, l.margem, v as 'pct' | 'reais')}
+                            className="h-8 px-1 text-xs"
+                            classNameContainer="w-16"
+                            opcoes={[
+                              { valor: 'pct', rotulo: '%' },
+                              { valor: 'reais', rotulo: 'R$' }
+                            ]}
+                          />
                           <span className="text-xs text-muted-foreground ml-2">vende a</span>
                           <Input
                             type="number"
@@ -889,17 +895,13 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                             return (
                               <label className="flex items-center gap-1">
                                 tamanho:
-                                <select
-                                  value={l.variacaoId ?? ''}
-                                  onChange={(e) => mudarVariacao(l, e.target.value)}
-                                  className="h-7 rounded-md border border-input bg-background px-1"
-                                >
-                                  {p.variacoes.map((v) => (
-                                    <option key={v.id} value={v.id}>
-                                      {v.tamanho}
-                                    </option>
-                                  ))}
-                                </select>
+                                <Select
+                                  value={String(l.variacaoId ?? '')}
+                                  onChange={(v) => mudarVariacao(l, v)}
+                                  className="h-7 px-1 text-xs"
+                                  classNameContainer="w-20"
+                                  opcoes={p.variacoes.map((v) => ({ valor: String(v.id), rotulo: v.tamanho }))}
+                                />
                               </label>
                             )
                           })()}
@@ -946,16 +948,16 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                               onChange={(e) => setMargemLinha(l, e.target.value)}
                               className="h-7 w-16 text-right"
                             />
-                            <select
+                            <Select
                               value={l.margemTipo}
-                              onChange={(e) =>
-                                setMargemLinha(l, l.margem, e.target.value as 'pct' | 'reais')
-                              }
-                              className="h-7 rounded-md border border-input bg-background px-1"
-                            >
-                              <option value="pct">%</option>
-                              <option value="reais">R$</option>
-                            </select>
+                              onChange={(v) => setMargemLinha(l, l.margem, v as 'pct' | 'reais')}
+                              className="h-7 px-1 text-xs"
+                              classNameContainer="w-16"
+                              opcoes={[
+                                { valor: 'pct', rotulo: '%' },
+                                { valor: 'reais', rotulo: 'R$' }
+                              ]}
+                            />
                             →
                             <Input
                               type="number"

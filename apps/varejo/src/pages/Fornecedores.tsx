@@ -1,10 +1,12 @@
 import { FC, useEffect, useState } from 'react'
 import { IMaskInput } from 'react-imask'
-import { Pencil, Trash2, Plus, Search } from 'lucide-react'
+import { Pencil, Trash2, Plus, Search, Truck } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import EstadoVazio from '@fhvptech/core/ui/EstadoVazio'
+import { useSaidaDeLinha } from '@fhvptech/core/ui/animacoes'
 import {
   Dialog,
   DialogContent,
@@ -161,6 +163,8 @@ const Fornecedores: FC = () => {
 
   const confirmar = useConfirm()
 
+  const saidaLinha = useSaidaDeLinha()
+
   const excluir = async (id: number, nome: string) => {
     if (
       !(await confirmar({
@@ -172,7 +176,7 @@ const Fornecedores: FC = () => {
       return
     const resp = await window.api.fornecedores.deletar(id)
     if (resp.success) {
-      await carregarFornecedores()
+      saidaLinha.sairEntao(String(id), () => void carregarFornecedores())
     } else {
       alert(`Erro ao excluir: ${resp.error}`)
     }
@@ -219,8 +223,13 @@ const Fornecedores: FC = () => {
           <tbody>
             {listaFiltrada.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center py-12 text-muted-foreground">
-                  {busca ? 'Nenhum fornecedor encontrado.' : 'Nenhum fornecedor cadastrado.'}
+                <td colSpan={5}>
+                  <EstadoVazio
+                    icone={<Truck className="w-9 h-9" />}
+                    dica={busca ? 'Tente outro nome ou CNPJ.' : 'Cadastre quem fornece as peças que você revende.'}
+                  >
+                    {busca ? 'Nenhum fornecedor encontrado.' : 'Nenhum fornecedor cadastrado.'}
+                  </EstadoVazio>
                 </td>
               </tr>
             )}
@@ -228,6 +237,8 @@ const Fornecedores: FC = () => {
               <tr
                 key={f.id}
                 className={`border-b border-border last:border-b-0 ${
+                  saidaLinha.estaSaindo(String(f.id)) ? 'anim-linha-sai' : ''
+                } ${
                   i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
                 }`}
               >

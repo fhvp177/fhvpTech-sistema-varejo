@@ -22,9 +22,16 @@ export type ClienteSelecionavel = {
 
 type Props = {
   clientes: ClienteSelecionavel[]
-  clienteIdSelecionado: string // '' = venda avulsa
+  clienteIdSelecionado: string // '' = nenhum cliente escolhido
   onChange: (id: string) => void
   placeholder?: string
+  /**
+   * Como chamar a opção "nenhum cliente". O padrão fala a língua do PDV, que é
+   * onde este seletor nasceu — mas ele já é usado fora de venda (empréstimo,
+   * devolução), e "— Venda avulsa —" no meio de um empréstimo é vocabulário de
+   * outra tela vazando. Quem usa fora do balcão passa o seu.
+   */
+  rotuloSemCliente?: string
 }
 
 const MAX_RESULTADOS = 50
@@ -33,7 +40,8 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
   clientes,
   clienteIdSelecionado,
   onChange,
-  placeholder = 'Buscar cliente por nome, telefone, CPF/CNPJ...'
+  placeholder = 'Buscar cliente por nome, telefone, CPF/CNPJ...',
+  rotuloSemCliente = '— Venda avulsa —'
 }, ref) => {
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
@@ -200,7 +208,7 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
                 type="button"
                 onClick={limpar}
                 className="text-muted-foreground hover:text-foreground p-0.5 mr-1"
-                title="Limpar (venda avulsa)"
+                title="Limpar seleção"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -209,7 +217,7 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
           ) : (
             <>
               <Search className="w-4 h-4 text-muted-foreground shrink-0 mr-2" />
-              <span className="flex-1 text-muted-foreground">— Venda avulsa —</span>
+              <span className="flex-1 text-muted-foreground">{rotuloSemCliente}</span>
               <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
             </>
           )}
@@ -219,21 +227,43 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
       {aberto &&
         posicaoLista &&
         createPortal(
+          /*
+            ⚠️ pointerEvents e stopPropagation NÃO são enfeite — sem eles a lista
+            fica visível e INCLICÁVEL dentro de um diálogo.
+
+            O diálogo modal do Radix põe `pointer-events: none` no <body> e devolve
+            `auto` só para o painel dele (react-dismissable-layer/dist/index.js:111 e
+            142). Como esta lista mora num portal em document.body, ela herda o
+            `none`: o mouse atravessa, e só o teclado (setas + Enter) seleciona. É um
+            defeito que passa despercebido porque a lista APARECE e o hover do
+            teclado até destaca a linha.
+
+            E o `stopPropagation` no pointerdown é o par obrigatório do primeiro: a
+            mesma camada do Radix escuta `pointerdown` no document (linha 204) e
+            fecha o diálogo ao ver um clique "fora" — que é como este portal parece
+            para ela. Sem barrar aqui, arrumar o clique fecharia o modal inteiro.
+
+            Vale para QUALQUER dropdown portado a document.body. Guardado por
+            `dropdownDentroDeModal.test.ts`.
+          */
           <div
             className="fixed z-[60] mt-1 bg-popover border rounded-md shadow-lg overflow-hidden"
             style={{
               left: posicaoLista.left,
               top: posicaoLista.top,
-              width: posicaoLista.width
+              width: posicaoLista.width,
+              pointerEvents: 'auto'
             }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           >
           <ul ref={listaRef} className="max-h-72 overflow-y-auto py-1">
-            {/* Opção "venda avulsa" sempre disponível no topo */}
+            {/* A opção "nenhum cliente" fica sempre disponível no topo */}
             <li
               onMouseDown={(e) => { e.preventDefault(); selecionar('') }}
               className="px-3 py-2 text-sm text-muted-foreground italic cursor-pointer hover:bg-muted"
             >
-              — Venda avulsa —
+              {rotuloSemCliente}
             </li>
             {listaFiltrada.length === 0 ? (
               <li className="px-3 py-3 text-sm text-center text-muted-foreground">

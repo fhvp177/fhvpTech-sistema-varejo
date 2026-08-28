@@ -27,6 +27,12 @@ import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido, type VencimentosMes } from '@/utils/relatorioVendas'
 import { FORMAS_A_VISTA, type FormaPagamento } from '@/utils/formaPagamento'
 import { useCalculadora, usePdvMode, useSessao } from '@/App'
+import {
+  useLinhaNova,
+  useSaidaDeLinha,
+  useValorMudou,
+  focarComRealce
+} from '@fhvptech/core/ui/animacoes'
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
 import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancelarVenda'
@@ -1336,6 +1342,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       if (rProdutos.success) setProdutos(rProdutos.data as Produto[])
       if (rTeto.success) setTetoDesconto(rTeto.data)
     })
+    // Sem realce de propósito: ao ABRIR o PDV o cursor já nasce aqui, e isso é
+    // o estado normal da tela — não um aviso de que algo se moveu.
     scanRef.current?.focus()
   }, [])
 
@@ -1365,6 +1373,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   useEffect(() => { onSairRef.current = onSair }, [onSair])
 
   const subtotal = carrinho.reduce((acc, item) => acc + item.quantidade * item.preco_unitario, 0)
+  // Realce da linha recém-bipada e do total quando ele muda. Os dois respondem
+  // à mesma pergunta do operador — "entrou?" — por caminhos diferentes: um na
+  // linha, outro no número grande.
+  const linhaNova = useLinhaNova()
+  const saidaLinha = useSaidaDeLinha()
+
   const totalItens = carrinho.reduce((acc, item) => acc + item.quantidade, 0)
 
   const descontoNum = parseFloat(descontoEntrada.replace(',', '.')) || 0
@@ -1373,6 +1387,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       ? +((subtotal * Math.min(100, Math.max(0, descontoNum))) / 100).toFixed(2)
       : +Math.min(subtotal, Math.max(0, descontoNum)).toFixed(2)
   const total = +(subtotal - descontoValor).toFixed(2)
+  // O número grande do TOTAL é o que o operador confere antes de fechar. Quando
+  // ele troca sozinho (bipada, desconto, crédito), o pulso avisa que mudou —
+  // senão o olho lê o mesmo lugar e não registra o valor novo.
+  const totalMudou = useValorMudou(total)
 
   // Crédito da loja só abate no à vista. Aplica o menor entre saldo e total.
   const creditoAplicado =
@@ -1434,6 +1452,9 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         }
       ]
     })
+    // A chave é a mesma do `key` da linha, então o realce cai no lugar certo
+    // tanto quando o item é novo quanto quando ele só ganhou +1 na quantidade.
+    linhaNova.marcar(k)
     setFeedbackScan({ tipo: 'ok', msg: `✓ ${nomeExib}` })
     setTimeout(() => setFeedbackScan(null), 2000)
   }
@@ -1455,12 +1476,17 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       // já com o código bipado — o caixa não precisa abandonar o carrinho.
       setCodigoNaoEncontrado(codigo)
     }
-    scanRef.current?.focus()
+    focarComRealce(scanRef.current)
   }
+
+  const tirarDoCarrinho = (k: string): void =>
+    setCarrinho((prev) => prev.filter((item) => chaveItem(item.produto_id, item.variacao_id) !== k))
 
   const atualizarQtd = (k: string, qtd: number) => {
     if (qtd <= 0) {
-      setCarrinho((prev) => prev.filter((item) => chaveItem(item.produto_id, item.variacao_id) !== k))
+      // Sai deslizando antes de sumir da lista: sem isso, a linha desaparece no
+      // mesmo quadro e fica a dúvida de qual item foi embora.
+      saidaLinha.sairEntao(k, () => tirarDoCarrinho(k))
     } else {
       setCarrinho((prev) =>
         prev.map((item) => {
@@ -1499,7 +1525,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     setCodigoScan('')
     setErro('')
     setFeedbackScan(null)
-    scanRef.current?.focus()
+    focarComRealce(scanRef.current)
   }
 
   // Imprime o cupom direto da venda recém-criada (criarVenda já devolve itens,
@@ -1775,7 +1801,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       // sem estoque, fica só cadastrado pra completar depois.
       if (novo.estoque > 0) adicionarItem(novo, null)
       else showToast({ message: `Produto "${novo.nome}" cadastrado.`, variant: 'success' })
-      scanRef.current?.focus()
+      focarComRealce(scanRef.current)
     } else {
       setErroProduto(resp.error)
       setSalvandoProduto(false)
@@ -1899,7 +1925,16 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
               {carrinho.map((item, i) => {
                 const k = chaveItem(item.produto_id, item.variacao_id)
                 return (
-                <tr key={k} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                <tr
+                  key={k}
+                  className={`${i % 2 === 0 ? 'bg-background' : 'bg-muted/20'} ${
+                    saidaLinha.estaSaindo(k)
+                      ? 'anim-linha-sai'
+                      : linhaNova.ehNova(k)
+                        ? 'anim-linha-entra'
+                        : ''
+                  }`}
+                >
                   <td className="px-3 py-2 font-medium">
                     <div className="truncate max-w-[220px]" title={item.nome}>{item.nome}</div>
                     <div
@@ -2066,7 +2101,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           )}
           <div className={`flex justify-between font-bold text-[2rem] pt-2 ${descontoValor > 0 ? '' : 'border-t'}`}>
             <span>TOTAL</span>
-            <span>{fmt(total)}</span>
+            <span className={totalMudou ? 'anim-valor-muda' : ''}>{fmt(total)}</span>
           </div>
           {creditoAplicado > 0 && (
             <>
@@ -2521,7 +2556,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                           onClick={() => {
                             adicionarItem(p, v)
                             setBuscaProdutos(false)
-                            scanRef.current?.focus()
+                            focarComRealce(scanRef.current)
                           }}
                           className={`px-2 py-1 rounded border text-xs font-medium transition-colors ${
                             v.estoque === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-accent'
@@ -2542,7 +2577,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   onClick={() => {
                     adicionarItem(p, null)
                     setBuscaProdutos(false)
-                    scanRef.current?.focus()
+                    focarComRealce(scanRef.current)
                   }}
                   className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex justify-between items-center ${
                     i > 0 ? 'border-t' : ''
@@ -2575,7 +2610,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       {/* ── Modal Consulta de preço (F2) ── */}
       <ConsultaPreco
         aberto={consultaPrecoAberta}
-        onFechar={() => { setConsultaPrecoAberta(false); scanRef.current?.focus() }}
+        onFechar={() => { setConsultaPrecoAberta(false); focarComRealce(scanRef.current) }}
         produtos={produtos}
       />
 

@@ -2,6 +2,7 @@ import { FC, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Printer, Tag, Search } from 'lucide-react'
 import { PRESETS, PRESET_PADRAO, LayoutEtiqueta } from '../utils/presetsLayoutA4'
+import { Select } from '@fhvptech/core/ui/select'
 import FolhaA4Preview, { SlotDado } from '../components/FolhaA4Preview'
 import { nomeImpressao } from '../utils/nomeImpressao'
 import { useImprimirJanela } from '@/components/ImpressaoProvider'
@@ -250,17 +251,12 @@ const EtiquetasA4: FC = () => {
         <div className="border-b p-3 flex flex-wrap gap-x-6 gap-y-3 items-end bg-background no-print">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Layout</label>
-            <select
+            <Select
               value={layout.id}
-              onChange={(e) => handleLayoutChange(e.target.value)}
-              className="text-sm border rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-background"
-            >
-              {PRESETS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nome}
-                </option>
-              ))}
-            </select>
+              onChange={handleLayoutChange}
+              className="h-9 w-64"
+              opcoes={PRESETS.map((p) => ({ valor: p.id, rotulo: p.nome }))}
+            />
           </div>
 
           <div>

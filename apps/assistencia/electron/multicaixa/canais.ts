@@ -130,6 +130,21 @@ export const CANAIS_REDE = [
   'devolucoes:porVenda',
   'devolucoes:registrar',
   'devolucoes:saldoCredito',
+  // Empréstimos de dinheiro. Vão pela rede pelo mesmo motivo de Contas a Pagar:
+  // não tocam hardware, não abrem diálogo e são sobre a LOJA, não sobre a
+  // máquina. Quem protege não é a lista — é o `requerDono()` em todos eles, que
+  // exige uma sessão de gerente autenticada por PIN naquela origem.
+  'emprestimos:cancelar',
+  'emprestimos:criar',
+  'emprestimos:definirModulo',
+  'emprestimos:estornarLancamento',
+  'emprestimos:lancarAjuste',
+  'emprestimos:listar',
+  'emprestimos:moduloAtivo',
+  'emprestimos:obter',
+  'emprestimos:pagarParcela',
+  'emprestimos:registrarPagamento',
+  'emprestimos:resumo',
   'etiquetas:gerarPDF',
   'fiscal:aplicarEmLote',
   'fiscal:buscarCep',
@@ -284,6 +299,14 @@ export const CANAIS_REPETIVEIS = [
   'devolucoes:itensDevolviveis',
   'devolucoes:porVenda',
   'devolucoes:saldoCredito',
+  // Só as LEITURAS de empréstimo. As escritas ficam de fora, e
+  // `emprestimos:registrarPagamento` é a mais crítica: repetir sozinho depois de
+  // uma falha de rede creditaria o mesmo pagamento duas vezes e o cliente
+  // apareceria devendo menos do que deve.
+  'emprestimos:listar',
+  'emprestimos:moduloAtivo',
+  'emprestimos:obter',
+  'emprestimos:resumo',
   'fiscal:categoriasPendentes',
   'fiscal:diagnostico',
   'fiscal:diagnosticoNfse',

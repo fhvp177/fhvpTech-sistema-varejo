@@ -4,11 +4,12 @@ import { IMaskInput } from 'react-imask'
 import {
   Plus, Search, Wrench, MapPin, Eye, EyeOff, Package, ShieldCheck,
   Trash2, UserPlus, History, Printer, MessageCircle, FileDown, Cctv, Laptop,
-  ImagePlus, X
-} from 'lucide-react'
+  ImagePlus, X, ClipboardList } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
+import EstadoVazio from '@fhvptech/core/ui/EstadoVazio'
+import { Select } from '@fhvptech/core/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@fhvptech/core/ui/dialog'
 import { useToast } from '@fhvptech/core/ui/toast'
 import Paginacao from '@fhvptech/core/ui/paginacao'
@@ -349,10 +350,15 @@ const OrdensServico: FC = () => {
           <tbody>
             {listaFiltrada.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-muted-foreground">
-                  {busca || aba !== 'andamento'
-                    ? 'Nenhuma OS encontrada.'
-                    : 'Nenhuma OS em andamento. Clique em "Nova OS" para abrir a primeira.'}
+                <td colSpan={6}>
+                  <EstadoVazio
+                    icone={<ClipboardList className="w-9 h-9" />}
+                    dica={busca || aba !== 'andamento' ? undefined : 'O botão "Nova OS" abre a primeira.'}
+                  >
+                    {busca || aba !== 'andamento'
+                      ? 'Nenhuma OS encontrada.'
+                      : 'Nenhuma OS em andamento.'}
+                  </EstadoVazio>
                 </td>
               </tr>
             )}
@@ -580,19 +586,20 @@ const ModalNovaOS: FC<{
               Cliente <span className="text-destructive">*</span>
             </Label>
             <div className="flex gap-2">
-              <select
+              <Select
                 id="os-cliente"
                 value={form.cliente_id}
-                onChange={setF('cliente_id')}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">— Selecione —</option>
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}{c.telefone ? ` · ${c.telefone}` : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setForm((f) => ({ ...f, cliente_id: v }))}
+                placeholder="— Selecione —"
+                opcoes={[
+                  { valor: '', rotulo: '— Selecione —' },
+                  ...clientes.map((c) => ({
+                    valor: String(c.id),
+                    rotulo: c.nome,
+                    detalhe: c.telefone || undefined
+                  }))
+                ]}
+              />
               <Button
                 type="button"
                 variant="outline"
@@ -1974,18 +1981,15 @@ const ModalFechamento: FC<{
                   {condicao === 'parcelado' ? (
                     <div className="grid gap-1.5">
                       <Label htmlFor="fech-parc">Parcelas</Label>
-                      <select
+                      <Select
                         id="fech-parc"
                         value={parcelas}
-                        onChange={(e) => setParcelas(e.target.value)}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {Array.from({ length: 11 }, (_, i) => i + 2).map((n) => (
-                          <option key={n} value={n}>
-                            {n}× de ≈ {fmt(financiado / n)}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setParcelas}
+                        opcoes={Array.from({ length: 11 }, (_, i) => i + 2).map((n) => ({
+                          valor: String(n),
+                          rotulo: `${n}× de ≈ ${fmt(financiado / n)}`
+                        }))}
+                      />
                     </div>
                   ) : (
                     <div />

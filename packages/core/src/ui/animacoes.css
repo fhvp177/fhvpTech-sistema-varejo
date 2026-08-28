@@ -113,3 +113,116 @@
     stroke-dashoffset: 0;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * ANIMAÇÕES DE TRABALHO
+ *
+ * As de cima são de CERIMÔNIA: aparecem no guia, no sino, nas novidades — uma
+ * vez por dia, no máximo. Estas de baixo aparecem centenas de vezes por turno, e
+ * por isso obedecem a regras diferentes:
+ *
+ *  1. Elas INFORMAM, não enfeitam. Cada uma responde a uma pergunta que o olho
+ *     faz sozinho: "entrou?", "qual saiu?", "o que mudou?", "onde está o
+ *     cursor?". Movimento que não responde nada é imposto cobrado 300x por dia.
+ *  2. Curtas. 150ms para "eu fiz isso", até 900ms para um realce que some
+ *     sozinho. Nada que faça alguém esperar.
+ *  3. Só `opacity`, `transform`, `background-color` e `box-shadow`. Nunca
+ *     `height`/`width`/`margin`: essas obrigam o navegador a refazer o layout a
+ *     cada quadro, e o alvo aqui é PC de loja, não máquina de desenvolvedor.
+ *  4. A cor sai dos TOKENS (`--primary`, `--ring`), nunca fixa. Assim o realce
+ *     nasce petróleo na assistência, azul no varejo, e continua certo no tema
+ *     escuro sem ninguém lembrar de ajustar.
+ *
+ * ⚠️ `opacity` e `transform` em <tr>/<td> funcionam porque estes apps rodam só
+ * em Chromium (Electron). Em navegador antigo isso seria ignorado.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* 1. LINHA QUE ENTRA — o item recém-adicionado se acende e apaga.
+ *
+ * É a resposta ao "bipou mesmo?" do PDV. O operador passa o leitor e precisa da
+ * confirmação antes de conseguir ler a linha; um clarão que some faz isso pela
+ * visão periférica, sem tirar a atenção do produto seguinte.
+ *
+ * Só fundo, sem deslocamento: mover a linha faria a lista inteira dançar a cada
+ * bipada, que é o oposto de conforto. */
+@keyframes anim-kf-linha-entra {
+  0%   { background-color: hsl(var(--primary) / 0.26); }
+  65%  { background-color: hsl(var(--primary) / 0.18); }
+  100% { background-color: transparent; }
+}
+.anim-linha-entra {
+  animation: anim-kf-linha-entra 0.85s ease-out;
+}
+
+/* 2. LINHA QUE SAI — some deslizando pra esquerda antes de deixar a lista.
+ *
+ * Sem isso, apagar um item é um piscar: a linha desaparece no mesmo quadro e o
+ * olho não confirma QUAL saiu — a dúvida "apaguei o certo?" fica. Saindo, ela é
+ * vista saindo.
+ *
+ * `pointer-events: none` porque quem já está saindo não pode ser clicado de
+ * novo — dois cliques rápidos no lixeirinha mandariam a exclusão duas vezes. */
+@keyframes anim-kf-linha-sai {
+  0%   { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-18px); }
+}
+.anim-linha-sai {
+  animation: anim-kf-linha-sai 0.22s ease-in both;
+  pointer-events: none;
+}
+
+/* 3. NÚMERO QUE MUDOU — pulso curto atrás do valor.
+ *
+ * Número que troca sozinho não é percebido: o olho registra MOVIMENTO, não
+ * valor. O total do PDV subindo de 45,00 pra 92,00 é invisível se nada se mexer.
+ *
+ * O realce é `box-shadow`, não padding: padding mudaria o tamanho do elemento e
+ * empurraria o que está ao lado toda vez que o número mudasse. */
+@keyframes anim-kf-valor-muda {
+  0%   {
+    background-color: hsl(var(--primary) / 0.24);
+    box-shadow: 0 0 0 5px hsl(var(--primary) / 0.24);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 5px hsl(var(--primary) / 0);
+  }
+}
+.anim-valor-muda {
+  animation: anim-kf-valor-muda 0.65s ease-out;
+  border-radius: 0.25rem;
+}
+
+/* 4. FOCO QUE O SISTEMA MOVEU — onda que abre e some no campo que recebeu.
+ *
+ * Diferente do anel de foco normal: aquele diz "o cursor está AQUI", e quem
+ * apertou Tab já sabe. Este é para quando o SISTEMA move o foco sozinho (depois
+ * de salvar, depois de bipar) — aí a pessoa não mandou, e precisa ser avisada
+ * pra onde foi, senão digita no lugar errado. */
+@keyframes anim-kf-foco-realce {
+  0%   { box-shadow: 0 0 0 0 hsl(var(--ring) / 0.5); }
+  100% { box-shadow: 0 0 0 9px hsl(var(--ring) / 0); }
+}
+.anim-foco-realce {
+  animation: anim-kf-foco-realce 0.6s ease-out;
+}
+
+/* 5. Estado vazio: não tem classe nova — usa a `.anim-flutua` lá de cima no
+ * ícone. Uma tela sem nada é o momento em que a pessoa mais precisa de um ponto
+ * de descanso pro olho, e o ícone boiando devagar dá isso sem chamar atenção. */
+
+/* Acessibilidade: quem pediu menos movimento no SO não vê nada disto.
+ * O bloco de cima cobre as animações de cerimônia; este cobre as de trabalho.
+ * Repare que a linha que SAI vira invisível na hora em vez de deslizar — ela
+ * ainda precisa sumir, só que sem o movimento. */
+@media (prefers-reduced-motion: reduce) {
+  .anim-linha-entra,
+  .anim-valor-muda,
+  .anim-foco-realce {
+    animation: none;
+  }
+  .anim-linha-sai {
+    animation: none;
+    opacity: 0;
+  }
+}
