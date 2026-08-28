@@ -191,6 +191,15 @@ export default function CidadeSeletor({ cidade, uf, onSelecionar, onDigitar }: P
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
+            // A roda do mouse é a TERCEIRA do conjunto, e some do radar porque
+            // a lista tem `overflow-y-auto` e parece que deveria rolar sozinha.
+            // Só que o Radix trava a rolagem da página com `react-remove-scroll`,
+            // que escuta `wheel` no document (SideEffect.js:139, passive:false) e
+            // chama preventDefault em tudo que julga estar FORA do modal — e este
+            // portal, morando em document.body, é exatamente isso pra ele.
+            // Resultado: lista rolável que não rola. Barrar aqui faz o evento não
+            // chegar ao document, e o navegador rola normalmente.
+            onWheel={(e) => e.stopPropagation()}
           >
           <ul ref={listaRef} className="max-h-72 overflow-y-auto py-1">
             {sugestoes.length === 0 ? (

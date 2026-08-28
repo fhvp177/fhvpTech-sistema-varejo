@@ -10,7 +10,8 @@ import {
   Undo2,
   Ban,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  FileText
 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
@@ -26,12 +27,18 @@ import {
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
 import Paginacao from '@fhvptech/core/ui/paginacao'
+import { Select } from '@fhvptech/core/ui/select'
 import { useValorMudou } from '@fhvptech/core/ui/animacoes'
 import ClienteSeletor, { type ClienteSelecionavel } from '../components/ClienteSeletor'
 import { CampoCpfCnpj } from '../components/CamposDocumento'
 import { useImprimir } from '../components/ImpressaoProvider'
 import { comprovanteEmprestimoHtml, reciboPagamentoEmprestimoHtml } from '../utils/comprovanteEmprestimo'
+import {
+  carneEmprestimoHtml,
+  promissoriaEmprestimoHtml
+} from '../utils/documentosEmprestimo'
 import { obterDadosLoja } from '../utils/dadosLoja'
+import { montarParcelas } from '@fhvptech/core/lib/parcelas'
 
 // Empréstimos de dinheiro do dono para clientes.
 //
@@ -67,9 +74,28 @@ type FormEmprestimo = {
   juros: string
   juros_modo: ModoJuros
   data_emprestimo: string
+  /**
+   * A CONDIÇÃO de pagamento — o prazo, não o instrumento.
+   *
+   * ⚠️ Não chamar de "forma de pagamento". Forma é dinheiro/PIX/cartão;
+   * condição é à vista/parcelado. A casa já trocou os dois nomes uma vez e
+   * teve de corrigir em 4 lugares do PDV; o módulo novo nasce com o nome certo.
+   *
+   * Os dois valores são excludentes de propósito, igual às vendas:
+   *   'unico' = uma data alvo, e o devedor paga quanto quiser até quitar;
+   *   'carne' = parcelas fixas, cada uma quitada por inteiro.
+   * Misturar os dois faria o papel que o cliente leva pra casa deixar de bater
+   * com o saldo do sistema.
+   */
+  modo: ModoEmprestimo
   vencimento: string
+  /** Só no carnê. */
+  num_parcelas: string
+  primeiro_vencimento: string
   observacao: string
 }
+
+type ModoEmprestimo = 'unico' | 'carne'
 
 const hojeISO = (): string => {
   const d = new Date()
@@ -88,7 +114,12 @@ const formVazio = (): FormEmprestimo => ({
   // raciocina por valor — a maioria — não precisa mexer em nada.
   juros_modo: 'reais',
   data_emprestimo: hojeISO(),
+  // Vencimento único como padrão: é o acordo mais comum de balcão, e quem
+  // precisa de carnê sabe que precisa.
+  modo: 'unico',
   vencimento: '',
+  num_parcelas: '3',
+  primeiro_vencimento: '',
   observacao: ''
 })
 
@@ -252,6 +283,24 @@ const Emprestimos: FC = () => {
     [form.valor_principal, form.juros, form.juros_modo]
   )
 
+  /**
+   * A prévia do carnê. Usa `montarParcelas` do core — a MESMA função que o banco
+   * chama ao gravar. Não é uma reimplementação parecida: é a mesma conta, e é
+   * isso que garante que o carnê impresso bata com o que será cobrado.
+   *
+   * Devolve [] em vez de estourar quando os campos ainda estão pela metade —
+   * digitar é um estado normal do formulário, não um erro.
+   */
+  const previaParcelas = useMemo(() => {
+    if (form.modo !== 'carne') return []
+    const n = Number(form.num_parcelas)
+    try {
+      return montarParcelas(acordo.total, n, form.primeiro_vencimento)
+    } catch {
+      return []
+    }
+  }, [form.modo, form.num_parcelas, form.primeiro_vencimento, acordo.total])
+
   // ── Novo empréstimo ────────────────────────────────────────────────────────
   const abrirNovo = (): void => {
     setForm(formVazio())
@@ -286,7 +335,18 @@ const Emprestimos: FC = () => {
       return setErro('O juros não pode ser negativo.')
     }
     if (!form.data_emprestimo) return setErro('Informe a data do empréstimo.')
-    if (form.vencimento && form.vencimento < form.data_emprestimo) {
+
+    if (form.modo === 'carne') {
+      const n = Number(form.num_parcelas)
+      if (!Number.isInteger(n) || n < 2) return setErro('O carnê precisa de pelo menos 2 parcelas.')
+      if (!form.primeiro_vencimento) return setErro('Informe o vencimento da primeira parcela.')
+      if (form.primeiro_vencimento < form.data_emprestimo) {
+        return setErro('A primeira parcela não pode vencer antes do empréstimo.')
+      }
+      // Se a prévia não fechou, alguma coisa acima está incoerente — melhor
+      // barrar aqui do que gravar um carnê que a tela não conseguiu desenhar.
+      if (previaParcelas.length !== n) return setErro('Confira os dados do carnê.')
+    } else if (form.vencimento && form.vencimento < form.data_emprestimo) {
       return setErro('O vencimento não pode ser antes da data do empréstimo.')
     }
 
@@ -304,9 +364,13 @@ const Emprestimos: FC = () => {
       // só.
       valor_principal: capital,
       valor_acordado: acordado,
-      modo: 'unico',
+      modo: form.modo,
       data_emprestimo: form.data_emprestimo,
-      vencimento: form.vencimento || null,
+      // No carnê o vencimento vive nas parcelas; mandar uma data solta aqui
+      // criaria uma segunda verdade sobre a mesma coisa.
+      vencimento: form.modo === 'carne' ? null : form.vencimento || null,
+      num_parcelas: form.modo === 'carne' ? Number(form.num_parcelas) : null,
+      primeiro_vencimento: form.modo === 'carne' ? form.primeiro_vencimento : null,
       observacao: form.observacao.trim() || null
     })
     setSalvando(false)
@@ -334,12 +398,60 @@ const Emprestimos: FC = () => {
     await imprimir(comprovanteEmprestimoHtml(emp, loja), 'comprovante-emprestimo', 'cupom')
   }
 
+  // Carnê e promissória são 'documento', não 'cupom': saem em A4 na impressora
+  // comum, não na bobina térmica do balcão.
+  const imprimirCarne = async (emp: EmprestimoDetalhado): Promise<void> => {
+    const loja = await obterDadosLoja()
+    await imprimir(
+      carneEmprestimoHtml(emp, emp.parcelas, loja),
+      `carne-emprestimo-${emp.id}`,
+      'documento'
+    )
+  }
+
+  const imprimirPromissoria = async (emp: Emprestimo): Promise<void> => {
+    const loja = await obterDadosLoja()
+    await imprimir(
+      promissoriaEmprestimoHtml(emp, loja),
+      `promissoria-emprestimo-${emp.id}`,
+      'documento'
+    )
+  }
+
   // ── Receber pagamento ──────────────────────────────────────────────────────
   const abrirRecebimento = (emp: Emprestimo): void => {
     setRecebendo(emp)
     setValorReceb(String(emp.restante.toFixed(2)))
     setDataReceb(hojeISO())
     setErroReceb('')
+  }
+
+  /**
+   * Quita uma parcela do carnê por inteiro.
+   *
+   * Sem campo de valor de propósito: a parcela vale o que está escrita no papel
+   * que o cliente levou pra casa. Deixar editar aqui abriria a porta pro saldo
+   * do sistema e o carnê da mão dele contarem histórias diferentes — quem quiser
+   * cobrar a mais lança um acréscimo, que fica datado no extrato.
+   */
+  const receberParcela = async (parcela: ParcelaEmprestimo): Promise<void> => {
+    if (!detalhe) return
+    const ok = await confirmar({
+      titulo: `Receber a ${parcela.numero}ª parcela?`,
+      mensagem: `${fmt(parcela.valor)}, com vencimento em ${fmtData(parcela.vencimento)}.`,
+      rotuloConfirmar: 'Confirmar recebimento'
+    })
+    if (!ok) return
+
+    const resp = await window.api.emprestimos.pagarParcela(parcela.id, {
+      valor: parcela.valor,
+      data: hojeISO()
+    })
+    if (!resp.success) return showToast({ message: resp.error, variant: 'destructive' })
+
+    showToast({ message: `Parcela ${parcela.numero} recebida.`, variant: 'success' })
+    await recarregarDetalhe(detalhe.id)
+    await carregar()
   }
 
   const confirmarRecebimento = async (): Promise<void> => {
@@ -602,8 +714,18 @@ const Emprestimos: FC = () => {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       {e.situacao !== 'quitado' && e.situacao !== 'cancelado' && (
-                        <Button size="sm" onClick={() => abrirRecebimento(e)}>
-                          Receber
+                        // No carnê não existe "receber um valor qualquer": o
+                        // backend recusa pagamento parcial de propósito, porque
+                        // o papel do cliente tem parcelas fechadas. Mandar pro
+                        // carnê é o único caminho que leva a algum lugar —
+                        // abrir o diálogo de valor livre daria um erro seco.
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            e.modo === 'carne' ? recarregarDetalhe(e.id) : abrirRecebimento(e)
+                          }
+                        >
+                          {e.modo === 'carne' ? 'Ver carnê' : 'Receber'}
                         </Button>
                       )}
                       <Button
@@ -761,6 +883,35 @@ const Emprestimos: FC = () => {
               <p className="text-2xl font-bold whitespace-nowrap">{fmt(acordo.total)}</p>
             </div>
 
+            {/* Forma de cobrança. Os dois modos são excludentes: o carnê quita
+                parcela por inteiro, o vencimento único aceita pagamento parcial
+                livre. Deixar escolher DEPOIS de ver o total é de propósito — a
+                pergunta "em quantas vezes?" só faz sentido com o número na tela. */}
+            <div className="grid gap-1.5">
+              <Label>Condição de pagamento</Label>
+              <div className="inline-flex rounded-lg border p-0.5 bg-muted/30 w-fit">
+                {(
+                  [
+                    ['unico', 'Pagamento único'],
+                    ['carne', 'Parcelado (carnê)']
+                  ] as [ModoEmprestimo, string][]
+                ).map(([modo, rotulo]) => (
+                  <button
+                    key={modo}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, modo }))}
+                    className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                      form.modo === modo
+                        ? 'bg-background shadow-sm font-medium'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {rotulo}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label htmlFor="data">
@@ -773,16 +924,81 @@ const Emprestimos: FC = () => {
                   onChange={(e) => setForm((f) => ({ ...f, data_emprestimo: e.target.value }))}
                 />
               </div>
+
+              {form.modo === 'unico' ? (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="vencimento">Vencimento</Label>
+                  <Input
+                    id="vencimento"
+                    type="date"
+                    value={form.vencimento}
+                    onChange={(e) => setForm((f) => ({ ...f, vencimento: e.target.value }))}
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="primeira-parcela">
+                    1ª parcela vence em <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="primeira-parcela"
+                    type="date"
+                    value={form.primeiro_vencimento}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, primeiro_vencimento: e.target.value }))
+                    }
+                  />
+                </div>
+              )}
+            </div>
+
+            {form.modo === 'carne' && (
               <div className="grid gap-1.5">
-                <Label htmlFor="vencimento">Vencimento</Label>
-                <Input
-                  id="vencimento"
-                  type="date"
-                  value={form.vencimento}
-                  onChange={(e) => setForm((f) => ({ ...f, vencimento: e.target.value }))}
+                <Label htmlFor="num-parcelas">
+                  Quantas parcelas <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  id="num-parcelas"
+                  value={form.num_parcelas}
+                  onChange={(v) => setForm((f) => ({ ...f, num_parcelas: v }))}
+                  classNameContainer="max-w-xs"
+                  opcoes={Array.from({ length: 23 }, (_, i) => i + 2).map((n) => ({
+                    valor: String(n),
+                    rotulo: `${n}x`,
+                    detalhe:
+                      acordo.total > 0
+                        ? `de ${fmt(Math.round((acordo.total / n) * 100) / 100)} (aprox.)`
+                        : undefined
+                  }))}
                 />
               </div>
-            </div>
+            )}
+
+            {/* A prévia do carnê. Sai da MESMA função que o banco usa pra gravar,
+                então o que está na tela é exatamente o que vai ser cobrado — e o
+                que vai sair impresso no papel do cliente. */}
+            {form.modo === 'carne' && previaParcelas.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+                <p className="text-xs font-medium mb-2">
+                  Carnê de {previaParcelas.length} parcelas
+                </p>
+                <div className="max-h-36 overflow-y-auto divide-y divide-border/60">
+                  {previaParcelas.map((p) => (
+                    <div key={p.numero} className="flex items-center gap-3 py-1 text-sm">
+                      <span className="w-8 text-muted-foreground">{p.numero}ª</span>
+                      <span className="flex-1 text-muted-foreground">{fmtData(p.vencimento)}</span>
+                      <span className="font-medium">{fmt(p.valor)}</span>
+                    </div>
+                  ))}
+                </div>
+                {previaParcelas[0].valor !== previaParcelas[previaParcelas.length - 1].valor && (
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    A sobra dos centavos vai na 1ª parcela, para o carnê não terminar com um
+                    valor quebrado.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="grid gap-1.5">
               <Label htmlFor="observacao">Observação</Label>
@@ -936,6 +1152,53 @@ const Emprestimos: FC = () => {
                 </p>
               )}
 
+              {detalhe.modo === 'carne' && detalhe.parcelas.length > 0 && (
+                <div>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <p className="text-sm font-medium">
+                      Carnê · {detalhe.parcelas.filter((p) => p.paga === 1).length} de{' '}
+                      {detalhe.parcelas.length} pagas
+                    </p>
+                    {detalhe.cancelado === 0 && (
+                      <Button size="sm" variant="outline" onClick={() => imprimirCarne(detalhe)}>
+                        <Printer className="w-4 h-4 mr-1.5" />
+                        Imprimir carnê
+                      </Button>
+                    )}
+                  </div>
+                  <div className="border rounded-lg divide-y max-h-56 overflow-y-auto">
+                    {detalhe.parcelas.map((p) => {
+                      const atrasada = p.paga === 0 && p.vencimento < hojeISO()
+                      return (
+                        <div key={p.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                          <span className="w-8 text-muted-foreground">{p.numero}ª</span>
+                          <span
+                            className={`flex-1 ${
+                              atrasada ? 'text-red-600 font-medium' : 'text-muted-foreground'
+                            }`}
+                          >
+                            {fmtData(p.vencimento)}
+                            {atrasada && ' · em atraso'}
+                          </span>
+                          <span className={`font-medium ${p.paga ? 'line-through opacity-60' : ''}`}>
+                            {fmt(p.valor)}
+                          </span>
+                          {p.paga === 1 ? (
+                            <span className="text-xs text-green-600 w-20 text-right">paga</span>
+                          ) : detalhe.cancelado === 0 ? (
+                            <Button size="sm" className="w-20" onClick={() => receberParcela(p)}>
+                              Receber
+                            </Button>
+                          ) : (
+                            <span className="w-20" />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <p className="text-sm font-medium mb-2">Extrato</p>
                 <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
@@ -997,6 +1260,10 @@ const Emprestimos: FC = () => {
                   <Button size="sm" variant="outline" onClick={() => imprimirComprovante(detalhe)}>
                     <Printer className="w-4 h-4 mr-1.5" />
                     Comprovante
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => imprimirPromissoria(detalhe)}>
+                    <FileText className="w-4 h-4 mr-1.5" />
+                    Promissória
                   </Button>
                   <Button
                     size="sm"

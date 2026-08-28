@@ -217,9 +217,59 @@ funcionando, só sem movimento.
 | **Contas a Pagar / Empréstimos** → cartões do topo | Pulsam ao registrar um pagamento. **Não** pulsam ao abrir a tela (ali o número apareceu, não mudou). |
 | Qualquer lista vazia | Ícone grande boiando devagar, com uma dica embaixo. |
 
-## O que fica pra Fase 2
+## Fase 2 — carnê, promissória e QR do PIX
 
-- Carnê de parcelas na tela (o banco e as regras já estão prontos e testados).
-- Promissória em A4.
-- QR do PIX no carnê — o único papel onde ele faz sentido, porque é o que o
-  cliente leva pra casa com parcela em aberto.
+### O carnê na tela
+
+55. **Novo empréstimo** → capital `900`, juros `R$ 0`.
+56. Em **"Condição de pagamento"**, escolher **Parcelado (carnê)**.
+    ✅ O campo "Vencimento" some e aparece "1ª parcela vence em".
+57. Abrir o seletor de parcelas e **rolar a lista com a roda do mouse**.
+    ✅ Ela rola. (Já foi um bug: a lista abria e ficava parada dentro do diálogo.)
+58. Parcelas: `4`. Primeira parcela: **daqui a 30 dias**.
+    ✅ A prévia lista as 4 parcelas, com data e valor — e **a soma bate 900,00**.
+    ✅ O seletor de quantidade mostra "de R$ 225,00 (aprox.)" em cada opção.
+58. Trocar para `7` parcelas. ✅ 900 ÷ 7 não fecha: a **1ª parcela fica maior**
+    que as outras, e aparece a nota explicando que a sobra vai nela.
+59. Voltar para `4` e salvar.
+
+### Receber parcela
+
+60. Na lista, o botão do carnê diz **"Ver carnê"**, não "Receber".
+    ⚠️ Isso é de propósito: carnê não aceita pagamento de valor livre.
+61. Clicar → abre o extrato com o bloco **Carnê · 0 de 4 pagas**.
+62. **Receber** na 1ª parcela. ✅ Pergunta confirmando o valor e a data da parcela
+    (sem campo pra editar o valor — ele é o que está no papel do cliente).
+63. ✅ A parcela fica riscada com "paga", o contador vira **1 de 4**, e o cartão
+    "Total a receber" do topo **pulsa** com o valor novo.
+64. ✅ No **Extrato**, embaixo, aparece "Pagamento recebido" com o valor da parcela.
+
+### O carnê impresso
+
+65. No bloco do carnê, **Imprimir carnê**. Sai em **A4**, não na bobina.
+66. ✅ Conferir no papel:
+    - um canhoto por parcela, com **linha tracejada no meio** (via da loja | via do cliente);
+    - número, vencimento e valor em cada um;
+    - **QR do PIX** em cada parcela **em aberto**, com o valor daquela parcela;
+    - a parcela já paga sai com o selo **PAGA** e **sem QR**;
+    - o topo mostra quanto ainda falta e em quantas parcelas.
+
+> Por que a paga não leva QR: reimprimir um carnê meio pago não pode virar
+> convite pra pagar de novo o que já foi pago.
+
+### A promissória
+
+67. No rodapé do extrato, **Promissória**. Sai em A4.
+68. ✅ Conferir:
+    - "NOTA PROMISSÓRIA Nº ..." e o valor grande no topo;
+    - a fórmula "pagarei por esta única via... ou à sua ordem";
+    - o valor **em número e por extenso** (se divergirem, vale o extenso — por
+      isso os dois saem da mesma fonte);
+    - o CNPJ da loja como credora e o CPF do devedor como emitente;
+    - linha de assinatura com o nome do devedor;
+    - ⚠️ **NÃO tem QR de PIX** — título de crédito não é boleto.
+
+### Sem chave PIX cadastrada
+
+69. Em Configurações, apagar a chave PIX e imprimir o carnê de novo.
+    ✅ O carnê sai igual, só **sem os QRs**. Nada quebra.

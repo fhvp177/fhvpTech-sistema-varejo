@@ -14,10 +14,19 @@
  * simplesmente atravessa**. Nada quebra, nada dá erro, e o defeito só aparece
  * pra quem clica — que é todo mundo.
  *
- * Junto vem o par obrigatório: a mesma camada do Radix escuta `pointerdown` no
- * document e fecha o diálogo ao ver um clique "fora". Para ela, este portal É
- * fora. Sem barrar a propagação, consertar o clique passaria a fechar o modal
- * inteiro a cada cliente escolhido.
+ * Junto vêm mais duas, e as três só funcionam juntas:
+ *
+ *  2. `pointerdown` — a mesma camada do Radix escuta no document e fecha o
+ *     diálogo ao ver um clique "fora". Para ela, este portal É fora. Sem barrar
+ *     a propagação, consertar o clique passaria a fechar o modal inteiro a cada
+ *     opção escolhida.
+ *
+ *  3. `wheel` — o `react-remove-scroll`, que trava a rolagem da página enquanto
+ *     o modal está aberto, escuta `wheel` no document (SideEffect.js:139, com
+ *     passive:false) e chama preventDefault em tudo que julga estar fora do
+ *     modal. A lista tem `overflow-y-auto` e PARECE que deveria rolar sozinha —
+ *     mas o navegador nunca chega a rolar. Foi o terceiro a ser descoberto, e o
+ *     mais fácil de não perceber: nada quebra, a lista só fica parada.
  *
  * ── Por que ler o FONTE e não simular o clique ──────────────────────────────
  * Em jsdom não existe hit-testing: `pointer-events` não é calculado e um
@@ -31,6 +40,18 @@ import { readdirSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
 
 const RAIZ_SRC = join(__dirname, '..', '..')
+
+/**
+ * O core entra na varredura junto com o app.
+ *
+ * ⚠️ Ele ficou de fora na primeira versão deste guarda, e o buraco era grande:
+ * `ui/select.tsx` é o componente por trás dos ~66 seletores dos dois apps — de
+ * longe o que mais tem dropdown — e nenhuma das três regras era cobrada dele.
+ * A falha só apareceu ao rodar mutação: apagar a regra da roda do mouse no core
+ * deixava o teste VERDE. Guarda que não alcança o componente mais usado é
+ * decoração.
+ */
+const RAIZ_CORE = join(__dirname, '..', '..', '..', '..', '..', 'packages', 'core', 'src', 'ui')
 
 function arquivosTsx(dir: string): string[] {
   const achados: string[] = []
@@ -83,16 +104,17 @@ function conteudosDePortal(fonte: string): string[] {
   return blocos
 }
 
-const portais = arquivosTsx(RAIZ_SRC).flatMap((caminho) =>
+const portais = [...arquivosTsx(RAIZ_SRC), ...arquivosTsx(RAIZ_CORE)].flatMap((caminho) =>
   conteudosDePortal(readFileSync(caminho, 'utf8')).map((conteudo, n) => ({
-    nome: `${caminho.replace(RAIZ_SRC, 'src')} (portal ${n + 1})`,
+    nome: `${caminho.replace(RAIZ_SRC, 'src').replace(RAIZ_CORE, 'core/ui')} (portal ${n + 1})`,
     conteudo
   }))
 )
 
 describe('dropdown em portal dentro de modal', () => {
   it('encontrou os portais (se isto falhar, o resto vira teatro)', () => {
-    expect(portais.length).toBeGreaterThanOrEqual(3)
+    // 3 do app (ClienteSeletor, CidadeSeletor, EtiquetasA4) + o Select do core.
+    expect(portais.length).toBeGreaterThanOrEqual(4)
   })
 
   it.each(portais.map((p) => [p.nome, p.conteudo]))(
@@ -104,6 +126,7 @@ describe('dropdown em portal dentro de modal', () => {
 
       expect(conteudo).toMatch(/pointerEvents:\s*'auto'/)
       expect(conteudo).toMatch(/onPointerDown=\{\(e\)\s*=>\s*e\.stopPropagation\(\)\}/)
+      expect(conteudo).toMatch(/onWheel=\{\(e\)\s*=>\s*e\.stopPropagation\(\)\}/)
     }
   )
 })

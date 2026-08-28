@@ -1,5 +1,6 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
+import { montarParcelas } from '@fhvptech/core/lib/parcelas'
 import type { AlertaVivo } from './notificacoes'
 
 // Empréstimos de dinheiro do dono para clientes.
@@ -313,41 +314,13 @@ export function criarEmprestimo(dados: DadosEmprestimo): EmprestimoDetalhado {
 }
 
 /**
- * Divide o total em N parcelas mensais. A sobra dos centavos vai toda na PRIMEIRA
- * parcela, não na última: quem paga em dia paga o arredondamento, e o carnê nunca
- * termina com uma parcela quebrada que o cliente estranha na hora de quitar.
- * A soma das parcelas é exatamente o total — há teste (`provaDosNove`).
+ * A divisão em parcelas mora no core (`@fhvptech/core/lib/parcelas`), e não
+ * aqui, porque a TELA precisa da mesma conta para mostrar a prévia do carnê
+ * antes de gravar. Duas cópias divergiriam, e o papel que o cliente leva pra
+ * casa deixaria de bater com o saldo do sistema. Reexportado para quem já
+ * importava deste módulo.
  */
-export function montarParcelas(
-  total: number,
-  numParcelas: number,
-  primeiroVencimento: string
-): Array<{ numero: number; valor: number; vencimento: string }> {
-  if (!Number.isInteger(numParcelas) || numParcelas < 2) {
-    throw new Error('O carnê precisa de pelo menos 2 parcelas.')
-  }
-  if (!EH_DATA.test(primeiroVencimento)) {
-    throw new Error('Data de vencimento da primeira parcela inválida.')
-  }
-
-  const base = Math.floor((total * 100) / numParcelas) / 100
-  const sobra = centavos(total - base * numParcelas)
-
-  const [ano, mes, dia] = primeiroVencimento.split('-').map(Number)
-  const parcelas: Array<{ numero: number; valor: number; vencimento: string }> = []
-  for (let i = 0; i < numParcelas; i++) {
-    // Dia 31 em mês de 30 cai no último dia do mês, nunca vaza pro mês seguinte:
-    // vencimento que pula de mês bagunça a ordem do carnê.
-    const alvo = new Date(ano, mes - 1 + i, 1)
-    const ultimoDia = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate()
-    alvo.setDate(Math.min(dia, ultimoDia))
-    const iso = `${alvo.getFullYear()}-${String(alvo.getMonth() + 1).padStart(2, '0')}-${String(
-      alvo.getDate()
-    ).padStart(2, '0')}`
-    parcelas.push({ numero: i + 1, valor: i === 0 ? centavos(base + sobra) : base, vencimento: iso })
-  }
-  return parcelas
-}
+export { montarParcelas }
 
 function garantirAtivo(db: ReturnType<typeof obterBancoDeDados>, id: number): LinhaEmprestimo {
   const emp = db.prepare(`${SELECT_BASE} WHERE e.id = ?`).get(id) as LinhaEmprestimo | undefined
