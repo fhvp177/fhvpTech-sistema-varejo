@@ -13,7 +13,7 @@ export const NOVIDADES: ReleaseNovidades[] = [
         emoji: '🛠️',
         titulo: 'Correção de bugs',
         descricao:
-          'Foi corrigida uma situação em que as listas de seleção abertas dentro de uma janela do sistema não respondiam à rolagem pela roda do mouse, sendo possível percorrê-las apenas pelo teclado. A correção alcança todas as listas do programa, entre elas as de cliente, cidade, produto e categoria.'
+          'Foram corrigidos pequenos problemas nas listas de seleção do sistema.'
       }
     ]
   },
