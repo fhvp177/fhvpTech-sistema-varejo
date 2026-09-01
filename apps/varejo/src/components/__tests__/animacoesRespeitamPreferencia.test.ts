@@ -102,3 +102,104 @@ describe('animacoes.css', () => {
     expect(culpados).toEqual([])
   })
 })
+
+/**
+ * ── Trava 3: a sanfona é a ÚNICA exceção, e ela é curta ─────────────────────
+ *
+ * As travas acima inspecionam `@keyframes`. Uma `transition:` passava por elas
+ * sem ser vista — o que significa que qualquer pessoa poderia animar `height`
+ * amanhã, com a melhor das intenções, e nada acusaria.
+ *
+ * A sanfona das Configurações abriu essa exceção de propósito: recolher uma
+ * seção É mudar a altura, e a tela de Configurações é aberta por vontade
+ * própria, poucas vezes, sem ninguém esperando atrás — o imposto de 300x por
+ * dia que condena animação decorativa nas telas de trabalho não incide ali.
+ *
+ * O que estes testes prendem não é a existência da exceção: é o TAMANHO dela.
+ * Uma sanfona de 120ms é imperceptível como custo; a mesma sanfona em 400ms,
+ * num formulário grande, engasga no PC de loja. Duração é o único parâmetro que
+ * separa as duas, e é ele que fica pinado aqui.
+ *
+ * Se este teste ficar vermelho porque alguém precisou de uma segunda exceção:
+ * a resposta certa quase nunca é adicionar à lista. É perguntar se dava pra
+ * animar `opacity`/`transform` em vez de layout.
+ */
+describe('transições que mexem em layout', () => {
+  const LAYOUT = '(height|width|margin|padding|top|left|right|bottom|grid-template-rows)'
+  // O `reduzido` do describe acima é local dele; aqui se recalcula a partir do
+  // mesmo helper de módulo.
+  const blocoReduzido = blocosReduzidos(CSS)
+
+  /** Toda declaração `transition:` do arquivo, com o seletor que a carrega. */
+  function transicoes(fonte: string): Array<{ seletor: string; decl: string }> {
+    // Os comentários saem ANTES de parsear. Sem isto, o que vem antes de uma
+    // regra — e aqui vem um bloco de 30 linhas explicando a exceção — é colhido
+    // junto como se fosse parte do seletor.
+    const css = fonte.replace(/\/\*[\s\S]*?\*\//g, '')
+    const achadas: Array<{ seletor: string; decl: string }> = []
+    const re = /([^{}]+)\{([^}]*)\}/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(css)) !== null) {
+      const decl = m[2]
+      if (!/transition\s*:/.test(decl)) continue
+      achadas.push({ seletor: m[1].trim().replace(/\s+/g, ' '), decl })
+    }
+    return achadas
+  }
+
+  const comLayout = transicoes(CSS).filter((t) =>
+    new RegExp(`transition:[^;]*\\b${LAYOUT}\\b`).test(t.decl.replace(/\s+/g, ' '))
+  )
+
+  // A exceção é um PAR (seletor, propriedade) — não um seletor com passe livre.
+  //
+  // Duas versões deste teste já foram furadas em conferência. A primeira casava
+  // o seletor por substring, e `.anim-sanfona-outra` entrava de carona. A
+  // segunda usou lista exata de seletores, e aí passou trocar o
+  // `grid-template-rows` por `height` DENTRO da própria sanfona — a porta certa,
+  // com a carga errada. Exceção que não diz o que exatamente permite não é
+  // exceção: é sala aberta.
+  const PERMITIDO: Record<string, string> = { '.anim-sanfona': 'grid-template-rows' }
+
+  it('só a sanfona anima propriedade de layout', () => {
+    const forasteiros = comLayout.filter((t) => !(t.seletor in PERMITIDO))
+    expect(forasteiros.map((t) => t.seletor)).toEqual([])
+  })
+
+  it('e mesmo ela só pode animar a trilha do grid, nunca height/max-height', () => {
+    for (const t of comLayout) {
+      const propriedades = [...t.decl.matchAll(new RegExp(`\\b${LAYOUT}\\b`, 'g'))].map(
+        (m) => m[0]
+      )
+      for (const prop of propriedades) expect(prop).toBe(PERMITIDO[t.seletor])
+    }
+  })
+
+  it('a exceção existe mesmo (senão as asserções abaixo viram teatro)', () => {
+    expect(comLayout.length).toBeGreaterThan(0)
+  })
+
+  it('e ela dura no máximo 150ms', () => {
+    for (const t of comLayout) {
+      const duracoes = [...t.decl.matchAll(/(\d+)ms/g)].map((d) => Number(d[1]))
+      expect(duracoes.length).toBeGreaterThan(0)
+      for (const ms of duracoes) expect(ms).toBeLessThanOrEqual(150)
+    }
+  })
+
+  it('a sanfona é desligada em prefers-reduced-motion', () => {
+    // Fronteira de palavra, não substring: `.anim-sanfona-conteudo` sozinho
+    // satisfazia um `toContain('.anim-sanfona')` e deixava a CAIXA continuar
+    // animando para quem pediu menos movimento. São duas classes distintas e as
+    // duas precisam ser desligadas.
+    expect(blocoReduzido).toMatch(/\.anim-sanfona(?![\w-])/)
+    expect(blocoReduzido).toMatch(/\.anim-sanfona-conteudo(?![\w-])/)
+  })
+
+  it('e o conteúdo dela fica VISÍVEL com movimento reduzido', () => {
+    // Sem isto, desligar só a transição congelaria o conteúdo em opacity 0 e a
+    // seção abriria vazia para quem pediu menos movimento — trocar animação por
+    // tela quebrada é pior que a animação.
+    expect(blocoReduzido).toMatch(/anim-sanfona-conteudo[\s\S]*opacity:\s*1/)
+  })
+})

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { posicaoDropdown, type PosicaoDropdown } from '@fhvptech/core/lib/posicaoDropdown'
 import { Search } from 'lucide-react'
 
 // Combobox de cidade com busca, alimentado pela lista oficial do IBGE embutida
@@ -41,11 +42,7 @@ export default function CidadeSeletor({ cidade, uf, onSelecionar, onDigitar }: P
    * mesmo assim pra que ele possa entrar num diálogo amanhã sem trazer o bug de
    * volta — foi essa reincidência que motivou a mudança.
    */
-  const [posicaoLista, setPosicaoLista] = useState<{
-    left: number
-    top: number
-    width: number
-  } | null>(null)
+  const [posicaoLista, setPosicaoLista] = useState<PosicaoDropdown | null>(null)
 
   useEffect(() => {
     if (!aberto) {
@@ -56,7 +53,7 @@ export default function CidadeSeletor({ cidade, uf, onSelecionar, onDigitar }: P
       const el = containerRef.current
       if (!el) return
       const r = el.getBoundingClientRect()
-      setPosicaoLista({ left: r.left, top: r.bottom, width: r.width })
+      setPosicaoLista(posicaoDropdown(r, window))
     }
     medir()
     window.addEventListener('resize', medir)
@@ -182,10 +179,13 @@ export default function CidadeSeletor({ cidade, uf, onSelecionar, onDigitar }: P
             `dropdownDentroDeModal.test.ts`.
           */
           <div
-            className="fixed z-[60] mt-1 bg-popover border rounded-md shadow-lg overflow-hidden"
+            className={`fixed z-[60] ${posicaoLista.bottom != null ? 'mb-1' : 'mt-1'}  bg-popover border rounded-md shadow-lg overflow-hidden`}
             style={{
               left: posicaoLista.left,
+              // Abre pra baixo ou pra cima conforme o espaço da janela — quando
+              // vira, ancora pelo `bottom` e cresce pra cima sozinha.
               top: posicaoLista.top,
+              bottom: posicaoLista.bottom,
               width: posicaoLista.width,
               pointerEvents: 'auto'
             }}
@@ -201,7 +201,8 @@ export default function CidadeSeletor({ cidade, uf, onSelecionar, onDigitar }: P
             // chegar ao document, e o navegador rola normalmente.
             onWheel={(e) => e.stopPropagation()}
           >
-          <ul ref={listaRef} className="max-h-72 overflow-y-auto py-1">
+          <ul ref={listaRef} className="overflow-y-auto py-1"
+            style={{ maxHeight: posicaoLista.maxHeight }}>
             {sugestoes.length === 0 ? (
               <li className="px-3 py-3 text-sm text-center text-muted-foreground">
                 Nenhuma cidade encontrada.

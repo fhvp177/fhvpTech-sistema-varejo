@@ -261,6 +261,55 @@ type ResumoContasPagar = {
   pago_mes: number
 }
 
+type LinhaComissao = {
+  vendedor_id: number | null
+  vendedor_nome: string
+  ativo: number
+  qtd_vendas: number
+  base: number
+  valor_comissao: number
+  pct_vigente: number
+  /** 1 quando as vendas do período foram carimbadas com percentuais diferentes. */
+  pct_misto: number
+  /** 0 na linha "Sem vendedor" — informa, mas não gera comissão. */
+  comissionavel: number
+  pagamento_id: number | null
+  pago_em: string | null
+  valor_pago_comissao: number | null
+}
+
+type ResumoComissoes = {
+  inicio: string
+  fim: string
+  padrao: number
+  linhas: LinhaComissao[]
+}
+
+type VendaComissao = {
+  venda_id: number
+  data: string
+  cliente_nome: string | null
+  total: number
+  devolvido: number
+  base: number
+  pct: number
+  valor_comissao: number
+}
+
+type PagamentoComissao = {
+  id: number
+  vendedor_id: number
+  vendedor_nome: string
+  periodo_inicio: string
+  periodo_fim: string
+  qtd_vendas: number
+  valor_base: number
+  valor_comissao: number
+  pago_em: string
+  pago_por_nome: string | null
+  observacao: string | null
+}
+
 interface Window {
   api: {
     produtos: {
@@ -293,6 +342,20 @@ interface Window {
       registrarPagamento: (id: number, valor: number) => Promise<RespostaIPC>
       estornarPagamento: (id: number) => Promise<RespostaIPC>
     }
+    comissoes: {
+      configurado: () => Promise<RespostaIPC<boolean>>
+      resumo: (mes: string) => Promise<RespostaIPC<ResumoComissoes>>
+      detalhe: (vendedorId: number | null, mes: string) => Promise<RespostaIPC<VendaComissao[]>>
+      registrarPagamento: (dados: {
+        vendedor_id: number
+        mes: string
+        observacao?: string | null
+      }) => Promise<RespostaIPC<{ id: number; valor_comissao: number }>>
+      estornarPagamento: (id: number) => Promise<RespostaIPC>
+      listarPagamentos: (vendedorId?: number) => Promise<RespostaIPC<PagamentoComissao[]>>
+      obterPadrao: () => Promise<RespostaIPC<number>>
+      definirPadrao: (pct: number) => Promise<RespostaIPC>
+    }
     notasEntrada: {
       analisar: (
         chave: string,
@@ -322,13 +385,16 @@ interface Window {
         email: string | null
         tem_pin: number
         vendas_count: number
+        comissao_pct: number | null
       }>>>
       criar: (
         dados: { nome: string; email?: string | null } | string
       ) => Promise<RespostaIPC<{ id: number; nome: string }>>
       atualizar: (
         id: number,
-        dados: { nome?: string; email?: string | null } | string
+        dados:
+          | { nome?: string; email?: string | null; comissao_pct?: number | null }
+          | string
       ) => Promise<RespostaIPC>
       alternarAtivo: (id: number, ativo: boolean) => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>

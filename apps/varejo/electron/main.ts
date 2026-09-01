@@ -15,6 +15,7 @@ import { registrarHandlersLicenca } from '@fhvptech/core/electron/ipc/licenca'
 import { registrarHandlersLicencaPagamento } from '@fhvptech/core/electron/ipc/licenca-pagamento'
 import { registrarHandlersFornecedores } from './ipc/fornecedores'
 import { registrarHandlersContasPagar } from './ipc/contasPagar'
+import { registrarHandlersComissoes } from './ipc/comissoes'
 import { registrarHandlersCategorias } from './ipc/categorias'
 import { registrarHandlersClientes } from './ipc/clientes'
 import { registrarHandlersProdutos } from './ipc/produtos'
@@ -182,6 +183,7 @@ app.whenReady().then(() => {
   registrarHandlersLicencaPagamento()
   registrarHandlersFornecedores()
   registrarHandlersContasPagar()
+  registrarHandlersComissoes()
   registrarHandlersCategorias()
   registrarHandlersClientes()
   registrarHandlersProdutos()

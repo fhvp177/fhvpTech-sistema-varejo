@@ -23,7 +23,11 @@ import {
   DialogTitle,
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
-import { useSessao } from '@/App'
+import { useComissoes, useSessao } from '@/App'
+import CampoPercentual, {
+  numeroParaPercentual,
+  percentualParaNumero
+} from '@/components/CampoPercentual'
 
 type Vendedor = {
   id: number
@@ -33,23 +37,29 @@ type Vendedor = {
   email: string | null
   tem_pin: number
   vendas_count: number
+  comissao_pct: number | null
 }
 
 type EdicaoState = {
   nome: string
   email: string
+  // String porque é o que o campo edita. Vazio significa "usa o padrão da
+  // loja", que é diferente de 0 ("esta pessoa não ganha comissão") — a
+  // distinção vive até o banco.
+  comissao: string
 }
 
 const sanitizarPin = (v: string) => v.replace(/\D/g, '').slice(0, 6)
 
 const CadastroVendedores: FC = () => {
   const { vendedor: logado } = useSessao()
+  const { recarregar: recarregarComissoes } = useComissoes()
   const [vendedores, setVendedores] = useState<Vendedor[]>([])
   const [novoNome, setNovoNome] = useState('')
   const [novoEmail, setNovoEmail] = useState('')
   const [erro, setErro] = useState('')
   const [editandoId, setEditandoId] = useState<number | null>(null)
-  const [edicao, setEdicao] = useState<EdicaoState>({ nome: '', email: '' })
+  const [edicao, setEdicao] = useState<EdicaoState>({ nome: '', email: '', comissao: '' })
 
   // Modal de redefinir PIN
   const [pinModalAberto, setPinModalAberto] = useState(false)
@@ -86,13 +96,17 @@ const CadastroVendedores: FC = () => {
 
   const iniciarEdicao = (v: Vendedor) => {
     setEditandoId(v.id)
-    setEdicao({ nome: v.nome, email: v.email ?? '' })
+    setEdicao({
+      nome: v.nome,
+      email: v.email ?? '',
+      comissao: numeroParaPercentual(v.comissao_pct)
+    })
     setErro('')
   }
 
   const cancelarEdicao = () => {
     setEditandoId(null)
-    setEdicao({ nome: '', email: '' })
+    setEdicao({ nome: '', email: '', comissao: '' })
     setErro('')
   }
 
@@ -101,7 +115,8 @@ const CadastroVendedores: FC = () => {
     if (!edicao.nome.trim()) return
     const resp = await window.api.vendedores.atualizar(id, {
       nome: edicao.nome.trim(),
-      email: edicao.email.trim() || null
+      email: edicao.email.trim() || null,
+      comissao_pct: percentualParaNumero(edicao.comissao)
     })
     if (!resp.success) {
       setErro(resp.error)
@@ -109,6 +124,9 @@ const CadastroVendedores: FC = () => {
     }
     cancelarEdicao()
     await carregar()
+    // O percentual acabou de mudar: pode ser o primeiro da loja (a aba de
+    // Comissões passa a existir) ou o último a ser zerado.
+    await recarregarComissoes()
   }
 
   const alternarAtivo = async (v: Vendedor) => {
@@ -279,6 +297,15 @@ const CadastroVendedores: FC = () => {
                         placeholder="Email"
                         type="email"
                       />
+                      <div className="w-28 shrink-0">
+                        <CampoPercentual
+                          id={`comissao-${v.id}`}
+                          valor={edicao.comissao}
+                          onChange={(valor) => setEdicao({ ...edicao, comissao: valor })}
+                          placeholder="padrão"
+                          className="h-8"
+                        />
+                      </div>
                       <button
                         onClick={() => salvarEdicao(v.id)}
                         className="text-green-600 hover:text-green-700 p-1"
@@ -294,6 +321,10 @@ const CadastroVendedores: FC = () => {
                         <X className="w-4 h-4" />
                       </button>
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      O último campo é a comissão desta pessoa. Deixe em branco para seguir o
+                      percentual padrão da loja; use 0 para quem não ganha comissão.
+                    </p>
                   </li>
                 )
               }
@@ -332,6 +363,12 @@ const CadastroVendedores: FC = () => {
                       <span>
                         {v.vendas_count} venda{v.vendas_count !== 1 ? 's' : ''}
                       </span>
+                      {v.comissao_pct !== null && (
+                        <>
+                          <span>·</span>
+                          <span>{numeroParaPercentual(v.comissao_pct)}% comissão</span>
+                        </>
+                      )}
                       {v.tem_pin === 0 && v.ativo === 1 && (
                         <span className="inline-flex items-center gap-0.5 text-amber-600">
                           <AlertCircle className="w-3 h-3" /> sem PIN

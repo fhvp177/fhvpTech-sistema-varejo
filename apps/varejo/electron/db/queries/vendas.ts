@@ -1,4 +1,5 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { obterComissaoPadrao } from './comissoes'
 
 export type StatusPagamento = 'pago' | 'pendente' | 'inadimplente' | 'parcelado'
 
@@ -23,6 +24,10 @@ export type Venda = {
   status_pagamento: StatusPagamento
   data_vencimento: string | null
   num_parcelas: number | null
+  // Percentual de comissão do vendedor CONGELADO no momento da venda. Aumentar
+  // o percentual de alguém não pode reescrever o mês que já foi pago — o porquê
+  // está inteiro na migration 038. NULL nas vendas anteriores a ela.
+  comissao_pct: number | null
   valor_inadimplente: number
   valor_devolvido: number
   cliente_nome?: string | null
@@ -295,11 +300,16 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
     throw new Error('Selecione o vendedor responsável pela venda.')
   }
   const vendedor = db
-    .prepare('SELECT id FROM vendedores WHERE id = ? AND ativo = 1')
-    .get(dados.vendedor_id) as { id: number } | undefined
+    .prepare('SELECT id, comissao_pct FROM vendedores WHERE id = ? AND ativo = 1')
+    .get(dados.vendedor_id) as { id: number; comissao_pct: number | null } | undefined
   if (!vendedor) {
     throw new Error('Vendedor inválido ou inativo.')
   }
+
+  // Carimba o percentual de comissão que vale AGORA (o do vendedor, ou o padrão
+  // da loja). Congelar aqui é o que mantém imóvel o mês já fechado quando
+  // alguém é promovido depois — ver migration 038.
+  const comissaoPct = vendedor.comissao_pct ?? obterComissaoPadrao()
 
   for (const item of dados.itens) {
     if (item.variacao_id != null) {
@@ -377,8 +387,8 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   const formaPagamento = formaDaVenda(dados, total, creditoUsado)
 
   const inserirVenda = db.prepare(
-    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento)
-     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento)`
+    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento, comissao_pct)
+     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @comissao_pct)`
   )
   const inserirItem = db.prepare(
     `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario)
@@ -410,7 +420,8 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       status_pagamento: dados.status_pagamento,
       data_vencimento: dados.data_vencimento,
       num_parcelas: dados.num_parcelas ?? null,
-      forma_pagamento: formaPagamento
+      forma_pagamento: formaPagamento,
+      comissao_pct: comissaoPct
     })
     vendaId = result.lastInsertRowid as number
 

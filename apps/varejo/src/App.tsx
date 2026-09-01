@@ -16,6 +16,7 @@ import {
   MessageCircle,
   QrCode,
   Crown,
+  BadgePercent,
   Calculator,
   ChevronDown,
   LogOut,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react'
 import Fornecedores from './pages/Fornecedores'
 import ContasPagar from './pages/ContasPagar'
+import Comissoes from './pages/Comissoes'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
@@ -113,6 +115,19 @@ const SessaoContext = createContext<SessaoCtx>({
 })
 export const useSessao = () => useContext(SessaoContext)
 
+// A loja usa comissão? Governa a existência da aba no menu.
+//
+// Diferente das flags __FEAT_* (decididas ao gerar o instalador, valem pra
+// edição inteira), isto é POR LOJA — e não tem interruptor próprio: quem liga é
+// definir um percentual. `recarregar` existe para Configurações e o cadastro de
+// vendedores avisarem assim que o percentual muda, sem exigir reabrir o app.
+type ComissoesCtx = { ativo: boolean; recarregar: () => Promise<void> }
+const ComissoesContext = createContext<ComissoesCtx>({
+  ativo: false,
+  recarregar: async () => {}
+})
+export const useComissoes = () => useContext(ComissoesContext)
+
 // Permite que Configurações reabra o guia de boas-vindas ("Ver tutorial novamente").
 type OnboardingCtx = { abrirGuia: () => void }
 const OnboardingContext = createContext<OnboardingCtx>({ abrirGuia: () => {} })
@@ -152,6 +167,7 @@ const App: FC = () => {
   const [autoLockMinutos, setAutoLockMinutos] = useState(15)
   const [mostrarPagamento, setMostrarPagamento] = useState(false)
   const [vendedor, setVendedor] = useState<SessaoVendedor | null>(null)
+  const [comissoesAtivo, setComissoesAtivo] = useState(false)
   // Gerente adiou o cadastro de email de recuperação — esconde só nesta sessão.
   const [pulouEmailDono, setPulouEmailDono] = useState(false)
   // Onboarding (tutorial de primeira abertura): estado do banco + guia aberto.
@@ -198,6 +214,29 @@ const App: FC = () => {
     return v
   }, [])
 
+  // A aba de Comissões aparece só quando a loja definiu algum percentual.
+  //
+  // O canal exige gerente (folha de pagamento não é dado de vendedor), então só
+  // faz sentido perguntar quando quem está logado é gerente. Para os demais a
+  // resposta seria um erro — e a aba já estaria escondida pelo `somenteDono` de
+  // qualquer forma.
+  const recarregarComissoes = useCallback(async (papel?: string): Promise<void> => {
+    if (papel !== 'dono') {
+      setComissoesAtivo(false)
+      return
+    }
+    const resp = await window.api.comissoes.configurado()
+    setComissoesAtivo(resp.success ? resp.data : false)
+  }, [])
+
+  const ctxComissoes = useMemo(
+    () => ({
+      ativo: comissoesAtivo,
+      recarregar: () => recarregarComissoes(vendedor?.papel)
+    }),
+    [comissoesAtivo, recarregarComissoes, vendedor?.papel]
+  )
+
   // Verifica status de auth + sessão depois que a licença passa
   useEffect(() => {
     if (estadoLicenca !== 'valida') return
@@ -208,6 +247,7 @@ const App: FC = () => {
           setAutoLockMinutos(respStatus.data.autoLockMinutos)
         }
         const sessao = await recarregarSessao()
+        await recarregarComissoes(sessao?.papel)
         setFalhaCaixaPrincipal(null)
         setEstadoAuth(sessao ? 'desbloqueado' : 'bloqueado')
       } catch (erro) {
@@ -218,7 +258,7 @@ const App: FC = () => {
         setFalhaCaixaPrincipal((erro as Error).message || 'Sem conexão com o caixa principal.')
       }
     })()
-  }, [estadoLicenca, recarregarSessao, tentativaCaixaPrincipal])
+  }, [estadoLicenca, recarregarSessao, recarregarComissoes, tentativaCaixaPrincipal])
 
   // ── Onboarding ──────────────────────────────────────────────────────────────
   // Relê o estado do tutorial. Em caso de falha, assume "tudo visto" (fail-safe:
@@ -431,6 +471,7 @@ const App: FC = () => {
       <SessaoContext.Provider
         value={{ vendedor, ehDono: vendedor?.papel === 'dono', recarregar: recarregarSessao }}
       >
+      <ComissoesContext.Provider value={ctxComissoes}>
        <OnboardingContext.Provider value={{ abrirGuia }}>
         <NovidadesContext.Provider value={{ abrirNovidades }}>
         <TourContext.Provider value={{ abrirTour }}>
@@ -448,6 +489,7 @@ const App: FC = () => {
                     onAbrirCalculadora={() => setCalculadoraAberta((v) => !v)}
                     onRenovarComPix={abrirPagamento}
                     vendedor={vendedor}
+                    comissoesAtivo={comissoesAtivo}
                   />
                 )}
                 <div className="flex-1 flex flex-col overflow-hidden">
@@ -492,6 +534,14 @@ const App: FC = () => {
                         element={
                           <RotaSomenteDono titulo="Contas a Pagar">
                             <ContasPagar />
+                          </RotaSomenteDono>
+                        }
+                      />
+                      <Route
+                        path="/comissoes"
+                        element={
+                          <RotaSomenteDono titulo="Comissões">
+                            <Comissoes />
                           </RotaSomenteDono>
                         }
                       />
@@ -581,6 +631,7 @@ const App: FC = () => {
         </TourContext.Provider>
         </NovidadesContext.Provider>
        </OnboardingContext.Provider>
+      </ComissoesContext.Provider>
       </SessaoContext.Provider>
       {estadoAuth === 'bloqueado' && <LoginSistema onDesbloquear={aoLogar} />}
       {guiaAberto && estadoAuth === 'desbloqueado' && (
@@ -633,7 +684,16 @@ const ToastInicial: FC<{ aviso: string | null; onMostrado: () => void }> = ({
   return null
 }
 
-type ItemSidebar = { to: string; label: string; icon: LucideIcon; somenteDono?: boolean }
+type ItemSidebar = {
+  to: string
+  label: string
+  icon: LucideIcon
+  somenteDono?: boolean
+  // A aba de Comissões só existe pra quem usa comissão. Quem liga o módulo é a
+  // própria regra de negócio: definir um percentual (na loja ou em alguém) é o
+  // ato de adotar a funcionalidade. Loja que não paga comissão nunca vê a aba.
+  requerComissoes?: boolean
+}
 const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Visão geral',
@@ -664,7 +724,14 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Financeiro',
     itens: [
-      { to: '/contas-pagar', label: 'Contas a Pagar', icon: Receipt, somenteDono: true }
+      { to: '/contas-pagar', label: 'Contas a Pagar', icon: Receipt, somenteDono: true },
+      {
+        to: '/comissoes',
+        label: 'Comissões',
+        icon: BadgePercent,
+        somenteDono: true,
+        requerComissoes: true
+      }
     ]
   },
   {
@@ -755,7 +822,15 @@ const Sidebar: FC<{
   onRenovarComPix: () => void
   onAbrirCalculadora: () => void
   vendedor: SessaoVendedor | null
-}> = ({ diasRestantes, onBloquear, onRenovarComPix, onAbrirCalculadora, vendedor }) => (
+  comissoesAtivo: boolean
+}> = ({
+  diasRestantes,
+  onBloquear,
+  onRenovarComPix,
+  onAbrirCalculadora,
+  vendedor,
+  comissoesAtivo
+}) => (
   <nav data-tour="menu" className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
     <div className="mb-4">
       <h1 className="text-lg font-bold text-white">FHVP Tech</h1>
@@ -771,7 +846,9 @@ const Sidebar: FC<{
             {cat.titulo}
           </p>
           <div className="flex flex-col gap-1">
-            {cat.itens.map(({ to, label, icon: Icon, somenteDono }) => {
+            {cat.itens
+              .filter((item) => !item.requerComissoes || comissoesAtivo)
+              .map(({ to, label, icon: Icon, somenteDono }) => {
               const bloqueado = somenteDono && vendedor?.papel !== 'dono'
               return (
                 <NavLink

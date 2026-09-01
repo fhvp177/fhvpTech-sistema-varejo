@@ -76,8 +76,12 @@ const SCHEMA = `
   CREATE TABLE vendedores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    ativo INTEGER NOT NULL DEFAULT 1
+    ativo INTEGER NOT NULL DEFAULT 1,
+    comissao_pct REAL
   );
+  -- criarVenda carimba o percentual de comissão vigente na venda, e cai no
+  -- padrão da loja quando o vendedor não tem o seu (ver migration 038).
+  CREATE TABLE config (chave TEXT PRIMARY KEY, valor TEXT);
   CREATE TABLE clientes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
@@ -116,7 +120,8 @@ const SCHEMA = `
     data_vencimento DATE,
     num_parcelas INTEGER,
     forma_pagamento TEXT,
-    cancelada INTEGER NOT NULL DEFAULT 0
+    cancelada INTEGER NOT NULL DEFAULT 0,
+    comissao_pct REAL
   );
   CREATE TABLE itens_venda (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

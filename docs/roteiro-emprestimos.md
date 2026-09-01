@@ -226,6 +226,11 @@ funcionando, só sem movimento.
     ✅ O campo "Vencimento" some e aparece "1ª parcela vence em".
 57. Abrir o seletor de parcelas e **rolar a lista com a roda do mouse**.
     ✅ Ela rola. (Já foi um bug: a lista abria e ficava parada dentro do diálogo.)
+    ✅ **Rolar até o fim: a última opção (24x) tem que aparecer inteira.**
+    Se o campo estiver perto do rodapé da janela, a lista encolhe ou vira pra
+    cima — o que ela nunca pode é terminar fora da tela. (Já foi um bug: as
+    duas últimas opções ficavam inalcançáveis mesmo rolando até o fim.)
+    ✅ Testar também com a **janela do app reduzida** pela metade.
 58. Parcelas: `4`. Primeira parcela: **daqui a 30 dias**.
     ✅ A prévia lista as 4 parcelas, com data e valor — e **a soma bate 900,00**.
     ✅ O seletor de quantidade mostra "de R$ 225,00 (aprox.)" em cada opção.

@@ -226,3 +226,78 @@
     opacity: 0;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * A SANFONA — a exceção documentada
+ *
+ * Esta é a ÚNICA animação da casa que mexe em propriedade de layout, e ela está
+ * aqui por decisão explícita, tomada sabendo o custo. As regras acima continuam
+ * valendo para todo o resto.
+ *
+ * ── Por que abriu-se exceção ────────────────────────────────────────────────
+ * Abrir uma seção recolhível É, por definição, mudar a altura. Dá para fingir —
+ * a caixa assume a altura final na hora e só o conteúdo aparece com fade — mas
+ * o resultado é visivelmente mais seco, e a tela de Configurações é o lugar da
+ * casa onde isso menos se justifica: ela é aberta por vontade própria, poucas
+ * vezes, sem ninguém esperando atrás. O imposto de 300x por dia que condena
+ * animação decorativa nas telas de trabalho simplesmente não incide aqui.
+ *
+ * ── Como o custo foi contido ────────────────────────────────────────────────
+ *  1. **120ms de teto.** É o suficiente para o olho ler "abriu" e curto demais
+ *     para acumular engasgo. Duração é o único parâmetro que separa esta
+ *     exceção de um problema de verdade — por isso ela é PINADA por teste.
+ *  2. **`grid-template-rows: 0fr → 1fr`**, e não `height` nem `max-height`. O
+ *     navegador interpola a trilha do grid sem que ninguém precise medir o
+ *     conteúdo em JS, e sem o salto que `max-height` chutado sempre dá.
+ *  3. **O conteúdo entra por cima**, com `opacity` + `transform` (custo zero),
+ *     entrando 60ms depois. É esse atraso que faz a abertura parecer suave: o
+ *     olho segue o conteúdo, não a borda da caixa.
+ *
+ * ── O recorte só existe enquanto dura ───────────────────────────────────────
+ * `overflow: hidden` é o que permite o recorte durante a transição, mas ele
+ * também cortaria qualquer coisa que precise transbordar da seção depois de
+ * aberta. Por isso quem usa a sanfona TIRA a classe de recorte quando a
+ * transição termina (ver SecaoConfig). Sem isso, um dia alguém coloca um
+ * popover dentro de uma seção e ele aparece decapitado, sem explicação.
+ */
+.anim-sanfona {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.anim-sanfona-aberta {
+  grid-template-rows: 1fr;
+}
+/* Só enquanto a transição roda. Removida ao assentar. */
+.anim-sanfona-recorta {
+  overflow: hidden;
+  min-height: 0;
+}
+.anim-sanfona-conteudo {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 180ms ease-out 60ms,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1) 60ms;
+}
+.anim-sanfona-aberta .anim-sanfona-conteudo {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Sem movimento nenhum: a seção troca de estado num quadro só. O conteúdo
+   * precisa ficar VISÍVEL — se só a transição fosse desligada, ele congelaria
+   * em opacity 0 e a seção abriria vazia. */
+  .anim-sanfona,
+  .anim-sanfona-conteudo {
+    transition: none;
+  }
+  .anim-sanfona-aberta .anim-sanfona-conteudo,
+  .anim-sanfona-conteudo {
+    transform: none;
+  }
+  .anim-sanfona-aberta .anim-sanfona-conteudo {
+    opacity: 1;
+  }
+}

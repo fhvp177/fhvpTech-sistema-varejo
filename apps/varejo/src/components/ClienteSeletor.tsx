@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { posicaoDropdown, type PosicaoDropdown } from '@fhvptech/core/lib/posicaoDropdown'
 import { Search, X, User, Building2, ChevronDown } from 'lucide-react'
 
 export type ClienteSeletorHandle = {
@@ -143,11 +144,7 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
    * `scrollHeight`, então nem rolando ela apareceria. No portal ela fica presa
    * à janela e nunca é cortada, esteja o seletor dentro de um diálogo ou não.
    */
-  const [posicaoLista, setPosicaoLista] = useState<{
-    left: number
-    top: number
-    width: number
-  } | null>(null)
+  const [posicaoLista, setPosicaoLista] = useState<PosicaoDropdown | null>(null)
 
   useEffect(() => {
     if (!aberto) {
@@ -158,7 +155,7 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
       const el = containerRef.current
       if (!el) return
       const r = el.getBoundingClientRect()
-      setPosicaoLista({ left: r.left, top: r.bottom, width: r.width })
+      setPosicaoLista(posicaoDropdown(r, window))
     }
     medir()
     // O diálogo pode rolar por baixo da lista aberta; remedir mantém as duas
@@ -247,10 +244,13 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
             `dropdownDentroDeModal.test.ts`.
           */
           <div
-            className="fixed z-[60] mt-1 bg-popover border rounded-md shadow-lg overflow-hidden"
+            className={`fixed z-[60] ${posicaoLista.bottom != null ? 'mb-1' : 'mt-1'}  bg-popover border rounded-md shadow-lg overflow-hidden`}
             style={{
               left: posicaoLista.left,
+              // Abre pra baixo ou pra cima conforme o espaço da janela — quando
+              // vira, ancora pelo `bottom` e cresce pra cima sozinha.
               top: posicaoLista.top,
+              bottom: posicaoLista.bottom,
               width: posicaoLista.width,
               pointerEvents: 'auto'
             }}
@@ -266,7 +266,8 @@ const ClienteSeletor = forwardRef<ClienteSeletorHandle, Props>(({
             // chegar ao document, e o navegador rola normalmente.
             onWheel={(e) => e.stopPropagation()}
           >
-          <ul ref={listaRef} className="max-h-72 overflow-y-auto py-1">
+          <ul ref={listaRef} className="overflow-y-auto py-1"
+            style={{ maxHeight: posicaoLista.maxHeight }}>
             {/* A opção "nenhum cliente" fica sempre disponível no topo */}
             <li
               onMouseDown={(e) => { e.preventDefault(); selecionar('') }}

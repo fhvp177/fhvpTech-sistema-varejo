@@ -9,6 +9,7 @@ import {
   type ReactNode
 } from 'react'
 import { createPortal } from 'react-dom'
+import { posicaoDropdown, type PosicaoDropdown } from '@fhvptech/core/lib/posicaoDropdown'
 import { ChevronDown, Check } from 'lucide-react'
 import { cn } from '../lib/utils'
 
@@ -153,7 +154,7 @@ const Select: FC<Props> = ({
 
   // Onde desenhar a lista. Mesma medição do ClienteSeletor: presa à janela,
   // remedida quando algo rola, para nunca ser recortada por um diálogo.
-  const [posicao, setPosicao] = useState<{ left: number; top: number; width: number } | null>(null)
+  const [posicao, setPosicao] = useState<PosicaoDropdown | null>(null)
   useEffect(() => {
     if (!aberto) {
       setPosicao(null)
@@ -165,7 +166,7 @@ const Select: FC<Props> = ({
       const el = botaoRef.current
       if (!el) return
       const r = el.getBoundingClientRect()
-      setPosicao({ left: r.left, top: r.bottom, width: r.width })
+      setPosicao(posicaoDropdown(r, window))
     }
     medir()
     window.addEventListener('resize', medir)
@@ -276,10 +277,13 @@ const Select: FC<Props> = ({
             no cabeçalho deste arquivo. Guardado por `dropdownDentroDeModal.test.ts`.
           */
           <div
-            className="fixed z-[60] mt-1 overflow-hidden rounded-md border bg-popover shadow-lg"
+            className={`fixed z-[60] ${posicao.bottom != null ? 'mb-1' : 'mt-1'}  overflow-hidden rounded-md border bg-popover shadow-lg`}
             style={{
               left: posicao.left,
+              // Abre pra baixo ou pra cima conforme o espaço da janela — quando
+              // vira, ancora pelo `bottom` e cresce pra cima sozinha.
               top: posicao.top,
+              bottom: posicao.bottom,
               width: posicao.width,
               pointerEvents: 'auto'
             }}
@@ -295,7 +299,8 @@ const Select: FC<Props> = ({
             // chegar ao document, e o navegador rola normalmente.
             onWheel={(e) => e.stopPropagation()}
           >
-            <ul ref={listaRef} role="listbox" className="max-h-72 overflow-y-auto py-1">
+            <ul ref={listaRef} role="listbox" className="overflow-y-auto py-1"
+            style={{ maxHeight: posicao.maxHeight }}>
               {opcoes.length === 0 && (
                 <li className="px-3 py-3 text-center text-sm text-muted-foreground">
                   Nenhuma opção disponível.

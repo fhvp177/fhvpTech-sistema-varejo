@@ -23,5 +23,6 @@ export const nomeImpressao = {
   // mes vem como 'YYYY-MM' (já filesystem-safe) — ex.: Relatorio-Vendas-2026-06
   relatorioVendas: (mes: string): string => `Relatorio-Vendas-${mes}`,
   relatorioEntradas: (mes: string): string => `Relatorio-Entradas-${mes}`,
+  relatorioComissoes: (mes: string): string => `Relatorio-Comissoes-${mes}`,
   etiquetas: (d: Date = new Date()): string => `Etiquetas-${dataHoraSlug(d)}`
 }

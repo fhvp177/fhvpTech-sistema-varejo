@@ -8,3 +8,4 @@ licenca.lic
 desktop.ini
 .claude/
 *.tsbuildinfo
+/data/

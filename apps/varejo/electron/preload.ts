@@ -59,6 +59,24 @@ const api = {
       ipcRenderer.invoke('contasPagar:estornarPagamento', id)
   },
 
+  // Comissão de vendedores. Todo canal exige gerente do outro lado.
+  comissoes: {
+    configurado: (): Promise<RespostaIPC> => ipcRenderer.invoke('comissoes:configurado'),
+    resumo: (mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comissoes:resumo', mes),
+    detalhe: (vendedorId: number | null, mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comissoes:detalhe', vendedorId, mes),
+    registrarPagamento: (dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comissoes:registrarPagamento', dados),
+    estornarPagamento: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comissoes:estornarPagamento', id),
+    listarPagamentos: (vendedorId?: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comissoes:listarPagamentos', vendedorId),
+    obterPadrao: (): Promise<RespostaIPC> => ipcRenderer.invoke('comissoes:obterPadrao'),
+    definirPadrao: (pct: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comissoes:definirPadrao', pct)
+  },
+
   // Notas de entrada (importação de NF-e via XML)
   notasEntrada: {
     analisar: (

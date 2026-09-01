@@ -1,4 +1,5 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { validarPct } from './comissoes'
 
 export type PapelVendedor = 'dono' | 'vendedor'
 
@@ -10,6 +11,11 @@ export type Vendedor = {
   email: string | null
   tem_pin: number
   vendas_count: number
+  // Percentual de comissão desta pessoa. NULL = "usa o padrão da loja", que é
+  // diferente de 0 ("esta pessoa não ganha comissão"). Manter os dois estados
+  // separados é o que permite mudar o padrão da loja sem atropelar quem tem
+  // acordo próprio.
+  comissao_pct: number | null
 }
 
 // Versão mínima usada na tela de login — não inclui dados sensíveis e nem
@@ -31,7 +37,7 @@ export type VendedorParaLogin = {
 }
 
 const COLUNAS_PUBLICAS = `
-  v.id, v.nome, v.ativo, v.papel, v.email,
+  v.id, v.nome, v.ativo, v.papel, v.email, v.comissao_pct,
   CASE WHEN v.pin_hash IS NOT NULL AND LENGTH(v.pin_hash) > 0 THEN 1 ELSE 0 END AS tem_pin,
   (SELECT COUNT(*) FROM vendas vd WHERE vd.vendedor_id = v.id) AS vendas_count
 `
@@ -129,26 +135,38 @@ export function criarVendedor(
 
 export function atualizarVendedor(
   id: number,
-  dados: { nome?: string; email?: string | null }
+  dados: { nome?: string; email?: string | null; comissao_pct?: number | null }
 ): void {
   const db = obterBancoDeDados()
-  const atual = db.prepare('SELECT nome, email FROM vendedores WHERE id = ?').get(id) as
-    | { nome: string; email: string | null }
-    | undefined
+  const atual = db
+    .prepare('SELECT nome, email, comissao_pct FROM vendedores WHERE id = ?')
+    .get(id) as { nome: string; email: string | null; comissao_pct: number | null } | undefined
   if (!atual) throw new Error('Vendedor não encontrado.')
 
   const novoNome = dados.nome !== undefined ? dados.nome.trim() : atual.nome
   if (!novoNome) throw new Error('Nome do vendedor não pode ficar vazio.')
   const novoEmail =
     dados.email !== undefined ? (dados.email?.trim() || null) : atual.email
+  // null aqui é intencional e significa "volta a usar o padrão da loja" — por
+  // isso o campo é comparado com `undefined`, e não testado pela verdade.
+  const novaComissao =
+    dados.comissao_pct !== undefined
+      ? dados.comissao_pct === null
+        ? null
+        : validarPct(dados.comissao_pct)
+      : atual.comissao_pct
 
-  if (novoNome === atual.nome && novoEmail === atual.email) return
+  if (
+    novoNome === atual.nome &&
+    novoEmail === atual.email &&
+    novaComissao === atual.comissao_pct
+  ) {
+    return
+  }
 
-  db.prepare('UPDATE vendedores SET nome = ?, email = ? WHERE id = ?').run(
-    novoNome,
-    novoEmail,
-    id
-  )
+  db.prepare(
+    'UPDATE vendedores SET nome = ?, email = ?, comissao_pct = ? WHERE id = ?'
+  ).run(novoNome, novoEmail, novaComissao, id)
 }
 
 // Troca o papel de um vendedor. Bloqueia rebaixar o último gerente ativo

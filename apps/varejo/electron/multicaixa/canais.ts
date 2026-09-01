@@ -49,6 +49,22 @@ export const CANAIS_LOCAIS = [
   'backup:restaurar',
   'backup:selecionarPasta',
   'backup:verificarSenha',
+  // Comissão — folha de pagamento não anda na rede.
+  //
+  // Todo canal aqui já exige gerente no backend, então nada disso responderia a
+  // um vendedor no terminal de qualquer forma. Ficar local é a segunda camada:
+  // o notebook do multi-caixa pode estar fora da loja, e quanto o time inteiro
+  // ganha é o dado mais sensível do banco. Se um dia o gerente pedir pra
+  // consultar comissão do notebook, é mover estas linhas pra CANAIS_REDE — uma
+  // decisão consciente, que é justamente o que esta lista força.
+  'comissoes:configurado',
+  'comissoes:definirPadrao',
+  'comissoes:detalhe',
+  'comissoes:estornarPagamento',
+  'comissoes:listarPagamentos',
+  'comissoes:obterPadrao',
+  'comissoes:registrarPagamento',
+  'comissoes:resumo',
   // Abre diálogo de pasta no PC.
   'fiscal:salvarXmls',
   'notasEntrada:exportarXmls',

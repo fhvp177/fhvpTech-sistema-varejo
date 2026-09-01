@@ -6,6 +6,7 @@ import { Select } from '@fhvptech/core/ui/select'
 import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
+import ConfigComissao from '@/components/ConfigComissao'
 import CadastroPixLoja from '@/components/CadastroPixLoja'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
 import ConfigImpressao from '@/components/ConfigImpressao'
@@ -568,6 +569,7 @@ const Configuracoes: FC = () => {
           Cadastre os vendedores da loja. Cada venda registra o vendedor que a realizou,
           permitindo acompanhar produção individual no histórico.
         </p>
+        <ConfigComissao />
         <CadastroVendedores />
         </div>
       </SecaoConfig>
