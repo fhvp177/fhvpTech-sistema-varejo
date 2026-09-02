@@ -1,0 +1,23 @@
+# Worker que publica o painel do revendedor em fhvptech.com.
+#
+# A rota mora AQUI, e não no painel do Cloudflare, de propósito: worker
+# configurado por clique descola do arquivo versionado — o repositório passa a
+# dizer uma coisa e a produção outra, e a próxima alteração vira arqueologia.
+# Com isto, `npx wrangler deploy` publica o código E garante a rota.
+#
+# Publicar:  cd tools/cloudflare && npx wrangler deploy
+# (exige `npx wrangler login` uma vez, num terminal interativo)
+
+name = "painel-do-revendedor"
+main = "painel-do-revendedor.worker.js"
+compatibility_date = "2026-01-01"
+
+# Sem endereço em workers.dev: este worker só deve ser alcançável pela rota de
+# marca. Um segundo endereço público seria superfície a mais sem ninguém ganhar.
+workers_dev = false
+
+# A estrela é obrigatória — sem ela só o caminho exato passaria, e o CSS, o
+# logotipo e as chamadas de API (que vêm como sufixos) ficariam de fora.
+[[routes]]
+pattern = "fhvptech.com/painel-do-revendedor*"
+zone_name = "fhvptech.com"

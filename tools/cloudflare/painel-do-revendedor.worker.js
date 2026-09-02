@@ -97,6 +97,27 @@ export default {
     // Só o HTML precisa da <base>; o resto passa intocado.
     if (caminho !== '/painel') return saida
 
+    // ⚠️ A CSP da página traz `base-uri 'none'`, que PROÍBE a tag <base>.
+    //
+    // Não é descuido do backend: é defesa contra exatamente o que este Worker
+    // faz de propósito — injetar uma <base> e com isso redirecionar todo
+    // caminho relativo da página. Contra um atacante, essa diretiva é o que
+    // impede sequestrar o CSS e as chamadas de API de uma vez.
+    //
+    // Servido direto pelo Fly, nada injeta <base> e a proibição continua
+    // valendo inteira. Aqui, e só aqui, ela é afrouxada para `'self'`: a <base>
+    // passa a ser permitida, mas apenas apontando para a própria origem. É a
+    // menor abertura que resolve — trocar por `*` ou remover a diretiva
+    // devolveria o buraco que ela existe para fechar.
+    //
+    // Sem isto o navegador descarta a <base> em silêncio (nem erro de console
+    // aparece), os caminhos voltam a resolver contra a raiz do domínio, e a
+    // página abre sem estilo nenhum. Foi assim que este bug apareceu.
+    const csp = saida.headers.get('content-security-policy')
+    if (csp) {
+      saida.headers.set('content-security-policy', csp.replace("base-uri 'none'", "base-uri 'self'"))
+    }
+
     return new HTMLRewriter()
       .on('head', {
         element(head) {
