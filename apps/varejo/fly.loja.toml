@@ -1,0 +1,92 @@
+# Modelo de configuração de UMA loja hospedada.
+#
+# ⚠️ Este arquivo é MODELO. Cada loja é um app próprio no Fly, com nome próprio
+# e volume próprio — por isso `app` fica em branco e vai na linha de comando:
+#
+#   fly deploy --config fly.loja.toml --app fhvp-nomedaloja
+#
+# ── Por que um app por loja, e não um app com várias máquinas ────────────────
+# A conexão com o banco é uma variável única do processo, consultada em 334
+# lugares do código. Fazer um processo atender várias lojas significaria
+# carregar a identidade da loja por todos eles — bem no caminho onde mora o
+# dinheiro: estoque, venda, comissão. Um erro ali não dá tela vermelha, dá baixa
+# de estoque na loja errada.
+#
+# E há o motivo mais forte: o que impede vender a última unidade duas vezes é o
+# banco ser SÍNCRONO, uma operação por vez. Isso continua valendo com um
+# processo por loja. Espalhar por processos abriria esse vão sem quebrar teste
+# nenhum.
+#
+# Então o isolamento é de infraestrutura, não de código: uma loja, uma máquina,
+# um disco, um arquivo de banco. É a instalação de sempre, na nuvem.
+#
+# ── Roteiro para abrir uma loja nova ─────────────────────────────────────────
+#   fly apps create fhvp-nomedaloja
+#   fly volumes create loja_dados --app fhvp-nomedaloja --region gru --size 1
+#   fly secrets set --app fhvp-nomedaloja \
+#       CHAVE_HMAC=... CHAVE_AES=... SALT_AES=... \
+#       R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... \
+#       R2_BUCKET_BACKUPS=fhvp-backups
+#   npm run build:web
+#   fly deploy --config fly.loja.toml --app fhvp-nomedaloja
+#
+# Depois, a licença: a loja abre pedindo ativação, como qualquer instalação
+# nova, e a chave é cunhada no painel de sempre.
+
+primary_region = "gru" # São Paulo — o dado do cliente não sai do Brasil (LGPD)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # ⚠️ NÃO desligar a máquina por ociosidade. Duas razões:
+  #
+  # 1. É um caixa. O lojista abre o sistema e espera a tela, não um servidor
+  #    acordando. Meio segundo de espera na frente do cliente é inaceitável.
+  # 2. O backup e o envio para a nuvem rodam por temporizador DENTRO do
+  #    processo. Máquina dormindo é loja sem backup — e sem ninguém perceber.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  # Uma máquina só, sempre. Duas escrevendo no mesmo banco é justamente o que
+  # este desenho existe para impedir.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+# Checagem de saúde: o `/saude` responde sem tocar no banco, então ele diz
+# "o processo está de pé", que é o que o Fly precisa saber para decidir se o
+# deploy vingou.
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "20s"
+  method = "GET"
+  path = "/saude"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # 512 MB e não 256: o Chromium ficou do lado do tablet, mas o backup compacta
+  # o banco inteiro em memória, e é nessa hora que o consumo sobe. Errar para
+  # baixo custa a máquina morrer exatamente durante o backup.
+  memory = "512mb"
+
+[[mounts]]
+  source = "loja_dados"
+  destination = "/data"
+  # 1 GB cobre uma loja de venda pouca e cara por muitos anos. O que faz o banco
+  # crescer não são as vendas: é o XML fiscal guardado dentro dele (uma nota de
+  # fornecedor medida deu 12,7 KB, e a lei pede cinco anos de guarda). Uma loja
+  # de volume alto pede mais — `fly volumes extend` resolve sem parar nada.
+  initial_size = "1gb"
+
+[env]
+  FHVP_DADOS = "/data"
+  FHVP_WEB = "/app/dist-web"
+  PORT = "8080"
+  NODE_ENV = "production"
