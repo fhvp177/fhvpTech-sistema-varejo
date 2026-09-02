@@ -21,12 +21,29 @@
 import { resolve } from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync, renameSync } from 'fs'
 import { FEATURES_POR_EDICAO } from './edicoes'
+
+/**
+ * O arquivo de entrada se chama `index.web.html` (para não disputar com o
+ * `index.html` do app instalado), mas o navegador tem que receber `index.html`
+ * — é o nome que todo servidor entrega quando alguém pede a raiz.
+ */
+function renomearParaIndex(saida: string): { name: string; closeBundle(): void } {
+  return {
+    name: 'fhvp-renomeia-index',
+    closeBundle() {
+      const de = resolve(saida, 'index.web.html')
+      if (existsSync(de)) renameSync(de, resolve(saida, 'index.html'))
+    }
+  }
+}
 
 const APP_VERSION = JSON.parse(
   readFileSync(resolve(__dirname, 'package.json'), 'utf8')
 ).version as string
+
+const SAIDA = resolve(__dirname, 'dist-web')
 
 const EDICAO = process.env.EDICAO ?? 'pro'
 const FEATURES = FEATURES_POR_EDICAO[EDICAO]
@@ -43,11 +60,11 @@ export default defineConfig({
   // de um domínio quanto um subcaminho, sem recompilar.
   base: './',
   build: {
-    outDir: resolve(__dirname, 'dist-web'),
+    outDir: SAIDA,
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: resolve(__dirname, 'index.html')
+        index: resolve(__dirname, 'index.web.html')
       }
     }
   },
@@ -58,6 +75,7 @@ export default defineConfig({
   },
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __ALVO__: JSON.stringify('web'),
     __EDICAO__: JSON.stringify(EDICAO),
     __FEAT_DASHBOARD__: JSON.stringify(FEATURES.dashboard),
     __FEAT_CHATBOT__: JSON.stringify(FEATURES.chatbot),
@@ -67,5 +85,5 @@ export default defineConfig({
     __FEAT_PAGAMENTO__: JSON.stringify(FEATURES.pagamento),
     __FEAT_MULTICAIXA__: JSON.stringify(FEATURES.multicaixa)
   },
-  plugins: [react()]
+  plugins: [react(), renomearParaIndex(SAIDA)]
 })

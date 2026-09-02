@@ -1,3 +1,6 @@
+/** Onde esta interface está rodando: na janela instalada ou no navegador. */
+declare const __ALVO__: 'desktop' | 'web'
+
 // Tipos da API exposta pelo preload via contextBridge
 // Mantido em sync com electron/preload.ts
 

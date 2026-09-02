@@ -106,6 +106,7 @@ export default defineConfig({
     },
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
+      __ALVO__: JSON.stringify('desktop'),
       __EDICAO__: JSON.stringify(EDICAO),
       __FEAT_DASHBOARD__: JSON.stringify(FEATURES.dashboard),
       __FEAT_CHATBOT__: JSON.stringify(FEATURES.chatbot),

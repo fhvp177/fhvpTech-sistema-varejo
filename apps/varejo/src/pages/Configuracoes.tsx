@@ -228,6 +228,12 @@ const Configuracoes: FC = () => {
       await window.api.backup.gravarConfig('backup_pasta_padrao', pasta)
       mostrarFeedback('ok', 'Pasta primária atualizada!')
       await carregarStatus()
+    } else if (!resp.success) {
+      // Sem este ramo, o botão ficava mudo: clicar não abria nada e não dizia
+      // nada. No aplicativo instalado isso quase nunca acontecia, então passou
+      // despercebido; pelo navegador acontece sempre, porque uma página não
+      // escolhe pasta do computador.
+      mostrarFeedback('erro', resp.error)
     }
   }
 
@@ -239,6 +245,12 @@ const Configuracoes: FC = () => {
       await window.api.backup.gravarConfig('backup_pasta_secundaria', pasta)
       mostrarFeedback('ok', 'Pasta secundária configurada!')
       await carregarStatus()
+    } else if (!resp.success) {
+      // Sem este ramo, o botão ficava mudo: clicar não abria nada e não dizia
+      // nada. No aplicativo instalado isso quase nunca acontecia, então passou
+      // despercebido; pelo navegador acontece sempre, porque uma página não
+      // escolhe pasta do computador.
+      mostrarFeedback('erro', resp.error)
     }
   }
 

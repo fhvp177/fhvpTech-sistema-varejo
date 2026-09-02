@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["electron/**/*", "electron.vite.config.ts"]
+  "include": ["electron/**/*", "servidor/**/*", "electron.vite.config.ts", "vite.servidor.config.ts", "edicoes.ts"]
 }

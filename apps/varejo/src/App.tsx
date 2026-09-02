@@ -1,5 +1,6 @@
 import { createContext, FC, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { MemoryRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
+import { GuardaDoVoltar } from './web/GuardaDoVoltar'
 import {
   Lock,
   LayoutDashboard,
@@ -501,6 +502,15 @@ const App: FC = () => {
              value={{ aberta: calculadoraAberta, alternar: () => setCalculadoraAberta((v) => !v) }}
            >
             <MemoryRouter>
+              {/*
+                No navegador, o botão "voltar" do aparelho precisa andar dentro
+                do sistema em vez de sair dele — ver web/GuardaDoVoltar.tsx.
+                A constante é literal no build, então no aplicativo instalado
+                este componente nem entra no pacote.
+              */}
+              {__ALVO__ === 'web' && (
+                <GuardaDoVoltar pdvAtivo={pdvAtivo} setPdvAtivo={setPdvAtivo} />
+              )}
               <div className="flex h-screen bg-background">
                 {!pdvAtivo && (
                   <Sidebar

@@ -9,6 +9,10 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:web": "vite build --config vite.web.config.ts && vite build --config vite.servidor.config.ts",
+    "servidor": "node dist-servidor/servidor.mjs",
+    "servidor:local": "node scripts/servidor-local.js",
+    "publicar:lojas": "node scripts/publicar-lojas.js",
     "setup": "npm install --ignore-scripts && node node_modules/electron/install.js && electron-builder install-app-deps",
     "rebuild-native": "electron-builder install-app-deps",
     "dist": "node scripts/dist-bloqueado.js",
