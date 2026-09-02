@@ -283,6 +283,9 @@ const stmts = {
        acbr_id = excluded.acbr_id, status = excluded.status, chave = excluded.chave`
   ),
   getContagem: db.prepare('SELECT total FROM nfce_contagem WHERE cliente_id = ? AND mes = ?'),
+  getContagemDoMes: db.prepare(
+    'SELECT cliente_id, total FROM nfce_contagem WHERE mes = ?'
+  ),
   incContagem: db.prepare(
     `INSERT INTO nfce_contagem (cliente_id, mes, total) VALUES (?, ?, 1)
      ON CONFLICT(cliente_id, mes) DO UPDATE SET total = total + 1`
@@ -335,6 +338,23 @@ export function contarNotasMes(clienteId: string): number {
 export function registrarNotaMes(clienteId: string): void {
   const mes = new Date().toISOString().slice(0, 7)
   stmts.incContagem.run(clienteId, mes)
+}
+
+/**
+ * Contagem de TODAS as lojas num mês, de uma consulta só.
+ *
+ * Existe para o painel da FHVP: perguntar loja a loja daria uma consulta por
+ * cliente só para desenhar uma tabela. O mês é o corrente (UTC) quando não
+ * informado; aceita 'AAAA-MM' para olhar um mês fechado — que é o que se usa na
+ * hora de cobrar o excedente, já que o mês corrente ainda está andando.
+ */
+export function contarNotasMesDeTodos(mes?: string): Map<string, number> {
+  const alvo = mes ?? new Date().toISOString().slice(0, 7)
+  const linhas = stmts.getContagemDoMes.all(alvo) as Array<{
+    cliente_id: string
+    total: number
+  }>
+  return new Map(linhas.map((l) => [l.cliente_id, l.total]))
 }
 
 export type TokenAcbrGravado = {

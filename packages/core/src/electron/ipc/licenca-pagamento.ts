@@ -35,6 +35,41 @@ export function registrarHandlersLicencaPagamento(): void {
     }
   })
 
+  /**
+   * Quem atende esta loja — a FHVP ou o revendedor que a vendeu.
+   *
+   * Serve à tela de licença bloqueada, que é onde a pergunta importa: ela mostra
+   * um telefone e um botão de renovar por PIX, e os dois estão ERRADOS para
+   * quem comprou de um revendedor. O PIX cairia na conta da FHVP (dinheiro no
+   * lado errado do ciclo) e o telefone mandaria o lojista ligar para quem não
+   * atende a conta dele.
+   *
+   * ── Falhar aqui não pode piorar a tela ───────────────────────────────────
+   * Esta consulta acontece justamente quando a licença venceu — e uma loja com
+   * a licença vencida tem chance real de estar sem internet. Por isso qualquer
+   * problema (offline, backend fora, resposta estranha) devolve `null`, e a tela
+   * cai no texto genérico da FHVP. Nunca um erro na cara de quem já está vendo
+   * uma tela de bloqueio.
+   *
+   * O timeout curto é parte disso: sem ele, a tela ficaria com o contato em
+   * branco por meio minuto esperando um servidor que não vem.
+   */
+  ipcMain.handle('licenca:suporte', async () => {
+    try {
+      const clienteId = extrairClienteIdLocal()
+      if (!clienteId) return { success: true, data: null }
+
+      const resp = await fetch(`${URL_BACKEND}/suporte/${encodeURIComponent(clienteId)}`, {
+        signal: AbortSignal.timeout(5000)
+      })
+      if (!resp.ok) return { success: true, data: null }
+      return { success: true, data: await resp.json() }
+    } catch {
+      // Offline é o caso ESPERADO, não uma exceção — daí o catch mudo.
+      return { success: true, data: null }
+    }
+  })
+
   ipcMain.handle(
     'licenca:criarCobranca',
     async (

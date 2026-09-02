@@ -233,6 +233,8 @@ const api = {
     validar: (): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:validar'),
     ativar: (chave: string): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:ativar', chave),
     obterClienteId: (): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:obterClienteId'),
+    // Quem atende esta loja (FHVP ou revendedor). Falha vira null, nunca erro.
+    suporte: (): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:suporte'),
     destravarRelogio: (): Promise<RespostaIPC> => ipcRenderer.invoke('licenca:destravarRelogio'),
     criarCobranca: (dados: {
       diasContratados?: number

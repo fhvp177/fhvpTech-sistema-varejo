@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel FHVP Tech</title>
+<!-- Identidade compartilhada com o painel do revendedor. Ver /painel.css. -->
+<link rel="stylesheet" href="/painel.css">
+</head>
+<body>
+
+<div id="telaLogin">
+  <form class="cartao-login" id="formLogin">
+    <img class="logo-entrada" src="/painel-logo.png" alt="FHVP Tech" width="104" height="104">
+    <div class="marca" style="text-align:center">FHVP <span>Tech</span></div>
+    <div class="selo">Administração</div>
+    <p class="sub" style="text-align:center;margin-top:10px">Revendedores e lojas da rede.</p>
+    <label for="campoToken">Token de administração</label>
+    <input id="campoToken" type="password" autocomplete="off" spellcheck="false"
+           placeholder="cole o ADMIN_TOKEN">
+    <p class="sub" style="margin:8px 0 0;font-size:13px">
+      O token fica só na memória desta aba. Recarregar a página pede de novo — de propósito.
+    </p>
+    <div id="erroLogin" class="aviso erro" hidden style="margin-top:14px"></div>
+    <button id="botaoEntrar" type="submit" style="width:100%;margin-top:18px">Entrar</button>
+  </form>
+</div>
+
+<div id="telaApp" hidden>
+  <header class="topo">
+    <div class="marca">FHVP <span>Tech</span></div>
+    <div class="crescer"></div>
+    <button class="neutro pequeno" id="botaoAtualizar" type="button">Atualizar</button>
+    <button class="neutro pequeno" id="botaoSair" type="button">Sair</button>
+  </header>
+
+  <main>
+    <div class="abas" role="tablist">
+      <button role="tab" id="abaRevendedores" aria-selected="true" type="button">Revendedores</button>
+      <button role="tab" id="abaClientes" aria-selected="false" type="button">Lojas</button>
+    </div>
+
+    <div id="erroGeral" class="aviso erro" hidden style="margin-bottom:16px"></div>
+
+    <section id="painelRevendedores">
+      <div class="cards" id="cartoesRevenda"></div>
+      <div class="painel"><div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>Revendedor</th><th>Validade</th><th>Situação</th>
+          <th class="num">Lojas</th><th class="num">Ativas</th><th>Recuperação</th><th></th>
+        </tr></thead>
+        <tbody id="corpoRevendedores"></tbody>
+      </table></div></div>
+    </section>
+
+    <section id="painelClientes" hidden>
+      <div class="cards" id="cartoesClientes"></div>
+      <div class="painel"><div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>Loja</th><th>Origem</th><th>Plano</th><th>Validade</th>
+          <th class="num">Notas</th><th class="num">Excedente</th><th>Situação</th><th></th>
+        </tr></thead>
+        <tbody id="corpoClientes"></tbody>
+      </table></div></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dialogo" aria-labelledby="dialogoTitulo"></dialog>
+
+<script>
+(function () {
+  'use strict'
+
+  /**
+   * ── Por que o token NÃO é guardado ────────────────────────────────────────
+   * O ADMIN_TOKEN abre todas as lojas e todos os revendedores, e trocá-lo exige
+   * mexer nos segredos do Fly e reiniciar o backend — ou seja, é caro de
+   * revogar. Guardá-lo em localStorage transformaria qualquer comprometimento
+   * do navegador (extensão, XSS num outro site do mesmo perfil, máquina
+   * emprestada) numa perda permanente e silenciosa.
+   *
+   * Em memória, o estrago fica limitado ao tempo da aba aberta. O preço é ter
+   * que colar o token de novo depois de recarregar — que é justamente o
+   * lembrete de que esta tela não é para ficar aberta o dia todo.
+   *
+   * Diferente do painel do revendedor, que usa sessão de verdade (token opaco
+   * em banco, revogável na hora): lá havia como construir isso porque cada
+   * revendedor tem conta própria. Aqui a "conta" é o segredo do servidor.
+   */
+  let token = ''
+  let revendedores = []
+  let clientes = []
+
+  const $ = (id) => document.getElementById(id)
+  const dinheiro = (centavos) =>
+    (Number(centavos || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const dataBr = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '—')
+
+  function mostrarErro(el, msg) {
+    if (!msg) { el.hidden = true; el.textContent = ''; return }
+    el.textContent = msg
+    el.hidden = false
+  }
+
+  async function api(caminho, opcoes) {
+    const o = opcoes || {}
+    const cab = { 'Content-Type': 'application/json' }
+    if (token) cab.Authorization = 'Bearer ' + token
+    let resp
+    try {
+      resp = await fetch(caminho, {
+        method: o.metodo || 'GET',
+        headers: cab,
+        body: o.corpo ? JSON.stringify(o.corpo) : undefined
+      })
+    } catch (e) {
+      return { ok: false, erro: 'sem conexão com o servidor' }
+    }
+    let dados = {}
+    try { dados = await resp.json() } catch (e) { /* resposta sem corpo */ }
+    if (resp.status === 401) { sair('token recusado pelo servidor'); return { ok: false, erro: 'não autorizado' } }
+    return resp.ok ? { ok: true, dados } : { ok: false, erro: dados.erro || ('erro ' + resp.status) }
+  }
+
+  /**
+   * Diálogo único da página.
+   *
+   * Nenhuma caixa nativa do navegador entra aqui — nem `alert`, nem `confirm`,
+   * nem `prompt`. Elas travam o processo, não dá para estilizar, e o texto sai
+   * com o domínio do servidor em cima, o que numa tela de administração parece
+   * golpe. Regra da casa; este arquivo a segue como o painel do revendedor.
+   *
+   * Erro NÃO fecha o diálogo e devolve o cursor ao campo culpado — quem errou
+   * um número não deve ter que reabrir tudo e redigitar o resto.
+   */
+  function abrirModal(opcoes) {
+    const o = opcoes || {}
+    return new Promise((resolver) => {
+      const focoAnterior = document.activeElement
+      const caixa = $('dialogo')
+      caixa.replaceChildren()
+
+      const titulo = document.createElement('h2')
+      titulo.id = 'dialogoTitulo'
+      titulo.textContent = o.titulo || ''
+      caixa.appendChild(titulo)
+
+      if (o.subtitulo) {
+        const p = document.createElement('p')
+        p.className = 'sub'
+        p.style.margin = '0'
+        p.textContent = o.subtitulo
+        caixa.appendChild(p)
+      }
+      if (o.aviso) {
+        const a = document.createElement('div')
+        a.className = 'aviso ' + (o.avisoTipo || 'alerta')
+        a.style.marginTop = '14px'
+        a.textContent = o.aviso
+        caixa.appendChild(a)
+      }
+
+      const entradas = {}
+      for (const campo of (o.campos || [])) {
+        const rot = document.createElement('label')
+        rot.textContent = campo.rotulo
+        rot.htmlFor = 'campo_' + campo.id
+        caixa.appendChild(rot)
+
+        const inp = document.createElement('input')
+        inp.id = 'campo_' + campo.id
+        inp.type = campo.tipo || 'text'
+        inp.value = campo.valor == null ? '' : String(campo.valor)
+        if (campo.dica) inp.placeholder = campo.dica
+        if (campo.tipo === 'number') { inp.inputMode = 'numeric' }
+        inp.autocomplete = 'off'
+        caixa.appendChild(inp)
+        entradas[campo.id] = inp
+
+        if (campo.ajuda) {
+          const p = document.createElement('p')
+          p.className = 'sub'
+          p.style.margin = '6px 0 0'
+          p.style.fontSize = '13px'
+          p.textContent = campo.ajuda
+          caixa.appendChild(p)
+        }
+      }
+
+      const erro = document.createElement('div')
+      erro.className = 'aviso erro'
+      erro.hidden = true
+      erro.style.marginTop = '14px'
+      caixa.appendChild(erro)
+
+      const botoes = document.createElement('div')
+      botoes.className = 'modal-botoes'
+      const cancelar = document.createElement('button')
+      cancelar.type = 'button'
+      cancelar.className = 'neutro'
+      cancelar.textContent = o.rotuloCancelar || 'Cancelar'
+      const confirmar = document.createElement('button')
+      confirmar.type = 'button'
+      confirmar.className = o.perigo ? 'perigo-forte' : ''
+      confirmar.textContent = o.rotuloConfirmar || 'Confirmar'
+      botoes.append(cancelar, confirmar)
+      caixa.appendChild(botoes)
+
+      let vivo = true
+      function fechar(resultado) {
+        if (!vivo) return
+        vivo = false
+        caixa.close()
+        caixa.removeEventListener('cancel', aoCancelar)
+        caixa.removeEventListener('click', aoClicarFora)
+        caixa.removeEventListener('keydown', aoTeclar)
+        // Devolve o foco a quem abriu — sem isto o leitor de tela (e o Tab)
+        // recomeçam do topo da página a cada ação.
+        if (focoAnterior && focoAnterior.focus) focoAnterior.focus()
+        resolver(resultado)
+      }
+      const aoCancelar = (ev) => { ev.preventDefault(); fechar(null) }
+      const aoClicarFora = (ev) => { if (ev.target === caixa) fechar(null) }
+      const aoTeclar = (ev) => {
+        if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') { ev.preventDefault(); tentar() }
+      }
+
+      async function tentar() {
+        const valores = {}
+        for (const k of Object.keys(entradas)) valores[k] = entradas[k].value.trim()
+        confirmar.disabled = true
+        mostrarErro(erro, '')
+        let problema = null
+        try {
+          problema = o.aoConfirmar ? await o.aoConfirmar(valores) : null
+        } catch (e) {
+          problema = { mensagem: (e && e.message) || 'falhou' }
+        }
+        confirmar.disabled = false
+        if (problema) {
+          mostrarErro(erro, problema.mensagem || 'não deu certo')
+          const alvo = problema.campo && entradas[problema.campo]
+          if (alvo) { alvo.focus(); alvo.select && alvo.select() }
+          return
+        }
+        fechar(valores)
+      }
+
+      cancelar.addEventListener('click', () => fechar(null))
+      confirmar.addEventListener('click', tentar)
+      caixa.addEventListener('cancel', aoCancelar)
+      caixa.addEventListener('click', aoClicarFora)
+      caixa.addEventListener('keydown', aoTeclar)
+
+      caixa.showModal()
+      const primeiro = Object.keys(entradas)[0]
+      if (primeiro) entradas[primeiro].focus()
+      else confirmar.focus()
+    })
+  }
+
+  // ── Login ────────────────────────────────────────────────────────────────
+
+  $('formLogin').addEventListener('submit', async (ev) => {
+    ev.preventDefault()
+    const botao = $('botaoEntrar')
+    const digitado = $('campoToken').value.trim()
+    if (!digitado) return
+    botao.disabled = true
+    mostrarErro($('erroLogin'), '')
+
+    token = digitado
+    const r = await api('/admin/revendedores')
+    botao.disabled = false
+    if (!r.ok) {
+      token = ''
+      mostrarErro($('erroLogin'), r.erro === 'não autorizado' ? 'Token recusado.' : r.erro)
+      return
+    }
+    // O campo é limpo assim que o token entra na memória: ele não deve seguir
+    // no DOM, onde qualquer inspeção casual o mostraria em claro.
+    $('campoToken').value = ''
+    $('telaLogin').hidden = true
+    $('telaApp').hidden = false
+    aplicar(r.dados)
+    await carregarClientes()
+  })
+
+  function sair(motivo) {
+    token = ''
+    revendedores = []
+    clientes = []
+    $('telaApp').hidden = true
+    $('telaLogin').hidden = false
+    mostrarErro($('erroLogin'), motivo || '')
+  }
+  $('botaoSair').addEventListener('click', () => sair(''))
+
+  // ── Abas ─────────────────────────────────────────────────────────────────
+
+  function trocarAba(qual) {
+    const ehRevenda = qual === 'revendedores'
+    $('abaRevendedores').setAttribute('aria-selected', String(ehRevenda))
+    $('abaClientes').setAttribute('aria-selected', String(!ehRevenda))
+    $('painelRevendedores').hidden = !ehRevenda
+    $('painelClientes').hidden = ehRevenda
+  }
+  $('abaRevendedores').addEventListener('click', () => trocarAba('revendedores'))
+  $('abaClientes').addEventListener('click', () => trocarAba('clientes'))
+
+  // ── Carregar ─────────────────────────────────────────────────────────────
+
+  async function carregarRevendedores() {
+    const r = await api('/admin/revendedores')
+    if (!r.ok) { mostrarErro($('erroGeral'), r.erro); return }
+    aplicar(r.dados)
+  }
+  function aplicar(dados) {
+    revendedores = (dados && dados.revendedores) || []
+    mostrarErro($('erroGeral'), '')
+    desenharRevendedores()
+  }
+
+  async function carregarClientes() {
+    const r = await api('/admin/clientes')
+    if (!r.ok) { mostrarErro($('erroGeral'), r.erro); return }
+    clientes = (r.dados && r.dados.clientes) || []
+    desenharClientes()
+  }
+
+  async function recarregar() {
+    await carregarRevendedores()
+    await carregarClientes()
+  }
+  $('botaoAtualizar').addEventListener('click', recarregar)
+
+  // ── Revendedores ─────────────────────────────────────────────────────────
+
+  function situacaoRevendedor(rv) {
+    if (rv.bloqueado) return { texto: 'Bloqueado', classe: 'erro' }
+    if (!rv.validade) return { texto: 'Sem validade', classe: 'alerta' }
+    const hoje = new Date().toISOString().slice(0, 10)
+    if (rv.validade < hoje) return { texto: 'Vencido', classe: 'alerta' }
+    return { texto: 'Em dia', classe: 'ok' }
+  }
+
+  function desenharRevendedores() {
+    const ativos = revendedores.reduce((s, r) => s + (r.clientesAtivos || 0), 0)
+    const lojas = revendedores.reduce((s, r) => s + (r.clientes || 0), 0)
+    const bloqueados = revendedores.filter((r) => r.bloqueado).length
+    const cartoes = [
+      ['Revendedores', String(revendedores.length)],
+      ['Lojas na rede', String(lojas)],
+      ['Lojas ativas', String(ativos)],
+      ['Bloqueados', String(bloqueados)]
+    ]
+    $('cartoesRevenda').replaceChildren(...cartoes.map(([rot, val]) => {
+      const d = document.createElement('div')
+      d.className = 'card anim-pop'
+      const r = document.createElement('div'); r.className = 'rotulo'; r.textContent = rot
+      const v = document.createElement('div'); v.className = 'valor'; v.textContent = val
+      d.append(r, v)
+      return d
+    }))
+
+    const corpo = $('corpoRevendedores')
+    if (revendedores.length === 0) {
+      const tr = document.createElement('tr')
+      const td = document.createElement('td')
+      td.colSpan = 7; td.className = 'vazio'
+      td.textContent = 'Nenhum revendedor cadastrado ainda.'
+      tr.appendChild(td); corpo.replaceChildren(tr)
+      return
+    }
+
+    corpo.replaceChildren(...revendedores.map((rv) => {
+      const tr = document.createElement('tr')
+      const sit = situacaoRevendedor(rv)
+
+      const tdNome = document.createElement('td')
+      const nome = document.createElement('div'); nome.textContent = rv.nome || rv.revendedorId
+      const id = document.createElement('div'); id.className = 'mono fraco'; id.textContent = rv.revendedorId
+      tdNome.append(nome, id)
+
+      const tdValidade = document.createElement('td')
+      tdValidade.textContent = dataBr(rv.validade)
+
+      const tdSit = document.createElement('td')
+      const et = document.createElement('span')
+      et.className = 'etiqueta ' + sit.classe
+      et.textContent = sit.texto
+      tdSit.appendChild(et)
+
+      const tdLojas = document.createElement('td'); tdLojas.className = 'num'
+      tdLojas.textContent = String(rv.clientes ?? 0)
+      const tdAtivas = document.createElement('td'); tdAtivas.className = 'num'
+      tdAtivas.textContent = String(rv.clientesAtivos ?? 0)
+
+      const tdRec = document.createElement('td')
+      const etRec = document.createElement('span')
+      const podeRec = rv.podeRecuperarSenha
+      etRec.className = 'etiqueta ' + (podeRec ? 'ok' : 'alerta')
+      etRec.textContent = podeRec ? 'e-mail ok' : 'sem e-mail'
+      tdRec.appendChild(etRec)
+
+      const tdAcoes = document.createElement('td'); tdAcoes.className = 'acoes'
+      const caixa = document.createElement('div'); caixa.className = 'acoes'
+      caixa.append(
+        botao('Validade', 'neutro', () => modalValidade(rv)),
+        botao(rv.bloqueado ? 'Desbloquear' : 'Estrangular', 'neutro', () => modalBloqueio(rv)),
+        botao('Senha', 'neutro', () => modalSenha(rv)),
+        botao('Cortar', 'perigo-forte', () => modalCortar(rv))
+      )
+      tdAcoes.appendChild(caixa)
+
+      tr.append(tdNome, tdValidade, tdSit, tdLojas, tdAtivas, tdRec, tdAcoes)
+      return tr
+    }))
+  }
+
+  function botao(texto, classe, aoClicar) {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.className = 'pequeno ' + (classe || '')
+    b.textContent = texto
+    b.addEventListener('click', aoClicar)
+    return b
+  }
+
+  async function modalValidade(rv) {
+    const r = await abrirModal({
+      titulo: 'Somar dias ao revendedor',
+      subtitulo: rv.nome + ' — vence em ' + dataBr(rv.validade),
+      campos: [{ id: 'dias', rotulo: 'Dias a somar', tipo: 'number', valor: 30,
+        ajuda: 'A validade dele é o TETO das chaves que ele emite: nenhuma loja dele pode passar desta data.' }],
+      rotuloConfirmar: 'Somar',
+      aoConfirmar: async (v) => {
+        const dias = Number(v.dias)
+        if (!Number.isInteger(dias) || dias <= 0) return { campo: 'dias', mensagem: 'informe um número inteiro de dias' }
+        const resp = await api('/admin/revendedor/' + encodeURIComponent(rv.revendedorId) + '/validade',
+          { metodo: 'POST', corpo: { dias } })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await recarregar()
+  }
+
+  /**
+   * Estrangular ≠ cortar, e a tela precisa deixar isso óbvio.
+   *
+   * Bloquear o revendedor NÃO derruba as lojas dele: elas seguem funcionando
+   * até a data de cada uma, e a carteira murcha sozinha no ritmo do ciclo. É a
+   * ação do dia a dia (atraso de pagamento). Cortar é outra coisa, mora noutro
+   * botão e pede o código digitado — ver `modalCortar`.
+   */
+  async function modalBloqueio(rv) {
+    const bloqueando = !rv.bloqueado
+    const r = await abrirModal({
+      titulo: bloqueando ? 'Estrangular ' + rv.nome + '?' : 'Desbloquear ' + rv.nome + '?',
+      aviso: bloqueando
+        ? 'As lojas dele CONTINUAM funcionando até a validade de cada uma. O que para é o painel: ele deixa de emitir e de renovar chaves, e a carteira vence sozinha. Pagar não desfaz isto.'
+        : 'Ele volta a emitir e renovar chaves imediatamente.',
+      avisoTipo: bloqueando ? 'alerta' : 'ok',
+      campos: bloqueando
+        ? [{ id: 'motivo', rotulo: 'Motivo', dica: 'ex.: mensalidade em atraso desde 10/09',
+             ajuda: 'Fica gravado para quem for destravar depois entender o porquê.' }]
+        : [],
+      rotuloConfirmar: bloqueando ? 'Estrangular' : 'Desbloquear',
+      perigo: bloqueando,
+      aoConfirmar: async (v) => {
+        const resp = await api('/admin/revendedor/' + encodeURIComponent(rv.revendedorId) + '/bloqueio',
+          { metodo: 'POST', corpo: { bloqueado: bloqueando, motivo: v.motivo || undefined } })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await recarregar()
+  }
+
+  async function modalSenha(rv) {
+    const r = await abrirModal({
+      titulo: 'Definir senha do painel',
+      subtitulo: rv.nome,
+      aviso: 'Senha não é recuperável, só redefinível — nem a FHVP consegue ler a atual. Isto aqui é o socorro que sempre funciona quando ele perde o acesso.',
+      avisoTipo: 'alerta',
+      campos: [{ id: 'senha', rotulo: 'Nova senha', tipo: 'password',
+        ajuda: 'Ele pode trocar depois, pelo próprio painel.' }],
+      rotuloConfirmar: 'Definir',
+      aoConfirmar: async (v) => {
+        if (!v.senha) return { campo: 'senha', mensagem: 'informe a senha' }
+        const resp = await api('/admin/revendedor/' + encodeURIComponent(rv.revendedorId) + '/senha',
+          { metodo: 'POST', corpo: { senha: v.senha } })
+        return resp.ok ? null : { campo: 'senha', mensagem: resp.erro }
+      }
+    })
+    if (r) await recarregar()
+  }
+
+  /**
+   * O botão nuclear.
+   *
+   * Cortar derruba as lojas do revendedor — é o oposto do estrangulamento, que
+   * respeita o ciclo. Existe para fraude, e por isso o backend exige o código
+   * digitado no corpo do pedido (`confirmarId`): um clique errado não pode
+   * apagar a operação de um parceiro.
+   *
+   * A confirmação por digitação é chata de propósito. É o único lugar da tela
+   * onde a chatice é a funcionalidade.
+   */
+  async function modalCortar(rv) {
+    const r = await abrirModal({
+      titulo: 'CORTAR ' + rv.nome + '?',
+      aviso: 'Isto derruba as lojas dele. Diferente de estrangular, que só impede novas chaves e deixa cada loja viver até a data dela. Use para fraude, não para atraso.',
+      avisoTipo: 'erro',
+      campos: [{ id: 'confirmar', rotulo: 'Digite o código do revendedor para confirmar',
+        dica: rv.revendedorId, ajuda: 'A digitação existe para separar isto de um clique errado.' }],
+      rotuloConfirmar: 'Cortar',
+      perigo: true,
+      aoConfirmar: async (v) => {
+        if (v.confirmar !== rv.revendedorId) {
+          return { campo: 'confirmar', mensagem: 'o código não confere' }
+        }
+        const resp = await api('/admin/revendedor/' + encodeURIComponent(rv.revendedorId) + '/cortar',
+          { metodo: 'POST', corpo: { confirmarId: v.confirmar } })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await recarregar()
+  }
+
+  // ── Lojas ────────────────────────────────────────────────────────────────
+
+  function desenharClientes() {
+    const comExcedente = clientes.filter((c) => (c.notas && c.notas.excedentes) > 0)
+    const totalNotas = clientes.reduce((s, c) => s + ((c.notas && c.notas.emitidas) || 0), 0)
+    const deRevenda = clientes.filter((c) => c.revendedorId).length
+    const cartoes = [
+      ['Lojas', String(clientes.length)],
+      ['De revendedor', String(deRevenda)],
+      ['Notas no mês', String(totalNotas)],
+      ['Acima da cota', String(comExcedente.length)]
+    ]
+    $('cartoesClientes').replaceChildren(...cartoes.map(([rot, val]) => {
+      const d = document.createElement('div')
+      d.className = 'card anim-pop'
+      const r = document.createElement('div'); r.className = 'rotulo'; r.textContent = rot
+      const v = document.createElement('div'); v.className = 'valor'; v.textContent = val
+      d.append(r, v)
+      return d
+    }))
+
+    const corpo = $('corpoClientes')
+    if (clientes.length === 0) {
+      const tr = document.createElement('tr')
+      const td = document.createElement('td')
+      td.colSpan = 8; td.className = 'vazio'
+      td.textContent = 'Nenhuma loja cadastrada.'
+      tr.appendChild(td); corpo.replaceChildren(tr)
+      return
+    }
+
+    corpo.replaceChildren(...clientes.map((cl) => {
+      const tr = document.createElement('tr')
+      const notas = cl.notas || { emitidas: 0, teto: null, excedentes: 0 }
+
+      const tdNome = document.createElement('td')
+      const nome = document.createElement('div'); nome.textContent = cl.nome || cl.clienteId
+      const id = document.createElement('div'); id.className = 'mono fraco'; id.textContent = cl.clienteId
+      tdNome.append(nome, id)
+
+      const tdOrigem = document.createElement('td')
+      if (cl.revendedorId) {
+        const et = document.createElement('span')
+        et.className = 'etiqueta neutra'
+        et.textContent = cl.revendedorId
+        tdOrigem.appendChild(et)
+      } else {
+        tdOrigem.textContent = 'FHVP direto'
+        tdOrigem.className = 'fraco'
+      }
+
+      const tdPlano = document.createElement('td')
+      tdPlano.textContent = cl.plano ? (cl.plano === 'pro' ? 'Pro' : 'Básico') : '—'
+
+      const tdValidade = document.createElement('td')
+      tdValidade.textContent = dataBr(cl.validadeAtual)
+
+      const tdNotas = document.createElement('td'); tdNotas.className = 'num'
+      tdNotas.textContent = notas.teto === null
+        ? String(notas.emitidas)
+        : notas.emitidas + ' / ' + notas.teto
+
+      const tdExc = document.createElement('td'); tdExc.className = 'num'
+      if (notas.excedentes > 0) {
+        const et = document.createElement('span')
+        et.className = 'etiqueta alerta'
+        // R$0,50 por nota acima da cota — a mesma regra do atacado e do varejo.
+        et.textContent = notas.excedentes + ' · ' + dinheiro(notas.excedentes * 50)
+        tdExc.appendChild(et)
+      } else {
+        tdExc.textContent = '—'
+        tdExc.className = 'num fraco'
+      }
+
+      const tdSit = document.createElement('td')
+      if (cl.bloqueadoPor) {
+        const et = document.createElement('span')
+        et.className = 'etiqueta erro'
+        et.textContent = 'bloqueada · ' + cl.bloqueadoPor
+        tdSit.appendChild(et)
+      } else if (notas.bloqueiaAcimaDoTeto) {
+        const et = document.createElement('span')
+        et.className = 'etiqueta alerta'
+        et.textContent = 'cota trava'
+        tdSit.appendChild(et)
+      } else {
+        tdSit.textContent = '—'
+        tdSit.className = 'fraco'
+      }
+
+      const tdAcoes = document.createElement('td'); tdAcoes.className = 'acoes'
+      const caixa = document.createElement('div'); caixa.className = 'acoes'
+      caixa.append(
+        botao('Renovar', 'neutro', () => modalRenovarCliente(cl)),
+        botao('Cota', 'neutro', () => modalCota(cl)),
+        botao(cl.bloqueadoPor ? 'Desbloquear' : 'Bloquear', 'neutro', () => modalBloqueioCliente(cl))
+      )
+      tdAcoes.appendChild(caixa)
+
+      tr.append(tdNome, tdOrigem, tdPlano, tdValidade, tdNotas, tdExc, tdSit, tdAcoes)
+      return tr
+    }))
+  }
+
+  async function modalRenovarCliente(cl) {
+    const r = await abrirModal({
+      titulo: 'Somar dias à loja',
+      subtitulo: (cl.nome || cl.clienteId) + ' — vence em ' + dataBr(cl.validadeAtual),
+      aviso: cl.revendedorId
+        ? 'Esta loja é do revendedor ' + cl.revendedorId + '. A validade dela nunca passa da validade dele — o servidor corta no teto.'
+        : undefined,
+      campos: [{ id: 'dias', rotulo: 'Dias a somar', tipo: 'number', valor: 30 }],
+      rotuloConfirmar: 'Somar',
+      aoConfirmar: async (v) => {
+        const dias = Number(v.dias)
+        if (!Number.isInteger(dias) || dias <= 0) return { campo: 'dias', mensagem: 'informe um número inteiro de dias' }
+        const resp = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/renovar',
+          { metodo: 'POST', corpo: { dias } })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await carregarClientes()
+  }
+
+  async function modalCota(cl) {
+    const notas = cl.notas || {}
+    const r = await abrirModal({
+      titulo: 'Cota de notas',
+      subtitulo: (cl.nome || cl.clienteId) + ' — ' + (notas.emitidas || 0) + ' emitidas neste mês',
+      aviso: 'A cota é régua, não cancela: passar dela NÃO impede de emitir, só marca o excedente. Ligue a trava só se a conversa sobre reajuste não tiver resolvido.',
+      campos: [
+        { id: 'teto', rotulo: 'Notas incluídas', tipo: 'number', valor: notas.teto == null ? '' : notas.teto,
+          dica: 'em branco = padrão', ajuda: 'Vazio devolve ao padrão (100 no varejo, 50 na loja de revendedor no Pro). Zero é outra coisa: nenhuma nota incluída.' },
+        { id: 'travar', rotulo: 'Travar ao estourar? (sim/não)', valor: notas.bloqueiaAcimaDoTeto ? 'sim' : 'não' }
+      ],
+      rotuloConfirmar: 'Salvar',
+      aoConfirmar: async (v) => {
+        const corpo = {}
+        if (v.teto === '') corpo.teto = null
+        else {
+          const n = Number(v.teto)
+          if (!Number.isInteger(n) || n < 0) return { campo: 'teto', mensagem: 'informe um inteiro ≥ 0, ou deixe vazio' }
+          corpo.teto = n
+        }
+        const sim = /^(s|sim|1|true)$/i.test(v.travar)
+        const nao = /^(n|nao|não|0|false)$/i.test(v.travar)
+        if (!sim && !nao) return { campo: 'travar', mensagem: 'responda sim ou não' }
+        corpo.bloquear = sim
+        const resp = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/cota',
+          { metodo: 'POST', corpo })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await carregarClientes()
+  }
+
+  async function modalBloqueioCliente(cl) {
+    const bloqueando = !cl.bloqueadoPor
+    const r = await abrirModal({
+      titulo: bloqueando ? 'Bloquear a loja?' : 'Desbloquear a loja?',
+      subtitulo: cl.nome || cl.clienteId,
+      aviso: bloqueando
+        ? 'A licença atual dela continua valendo até ' + dataBr(cl.validadeAtual) + '. O bloqueio é sobre o PRÓXIMO ciclo — em sistema que valida offline, a data é a única lei.'
+        : (cl.bloqueadoPor === 'revendedor'
+            ? 'Este bloqueio foi posto pelo revendedor. Desfazê-lo aqui passa por cima da decisão dele.'
+            : 'A loja volta a poder renovar.'),
+      avisoTipo: bloqueando ? 'alerta' : 'ok',
+      campos: bloqueando ? [{ id: 'motivo', rotulo: 'Motivo' }] : [],
+      rotuloConfirmar: bloqueando ? 'Bloquear' : 'Desbloquear',
+      perigo: bloqueando,
+      aoConfirmar: async (v) => {
+        const resp = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/bloqueio',
+          { metodo: 'POST', corpo: { bloqueado: bloqueando, por: 'fhvp', motivo: v.motivo || undefined } })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await carregarClientes()
+  }
+})()
+</script>
+</body>
+</html>

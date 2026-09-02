@@ -32,8 +32,11 @@ import {
   gravarRevendedor,
   listarRevendedores,
   listarClientesDoRevendedor,
-  apagarSessoesDoRevendedor
+  apagarSessoesDoRevendedor,
+  contarNotasMesDeTodos,
+  contarNotasMes
 } from './db.ts'
+import { avaliarCota, cotaPadrao } from './cotaNotas.ts'
 import {
   clienteBloqueado,
   limitarAoTeto,
@@ -81,6 +84,92 @@ app.use('*', cors())
 
 app.get('/', (c) => c.text('FHVP Tech — licenca API ok'))
 
+/**
+ * Identidade visual dos painéis — folha e logotipo, servidos pelo backend.
+ *
+ * Ficam em arquivo próprio, e não embutidos em cada página, porque são DOIS
+ * painéis (o do revendedor e o da FHVP) que precisam parecer o mesmo produto.
+ * Com o CSS copiado nos dois, a segunda mudança de cor já sai divergente — e
+ * "quase igual" passa impressão de descuido, justamente o que um parceiro
+ * comercial não deveria sentir ao abrir a tela todo dia.
+ *
+ * A folha é lida do disco a cada pedido (arquivo pequeno; editar não exige
+ * reiniciar) e vai com cache curto: é servida pela mesma origem das páginas,
+ * então nunca desencontra da versão delas.
+ */
+const CAMINHO_CSS_PAINEL = new URL('./painel.css', import.meta.url)
+app.get('/painel.css', async (c) => {
+  const css = await readFile(CAMINHO_CSS_PAINEL, 'utf8')
+  return c.body(css, 200, {
+    'Content-Type': 'text/css; charset=utf-8',
+    'Cache-Control': 'public, max-age=300'
+  })
+})
+
+const CAMINHO_LOGO = new URL('./logo.png', import.meta.url)
+app.get('/painel-logo.png', async (c) => {
+  const png = await readFile(CAMINHO_LOGO)
+  return c.body(new Uint8Array(png), 200, {
+    'Content-Type': 'image/png',
+    // O logotipo não muda; vale guardar por um dia para a tela de entrada não
+    // baixar 270 KB a cada login.
+    'Cache-Control': 'public, max-age=86400'
+  })
+})
+
+/**
+ * Quem atende esta loja.
+ *
+ * ── As duas coisas que isto resolve ──────────────────────────────────────────
+ * (a) O app do lojista de revendedor precisa ESCONDER o botão de renovar por
+ *     PIX — aquele PIX cai na conta da FHVP, e quem cobra essa loja é o
+ *     revendedor. Sem isto, o dinheiro vai para o lado errado do ciclo.
+ * (b) A marca na tela é FHVP Tech, então o lojista com problema liga para a
+ *     FHVP mesmo quando comprou de terceiro. Com um `clienteId` em mãos dá para
+ *     saber para quem devolver a ligação, em vez de descobrir na conversa.
+ *
+ * ── Por que é aberta, e o que isso obrigou ───────────────────────────────────
+ * Precisa responder ao app antes de qualquer sessão existir, então não há
+ * autenticação. Isso a tornaria um verificador de quais códigos de loja são
+ * reais — por isso **código desconhecido recebe a MESMA resposta** de um cliente
+ * direto: atendido pela FHVP. Quem sondar não distingue "não existe" de "existe
+ * e é nosso", que é exatamente o que se quer.
+ *
+ * Sai o `contato` do revendedor (o que ele já usa para atender), NUNCA o e-mail
+ * dele: aquele endereço é o caminho de recuperação de senha do painel, e
+ * publicá-lo numa rota aberta entregaria metade do login de graça.
+ */
+const SUPORTE_FHVP = {
+  nome: 'FHVP Tech',
+  contato: process.env.CONTATO_SUPORTE_FHVP ?? 'https://wa.me/5585921871975'
+}
+
+app.get('/suporte/:clienteId', (c) => {
+  const cliente = obterCliente(c.req.param('clienteId'))
+  const revendedor = cliente?.revendedorId ? obterRevendedor(cliente.revendedorId) : null
+
+  // A ausência de revendedor — porque a loja é direta, porque o código não
+  // existe, ou porque o cadastro do revendedor sumiu — cai toda no mesmo lugar.
+  if (!revendedor) {
+    return c.json({
+      atendidoPor: 'fhvp',
+      nome: SUPORTE_FHVP.nome,
+      contato: SUPORTE_FHVP.contato,
+      podeRenovarNoApp: true
+    })
+  }
+
+  return c.json({
+    atendidoPor: 'revendedor',
+    nome: revendedor.nome,
+    contato: revendedor.contato ?? null,
+    // O app lê ESTE campo para decidir se mostra o botão de PIX — e não o
+    // `atendidoPor`. Assim, mudar a política de quem pode renovar sozinho não
+    // exige uma release do app para reinterpretar o outro campo.
+    podeRenovarNoApp: false
+  })
+})
+
 // Painel do revendedor: página única, servida pelo próprio backend.
 //
 // Mesma origem da API de propósito — sem CORS, sem token viajando entre
@@ -97,9 +186,44 @@ app.get('/painel', async (c) => {
     // Nada nesta página vem de fora, então travar as origens é de graça e
     // fecha a porta pra injeção de script de terceiro.
     'Content-Security-Policy':
-      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "default-src 'none'; script-src 'unsafe-inline'; " +
+      // 'self' entrou para a folha de identidade (/painel.css) e o logotipo;
+      // 'unsafe-inline' segue porque as páginas ainda têm estilo embutido.
+      "style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+      "connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
     'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff'
+  })
+})
+
+/**
+ * Painel da FHVP — o outro lado do balcão.
+ *
+ * Fica FORA do prefixo `/admin` de propósito: aquele guarda exige um cabeçalho
+ * `Authorization`, e um navegador pedindo uma página não manda cabeçalho nenhum.
+ * A página em si não é segredo — ela é uma casca vazia sem token. O que protege
+ * são as rotas `/admin/*` que ela chama, cada uma exigindo o Bearer que a pessoa
+ * cola na tela.
+ *
+ * O nome é `/painel-fhvp` e não `/admin/painel` justamente para não sugerir que
+ * a página está atrás da portaria — ela não está, e fingir que sim seria pior
+ * que assumir.
+ */
+const CAMINHO_PAINEL_FHVP = new URL('./painel-fhvp.html', import.meta.url)
+app.get('/painel-fhvp', async (c) => {
+  const html = await readFile(CAMINHO_PAINEL_FHVP, 'utf8')
+  return c.html(html, 200, {
+    'Content-Security-Policy':
+      "default-src 'none'; script-src 'unsafe-inline'; " +
+      // 'self' entrou para a folha de identidade (/painel.css) e o logotipo;
+      // 'unsafe-inline' segue porque as páginas ainda têm estilo embutido.
+      "style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+      "connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    // Esta tela lista a carteira inteira. Não deve ficar em cache de proxy nem
+    // voltar pelo botão "voltar" depois de alguém sair.
+    'Cache-Control': 'no-store'
   })
 })
 
@@ -126,16 +250,98 @@ app.use('/admin/*', async (c, next) => {
   await next()
 })
 
-// Lista todos os clientes cadastrados (resumo: id, nome, validade, preço fixo).
+// Lista todos os clientes cadastrados, com o consumo de notas do mês.
+//
+// O contador vem junto de propósito: é a pergunta "quem está emitindo quanto?",
+// e ela só é útil se puder ser feita de um golpe, olhando a carteira inteira.
+// Perguntar loja a loja daria uma consulta por cliente para desenhar uma tabela
+// — por isso `contarNotasMesDeTodos` traz tudo numa consulta só.
+//
+// `?mes=AAAA-MM` olha um mês fechado. É o que se usa para cobrar excedente: o
+// mês corrente ainda está andando, e cobrar por ele seria cobrar um número que
+// vai mudar depois.
 app.get('/admin/clientes', (c) => {
-  const clientes = listarClientes().map((cl) => ({
-    clienteId: cl.clienteId,
-    nome: cl.nome,
-    contato: cl.contato,
-    validadeAtual: cl.validadeAtual,
-    valorCentavosRenovacao: cl.valorCentavosRenovacao ?? null
-  }))
+  const mes = c.req.query('mes')
+  const contagem = contarNotasMesDeTodos(mes)
+
+  const clientes = listarClientes().map((cl) => {
+    const teto =
+      cl.tetoNotasMes ??
+      cotaPadrao({ plano: cl.plano, ehDeRevendedor: Boolean(cl.revendedorId) })
+    const cota = avaliarCota(
+      contagem.get(cl.clienteId) ?? 0,
+      teto,
+      cl.bloquearAcimaDoTeto === true
+    )
+    return {
+      clienteId: cl.clienteId,
+      nome: cl.nome,
+      contato: cl.contato,
+      validadeAtual: cl.validadeAtual,
+      valorCentavosRenovacao: cl.valorCentavosRenovacao ?? null,
+      plano: cl.plano ?? null,
+      // Ausente = cliente direto da FHVP. Explicitado como null para a tela não
+      // ter que distinguir "campo não veio" de "não tem revendedor".
+      revendedorId: cl.revendedorId ?? null,
+      bloqueadoPor: cl.bloqueadoPor ?? null,
+      notas: {
+        mes: mes ?? new Date().toISOString().slice(0, 7),
+        emitidas: cota.emitidas,
+        teto: cota.teto,
+        excedentes: cota.excedentes,
+        // Verdadeiro só quando alguém ligou o bloqueio nesta loja. Serve para a
+        // tela mostrar que ali existe uma cancela, não só uma régua.
+        bloqueiaAcimaDoTeto: cl.bloquearAcimaDoTeto === true
+      }
+    }
+  })
+
+  // Quem estourou primeiro: é essa a linha que o gerente procura ao abrir.
+  clientes.sort((a, b) => b.notas.excedentes - a.notas.excedentes)
   return c.json({ total: clientes.length, clientes })
+})
+
+/**
+ * Ajusta a cota de notas de uma loja.
+ *
+ * `teto: null` devolve a loja ao padrão da origem dela (varejo 100 · cliente de
+ * revendedor no Pro 50) — não é o mesmo que `teto: 0`, que significaria "esta
+ * loja não emite mais nada". Os dois estados são aceitos porque os dois têm uso.
+ */
+app.post('/admin/cliente/:clienteId/cota', async (c) => {
+  const clienteId = c.req.param('clienteId')
+  const cliente = obterCliente(clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+
+  const body = await c.req.json<{ teto?: number | null; bloquear?: boolean }>()
+
+  if (body.teto !== undefined) {
+    if (body.teto === null) {
+      delete cliente.tetoNotasMes
+    } else if (!Number.isInteger(body.teto) || body.teto < 0) {
+      return c.json({ erro: 'teto deve ser inteiro >= 0, ou null para voltar ao padrão' }, 400)
+    } else {
+      cliente.tetoNotasMes = body.teto
+    }
+  }
+  if (body.bloquear !== undefined) {
+    cliente.bloquearAcimaDoTeto = body.bloquear === true
+  }
+  gravarCliente(cliente)
+
+  const tetoEfetivo =
+    cliente.tetoNotasMes ??
+    cotaPadrao({ plano: cliente.plano, ehDeRevendedor: Boolean(cliente.revendedorId) })
+  return c.json({
+    ok: true,
+    clienteId,
+    cota: avaliarCota(
+      contarNotasMes(clienteId),
+      tetoEfetivo,
+      cliente.bloquearAcimaDoTeto === true
+    ),
+    usandoPadrao: cliente.tetoNotasMes === undefined
+  })
 })
 
 // Cria um cliente novo e devolve a 1ª chave (válida por `diasIniciais`).

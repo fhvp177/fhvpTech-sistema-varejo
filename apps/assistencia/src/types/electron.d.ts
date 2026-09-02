@@ -711,6 +711,14 @@ interface Window {
       validar: () => Promise<RespostaIPC<StatusLicenca>>
       ativar: (chave: string) => Promise<RespostaIPC<StatusLicenca>>
       obterClienteId: () => Promise<RespostaIPC<string | null>>
+      suporte: () => Promise<
+        RespostaIPC<{
+          atendidoPor: 'fhvp' | 'revendedor'
+          nome: string
+          contato: string | null
+          podeRenovarNoApp: boolean
+        } | null>
+      >
       destravarRelogio: () => Promise<RespostaIPC<{ destravado: boolean }>>
       criarCobranca: (dados: {
         diasContratados?: number

@@ -101,6 +101,9 @@ export const CANAIS_LOCAIS = [
   'licenca:criarCobranca',
   'licenca:destravarRelogio',
   'licenca:obterClienteId',
+  // Quem atende esta loja. Fica local com a família licenca: a tela que a usa
+  // (licença bloqueada) só existe na máquina que está bloqueada.
+  'licenca:suporte',
   'licenca:validar'
 ] as const
 

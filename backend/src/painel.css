@@ -1,0 +1,576 @@
+/* ══════════════════════════════════════════════════════════════════════════
+ * Identidade visual da FHVP Tech — folha compartilhada pelos painéis web.
+ *
+ * ── Por que uma folha só ────────────────────────────────────────────────────
+ * São duas telas (a do revendedor e a da FHVP) e elas precisam parecer o MESMO
+ * produto. Com o CSS copiado dentro de cada arquivo, a segunda mudança de cor
+ * já sai divergente — e "quase igual" passa impressão de descuido, que é
+ * exatamente o que um parceiro comercial não deveria sentir ao abrir a tela
+ * todo dia.
+ *
+ * ── De onde vieram estes valores ────────────────────────────────────────────
+ * Não foram escolhidos aqui. São os MESMOS tokens do aplicativo desktop
+ * (`apps/varejo/src/index.css`), copiados em HSL, para o painel e o sistema
+ * serem literalmente a mesma cor — não duas cores parecidas. A escala escura é
+ * a do menu lateral do app (slate-900), e o azul claro do logotipo aparece
+ * onde o app usa `blue-300`: sobre fundo escuro.
+ *
+ * ── Identidade é mais que cor ───────────────────────────────────────────────
+ * Três gestos que o app repete e que esta folha traz para a web:
+ *
+ *  1. **Superfície escura para a moldura, clara para o conteúdo.** No desktop
+ *     é o menu lateral grafite; aqui é a barra do topo. Mesma hierarquia,
+ *     girada 90° porque a tela é outra.
+ *  2. **Rótulo miúdo em caixa alta e espaçado**, herdado do "T E C H" do
+ *     logotipo — nos títulos de cartão e nos cabeçalhos de tabela.
+ *  3. **Movimento que INFORMA, nunca que enfeita.** As animações do fim deste
+ *     arquivo são as mesmas de `packages/core/src/ui/animacoes.css`, com as
+ *     mesmas regras: só `opacity`/`transform`/`background-color`/`box-shadow`,
+ *     nada que refaça layout, e tudo desligado em `prefers-reduced-motion`.
+ *
+ * ⚠️ Os nomes de classe aqui são os que as PÁGINAS já usavam. A folha se
+ * adaptou ao painel do revendedor, e não o contrário: aquele arquivo está
+ * testado em uso, e trocar os nomes obrigaria a mexer no JS que desenha as
+ * linhas — risco sem retorno para uma mudança de aparência.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Tokens do app, em HSL — mesma fonte que o desktop. */
+  --primary: 221.2 83.2% 53.3%;
+  --primary-escura: 221.2 83.2% 45%;
+  --foreground: 222.2 84% 4.9%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --border: 214.3 31.8% 91.4%;
+  --destructive: 0 84.2% 60.2%;
+  --ring: 221.2 83.2% 53.3%;
+  --raio: 0.5rem;
+
+  /* Escala escura: a do menu lateral do app. */
+  --grafite-900: #0f172a;
+  --grafite-800: #1e293b;
+  --grafite-700: #334155;
+  --grafite-400: #94a3b8;
+  --grafite-300: #cbd5e1;
+  --azul-claro: #60a5fa;
+
+  --ok: #047857;
+  --ok-fundo: #ecfdf5;
+  --alerta: #b45309;
+  --alerta-fundo: #fffbeb;
+  --erro: hsl(var(--destructive));
+  --erro-fundo: #fef2f2;
+
+  --papel: #ffffff;
+  --fundo: #f8fafc;
+}
+
+* { box-sizing: border-box; }
+.oculto { display: none !important; }
+/* O atributo `hidden` esconde por `display:none` da folha padrão do navegador
+   — e QUALQUER `display` declarado aqui vence essa regra. Foi assim que o aviso
+   de Caps Lock (um `display:flex`) apareceu com o campo vazio. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: hsl(var(--foreground));
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── A marca ────────────────────────────────────────────────────────────────
+ * Escrita, não desenhada: é o que o app faz no menu lateral. O logotipo em
+ * imagem fica só na tela de entrada, onde ele tem espaço para respirar —
+ * mesma divisão do desktop. */
+.marca {
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  color: var(--papel);
+  white-space: nowrap;
+}
+.marca span { color: var(--azul-claro); }
+/* Sobre fundo claro (a tela de entrada), a marca inverte. */
+.cartao-login .marca { color: hsl(var(--foreground)); }
+.cartao-login .marca span { color: hsl(var(--primary)); }
+
+/* O gesto do "T E C H" do logotipo virando elemento de interface: caixa alta,
+ * miúdo, muito espaçado, entre dois fios que somem nas pontas. */
+.selo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin: 14px 0 4px;
+}
+.selo::before, .selo::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: currentColor;
+  opacity: 0.28;
+}
+
+/* ── Entrada ────────────────────────────────────────────────────────────────
+ * Fundo grafite cheio, cartão claro por cima. É a gramática da tela de licença
+ * bloqueada do app: a pessoa reconhece o produto antes de ler uma palavra. */
+#telaLogin {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(1100px 620px at 50% -12%, #16233f 0%, transparent 62%),
+    var(--grafite-900);
+}
+.cartao-login {
+  background: var(--papel);
+  border-radius: 14px;
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 24px 60px -18px rgba(2, 6, 23, 0.55);
+  text-align: left;
+}
+/* 104px: abaixo disso os traços de circuito e o "TECH" do logotipo viram
+ * borrão — ele tem muita margem interna, então precisa de tamanho para ler. */
+.logo-entrada {
+  width: 104px;
+  height: 104px;
+  display: block;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+}
+.rodape-login { text-align: center; margin-top: 18px; }
+
+/* ── Moldura ────────────────────────────────────────────────────────────── */
+header {
+  background: var(--grafite-900);
+  color: var(--papel);
+  padding: 0 24px;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+header .cresce { flex: 1; min-width: 0; }
+header .cresce > div:first-child { font-size: 14px; }
+header .sub { color: var(--grafite-400); font-size: 12px; }
+
+main { padding: 26px 24px 48px; max-width: 1180px; margin: 0 auto; }
+
+/* ── Texto auxiliar ─────────────────────────────────────────────────────── */
+.sub { color: hsl(var(--muted-foreground)); font-size: 14px; margin: 4px 0 22px; }
+.dica { color: hsl(var(--muted-foreground)); font-size: 13px; margin: 6px 0 0; }
+.cresce { flex: 1; }
+.chave {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--raio);
+  padding: 10px 12px;
+  word-break: break-all;
+  color: hsl(var(--foreground));
+}
+
+/* ── Formulário ─────────────────────────────────────────────────────────── */
+label { display: block; font-size: 13px; font-weight: 600; margin: 15px 0 6px; }
+input, select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--raio);
+  font: inherit;
+  background: var(--papel);
+  color: hsl(var(--foreground));
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+input:focus, select:focus {
+  outline: none;
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
+}
+input::placeholder { color: hsl(var(--muted-foreground) / 0.75); }
+input[aria-invalid="true"] {
+  border-color: hsl(var(--destructive));
+  box-shadow: 0 0 0 3px hsl(var(--destructive) / 0.14);
+}
+.erro-campo { color: var(--erro); font-size: 13px; margin: 6px 0 0; }
+
+.form-linha { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.linha-botoes { display: flex; gap: 8px; justify-content: flex-end; }
+.linha-botoes button { min-width: 104px; }
+
+/* Campo de senha com olho: o botão fica DENTRO da caixa, e o input reserva o
+ * espaço dele no padding para o texto nunca correr por baixo do ícone. */
+.campo-senha { position: relative; }
+.campo-senha input { padding-right: 44px; }
+.olho {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: hsl(var(--muted-foreground));
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.olho:hover:not(:disabled) { background: transparent; color: hsl(var(--foreground)); }
+.olho svg { display: block; width: 18px; height: 18px; }
+
+/* Caps Lock: o único campo que se digita às cegas merece um aviso próprio.
+ * Nasceu de um incidente real — senha cadastrada com Caps Lock sem perceber. */
+.aviso-capslock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--alerta);
+  background: var(--alerta-fundo);
+  border: 1px solid rgba(180, 83, 9, 0.22);
+  border-radius: var(--raio);
+  padding: 7px 10px;
+}
+
+/* ── Botões ─────────────────────────────────────────────────────────────── */
+button {
+  font: inherit;
+  font-weight: 600;
+  border-radius: var(--raio);
+  border: 1px solid transparent;
+  padding: 10px 16px;
+  cursor: pointer;
+  background: hsl(var(--primary));
+  color: var(--papel);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 120ms ease;
+}
+button:hover:not(:disabled) { background: hsl(var(--primary-escura)); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:focus-visible { outline: none; box-shadow: 0 0 0 3px hsl(var(--ring) / 0.35); }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+button.largo { width: 100%; margin-top: 22px; padding: 11px 16px; }
+button.pequeno { padding: 6px 12px; font-size: 13px; }
+button.neutro {
+  background: var(--papel);
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+button.neutro:hover:not(:disabled) { background: hsl(var(--muted)); }
+/* Vermelho CONTIDO por padrão: bloquear uma loja é rotina do revendedor, e uma
+ * fileira de botões vermelhos sólidos grita o dia inteiro por nada. O sólido
+ * fica reservado para o que não tem volta (`.perigo-forte`), e aí o contraste
+ * entre os dois é que carrega o aviso. */
+button.perigo {
+  background: var(--papel);
+  color: hsl(var(--destructive));
+  border-color: hsl(var(--destructive) / 0.4);
+}
+button.perigo:hover:not(:disabled) {
+  background: var(--erro-fundo);
+  border-color: hsl(var(--destructive));
+}
+button.perigo-forte {
+  background: hsl(var(--destructive));
+  color: var(--papel);
+  border-color: transparent;
+}
+button.perigo-forte:hover:not(:disabled) { background: hsl(var(--destructive) / 0.86); }
+
+/* Na barra escura, o botão neutro vira fantasma — branco ali brigaria com a
+ * marca e roubaria a atenção de quem só quer sair. */
+header button.neutro {
+  background: transparent;
+  color: var(--grafite-300);
+  border-color: var(--grafite-700);
+}
+header button.neutro:hover:not(:disabled) { background: var(--grafite-800); color: var(--papel); }
+
+.link {
+  background: transparent;
+  border: none;
+  color: hsl(var(--primary));
+  font-weight: 600;
+  font-size: 14px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+.link:hover { background: transparent; text-decoration: underline; }
+
+/* ── Cartões de número ──────────────────────────────────────────────────────
+ * Rótulo miúdo em caixa alta sobre número grande: é o cartão do Dashboard e da
+ * tela de Comissões do app, sem mudar nada. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.card {
+  background: var(--papel);
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--raio);
+  padding: 15px 17px;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+.card:hover {
+  border-color: hsl(var(--primary) / 0.35);
+  box-shadow: 0 8px 22px -12px rgba(2, 6, 23, 0.28);
+  transform: translateY(-1px);
+}
+.card .rotulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.card .valor {
+  font-size: 26px;
+  font-weight: 700;
+  margin-top: 3px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.card .nota { font-size: 12px; color: hsl(var(--muted-foreground)); margin-top: 3px; }
+
+/* ── Quadro ─────────────────────────────────────────────────────────────── */
+.painel {
+  background: var(--papel);
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+.painel > h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 14px 18px;
+  border-bottom: 1px solid hsl(var(--border));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.painel > h2 .cresce { flex: 1; }
+.corpo { padding: 18px; border-bottom: 1px solid hsl(var(--border)); background: hsl(var(--muted) / 0.4); }
+
+/* ── Tabela ─────────────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 12px 18px; border-bottom: 1px solid hsl(var(--border)); }
+th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.55);
+  white-space: nowrap;
+}
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background-color 140ms ease; }
+tbody tr:hover { background: hsl(var(--muted) / 0.5); }
+td.acoes { text-align: right; white-space: nowrap; }
+td.acoes button { margin-left: 6px; }
+
+/* ── Etiquetas ──────────────────────────────────────────────────────────── */
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.etiqueta.ok { background: var(--ok-fundo); color: var(--ok); }
+.etiqueta.alerta { background: var(--alerta-fundo); color: var(--alerta); }
+.etiqueta.erro { background: var(--erro-fundo); color: var(--erro); }
+.etiqueta.neutra { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
+.etiqueta.marca { background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); }
+
+/* ── Avisos ─────────────────────────────────────────────────────────────── */
+.aviso {
+  border-radius: var(--raio);
+  padding: 11px 13px;
+  font-size: 14px;
+  border: 1px solid transparent;
+  margin-bottom: 16px;
+}
+.aviso.erro { background: var(--erro-fundo); color: var(--erro); border-color: hsl(var(--destructive) / 0.25); }
+.aviso.ok { background: var(--ok-fundo); color: var(--ok); border-color: rgba(4, 120, 87, 0.22); }
+.aviso.alerta { background: var(--alerta-fundo); color: var(--alerta); border-color: rgba(180, 83, 9, 0.22); }
+
+/* ── Vazio ──────────────────────────────────────────────────────────────────
+ * Única tela onde movimento contínuo se paga: não há o que ler nem conferir, e
+ * o ícone boiando diz "vivo, não travado". Mesma decisão do EstadoVazio do app. */
+.vazio { padding: 46px 24px; text-align: center; color: hsl(var(--muted-foreground)); }
+
+/* ── Diálogo ────────────────────────────────────────────────────────────────
+ * A sobreposição é feita à mão (e não com <dialog> nativo) porque já era assim
+ * — e porque o foco, o Esc e o clique-fora já estão tratados no JS da página. */
+#sobreposicao {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 50;
+}
+#dialogo {
+  background: var(--papel);
+  border-radius: 12px;
+  padding: 26px;
+  width: min(470px, 100%);
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  box-shadow: 0 30px 70px -20px rgba(2, 6, 23, 0.5);
+  animation: anim-kf-dialogo 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+#dialogo > * { min-width: 0; }
+#dialogo h2 { margin: 0 0 4px; font-size: 18px; letter-spacing: -0.01em; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * MOVIMENTO
+ * As mesmas perguntas que o app responde com animação: "entrou?", "o que
+ * mudou?". Nada decorativo — quem abre este painel abre para resolver algo.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes anim-kf-flutuar {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-5px); }
+}
+.anim-flutua { animation: anim-kf-flutuar 2.2s ease-in-out infinite alternate; }
+
+/* Linha que entra: o mesmo clarão que some do app. Só fundo — mover a linha
+ * faria a lista inteira dançar a cada carregamento. */
+@keyframes anim-kf-linha-entra {
+  0%   { background-color: hsl(var(--primary) / 0.26); }
+  65%  { background-color: hsl(var(--primary) / 0.18); }
+  100% { background-color: transparent; }
+}
+.anim-linha-entra { animation: anim-kf-linha-entra 0.85s ease-out; }
+
+/* Número que mudou: pulso em box-shadow, nunca em padding — padding empurraria
+ * o vizinho a cada atualização. */
+@keyframes anim-kf-valor-muda {
+  0%   { background-color: hsl(var(--primary) / 0.24); box-shadow: 0 0 0 5px hsl(var(--primary) / 0.24); }
+  100% { background-color: transparent; box-shadow: 0 0 0 5px hsl(var(--primary) / 0); }
+}
+.anim-valor-muda { animation: anim-kf-valor-muda 0.65s ease-out; border-radius: 0.25rem; }
+
+@keyframes anim-kf-pop {
+  0%   { transform: scale(0.94); opacity: 0; }
+  60%  { transform: scale(1.015); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.anim-pop { animation: anim-kf-pop 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes anim-kf-dialogo {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Erro pede atenção uma vez, e para. */
+@keyframes anim-kf-tremer {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+.anim-treme { animation: anim-kf-tremer 0.36s ease-in-out; }
+
+/* Acessibilidade: quem pediu menos movimento no sistema não vê nenhum. Cada
+ * classe animada precisa estar listada aqui — mesma regra do app, onde há teste
+ * que quebra o build quando alguém esquece. */
+@media (prefers-reduced-motion: reduce) {
+  .anim-flutua,
+  .anim-linha-entra,
+  .anim-valor-muda,
+  .anim-pop,
+  .anim-treme,
+  #dialogo {
+    animation: none;
+  }
+  .card:hover, button:active:not(:disabled) { transform: none; }
+  * { transition-duration: 0.01ms !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Peças que só o painel da FHVP usa
+ *
+ * Ele tem abas (revendedores × lojas) e usa o <dialog> nativo, enquanto o do
+ * revendedor monta a sobreposição à mão. As duas formas convivem: o que importa
+ * é que a APARÊNCIA seja a mesma, não a mecânica interna.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* Alias: as duas páginas nomearam o mesmo espaçador de formas diferentes. */
+.crescer { flex: 1; min-width: 0; }
+
+/* Abas: sublinhado na cor da marca, como a aba ativa do menu do app. */
+.abas { display: flex; gap: 2px; margin-bottom: 20px; border-bottom: 1px solid hsl(var(--border)); }
+.abas button {
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 9px 15px;
+  margin-bottom: -1px;
+}
+.abas button:hover:not(:disabled) { background: transparent; color: hsl(var(--foreground)); }
+.abas button[aria-selected="true"] {
+  color: hsl(var(--primary));
+  border-bottom-color: hsl(var(--primary));
+}
+.abas button:active:not(:disabled) { transform: none; }
+
+/* <dialog> nativo — mesma caixa do #dialogo feito à mão. */
+dialog {
+  border: none;
+  border-radius: 12px;
+  padding: 26px;
+  width: min(470px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  color: hsl(var(--foreground));
+  background: var(--papel);
+  box-shadow: 0 30px 70px -20px rgba(2, 6, 23, 0.5);
+}
+dialog::backdrop { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px); }
+dialog h2 { margin: 0 0 4px; font-size: 18px; letter-spacing: -0.01em; }
+dialog[open] { animation: anim-kf-dialogo 0.16s cubic-bezier(0.22, 1, 0.36, 1); }
+.modal-botoes { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; }
+
+/* Colunas numéricas e texto de apoio nas tabelas. */
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: hsl(var(--muted-foreground));
+}
+.fraco { color: hsl(var(--muted-foreground)); }
+/* Só o DIV vira flex. Aplicar isto na célula tira o <td> do layout da tabela e
+ * a linha passa a vazar para fora — foi exatamente o que aconteceu na 1ª versão. */
+div.acoes { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  dialog[open] { animation: none; }
+}

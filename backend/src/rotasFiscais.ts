@@ -17,6 +17,8 @@ import {
   contarNotasMes,
   registrarNotaMes
 } from './db.ts'
+import { avaliarCota, cotaPadrao, type SituacaoCota } from './cotaNotas.ts'
+import type { Cliente } from './tipos.ts'
 import {
   montarPedidoNfce,
   ErroMontagem,
@@ -106,6 +108,30 @@ const soDigitos = (v: string) => (v ?? '').replace(/\D/g, '')
 // A ACBr tem endereços separados por documento. Sem escolher o certo, a NF-e
 // bateria na rota da NFC-e e "não existiria".
 const rotaDoModelo = (modelo: number) => (modelo === 55 ? 'nfe' : 'nfce')
+
+/**
+ * Situação da cota mensal de notas desta loja.
+ *
+ * O teto vem do cadastro da loja quando existe; senão, do padrão da origem dela
+ * (varejo 100 · cliente de revendedor no Pro 50). Aplicar o padrão aqui, em vez
+ * de gravar o campo em todo cliente, é o que faz o contador aparecer no painel
+ * sem precisar tocar em nenhum cadastro existente.
+ *
+ * Repare que só MEDIR já é o comportamento útil: `bloquearAcimaDoTeto` nasce
+ * desligado, então o efeito prático disto, hoje, é o número na tela da FHVP e o
+ * `excedentes` que sustenta a cobrança de R$0,50/nota no atacado. A porta existe
+ * fechada, pronta para o dia em que a conversa não resolver.
+ */
+function situacaoDaCota(cliente: Cliente): SituacaoCota {
+  const teto =
+    cliente.tetoNotasMes ??
+    cotaPadrao({ plano: cliente.plano, ehDeRevendedor: Boolean(cliente.revendedorId) })
+  return avaliarCota(
+    contarNotasMes(cliente.clienteId),
+    teto,
+    cliente.bloquearAcimaDoTeto === true
+  )
+}
 
 // Traduz o erro do cliente ACBr no status HTTP que o app entende. Erros de
 // credencial/config são NOSSOS (502/500), não do lojista — não faz sentido
@@ -334,6 +360,15 @@ export function registrarRotasFiscais(app: Hono): void {
     const existente = obterEmissaoNfce(clienteId, body.referencia)
     if (existente) {
       return c.json({ ok: true, jaEmitida: true, emissao: existente })
+    }
+
+    // 1b) Cota do mês. Vem DEPOIS da idempotência de propósito: uma nota que já
+    //     existe na SEFAZ tem que continuar sendo devolvida mesmo com a cota
+    //     estourada — recusar aqui faria o app reenviar para sempre uma emissão
+    //     que já deu certo, e o lojista veria erro numa venda já fiscalizada.
+    const cota = situacaoDaCota(lic.cliente)
+    if (!cota.podeEmitir) {
+      return c.json({ erro: cota.motivo, cota }, 429)
     }
 
     const modelo = body.modelo === 55 ? 55 : 65
@@ -626,6 +661,13 @@ export function registrarRotasFiscais(app: Hono): void {
     // Idempotência: mesma OS/venda reenviada devolve a emissão existente.
     const existente = obterEmissaoNfce(clienteId, body.referencia)
     if (existente) return c.json({ ok: true, jaEmitida: true, emissao: existente })
+
+    // Cota do mês — NFS-e conta no mesmo balde que a NFC-e, porque o crédito da
+    // ACBr é o mesmo. Depois da idempotência, pelo motivo explicado na NFC-e.
+    const cotaNfse = situacaoDaCota(lic.cliente)
+    if (!cotaNfse.podeEmitir) {
+      return c.json({ erro: cotaNfse.motivo, cota: cotaNfse }, 429)
+    }
 
     const ambiente = c.req.query('ambiente') === 'producao' ? 'producao' : 'homologacao'
 

@@ -29,6 +29,16 @@ export type Cliente = {
   motivoBloqueio?: string
   // Plano contratado — define o preço de atacado cobrado do revendedor.
   plano?: 'basico' | 'pro'
+  // Quantas notas fiscais estão incluídas no que esta loja paga, por mês.
+  // AUSENTE = ninguém combinou cota com ela; a emissão conta e não compara.
+  // Nunca leia ausência como zero — zero significaria "esta loja não emite",
+  // e é assim que um campo novo derruba a emissão de todos os clientes atuais.
+  // O padrão por origem/plano está em `cotaPadrao()`, em cotaNotas.ts.
+  tetoNotasMes?: number
+  // Passar da cota IMPEDE de emitir? Padrão não. A cota é régua (gatilho de
+  // renegociação, porque o preço é negociado caso a caso) — não cancela. Ligar
+  // isto é decisão deliberada para um caso específico, nunca a política geral.
+  bloquearAcimaDoTeto?: boolean
 }
 
 export type StatusCobranca = 'pendente' | 'paga' | 'expirada'

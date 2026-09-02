@@ -18,156 +18,19 @@
   Nome de loja é texto que o revendedor digitou; se ele colar uma tag ali, ela
   tem que aparecer como texto. Tudo passa por textContent.
 -->
-<style>
-  :root {
-    --tinta: #1a1d23; --tinta-fraca: #5c6470; --linha: #e3e6ea;
-    --fundo: #f6f7f9; --papel: #ffffff; --marca: #1f6feb; --marca-escura: #1a5fd0;
-    --ok: #12805c; --ok-fundo: #e6f5ef; --alerta: #9a6700; --alerta-fundo: #fff8e5;
-    --erro: #b42318; --erro-fundo: #fdeceb; --raio: 10px;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--fundo); color: var(--tinta);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  .oculto { display: none !important; }
-  /* O atributo `hidden` esconde por `display:none` da folha padrão do
-     navegador — e QUALQUER `display` declarado aqui vence essa regra. Foi
-     assim que o aviso de Caps Lock (um `display:flex`) apareceu com o campo
-     vazio. Reforçado aqui, uma vez, para todo elemento presente e futuro. */
-  [hidden] { display: none !important; }
-
-  /* ── Login ── */
-  #telaLogin { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-  .cartao-login { background: var(--papel); border: 1px solid var(--linha); border-radius: var(--raio);
-    padding: 32px; width: 100%; max-width: 380px; }
-  .marca { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
-  .marca span { color: var(--marca); }
-  .sub { color: var(--tinta-fraca); font-size: 14px; margin: 4px 0 24px; }
-
-  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
-  input, select {
-    width: 100%; padding: 10px 12px; border: 1px solid var(--linha);
-    border-radius: 8px; font: inherit; background: var(--papel); color: var(--tinta);
-  }
-  input:focus, select:focus { outline: 2px solid var(--marca); outline-offset: -1px; border-color: var(--marca); }
-
-  button {
-    font: inherit; font-weight: 600; border-radius: 8px; border: 1px solid transparent;
-    padding: 10px 16px; cursor: pointer; background: var(--marca); color: #fff;
-  }
-  button:hover:not(:disabled) { background: var(--marca-escura); }
-  button:disabled { opacity: .55; cursor: not-allowed; }
-  button.neutro { background: var(--papel); color: var(--tinta); border-color: var(--linha); }
-  button.neutro:hover:not(:disabled) { background: var(--fundo); }
-  button.perigo { background: var(--papel); color: var(--erro); border-color: #f3c3bf; }
-  button.perigo:hover:not(:disabled) { background: var(--erro-fundo); }
-  button.largo { width: 100%; margin-top: 20px; }
-  button.pequeno { padding: 6px 10px; font-size: 13px; }
-
-  /* ── Estrutura ── */
-  header {
-    background: var(--papel); border-bottom: 1px solid var(--linha);
-    padding: 14px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  }
-  header .cresce { flex: 1; }
-  main { max-width: 1020px; margin: 0 auto; padding: 24px 20px 64px; }
-
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-  .card { background: var(--papel); border: 1px solid var(--linha); border-radius: var(--raio); padding: 16px; }
-  .card .rotulo { font-size: 12px; color: var(--tinta-fraca); text-transform: uppercase; letter-spacing: .04em; }
-  .card .valor { font-size: 26px; font-weight: 700; margin-top: 4px; }
-  .card .nota { font-size: 12px; color: var(--tinta-fraca); margin-top: 2px; }
-
-  .painel { background: var(--papel); border: 1px solid var(--linha); border-radius: var(--raio); margin-top: 24px; }
-  .painel > h2 { font-size: 15px; margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--linha);
-    display: flex; align-items: center; gap: 12px; }
-  .painel > h2 .cresce { flex: 1; }
-  .corpo { padding: 16px; }
-
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--linha); font-size: 14px; }
-  th { font-size: 12px; color: var(--tinta-fraca); text-transform: uppercase; letter-spacing: .04em; }
-  tr:last-child td { border-bottom: 0; }
-  td.acoes { text-align: right; white-space: nowrap; }
-  td.acoes button { margin-left: 6px; }
-  .vazio { padding: 32px 16px; text-align: center; color: var(--tinta-fraca); }
-
-  .etiqueta { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-  .etiqueta.ok { background: var(--ok-fundo); color: var(--ok); }
-  .etiqueta.alerta { background: var(--alerta-fundo); color: var(--alerta); }
-  .etiqueta.erro { background: var(--erro-fundo); color: var(--erro); }
-  .etiqueta.neutra { background: var(--fundo); color: var(--tinta-fraca); }
-
-  .aviso { border-radius: 8px; padding: 12px 14px; font-size: 14px; margin-bottom: 16px; }
-  .aviso.erro { background: var(--erro-fundo); color: var(--erro); }
-  .aviso.alerta { background: var(--alerta-fundo); color: var(--alerta); }
-  .aviso.ok { background: var(--ok-fundo); color: var(--ok); }
-
-  /* ── Diálogo: UM lugar só ──────────────────────────────────────────────
-     A proteção de layout mora AQUI, nunca em quem chama. Foi a lição que
-     custou três reincidências no app: corrigir a tela que quebrou faz toda
-     tela nova nascer desprotegida.
-       • max-height + overflow-y — a caixa é centralizada por translate, então
-         cresce para os DOIS lados; sem teto ela come o título e os botões.
-       • min-width: 0 nos filhos — item de grid nasce "não encolha abaixo do
-         meu conteúdo", e é assim que texto longo vaza para fora da caixa. */
-  #sobreposicao { position: fixed; inset: 0; background: rgba(20,24,31,.55);
-    display: grid; place-items: center; padding: 20px; z-index: 50; }
-  #dialogo {
-    background: var(--papel); border-radius: var(--raio); padding: 26px;
-    width: 100%; max-width: 520px;
-    max-height: 90vh; overflow-y: auto;
-    display: flex; flex-direction: column;
-  }
-  #dialogo > * { min-width: 0; }
-  #dialogo h2 { margin: 0 0 4px; font-size: 18px; }
-  .chave {
-    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 17px;
-    background: var(--fundo); border: 1px dashed var(--linha); border-radius: 8px;
-    padding: 16px; margin: 16px 0; word-break: break-all; user-select: all; text-align: center;
-  }
-  .linha-botoes { display: flex; gap: 8px; margin-top: 22px; }
-  .linha-botoes button { flex: 1; }
-  .form-linha { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 560px) { .form-linha { grid-template-columns: 1fr; } }
-  .erro-campo { color: var(--erro); font-size: 12px; margin-top: 5px; }
-  input[aria-invalid="true"] { border-color: var(--erro); }
-  .dica { color: var(--tinta-fraca); font-size: 12px; margin-top: 5px; }
-
-  /* ── Campo de senha: olhinho + aviso de Caps Lock ──────────────────────
-     Os dois existem pelo mesmo motivo — senha é o único campo que a pessoa
-     digita às cegas. Sem eles, errar o Caps Lock é indistinguível de
-     esquecer a senha, e o caminho vira "pedir recuperação" por engano. */
-  .campo-senha { position: relative; }
-  .campo-senha input { padding-right: 44px; }
-  .olho {
-    position: absolute; top: 0; right: 0; height: 100%; width: 40px;
-    display: grid; place-items: center;
-    background: none; border: none; padding: 0; cursor: pointer; color: var(--tinta-fraca);
-  }
-  .olho:hover:not(:disabled) { background: none; color: var(--tinta); }
-  .olho svg { width: 19px; height: 19px; display: block; }
-  .aviso-capslock {
-    display: flex; align-items: center; gap: 6px;
-    color: var(--alerta); background: var(--alerta-fundo);
-    border-radius: 6px; padding: 6px 9px; font-size: 12px; font-weight: 600; margin-top: 6px;
-  }
-  .link {
-    background: none; border: none; padding: 0; color: var(--marca);
-    font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: underline;
-  }
-  .link:hover { background: none; color: var(--marca-escura); }
-  .rodape-login { margin-top: 14px; text-align: center; }
-</style>
+<!-- A identidade vem de /painel.css, compartilhada com o painel da FHVP.
+     Ver o cabecalho daquele arquivo para o porque de nao ser embutida aqui. -->
+<link rel="stylesheet" href="/painel.css">
 </head>
 <body>
 
 <!-- ───────────── Login ───────────── -->
 <div id="telaLogin">
   <form class="cartao-login" id="formLogin">
-    <div class="marca">FHVP <span>Tech</span></div>
-    <p class="sub">Painel do revendedor</p>
+    <img class="logo-entrada" src="/painel-logo.png" alt="FHVP Tech" width="104" height="104">
+    <div class="marca" style="text-align:center">FHVP <span>Tech</span></div>
+    <div class="selo">Painel do revendedor</div>
+    <p class="sub" style="text-align:center;margin-top:10px">Entre com o código e a senha que a FHVP lhe enviou.</p>
     <div id="erroLogin" class="aviso erro oculto"></div>
     <label for="campoId">Código do revendedor</label>
     <input id="campoId" autocomplete="username" autocapitalize="characters" required>
