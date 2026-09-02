@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync, copyFileSync, rmSync } from 'fs'
 import { join } from 'path'
-import { app } from 'electron'
+import { pastaDados, pastaTemp } from '../plataforma'
 import Database from 'better-sqlite3'
 import { extrairZip } from '@fhvptech/core/electron/backup/Compactador'
 import { lerConfig } from './configBackup'
@@ -67,8 +67,8 @@ export async function restaurarBackup(caminhoZip: string): Promise<ResultadoRest
     return { sucesso: false, erro: 'Arquivo de backup não encontrado.' }
   }
 
-  const caminhoDb = join(app.getPath('userData'), 'database.sqlite')
-  const caminhoTemp = join(app.getPath('temp'), `restauracao_${Date.now()}`)
+  const caminhoDb = join(pastaDados(), 'database.sqlite')
+  const caminhoTemp = join(pastaTemp(), `restauracao_${Date.now()}`)
 
   try {
     // 1. Backup de segurança pré-restauração (proteção contra restauração mal sucedida)

@@ -22,11 +22,17 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-const config = readFileSync(join(__dirname, '..', '..', 'electron.vite.config.ts'), 'utf-8')
+const APP = join(__dirname, '..', '..')
+
+// A tabela de edições saiu do config e virou arquivo próprio quando o build do
+// navegador passou a consumi-la também — ver edicoes.ts. As flags moram lá; o
+// repasse da flag para o processo principal continua no config do Electron.
+const edicoes = readFileSync(join(APP, 'edicoes.ts'), 'utf-8')
+const config = readFileSync(join(APP, 'electron.vite.config.ts'), 'utf-8')
 
 describe('tapume da maquininha integrada', () => {
   it('a flag pagamento está desligada em TODAS as edições', () => {
-    const ligadas = [...config.matchAll(/pagamento:\s*(true|false)/g)]
+    const ligadas = [...edicoes.matchAll(/pagamento:\s*(true|false)/g)]
       .map((m) => m[1])
       .filter((v) => v === 'true')
 
@@ -42,7 +48,7 @@ describe('tapume da maquininha integrada', () => {
     // Se a chave sumisse, `FEATURES.pagamento` viraria undefined, o define
     // injetaria `undefined` e o `if (__FEAT_PAGAMENTO__)` continuaria falso por
     // acidente. Funcionaria hoje e quebraria no dia de ligar a feature.
-    const ocorrencias = [...config.matchAll(/pagamento:\s*(?:true|false)/g)]
+    const ocorrencias = [...edicoes.matchAll(/pagamento:\s*(?:true|false)/g)]
 
     expect(ocorrencias.length, 'esperado uma entrada por edição (basico e pro)').toBe(2)
   })

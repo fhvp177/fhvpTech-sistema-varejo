@@ -14,7 +14,7 @@
  * .env.example para o conjunto de variáveis necessárias.
  */
 import { createHmac, createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
-import { app } from 'electron'
+import { pastaDados } from './plataforma'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
@@ -78,11 +78,11 @@ export function calcularHMAC(clienteId: string, expiracao: string): string {
 }
 
 export function caminhoLicenca(): string {
-  return join(app.getPath('userData'), 'licenca.lic')
+  return join(pastaDados(), 'licenca.lic')
 }
 
 function caminhoHeartbeat(): string {
-  return join(app.getPath('userData'), 'licenca.heartbeat')
+  return join(pastaDados(), 'licenca.heartbeat')
 }
 
 // Lê o heartbeat. Retorna null em qualquer falha (arquivo ausente, corrompido,

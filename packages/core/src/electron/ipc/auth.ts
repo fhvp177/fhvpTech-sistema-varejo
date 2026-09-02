@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   alterarPin,
   definirPin,
@@ -23,7 +23,7 @@ const URL_BACKEND = 'https://licenca-gnmodas.fly.dev'
 export function registrarHandlersAuth(): void {
   // Status geral usado pelo App pra ler auto-lock e saber se há PIN configurado
   // (instalação fresca pode não ter — a tela de login lida com 1º cadastro).
-  ipcMain.handle('auth:obterStatus', () => {
+  registrarCanal('auth:obterStatus', () => {
     try {
       return {
         success: true,
@@ -38,7 +38,7 @@ export function registrarHandlersAuth(): void {
   })
 
   // ─── Sessão e login por usuário ──────────────────────────────────────
-  ipcMain.handle('auth:listarUsuariosParaLogin', () => {
+  registrarCanal('auth:listarUsuariosParaLogin', () => {
     try {
       return { success: true, data: obterAuthStore().listarParaLogin() }
     } catch (error) {
@@ -46,7 +46,7 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  ipcMain.handle('auth:login', async (_event, usuarioId: number, pin: string) => {
+  registrarCanal('auth:login', async (usuarioId: number, pin: string) => {
     try {
       const ok = await verificarPin(usuarioId, pin)
       if (!ok) return { success: true, data: { ok: false } }
@@ -58,7 +58,7 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  ipcMain.handle('auth:logout', () => {
+  registrarCanal('auth:logout', () => {
     try {
       limparSessao()
       return { success: true, data: null }
@@ -67,7 +67,7 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  ipcMain.handle('auth:sessaoAtual', () => {
+  registrarCanal('auth:sessaoAtual', () => {
     try {
       return { success: true, data: obterSessao() }
     } catch (error) {
@@ -77,7 +77,7 @@ export function registrarHandlersAuth(): void {
 
   // Modal "elevar privilégio": valida PIN de qualquer dono ativo sem trocar
   // o usuário da sessão. Retorna o id do dono que autenticou (pra log futuro).
-  ipcMain.handle('auth:elevar', async (_event, pin: string) => {
+  registrarCanal('auth:elevar', async (pin: string) => {
     try {
       const donoId = await verificarPinDono(pin)
       return { success: true, data: { ok: donoId !== null, donoId } }
@@ -86,9 +86,9 @@ export function registrarHandlersAuth(): void {
     }
   })
 
-  ipcMain.handle(
+  registrarCanal(
     'auth:cadastrarPinPrimeiroUso',
-    async (_event, usuarioId: number, pin: string) => {
+    async (usuarioId: number, pin: string) => {
       try {
         await definirPin(usuarioId, pin)
         return { success: true, data: null }
@@ -98,9 +98,9 @@ export function registrarHandlersAuth(): void {
     }
   )
 
-  ipcMain.handle(
+  registrarCanal(
     'auth:alterarPin',
-    async (_event, usuarioId: number, pinAtual: string, pinNovo: string) => {
+    async (usuarioId: number, pinAtual: string, pinNovo: string) => {
       try {
         await alterarPin(usuarioId, pinAtual, pinNovo)
         return { success: true, data: null }
@@ -113,7 +113,7 @@ export function registrarHandlersAuth(): void {
   // ─── Recuperação de PIN por email ────────────────────────────────────
   // Gera o código local (hash bcrypt, 6 dígitos, 15 min) e pede ao backend Fly
   // pra enviar por email. `enviado: false` = nenhum usuário ativo com esse email.
-  ipcMain.handle('auth:solicitarRecuperacao', async (_event, email: string) => {
+  registrarCanal('auth:solicitarRecuperacao', async (email: string) => {
     try {
       const gerado = await gerarCodigoRecuperacao(email)
       if (!gerado) {
@@ -154,9 +154,9 @@ export function registrarHandlersAuth(): void {
 
   // Valida o código e redefine o PIN. Em sucesso, já abre a sessão do usuário
   // (login automático) — ele acabou de provar a identidade pelo email.
-  ipcMain.handle(
+  registrarCanal(
     'auth:redefinirComCodigo',
-    async (_event, email: string, codigo: string, novoPin: string) => {
+    async (email: string, codigo: string, novoPin: string) => {
       try {
         const usuarioId = await redefinirComCodigo(email, codigo, novoPin)
         definirSessao(usuarioId)
@@ -168,7 +168,7 @@ export function registrarHandlersAuth(): void {
   )
 
   // ─── Auto-lock ───────────────────────────────────────────────────────
-  ipcMain.handle('auth:setarAutoLock', (_event, minutos: number) => {
+  registrarCanal('auth:setarAutoLock', (minutos: number) => {
     try {
       setarAutoLockMinutos(minutos)
       return { success: true, data: null }

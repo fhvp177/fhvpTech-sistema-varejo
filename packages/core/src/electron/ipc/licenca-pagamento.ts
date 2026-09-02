@@ -5,7 +5,7 @@
 // O clienteId vem da própria licença local — se não houver licença, não
 // dá pra renovar (primeira venda continua sendo manual).
 
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
 
 // URL do backend de licenciamento. Mude pra http://localhost:8080 se quiser
@@ -27,7 +27,7 @@ type RespostaCobranca = {
 }
 
 export function registrarHandlersLicencaPagamento(): void {
-  ipcMain.handle('licenca:obterClienteId', () => {
+  registrarCanal('licenca:obterClienteId', () => {
     try {
       return { success: true, data: extrairClienteIdLocal() }
     } catch (error) {
@@ -54,7 +54,7 @@ export function registrarHandlersLicencaPagamento(): void {
    * O timeout curto é parte disso: sem ele, a tela ficaria com o contato em
    * branco por meio minuto esperando um servidor que não vem.
    */
-  ipcMain.handle('licenca:suporte', async () => {
+  registrarCanal('licenca:suporte', async () => {
     try {
       const clienteId = extrairClienteIdLocal()
       if (!clienteId) return { success: true, data: null }
@@ -70,12 +70,9 @@ export function registrarHandlersLicencaPagamento(): void {
     }
   })
 
-  ipcMain.handle(
+  registrarCanal(
     'licenca:criarCobranca',
-    async (
-      _event,
-      dados: { diasContratados?: number; valorCentavos?: number }
-    ) => {
+    async (dados: { diasContratados?: number; valorCentavos?: number }) => {
       try {
         const clienteId = extrairClienteIdLocal()
         if (!clienteId) {
@@ -109,7 +106,7 @@ export function registrarHandlersLicencaPagamento(): void {
     }
   )
 
-  ipcMain.handle('licenca:consultarCobranca', async (_event, txid: string) => {
+  registrarCanal('licenca:consultarCobranca', async (txid: string) => {
     try {
       const r = await fetch(`${URL_BACKEND}/cobranca/${encodeURIComponent(txid)}`)
       if (!r.ok) {

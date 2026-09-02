@@ -3,6 +3,7 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { inicializarBancoDeDados, obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { executarMigrations } from '@fhvptech/core/electron/db/migrations'
+import { configurarPlataforma } from '@fhvptech/core/electron/plataforma'
 import { criarTabelas } from './db/schema'
 import { MIGRATIONS } from './db/migrations'
 import { registrarHandlersLicenca } from '@fhvptech/core/electron/ipc/licenca'
@@ -95,6 +96,15 @@ function criarJanela(): void {
 }
 
 app.whenReady().then(() => {
+  // Liga o núcleo a esta máquina antes de qualquer uso de banco ou licença.
+  // Vão funções, não valores: quem responde onde ficam os dados continua sendo
+  // o `app`, na hora da pergunta. Ver packages/core/src/electron/plataforma.ts.
+  configurarPlataforma({
+    pastaDados: () => app.getPath('userData'),
+    pastaTemp: () => app.getPath('temp'),
+    versao: () => app.getVersion()
+  })
+
   // Reaproveita banco, migrations e licença do @fhvptech/core (compartilhados
   // com o varejo). Backup entra quando suas tabelas virarem migration do core.
   inicializarBancoDeDados(criarTabelas)

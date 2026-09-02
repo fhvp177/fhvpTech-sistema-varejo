@@ -2,6 +2,7 @@ import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import { readFileSync, existsSync } from 'fs'
+import { FEATURES_POR_EDICAO } from './edicoes'
 
 const APP_VERSION = JSON.parse(
   readFileSync(resolve(__dirname, 'package.json'), 'utf8')
@@ -37,46 +38,9 @@ function lerSegredosLicenca(): Record<string, string> {
 
 const SEGREDOS = lerSegredosLicenca()
 
-// Edição do build — controla quais features entram no bundle. As flags viram
-// constantes literais (`define`), então o bundler faz dead-code elimination das
-// features desligadas: o código E suas libs exclusivas somem do binário daquela
-// edição (não ficam só escondidos). Cada edição é gerada com a env EDICAO.
-//
-// Planos comerciais (definidos 2026-07-17): 'basico' = tudo que o sistema tem
-// hoje; 'pro' = basico + nota fiscal (nfe) + TEF. NF-e e TEF ainda não foram
-// construídos — as flags só reservam o lugar, e o Pro nasce idêntico ao Básico.
-// Default 'pro' = tudo ligado (dev e build padrão, sem regressão).
-//
-// ⚠️ `pagamento` NÃO é flag de plano — é TAPUME DE OBRA. As outras respondem
-// "esta edição vendeu isso?"; esta responde "isto já está pronto pro lojista
-// ver?". Fica `false` em TODAS as edições, inclusive na 'pro', enquanto a
-// maquininha integrada estiver sendo construída. Quando terminar, ela some e o
-// gate passa a ser só `tef`, que é a flag comercial de verdade.
-type Features = Record<
-  'dashboard' | 'chatbot' | 'etiquetas' | 'tef' | 'nfe' | 'multicaixa' | 'pagamento',
-  boolean
->
-const FEATURES_POR_EDICAO: Record<string, Features> = {
-  basico: {
-    dashboard: true,
-    chatbot: true,
-    etiquetas: true,
-    tef: false,
-    nfe: false,
-    multicaixa: false,
-    pagamento: false
-  },
-  // pagamento fica false aqui TAMBÉM, de propósito — ver o comentário acima.
-  pro: {
-    dashboard: true,
-    chatbot: true,
-    etiquetas: true,
-    tef: true,
-    nfe: true,
-    multicaixa: true,
-    pagamento: false
-  }
-}
+// A tabela de edições mora em ./edicoes.ts — o build do navegador
+// (vite.web.config.ts) consome a MESMA, e duplicá-la faria uma edição nova
+// entrar num build e faltar no outro.
 const EDICAO = process.env.EDICAO ?? 'pro'
 const FEATURES = FEATURES_POR_EDICAO[EDICAO]
 if (!FEATURES) {

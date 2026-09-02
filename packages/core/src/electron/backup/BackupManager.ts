@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { pastaDados, pastaTemp, versaoApp } from '../plataforma'
 import { join } from 'path'
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'fs'
 import { randomUUID } from 'crypto'
@@ -57,7 +57,7 @@ class BackupManager {
   readonly pastaPadrao: string
 
   constructor() {
-    this.pastaPadrao = join(app.getPath('userData'), 'Backups')
+    this.pastaPadrao = join(pastaDados(), 'Backups')
     this.inicializarPastas()
     this.inicializarConfig()
   }
@@ -115,14 +115,14 @@ class BackupManager {
     const nomeArquivo = formatarNomeArquivo(agora, tipo)
     const pastaDestino = join(this.pastaPadrao, PASTA_POR_TIPO[tipo])
     const caminhoZip = join(pastaDestino, nomeArquivo)
-    const caminhoTemp = join(app.getPath('temp'), `db_backup_temp_${Date.now()}.sqlite`)
+    const caminhoTemp = join(pastaTemp(), `db_backup_temp_${Date.now()}.sqlite`)
 
     try {
       await db.backup(caminhoTemp)
 
       const tamanhoDb = statSync(caminhoTemp).size
       const metadata: MetadadoBackup = {
-        versao_app: app.getVersion(),
+        versao_app: versaoApp(),
         data: agora.toISOString(),
         tipo,
         tamanho_db_bytes: tamanhoDb,

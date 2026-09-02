@@ -6,7 +6,7 @@
  * verdade. Aqui só se resolve ONDE o arquivo mora — mesma separação que
  * `pastaDados.ts` / `pastaDadosLogica.ts` já usam.
  */
-import { app } from 'electron'
+import { pastaDados } from '../plataforma'
 import { join } from 'path'
 import {
   gravarConfigEm,
@@ -23,7 +23,7 @@ export { CONFIG_PADRAO, PORTA_PADRAO } from './configLogica'
  * junto do banco, porque o terminal não tem banco.
  */
 export function caminhoConfigMulticaixa(): string {
-  return join(app.getPath('userData'), 'multicaixa.json')
+  return join(pastaDados(), 'multicaixa.json')
 }
 
 export function lerConfigMulticaixa(): ConfigMulticaixa {

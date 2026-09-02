@@ -7,6 +7,7 @@ import { criarTabelas } from './db/schema'
 import { executarMigrations } from '@fhvptech/core/electron/db/migrations'
 import { MIGRATIONS } from './backup/migrations'
 import { configurarNucleo } from '@fhvptech/core/electron/nucleo'
+import { configurarPlataforma } from '@fhvptech/core/electron/plataforma'
 import { validarLicenca } from '@fhvptech/core/electron/licenca'
 import { inicializarBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { inicializarBackupAutomatico } from '@fhvptech/core/electron/backup/BackupAutomatico'
@@ -50,6 +51,22 @@ import { corrigirCaminhosBackupLegados, resolverPastaDados } from './pastaDados'
 // Tem que rodar antes de qualquer uso de userData (banco, licença, backup).
 // Ver electron/pastaDados.ts.
 app.setPath('userData', resolverPastaDados())
+
+// Liga o núcleo a esta máquina: onde ficam os dados, onde é o rascunho, qual a
+// versão. Antes disso o núcleo buscava tudo direto do `app`, e por causa desses
+// imports ele só carregava dentro de uma janela do Electron.
+//
+// Repare que vão FUNÇÕES, não valores. É de propósito: o `setPath` logo acima
+// pode ter acabado de apontar o userData pra outra pasta (migração de nome), e
+// congelar o caminho aqui reintroduziria exatamente o bug que aquele resolvedor
+// existe pra evitar — loja abrindo vazia, pedindo licença do zero. Guardando a
+// função, quem responde continua sendo o `app`, na hora da pergunta.
+configurarPlataforma({
+  pastaDados: () => app.getPath('userData'),
+  pastaTemp: () => app.getPath('temp'),
+  versao: () => app.getVersion()
+})
+
 
 let janelaAtual: BrowserWindow | null = null
 

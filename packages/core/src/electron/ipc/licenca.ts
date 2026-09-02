@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import {
   validarLicencaComRelogio,
   ativarLicenca,
@@ -8,7 +8,7 @@ import {
 export function registrarHandlersLicenca(): void {
   // Usa a versão que confere a hora com o servidor antes de acusar o relógio.
   // Custa uma requisição HEAD com timeout curto, e só quando a trava dispara.
-  ipcMain.handle('licenca:validar', async () => {
+  registrarCanal('licenca:validar', async () => {
     try {
       const status = await validarLicencaComRelogio()
       return { success: true, data: status }
@@ -17,7 +17,7 @@ export function registrarHandlersLicenca(): void {
     }
   })
 
-  ipcMain.handle('licenca:destravarRelogio', () => {
+  registrarCanal('licenca:destravarRelogio', () => {
     try {
       return { success: true, data: destravarRelogio() }
     } catch (error) {
@@ -25,7 +25,7 @@ export function registrarHandlersLicenca(): void {
     }
   })
 
-  ipcMain.handle('licenca:ativar', (_event, chave: string) => {
+  registrarCanal('licenca:ativar', (chave: string) => {
     try {
       const status = ativarLicenca(chave)
       return { success: true, data: status }

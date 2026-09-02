@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { app } from 'electron'
+import { pastaDados } from '../plataforma'
 import { join } from 'path'
 
 let db: Database.Database | null = null
@@ -19,7 +19,7 @@ export function fecharBancoDeDados(): void {
 }
 
 export function inicializarBancoDeDados(aoInicializar?: (db: Database.Database) => void): void {
-  const caminhoBanco = join(app.getPath('userData'), 'database.sqlite')
+  const caminhoBanco = join(pastaDados(), 'database.sqlite')
 
   db = new Database(caminhoBanco)
 
