@@ -5,13 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel FHVP Tech</title>
 <!-- Identidade compartilhada com o painel do revendedor. Ver /painel.css. -->
-<link rel="stylesheet" href="/painel.css">
+<!-- ⚠️ TODO caminho desta página é RELATIVO, e isso não é estilo: é o que faz
+     ela funcionar em dois endereços ao mesmo tempo.
+
+     Servida pelo backend em `/painel`, o diretório-base é `/`, então
+     `painel.css` vira `/painel.css` e `revenda/login` vira `/revenda/login`.
+
+     Servida em `fhvptech.com/painel-do-revendedor/` (o Worker do Cloudflare),
+     o diretório-base é `/painel-do-revendedor/`, então os mesmos caminhos viram
+     `/painel-do-revendedor/painel.css` e `/painel-do-revendedor/revenda/login`
+     — que é exatamente o prefixo que o Worker remove antes de repassar ao Fly.
+
+     Uma barra inicial em qualquer um deles quebra o segundo caso: o pedido sai
+     para a raiz de fhvptech.com, onde o Worker não escuta, e a página abre sem
+     estilo ou sem conseguir falar com a API. -->
+<link rel="stylesheet" href="painel.css">
 </head>
 <body>
 
 <div id="telaLogin">
   <form class="cartao-login" id="formLogin">
-    <img class="logo-entrada" src="/painel-logo.png" alt="FHVP Tech" width="104" height="104">
+    <img class="logo-entrada" src="painel-logo.png" alt="FHVP Tech" width="104" height="104">
     <div class="marca" style="text-align:center">FHVP <span>Tech</span></div>
     <div class="selo">Administração</div>
     <p class="sub" style="text-align:center;margin-top:10px">Revendedores e lojas da rede.</p>
@@ -109,7 +123,7 @@
     if (token) cab.Authorization = 'Bearer ' + token
     let resp
     try {
-      resp = await fetch(caminho, {
+      resp = await fetch(caminho.replace(/^\//, ''), {
         method: o.metodo || 'GET',
         headers: cab,
         body: o.corpo ? JSON.stringify(o.corpo) : undefined
