@@ -59,11 +59,12 @@ Zona: `fhvptech.com`.
 ## Passo 4 — conferir
 
 ```bash
-# redireciona para a barra no fim (301) — é o que segura os caminhos relativos
-curl -sI https://fhvptech.com/painel-do-revendedor | head -3
+# a página — SEM barra no fim, que é como o revendedor vai receber o link
+curl -s -o /dev/null -w "%{http_code}\n" https://fhvptech.com/painel-do-revendedor
 
-# a página
-curl -s -o /dev/null -w "%{http_code}\n" https://fhvptech.com/painel-do-revendedor/
+# e a <base> tem que estar lá dentro: é ela que faz os caminhos resolverem
+curl -s https://fhvptech.com/painel-do-revendedor | grep -o '<base[^>]*>'
+# esperado: <base href="/painel-do-revendedor/">
 
 # o estilo e o logotipo
 curl -s -o /dev/null -w "%{http_code}\n" https://fhvptech.com/painel-do-revendedor/painel.css
@@ -79,20 +80,28 @@ curl -s -o /dev/null -w "%{http_code}\n" https://fhvptech.com/painel-do-revended
 # esperado: 404 (o Worker recusa; a lista de rotas é fechada por padrão)
 ```
 
-## Por que a barra no fim importa
+## Por que o endereço fica sem barra no fim
 
 A página usa caminhos **relativos** (`painel.css`, `revenda/login`) — é isso que
-a faz funcionar nos dois endereços com o mesmo arquivo. O navegador resolve
-relativo contra o *diretório* do endereço atual:
+a faz funcionar nos dois endereços com o mesmo arquivo. Só que o navegador
+resolve relativo contra o *diretório* do endereço atual:
 
 ```
-/painel-do-revendedor     → diretório é /                   → /painel.css              ✗
-/painel-do-revendedor/    → diretório é /painel-do-.../      → /painel-do-.../painel.css ✓
+/painel-do-revendedor     → diretório é /                → /painel.css               ✗
+/painel-do-revendedor/    → diretório é o prefixo        → /painel-do-.../painel.css ✓
 ```
 
-Sem a barra, o pedido sai para a raiz de `fhvptech.com`, onde o Worker não
-escuta: a página abre sem estilo e o login não responde. O redirecionamento 301
-do passo 1 do Worker existe só para isso.
+A saída óbvia seria redirecionar para a versão com barra. Funciona, mas deixa a
+barra na cara do revendedor.
+
+Em vez disso o Worker mexe na **página**: injeta `<base href="/painel-do-revendedor/">`
+no `<head>` com o `HTMLRewriter`. A tag `<base>` troca a referência contra a qual
+todo caminho relativo é resolvido — inclusive os `fetch()` do JavaScript, que
+usam a base do documento. Resultado: o endereço fica limpo, sem barra, e os
+caminhos saem certos assim mesmo.
+
+> O `*` da rota (`fhvptech.com/painel-do-revendedor*`) é só padrão de
+> correspondência do Cloudflare — **nunca aparece no navegador**.
 
 ## O que este Worker deixa passar
 

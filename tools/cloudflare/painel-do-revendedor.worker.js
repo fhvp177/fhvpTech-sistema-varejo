@@ -1,6 +1,6 @@
 /**
  * Worker do Cloudflare — publica o painel do revendedor em
- * `https://fhvptech.com/painel-do-revendedor/`.
+ * `https://fhvptech.com/painel-do-revendedor`.
  *
  * ── Por que existe ──────────────────────────────────────────────────────────
  * O painel mora no Fly, em `licenca-gnmodas.fly.dev` — um endereço com nome de
@@ -13,16 +13,27 @@
  * segundo caixa apontam para lá. Uma loja que nunca atualizar vai falar com
  * aquele endereço para sempre. Desligá-lo derruba tudo isso de uma vez.
  *
- * ── A barra no fim não é detalhe ────────────────────────────────────────────
- * A página usa caminhos RELATIVOS (`painel.css`, `revenda/login`). O navegador
- * os resolve contra o diretório do endereço atual:
+ * ── O endereço fica limpo, sem barra no fim ─────────────────────────────────
+ * A página usa caminhos RELATIVOS (`painel.css`, `revenda/login`) — é o que a
+ * faz servir os dois endereços com o mesmo arquivo. Só que o navegador resolve
+ * relativo contra o DIRETÓRIO do endereço atual, e o diretório de
+ * `/painel-do-revendedor` é a raiz: `painel.css` sairia para
+ * `fhvptech.com/painel.css`, fora do que este Worker escuta. A página abriria
+ * sem estilo e sem conseguir falar com a API.
  *
- *   /painel-do-revendedor    → diretório é `/`         → /painel.css          ✗
- *   /painel-do-revendedor/   → diretório é o próprio   → /painel-do-.../css   ✓
+ * A saída óbvia seria redirecionar para `/painel-do-revendedor/` — com a barra,
+ * o diretório passa a ser o próprio prefixo e tudo resolve certo. Funciona, mas
+ * deixa a barra na cara do revendedor.
  *
- * Sem a barra, o CSS e a API saem para a raiz de fhvptech.com, onde este Worker
- * não escuta: a página abre sem estilo e o login não responde. Por isso a
- * primeira coisa aqui é o redirecionamento — e por isso ele não é opcional.
+ * Então em vez de mexer no endereço, mexe-se na PÁGINA: o `HTMLRewriter` injeta
+ * `<base href="/painel-do-revendedor/">` no `<head>` antes de entregar. A tag
+ * `<base>` troca a referência contra a qual todo caminho relativo é resolvido —
+ * inclusive os `fetch()` do JavaScript, que usam a base do documento. O
+ * endereço fica `fhvptech.com/painel-do-revendedor`, sem barra, e os caminhos
+ * saem certos mesmo assim.
+ *
+ * Custa uma passada de reescrita só no HTML (que é pequeno); CSS, imagem e as
+ * chamadas de API passam direto, sem tocar no corpo.
  *
  * ── Só a superfície do revendedor passa ─────────────────────────────────────
  * A lista abaixo é fechada por padrão. As rotas `/admin/*` existem no mesmo
@@ -54,14 +65,11 @@ export default {
       return new Response('Não encontrado.', { status: 404 })
     }
 
-    // Sem barra no fim, os caminhos relativos da página escapam do prefixo.
-    if (url.pathname === PREFIXO) {
-      return Response.redirect(`${url.origin}${PREFIXO}/${url.search}`, 301)
-    }
-
-    // `/painel-do-revendedor/revenda/login` → `/revenda/login`
+    // `/painel-do-revendedor` e `/painel-do-revendedor/` são a mesma coisa: a
+    // página. Qualquer outro sufixo é o caminho real no backend.
+    //   /painel-do-revendedor/revenda/login  →  /revenda/login
     let caminho = url.pathname.slice(PREFIXO.length)
-    if (caminho === '/') caminho = '/painel'
+    if (caminho === '' || caminho === '/') caminho = '/painel'
 
     if (!permitido(caminho)) {
       return new Response('Não encontrado.', { status: 404 })
@@ -77,14 +85,27 @@ export default {
 
     // Resposta copiada para poder mexer nos cabeçalhos (a original é imutável).
     const saida = new Response(resposta.body, resposta)
-    // O backend não sabe que está atrás de um domínio de marca; garantir aqui
-    // evita que um proxy no meio guarde a página de um revendedor e sirva para
-    // outro.
-    saida.headers.set('Cache-Control', caminho === '/painel-logo.png'
-      ? 'public, max-age=86400'
-      : caminho === '/painel.css'
-        ? 'public, max-age=300'
-        : 'no-store')
-    return saida
+    saida.headers.set(
+      'Cache-Control',
+      caminho === '/painel-logo.png'
+        ? 'public, max-age=86400'
+        : caminho === '/painel.css'
+          ? 'public, max-age=300'
+          : 'no-store'
+    )
+
+    // Só o HTML precisa da <base>; o resto passa intocado.
+    if (caminho !== '/painel') return saida
+
+    return new HTMLRewriter()
+      .on('head', {
+        element(head) {
+          // `prepend` põe a tag como PRIMEIRO filho do <head>. A posição
+          // importa: a <base> só vale para o que vem depois dela, e o
+          // <link rel="stylesheet"> da página está logo ali em cima.
+          head.prepend(`<base href="${PREFIXO}/">`, { html: true })
+        }
+      })
+      .transform(saida)
   }
 }
