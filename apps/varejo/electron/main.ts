@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { montarPonteIpc } from '@fhvptech/core/electron/roteador'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
@@ -10,7 +10,10 @@ import { configurarNucleo } from '@fhvptech/core/electron/nucleo'
 import { configurarPlataforma } from '@fhvptech/core/electron/plataforma'
 import { validarLicenca } from '@fhvptech/core/electron/licenca'
 import { inicializarBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
-import { inicializarBackupAutomatico } from '@fhvptech/core/electron/backup/BackupAutomatico'
+import {
+  inicializarBackupAutomatico,
+  obterBackupAutomatico
+} from '@fhvptech/core/electron/backup/BackupAutomatico'
 import { registrarBackupAoFechar } from '@fhvptech/core/electron/backup/BackupAoFechar'
 import { registrarHandlersLicenca } from '@fhvptech/core/electron/ipc/licenca'
 import { registrarHandlersLicencaPagamento } from '@fhvptech/core/electron/ipc/licenca-pagamento'
@@ -64,7 +67,17 @@ app.setPath('userData', resolverPastaDados())
 configurarPlataforma({
   pastaDados: () => app.getPath('userData'),
   pastaTemp: () => app.getPath('temp'),
-  versao: () => app.getVersion()
+  versao: () => app.getVersion(),
+  // Só o app instalado sabe pedir uma pasta. O servidor web não oferece esta
+  // função, e quem depende dela avisa o lojista em vez de gravar em lugar
+  // nenhum — ver escolherPasta() em plataforma.ts.
+  escolherPasta: async (titulo) => {
+    const r = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+      title: titulo
+    })
+    return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]
+  }
 })
 
 
@@ -207,7 +220,7 @@ app.whenReady().then(() => {
   registrarHandlersVendas()
   registrarHandlersVendedores()
   registrarHandlersEtiquetas()
-  registrarHandlersBackup()
+  registrarHandlersBackup({ aoMudarAgenda: () => obterBackupAutomatico().reiniciar() })
   registrarHandlersImpressao(() => janelaAtual)
   registrarHandlersDashboard()
   registrarHandlersAuth()

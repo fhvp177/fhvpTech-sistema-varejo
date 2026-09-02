@@ -1,16 +1,44 @@
-import { dialog } from 'electron'
+import { escolherPasta } from '@fhvptech/core/electron/plataforma'
 import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { fazerBackupManual } from '@fhvptech/core/electron/backup/BackupManual'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
-import { obterBackupAutomatico } from '@fhvptech/core/electron/backup/BackupAutomatico'
 import { verificarSenha, temSenhaConfigurada } from '@fhvptech/core/electron/backup/SenhaRestauracao'
 import { listarBackupsDisponiveis, restaurarBackup } from '@fhvptech/core/electron/backup/Restaurador'
 
-export function registrarHandlersBackup(): void {
+/**
+ * Ganchos de quem hospeda — cada lugar liga o que faz sentido nele.
+ *
+ * Recebê-los por parâmetro é o que permite ao servidor web registrar os oito
+ * canais de backup sem arrastar o Electron junto.
+ */
+export interface GanchosBackup {
+  /**
+   * Frequência mudou, ou o backup automático foi ligado/desligado. No
+   * aplicativo instalado reinicia o agendador. No servidor não vem: aquele
+   * mecanismo reage a suspender a máquina e avisa a janela, e servidor não
+   * dorme nem tem janela.
+   */
+  aoMudarAgenda?: () => void
+  /**
+   * Um backup manual acabou de ficar pronto.
+   *
+   * Existe por causa do que se viu no primeiro teste hospedado: o lojista
+   * clicava em "fazer backup", o arquivo era criado na hora, mas só saía da
+   * máquina no próximo ciclo de envio — até quinze minutos depois. Quem aperta
+   * aquele botão costuma estar prestes a fazer algo arriscado, e "já está
+   * salvo" não pode ser uma promessa com atraso.
+   */
+  aoConcluirBackup?: () => void
+}
+
+export function registrarHandlersBackup(ganchos: GanchosBackup = {}): void {
   registrarCanal('backup:fazerManual', async () => {
     try {
       const resultado = await fazerBackupManual()
       if (resultado.sucesso) {
+        // Sem esperar: o envio para fora da máquina começa agora, não no
+        // próximo ciclo. Falha aqui não estraga o backup, que já está no disco.
+        ganchos.aoConcluirBackup?.()
         return { success: true, data: null }
       }
       return { success: false, error: resultado.erro ?? 'Falha ao criar backup.' }
@@ -46,7 +74,7 @@ export function registrarHandlersBackup(): void {
     try {
       gravarConfig(chave, valor)
       if (chave === 'backup_frequencia_horas' || chave === 'backup_ativo') {
-        obterBackupAutomatico().reiniciar()
+        ganchos.aoMudarAgenda?.()
       }
       return { success: true, data: null }
     } catch (error) {
@@ -85,14 +113,8 @@ export function registrarHandlersBackup(): void {
 
   registrarCanal('backup:selecionarPasta', async () => {
     try {
-      const resultado = await dialog.showOpenDialog({
-        properties: ['openDirectory'],
-        title: 'Selecionar pasta para backups'
-      })
-      if (resultado.canceled || resultado.filePaths.length === 0) {
-        return { success: true, data: null }
-      }
-      return { success: true, data: resultado.filePaths[0] }
+      const pasta = await escolherPasta('Selecionar pasta para backups')
+      return { success: true, data: pasta }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

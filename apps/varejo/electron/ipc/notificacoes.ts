@@ -1,7 +1,7 @@
 import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { validarLicenca } from '@fhvptech/core/electron/licenca'
-import { obterEstadoAtualizacao } from '../atualizador'
+import { obterEstadoAtualizacao } from '../atualizacaoEstado'
 import {
   alertasDoBanco,
   sincronizar,

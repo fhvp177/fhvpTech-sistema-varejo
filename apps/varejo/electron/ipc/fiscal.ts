@@ -1,4 +1,4 @@
-import { dialog } from 'electron'
+import { escolherPasta } from '@fhvptech/core/electron/plataforma'
 import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -776,15 +776,11 @@ function registrarHandlersFiscalRemoto(): void {
         const lista = Array.isArray(arquivos) ? arquivos : []
         if (!lista.length) throw new Error('Nenhum XML para salvar.')
 
-        const resultado = await dialog.showOpenDialog({
-          properties: ['openDirectory', 'createDirectory'],
-          title: `Escolher pasta pros XMLs de ${mes}`
-        })
-        if (resultado.canceled || resultado.filePaths.length === 0) {
+        const pasta = await escolherPasta(`Escolher pasta pros XMLs de ${mes}`)
+        if (!pasta) {
           return { success: true, data: null } // lojista desistiu — não é erro
         }
 
-        const pasta = resultado.filePaths[0]
         for (const a of lista) {
           // Nome vem da chave de acesso; sanitiza pra não escapar da pasta.
           const nome = String(a.nome).replace(/[^A-Za-z0-9._-]/g, '_')

@@ -10,3 +10,6 @@ declare const __FEAT_PAGAMENTO__: boolean
 
 /** 'basico' | 'pro' — a edição com que este binário foi gerado. */
 declare const __EDICAO__: string
+
+/** Versão do app. O servidor web a usa onde o instalado usa `app.getVersion()`. */
+declare const __APP_VERSION__: string

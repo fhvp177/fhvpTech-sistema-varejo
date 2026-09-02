@@ -41,6 +41,17 @@ export interface Plataforma {
   pastaTemp: () => string
   /** Versão do app, como aparece para o usuário. */
   versao: () => string
+  /**
+   * Pede uma pasta ao usuário. `null` quando ele desiste.
+   *
+   * OPCIONAL de propósito: no navegador isso não existe. Uma página não escolhe
+   * pasta do aparelho — ela entrega um arquivo, e quem decide onde guardar é o
+   * sistema do lado de lá. Deixar de fora é mais honesto que devolver um
+   * caminho inventado que o servidor gravaria na máquina errada.
+   *
+   * Quem chama pergunta antes com `podeEscolherPasta()`, ou trata o erro.
+   */
+  escolherPasta?: (titulo: string) => Promise<string | null>
 }
 
 let plataforma: Plataforma | null = null
@@ -83,4 +94,28 @@ export function versaoApp(): string {
 /** Só para teste: devolve o módulo ao estado inicial entre casos. */
 export function limparPlataforma(): void {
   plataforma = null
+}
+
+/** Se esta instalação sabe pedir uma pasta ao usuário. */
+export function podeEscolherPasta(): boolean {
+  return exigir().escolherPasta !== undefined
+}
+
+/**
+ * Pede uma pasta. `null` = o usuário desistiu, o que NÃO é erro.
+ *
+ * Lança onde não há como pedir (servidor). A mensagem vai para a tela do
+ * lojista, então diz o que aconteceu em vez de citar a limitação técnica.
+ */
+export async function escolherPasta(titulo: string): Promise<string | null> {
+  const p = exigir()
+  if (!p.escolherPasta) {
+    // A frase vai direto para a tela do lojista, então conta o que ESTÁ
+    // acontecendo — não promete um download que ainda não existe.
+    throw new Error(
+      'Escolher uma pasta do computador só funciona no aplicativo instalado. ' +
+        'Pelo navegador, os backups ficam guardados no servidor da loja.'
+    )
+  }
+  return p.escolherPasta(titulo)
 }

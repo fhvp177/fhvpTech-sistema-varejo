@@ -1,4 +1,4 @@
-import { dialog } from 'electron'
+import { escolherPasta } from '@fhvptech/core/electron/plataforma'
 import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -222,15 +222,11 @@ export function registrarHandlersNotasEntrada(): void {
       const notas = xmlsDoMes(mes)
       if (notas.length === 0) throw new Error('Nenhuma nota importada neste mês.')
 
-      const resultado = await dialog.showOpenDialog({
-        properties: ['openDirectory', 'createDirectory'],
-        title: `Escolher pasta pros XMLs de ${mes}`
-      })
-      if (resultado.canceled || resultado.filePaths.length === 0) {
+      const pasta = await escolherPasta(`Escolher pasta pros XMLs de ${mes}`)
+      if (!pasta) {
         return { success: true, data: null } // lojista desistiu — não é erro
       }
 
-      const pasta = resultado.filePaths[0]
       for (const nota of notas) {
         writeFileSync(join(pasta, `NFe-${nota.chave}.xml`), nota.xml, 'utf-8')
       }

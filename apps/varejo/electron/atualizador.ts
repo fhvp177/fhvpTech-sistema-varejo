@@ -1,5 +1,10 @@
 import { BrowserWindow, app } from 'electron'
 import { registrarCanal } from '@fhvptech/core/electron/roteador'
+import {
+  estadoAtualizacao as estado,
+  obterEstadoAtualizacao,
+  type EstadoAtualizacao
+} from './atualizacaoEstado'
 import { autoUpdater } from 'electron-updater'
 import {
   executarBackupPreUpdate,
@@ -9,28 +14,6 @@ import {
 type RespostaIPC<T = unknown> =
   | { success: true; data: T }
   | { success: false; error: string }
-
-// Mantém uma referência ao último resultado pra a tela de Configurações
-// poder mostrar feedback mesmo sem rodar uma verificação manual.
-export type EstadoAtualizacao = {
-  versaoAtual: string
-  ultimaVerificacao: string | null
-  ultimaMensagem: string | null
-  versaoBaixada: string | null
-}
-
-const estado: EstadoAtualizacao = {
-  versaoAtual: app.getVersion(),
-  ultimaVerificacao: null,
-  ultimaMensagem: null,
-  versaoBaixada: null
-}
-
-// Permite que outros módulos (ex.: notificações) leiam o estado de atualização
-// sem passar pelo IPC. Devolve uma cópia para ninguém mutar o estado interno.
-export function obterEstadoAtualizacao(): EstadoAtualizacao {
-  return { ...estado }
-}
 
 /**
  * Configura o autoUpdater, registra os handlers IPC e o backup pré-atualização.
@@ -114,7 +97,7 @@ export function inicializarAtualizador(obterJanela: () => BrowserWindow | null):
 
   // ─── Handlers IPC chamados pelo renderer ─────────────────────────────────
   registrarCanal('atualizacao:obterInfo', (): RespostaIPC<EstadoAtualizacao> => {
-    return { success: true, data: { ...estado } }
+    return { success: true, data: obterEstadoAtualizacao() }
   })
 
   registrarCanal('atualizacao:verificar', async (): Promise<RespostaIPC> => {
