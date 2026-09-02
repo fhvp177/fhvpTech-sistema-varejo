@@ -98,6 +98,15 @@ describe('rede instável não polui o diário', () => {
     expect(resumirQuedas(arquivo).tempoForaMs).toBe(60 * 1000)
   })
 
+  // O tempo generoso não é folga: este é o único teste do arquivo que encosta
+  // no disco 500 vezes, e cada anotação lê o diário inteiro, reescreve e faz o
+  // rename atômico — mais de mil operações de sistema de arquivos sobre um JSON
+  // de 200 entradas. Com a suíte inteira rodando em paralelo no Windows, e o
+  // antivírus inspecionando cada arquivo temporário, isso passa dos cinco
+  // segundos padrão sem que nada esteja errado.
+  //
+  // Encurtar o laço enfraqueceria o teste: é justamente ultrapassar o limite
+  // que prova que o diário para de crescer.
   it('não cresce sem limite', () => {
     for (let i = 0; i < MAXIMO_REGISTROS + 50; i++) {
       anotarQueda(arquivo, T(0))
@@ -105,7 +114,7 @@ describe('rede instável não polui o diário', () => {
     }
 
     expect(resumirQuedas(arquivo).total).toBe(MAXIMO_REGISTROS)
-  })
+  }, 60_000)
 })
 
 describe('arquivo estragado não atrapalha', () => {
