@@ -15,6 +15,24 @@ import {
 import { definirSessao, limparSessao, obterSessao, requerDono } from '../sessao'
 import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
 import { listarParaLogin } from '../db/queries/vendedores'
+import { origemAtual } from '@fhvptech/core/electron/roteador'
+import {
+  Estrangulador,
+  mensagemDeEspera
+} from '@fhvptech/core/electron/auth/estrangulamento'
+
+/**
+ * Freio contra quem fica tentando adivinhar PIN ou código de recuperação.
+ *
+ * No aplicativo instalado isso nunca fez falta: para tentar, a pessoa tem que
+ * estar de pé no balcão. Servido pelo navegador o endereço é público, e sem
+ * freio um script varre os dez mil PINs de quatro dígitos em minutos.
+ *
+ * A chave separa o que é independente: cada vendedor tem a sua contagem, a
+ * elevação conta por aba, e o código de recuperação conta por e-mail. Assim
+ * ninguém castiga ninguém — ver estrangulamento.ts.
+ */
+const freio = new Estrangulador()
 
 // Mesmo backend do chat/renovação (ipc/chat.ts, ipc/licenca-pagamento.ts).
 const URL_BACKEND = 'https://licenca-gnmodas.fly.dev'
@@ -47,8 +65,16 @@ export function registrarHandlersAuth(): void {
 
   registrarCanal('auth:login', async (vendedorId: number, pin: string) => {
     try {
+      const chave = `login:${vendedorId}`
+      const espera = freio.espera(chave)
+      if (espera > 0) return { success: true, data: { ok: false, erro: mensagemDeEspera(espera) } }
+
       const ok = await verificarPinVendedor(vendedorId, pin)
-      if (!ok) return { success: true, data: { ok: false } }
+      if (!ok) {
+        freio.falhou(chave)
+        return { success: true, data: { ok: false } }
+      }
+      freio.acertou(chave)
       definirSessao(vendedorId)
       const sessao = obterSessao()
       return { success: true, data: { ok: true, sessao } }
@@ -78,7 +104,17 @@ export function registrarHandlersAuth(): void {
   // o vendedor da sessão. Retorna o id do gerente que autenticou (pra log futuro).
   registrarCanal('auth:elevar', async (pin: string) => {
     try {
+      // Conta por ORIGEM (a aba que pediu), e não por vendedor: elevar não diz
+      // de quem é o PIN que está sendo tentado.
+      const chave = `elevar:${origemAtual()}`
+      const espera = freio.espera(chave)
+      if (espera > 0) {
+        return { success: true, data: { ok: false, donoId: null, erro: mensagemDeEspera(espera) } }
+      }
+
       const donoId = await verificarPinDono(pin)
+      if (donoId === null) freio.falhou(chave)
+      else freio.acertou(chave)
       return { success: true, data: { ok: donoId !== null, donoId } }
     } catch (error) {
       return { success: false, error: (error as Error).message }
@@ -100,10 +136,17 @@ export function registrarHandlersAuth(): void {
   registrarCanal(
     'auth:alterarPinVendedor',
     async (vendedorId: number, pinAtual: string, pinNovo: string) => {
+      const chave = `login:${vendedorId}`
+      const espera = freio.espera(chave)
+      if (espera > 0) return { success: false, error: mensagemDeEspera(espera) }
       try {
         await alterarPinVendedor(vendedorId, pinAtual, pinNovo)
+        freio.acertou(chave)
         return { success: true, data: null }
       } catch (error) {
+        // Trocar o PIN exige o atual: sem freio aqui, seria a mesma porta do
+        // login com outro nome. Compartilha a contagem com ele, de propósito.
+        freio.falhou(chave)
         return { success: false, error: (error as Error).message }
       }
     }
@@ -156,11 +199,18 @@ export function registrarHandlersAuth(): void {
   registrarCanal(
     'auth:redefinirComCodigo',
     async (email: string, codigo: string, novoPin: string) => {
+      // O código tem seis dígitos e acertá-lo REDEFINE o PIN — é a porta mais
+      // valiosa das quatro, e a única em que adivinhar dá acesso total.
+      const chave = `recuperacao:${String(email).trim().toLowerCase()}`
+      const espera = freio.espera(chave)
+      if (espera > 0) return { success: false, error: mensagemDeEspera(espera) }
       try {
         const vendedorId = await redefinirComCodigo(email, codigo, novoPin)
+        freio.acertou(chave)
         definirSessao(vendedorId)
         return { success: true, data: { ok: true, sessao: obterSessao() } }
       } catch (error) {
+        freio.falhou(chave)
         return { success: false, error: (error as Error).message }
       }
     }
