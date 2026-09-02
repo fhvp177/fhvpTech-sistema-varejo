@@ -229,6 +229,27 @@ const App: FC = () => {
     setComissoesAtivo(resp.success ? resp.data : false)
   }, [])
 
+  /**
+   * A aba de Comissões acompanha a SESSÃO, sempre.
+   *
+   * ── O bug que este efeito consertou ───────────────────────────────────────
+   * Antes, quem atualizava este estado era o efeito de licença/auth, que roda
+   * uma vez quando o app abre. Só que ao ABRIR o app ainda não existe sessão —
+   * ela vive na memória do processo principal e morre junto com o app. O
+   * resultado: `papel` chegava indefinido, o estado ia para `false`, e o login
+   * logo em seguida não mexia mais nele. A aba sumia a cada reabertura e só
+   * voltava quando alguém mexia no percentual (que recarrega pelo contexto).
+   *
+   * Consertar chamando `recarregarComissoes` também no login funcionaria — e
+   * seria a mesma armadilha esperando o próximo caminho que troca de usuário
+   * (elevar privilégio, trocar de vendedor, logout). Aqui o estado é DERIVADO
+   * do papel de quem está logado: qualquer caminho que mexa na sessão acerta a
+   * aba de graça, sem ninguém precisar lembrar.
+   */
+  useEffect(() => {
+    void recarregarComissoes(vendedor?.papel)
+  }, [vendedor?.papel, recarregarComissoes])
+
   const ctxComissoes = useMemo(
     () => ({
       ativo: comissoesAtivo,
@@ -247,7 +268,6 @@ const App: FC = () => {
           setAutoLockMinutos(respStatus.data.autoLockMinutos)
         }
         const sessao = await recarregarSessao()
-        await recarregarComissoes(sessao?.papel)
         setFalhaCaixaPrincipal(null)
         setEstadoAuth(sessao ? 'desbloqueado' : 'bloqueado')
       } catch (erro) {
@@ -258,7 +278,7 @@ const App: FC = () => {
         setFalhaCaixaPrincipal((erro as Error).message || 'Sem conexão com o caixa principal.')
       }
     })()
-  }, [estadoLicenca, recarregarSessao, recarregarComissoes, tentativaCaixaPrincipal])
+  }, [estadoLicenca, recarregarSessao, tentativaCaixaPrincipal])
 
   // ── Onboarding ──────────────────────────────────────────────────────────────
   // Relê o estado do tutorial. Em caso de falha, assume "tudo visto" (fail-safe:

@@ -3,7 +3,7 @@ import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
 import { Select } from '@fhvptech/core/ui/select'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigComissao from '@/components/ConfigComissao'
@@ -70,11 +70,11 @@ const Configuracoes: FC = () => {
   const [porVenda, setPorVenda] = useState(false)
   const [pastaPadrao, setPastaPadrao] = useState('')
   const [pastaSecundaria, setPastaSecundaria] = useState('')
-  const [salvando, setSalvando] = useState(false)
   const [fazendoBackup, setFazendoBackup] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
-  // Feedback do backup manual mora DENTRO do card dele — mensagem de backup
-  // aparecendo ao lado do "Salvar configurações" era metade da confusão.
+  // Feedback do backup manual mora DENTRO do card dele: "backup criado" é
+  // resposta a uma AÇÃO, e não pode se misturar com o "salvo" das preferências
+  // logo abaixo — foram duas mensagens no mesmo lugar que confundiram antes.
   const [feedbackBackup, setFeedbackBackup] = useState<Feedback | null>(null)
 
   // Dados da loja (identidade no cupom)
@@ -187,19 +187,36 @@ const Configuracoes: FC = () => {
     setTimeout(() => setFeedback(null), 4000)
   }
 
-  const salvar = async () => {
-    setSalvando(true)
+  /**
+   * Grava uma preferência de backup na hora em que ela muda.
+   *
+   * ── Por que não existe mais botão de salvar ────────────────────────────────
+   * Metade desta tela já salvava sozinha (escolher pasta, pasta secundária,
+   * limpar), e a outra metade esperava um botão no rodapé. Quem mexia num
+   * interruptor e saía da tela achava que tinha configurado — e não tinha.
+   * Não era um botão faltando: eram duas regras convivendo na mesma tela, e a
+   * pessoa não tem como saber qual vale para qual campo.
+   *
+   * A tela toda passa a seguir a regra que já valia para a maioria dos campos.
+   *
+   * ── O estado da tela anda ANTES da gravação ────────────────────────────────
+   * O interruptor vira na hora e a gravação acontece atrás. Se ela falhar, o
+   * valor volta para o que estava e o erro aparece — nunca fica um interruptor
+   * ligado na tela e desligado no banco, que é o pior dos dois mundos.
+   */
+  const gravarPreferencia = async (
+    chave: string,
+    valor: string,
+    desfazer: () => void
+  ): Promise<void> => {
     try {
-      await window.api.backup.gravarConfig('backup_ativo', ativo ? '1' : '0')
-      await window.api.backup.gravarConfig('backup_frequencia_horas', frequencia)
-      await window.api.backup.gravarConfig('backup_ao_fechar', aoFechar)
-      await window.api.backup.gravarConfig('backup_por_venda', porVenda ? '1' : '0')
-      mostrarFeedback('ok', 'Configurações salvas com sucesso!')
+      const resp = await window.api.backup.gravarConfig(chave, valor)
+      if (!resp.success) throw new Error(resp.error)
+      mostrarFeedback('ok', 'Salvo.')
       await carregarStatus()
     } catch {
-      mostrarFeedback('erro', 'Erro ao salvar configurações.')
-    } finally {
-      setSalvando(false)
+      desfazer()
+      mostrarFeedback('erro', 'Não foi possível salvar. A opção voltou como estava.')
     }
   }
 
@@ -644,7 +661,11 @@ const Configuracoes: FC = () => {
             <p className="text-xs text-muted-foreground mt-0.5">Habilita backups periódicos e ao fechar o sistema</p>
           </div>
           <button
-            onClick={() => setAtivo(!ativo)}
+            onClick={() => {
+              const novo = !ativo
+              setAtivo(novo)
+              gravarPreferencia('backup_ativo', novo ? '1' : '0', () => setAtivo(ativo))
+            }}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               ativo ? 'bg-primary' : 'bg-muted-foreground/30'
             }`}
@@ -662,7 +683,11 @@ const Configuracoes: FC = () => {
           <Label className="text-sm font-medium mb-1.5 block">Frequência do backup automático</Label>
           <Select
             value={frequencia}
-            onChange={setFrequencia}
+            onChange={(v) => {
+              const anterior = frequencia
+              setFrequencia(v)
+              gravarPreferencia('backup_frequencia_horas', v, () => setFrequencia(anterior))
+            }}
             classNameContainer="max-w-xs"
             opcoes={[
               { valor: '1', rotulo: 'A cada 1 hora' },
@@ -684,7 +709,11 @@ const Configuracoes: FC = () => {
             </p>
           </div>
           <button
-            onClick={() => setPorVenda(!porVenda)}
+            onClick={() => {
+              const novo = !porVenda
+              setPorVenda(novo)
+              gravarPreferencia('backup_por_venda', novo ? '1' : '0', () => setPorVenda(porVenda))
+            }}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0 ml-4 ${
               porVenda ? 'bg-primary' : 'bg-muted-foreground/30'
             }`}
@@ -702,7 +731,11 @@ const Configuracoes: FC = () => {
           <Label className="text-sm font-medium mb-1.5 block">Backup ao fechar o sistema</Label>
           <Select
             value={aoFechar}
-            onChange={setAoFechar}
+            onChange={(v) => {
+              const anterior = aoFechar
+              setAoFechar(v)
+              gravarPreferencia('backup_ao_fechar', v, () => setAoFechar(anterior))
+            }}
             classNameContainer="max-w-xs"
             opcoes={[
               { valor: 'perguntar', rotulo: 'Perguntar se houve alterações' },
@@ -773,7 +806,14 @@ const Configuracoes: FC = () => {
                 Útil antes de operações importantes.
               </p>
               <div className="flex items-center gap-3">
-                <Button variant="outline" onClick={fazerBackup} disabled={fazendoBackup}>
+                {/* Cor própria: é a única ação desta seção que FAZ alguma coisa
+                    agora (as outras só guardam preferência). O contorno neutro
+                    a deixava indistinguível de um campo a mais. */}
+                <Button
+                  onClick={fazerBackup}
+                  disabled={fazendoBackup}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
                   <HardDriveDownload className="w-4 h-4 mr-2" />
                   {fazendoBackup ? 'Criando backup...' : 'Fazer backup agora'}
                 </Button>
@@ -787,18 +827,16 @@ const Configuracoes: FC = () => {
           </div>
         </div>
 
-        {/* Salvar — rodapé clássico do formulário: sozinho, com divisória e ícone */}
-        <div className="border-t pt-5 flex items-center gap-3">
-          <Button onClick={salvar} disabled={salvando}>
-            <Save className="w-4 h-4 mr-2" />
-            {salvando ? 'Salvando...' : 'Salvar configurações'}
-          </Button>
-          {feedback && (
+        {/* Sem botão de salvar: cada opção grava ao mudar (ver gravarPreferencia).
+            O aviso do resultado fica aqui, no fim da seção, para não pular ao
+            lado de cada controle a cada clique. */}
+        {feedback && (
+          <div className="border-t pt-4">
             <p className={`text-sm font-medium ${feedback.tipo === 'ok' ? 'text-green-600' : 'text-destructive'}`}>
               {feedback.msg}
             </p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       )}
     </div>
