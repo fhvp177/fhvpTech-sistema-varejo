@@ -326,11 +326,20 @@ const App: FC = () => {
   // Flag em localStorage (é só UI): marcada já no início pra nunca insistir.
   useEffect(() => {
     if (estadoAuth !== 'desbloqueado' || !vendedor || vendedor.papel === 'dono' || guiaAberto) return
+    // ⚠️ NÃO no meio de uma venda. Desde que o caixa ganhou "trocar de conta"
+    // (F7), o primeiro acesso de um atendente pode acontecer com o carrinho
+    // cheio: o colega chama, ele entra no próprio nome pra venda sair certa, e
+    // o tour navegava pra outra tela, desmontando o PDV e levando o carrinho.
+    // Acontece uma vez por pessoa, na primeira venda dela, na frente do cliente.
+    //
+    // Sair antes de gravar a flag ADIA o tour em vez de cancelá-lo: ele aparece
+    // no próximo login dessa pessoa fora do caixa, que é onde ele serve.
+    if (pdvAtivo) return
     const chave = `fhvp-tour-visto-vendedor-${vendedor.id}`
     if (localStorage.getItem(chave)) return
     localStorage.setItem(chave, '1')
     iniciarTour(false)
-  }, [estadoAuth, vendedor, guiaAberto, iniciarTour])
+  }, [estadoAuth, vendedor, guiaAberto, iniciarTour, pdvAtivo])
 
   const abrirGuia = useCallback(() => setGuiaAberto(true), [])
 

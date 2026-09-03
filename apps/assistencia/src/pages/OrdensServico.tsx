@@ -298,7 +298,10 @@ const OrdensServico: FC = () => {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Ordens de Serviço</h2>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <ClipboardList className="w-6 h-6 text-primary" />
+            Ordens de Serviço
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Ficou pra fazer? É OS. Levou embora agora? É venda no PDV.
           </p>

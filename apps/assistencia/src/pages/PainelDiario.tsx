@@ -97,8 +97,17 @@ const PainelDiario: FC = () => {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="text-2xl font-bold">Painel Diário</h2>
+      <div className="flex items-start justify-between gap-4 mb-1">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <CalendarCheck className="w-6 h-6 text-primary" />
+            Painel Diário
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            O que tem para hoje, em filas de trabalho. Dinheiro fica na Dashboard; aqui é
+            serviço. Clicar numa OS abre ela direto.
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => navigate('/vendas')}>
             <ShoppingCart className="w-4 h-4 mr-2" />

@@ -1,5 +1,5 @@
 import { FC, Suspense, lazy, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2 } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2 } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
 import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { IMaskInput } from 'react-imask'
@@ -26,7 +26,7 @@ import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido, type VencimentosMes } from '@/utils/relatorioVendas'
 import { FORMAS_A_VISTA, type FormaPagamento } from '@/utils/formaPagamento'
-import { useCalculadora, usePdvMode, useSessao } from '@/App'
+import { useCalculadora, useLock, usePdvMode, useSessao } from '@/App'
 import {
   useLinhaNova,
   useSaidaDeLinha,
@@ -597,7 +597,10 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Vendas</h2>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <ShoppingCart className="w-6 h-6 text-primary" />
+            Vendas
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Levou embora agora? É venda. Ficou pra fazer? Abra uma OS.
           </p>
@@ -1308,7 +1311,9 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { setAtivo: setPdvAtivo } = usePdvMode()
   const { aberta: calculadoraAberta } = useCalculadora()
-  const { ehDono } = useSessao()
+  const { ehDono, vendedor } = useSessao()
+  const { bloquear } = useLock()
+  const confirmar = useConfirm()
   const { showToast } = useToast()
   const imprimir = useImprimir()
   const [tetoDesconto, setTetoDesconto] = useState(10)
@@ -1398,6 +1403,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   // a cada keystroke. As funções capturam estado via closure e são atualizadas
   // a cada render através de um useEffect mais abaixo.
   const finalizarVendaRef = useRef<() => void>(() => {})
+  const trocarDeContaRef = useRef<() => void>(() => {})
   const abrirClienteRapidoRef = useRef<() => void>(() => {})
   const abrirProdutoRapidoRef = useRef<() => void>(() => {})
   // O que rodar quando um gerente autoriza no modal de elevação — recebe o PIN
@@ -1672,10 +1678,63 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
 
   // Mantém os refs atualizados para o listener global de atalhos chamar
   // as versões mais recentes das funções (que capturam estado via closure).
+  /**
+   * Entrar com outra conta sem sair do caixa.
+   *
+   * ── Por que existe ──────────────────────────────────────────────────────────
+   * Dois atendentes dividem o balcão e um computador só. Quem chega para atender
+   * precisa que a venda saia no nome DELE, porque é de lá que a comissão sai. Até
+   * aqui o único caminho era Ctrl+L, que ninguém descobre sozinho, e o botão
+   * Bloquear mora na barra lateral, que some justamente dentro do caixa.
+   *
+   * ── Por que o carrinho sobrevive ────────────────────────────────────────────
+   * A tela de login é uma SOBREPOSIÇÃO: o App inteiro continua montado embaixo
+   * dela, PDV e carrinho inclusive (ver o fim do render em `App.tsx`). Trocar de
+   * conta é literalmente trocar o crachá: a tela volta como estava.
+   *
+   * ── Por que carrinho cheio pergunta ─────────────────────────────────────────
+   * O `vendedor_id` da venda não vem daqui: é forçado no servidor a partir da
+   * sessão. Então quem finalizar DEPOIS da troca leva a venda inteira, a parte
+   * que o colega já tinha lançado junto, e a comissão dela. Sem o aviso, a troca
+   * é silenciosa e o erro só aparece no fechamento do mês.
+   *
+   * O carrinho não é limpo de propósito: jogar fora o trabalho de alguém é pior
+   * que avisar. Quem quer começar zerado limpa na mão, e vê o que está limpando.
+   */
+  const trocarDeConta = async () => {
+    if (carrinho.length > 0) {
+      const ok = await confirmar({
+        titulo: 'Trocar de conta',
+        mensagem:
+          `Há ${totalItens} ${totalItens === 1 ? 'item' : 'itens'} no carrinho (${fmt(total)}).
+
+` +
+          'Se a venda for finalizada depois da troca, ela sai no nome de quem ' +
+          'entrar — e a comissão também.',
+        rotuloConfirmar: 'Trocar conta',
+        // 'aviso' e não 'destructive': trocar de conta não apaga nada, só muda
+        // de quem é a venda. E é o que libera o foco ir pro botão de confirmar;
+        // o tipo proíbe isso em diálogo destrutivo, de propósito.
+        variante: 'aviso',
+        // Quem opera um caixa não larga o teclado no meio do atendimento:
+        // F7 → Enter troca de conta sem a mão sair de lugar.
+        focoInicial: 'confirmar'
+      })
+      if (!ok) return
+    }
+    bloquear()
+  }
+
+  // Mantém os refs atualizados para o listener global de atalhos chamar
+  // as versões mais recentes das funções (que capturam estado via closure).
   useEffect(() => {
     finalizarVendaRef.current = finalizarVenda
     abrirClienteRapidoRef.current = abrirClienteRapido
     abrirProdutoRapidoRef.current = () => abrirProdutoRapido()
+    // Sem este ref o aviso nunca apareceria: o listener de atalhos NÃO tem
+    // `carrinho` nas dependências (de propósito — reregistrar a cada item seria
+    // caro), então ele leria um carrinho velho, quase sempre vazio.
+    trocarDeContaRef.current = () => void trocarDeConta()
   })
 
   // Atalhos de teclado do PDV — registrados uma vez no mount.
@@ -1706,6 +1765,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         case 'F6':
           e.preventDefault()
           abrirProdutoRapidoRef.current()
+          break
+        // F7, e não F8: o F8 fica colado no F9, que finaliza a venda. Errar a
+        // tecla ali no meio de um atendimento trocaria o dono da venda.
+        case 'F7':
+          e.preventDefault()
+          trocarDeContaRef.current()
           break
         case 'F9':
           e.preventDefault()
@@ -1887,6 +1952,21 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="text-[2rem] font-bold">CAIXA ABERTO</h2>
+          {/* Quem está no caixa, e a saída para trocar. Mora no cabeçalho porque
+              é a única coisa da tela que responde "esta venda vai sair no nome de
+              quem?" — a barra lateral, que mostraria isso, some no PDV. */}
+          <Button
+            variant="outline"
+            className="ml-auto"
+            onClick={() => void trocarDeConta()}
+            title="Entrar com outra conta sem sair do caixa (F7)"
+          >
+            <ArrowLeftRight className="w-4 h-4 mr-2" />
+            Trocar conta
+            {vendedor?.nome && (
+              <span className="ml-2 font-normal text-muted-foreground">({vendedor.nome})</span>
+            )}
+          </Button>
         </div>
 
         <div className="mb-3">
@@ -2678,6 +2758,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         <DicaTecla tecla="F4" acao="Cliente" />
         <DicaTecla tecla="F5" acao="+ Cliente" />
         <DicaTecla tecla="F6" acao="+ Produto" />
+        <DicaTecla tecla="F7" acao="Trocar conta" />
         <DicaTecla tecla="F9" acao="Finalizar" />
         <DicaTecla tecla="F10" acao="Calculadora" />
         <DicaTecla tecla="ESC" acao="Sair" />

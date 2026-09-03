@@ -292,7 +292,10 @@ const Recibos: FC = () => {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Recibos</h2>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <ReceiptText className="w-6 h-6 text-primary" />
+            Recibos
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Comprovante de dinheiro que entrou fora do caixa — adiantamento, acerto, aluguel.
             Venda tem cupom e nota fiscal.

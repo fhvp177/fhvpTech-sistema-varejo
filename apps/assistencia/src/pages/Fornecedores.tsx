@@ -187,8 +187,17 @@ const Fornecedores: FC = () => {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Fornecedores</h2>
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Truck className="w-6 h-6 text-primary" />
+            Fornecedores
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            De quem a oficina compra peça. O mesmo cadastro é usado na entrada de mercadoria e
+            nas contas a pagar.
+          </p>
+        </div>
         {ehDono && (
           <Button onClick={abrirNovo}>
             <Plus className="w-4 h-4 mr-2" />

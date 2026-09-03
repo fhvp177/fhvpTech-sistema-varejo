@@ -1,6 +1,11 @@
 /**
  * Trocar de conta dentro do caixa, sem perder a venda em andamento.
  *
+ * ⚠️ Espelho do teste do VAREJO. As duas telas nasceram da mesma base e a
+ * funcionalidade foi herdada inteira; se um lado mudar, o outro precisa
+ * mudar junto. Os dois modos de falha protegidos aqui são idênticos, e o
+ * mais grave (o carrinho velho) é invisível a teste de comportamento.
+ *
  * ── O que a funcionalidade resolve ──────────────────────────────────────────
  * Dois vendedores, um balcão, um computador. Quem chega para atender precisa
  * que a venda saia no nome DELE — a comissão sai de lá. Antes disto o único

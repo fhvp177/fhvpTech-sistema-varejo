@@ -464,8 +464,17 @@ const Produtos: FC = () => {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Produtos e Serviços</h2>
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Package className="w-6 h-6 text-primary" />
+            Produtos e Serviços
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Peças e serviços moram na mesma lista, separados pelo tipo. Só peça tem estoque;
+            serviço é cobrado por mão de obra.
+          </p>
+        </div>
         <div className="flex gap-2">
           {ehDono && (
             <Button variant="outline" onClick={() => setModalCategoriasAberto(true)}>

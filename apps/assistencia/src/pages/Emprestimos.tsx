@@ -569,7 +569,10 @@ const Emprestimos: FC = () => {
     <div className="p-6">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Empréstimos</h2>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <HandCoins className="w-6 h-6 text-primary" />
+            Empréstimos
+          </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             Controle dos valores emprestados a clientes. Não integra o faturamento: é capital
             próprio a receber, não receita.

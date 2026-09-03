@@ -1,6 +1,6 @@
 import { FC, Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { IMaskInput } from 'react-imask'
-import { Pencil, Trash2, Plus, Search, Wallet, User, Building2 } from 'lucide-react'
+import { Pencil, Trash2, Plus, Search, Wallet, User, Building2, Users } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { Input } from '@fhvptech/core/ui/input'
@@ -338,8 +338,17 @@ const Clientes: FC = () => {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Clientes</h2>
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Users className="w-6 h-6 text-primary" />
+            Clientes
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Quem passa pela oficina. A dívida que aparece aqui é o que falta pagar das vendas e
+            ordens a prazo.
+          </p>
+        </div>
         <Button onClick={abrirNovo}>
           <Plus className="w-4 h-4 mr-2" />
           Novo Cliente
