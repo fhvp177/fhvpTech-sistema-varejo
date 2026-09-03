@@ -7,6 +7,23 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.39.0',
+    itens: [
+      {
+        emoji: '🔄',
+        titulo: 'Troca de vendedor no caixa',
+        descricao:
+          'O caixa passa a permitir a entrada de outro vendedor sem encerrar a venda em andamento.'
+      },
+      {
+        emoji: '✨',
+        titulo: 'Telas identificadas',
+        descricao:
+          'Cada tela passa a exibir seu ícone e um resumo do que apresenta.'
+      }
+    ]
+  },
+  {
     versao: '1.38.1',
     itens: [
       {
