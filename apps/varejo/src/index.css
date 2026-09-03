@@ -102,6 +102,73 @@
   }
 }
 
+/* ── Dedo em vez de mouse ────────────────────────────────────────────────────
+ *
+ * Estas regras valem quando existe um ponteiro GROSSO disponível — isto é, num
+ * aparelho de toque. `any-pointer` e não `pointer`: o tablet do lojista tem
+ * teclado acoplado, e nesse arranjo o navegador pode declarar o ponteiro
+ * principal como fino. O que interessa aqui é "dá para tocar com o dedo", e não
+ * "o dedo é o único jeito".
+ *
+ * ── Duas condições, não uma ─────────────────────────────────────────────────
+ * Vale só quando as DUAS batem: a página está sendo servida pelo navegador
+ * (`data-alvo="web"`, posto pelo main.web.tsx) E existe ponteiro grosso.
+ *
+ * Só a segunda não bastaria: um notebook Windows com tela sensível também casa
+ * com `any-pointer: coarse`, e receberia os alvos maiores — mudando a aparência
+ * de lojistas que já usam o aplicativo instalado e nunca pediram isso.
+ *
+ * Só a primeira também não: quem abrir o endereço da loja num PC com mouse não
+ * precisa de botão de 44px.
+ *
+ * E a correção mora aqui, e não espalhada nas telas, porque subir 67 classes na
+ * mão engordaria a janela do desktop junto — onde o mouse acerta 32px sem
+ * esforço.
+ *
+ * ── Por que 44px ────────────────────────────────────────────────────────────
+ * É o mínimo que as diretrizes de interface pedem para algo que se toca com o
+ * dedo. Abaixo disso o erro de toque deixa de ser exceção — e num caixa, errar
+ * o botão trinta vezes por dia cansa mais do que parece.
+ */
+@media (any-pointer: coarse) {
+  [data-alvo='web'] button,
+  [data-alvo='web'] [role='button'],
+  [data-alvo='web'] [role='combobox'],
+  [data-alvo='web'] summary,
+  [data-alvo='web'] nav a,
+  [data-alvo='web'] input:not([type='checkbox']):not([type='radio']),
+  [data-alvo='web'] select,
+  [data-alvo='web'] textarea {
+    min-height: 44px;
+  }
+
+  /* Onde o conteúdo é só um ícone, a altura não basta: sem largura mínima o
+     alvo continua sendo uma tira fina. */
+  [data-alvo='web'] button:not(:has(> :not(svg))) {
+    min-width: 44px;
+  }
+
+  /*
+   * Nome cortado volta a ser legível.
+   *
+   * A tabela corta o texto e deixa o inteiro no `title`, que aparece ao passar
+   * o mouse. No toque não existe passar o mouse: o nome fica cortado e não há
+   * como ver o resto. Numa joalheria, onde as descrições são longas e
+   * parecidas ("aliança ouro 18k 4mm"), meia palavra não identifica a peça.
+   *
+   * Deixar quebrar linha faz a tabela crescer em altura — o que se prefere a
+   * esconder informação. Restrito a célula de tabela de propósito: `truncate`
+   * também segura rótulo de menu e etiqueta, onde quebrar linha estragaria o
+   * alinhamento.
+   */
+  [data-alvo='web'] td .truncate,
+  [data-alvo='web'] td.truncate {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
 @media print {
   /* Esconde absolutamente tudo que está diretamente no body... */
   body > * {

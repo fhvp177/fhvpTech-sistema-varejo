@@ -155,7 +155,7 @@ const ModalNotasEntrada: FC<Props> = ({ aberto, onFechar }) => {
               </div>
             </div>
 
-            <div className="max-h-[50vh] overflow-y-auto rounded-md border">
+            <div className="max-h-[50vh] overflow-auto rounded-md border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>

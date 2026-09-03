@@ -25,4 +25,13 @@ import { instalarApiWeb } from './web/api'
 
 instalarApiWeb()
 
+// Marca o documento como "servido pelo navegador". É o que permite ao CSS
+// aplicar as regras de toque só aqui — ver o bloco `[data-alvo='web']` no
+// index.css.
+//
+// Sem essa marca, um notebook Windows com tela sensível casaria com
+// `any-pointer: coarse` e receberia os alvos maiores, mudando a aparência de
+// lojistas que já usam o aplicativo instalado e nunca pediram nada.
+document.documentElement.dataset.alvo = 'web'
+
 void import('./main')

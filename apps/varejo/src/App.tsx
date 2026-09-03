@@ -21,6 +21,7 @@ import {
   Calculator,
   ChevronDown,
   LogOut,
+  Menu,
   LucideIcon
 } from 'lucide-react'
 import Fornecedores from './pages/Fornecedores'
@@ -161,6 +162,9 @@ const App: FC = () => {
   const [diasRestantes, setDiasRestantes] = useState<number | null>(null)
   const [avisoLicenca, setAvisoLicenca] = useState<string | null>(null)
   const [pdvAtivo, setPdvAtivo] = useState(false)
+  // Gaveta do menu. Só existe em tela estreita (abaixo de 1024px): num tablet
+  // em pé, os 224px da barra lateral comeriam mais de um quarto da largura.
+  const [menuAberto, setMenuAberto] = useState(false)
   const [estadoAuth, setEstadoAuth] = useState<EstadoAuth>('verificando')
   // Caixa adicional que não conseguiu falar com o computador principal ao abrir.
   const [falhaCaixaPrincipal, setFalhaCaixaPrincipal] = useState<string | null>(null)
@@ -520,6 +524,21 @@ const App: FC = () => {
                     onRenovarComPix={abrirPagamento}
                     vendedor={vendedor}
                     comissoesAtivo={comissoesAtivo}
+                    aberta={menuAberto}
+                    onFechar={() => setMenuAberto(false)}
+                  />
+                )}
+                {/*
+                  Véu por trás da gaveta: escurece o conteúdo e dá onde tocar
+                  para fechar sem escolher nada. Só existe enquanto ela está
+                  aberta, e some de vez em tela larga — onde a barra é fixa e
+                  não há o que fechar.
+                */}
+                {!pdvAtivo && menuAberto && (
+                  <div
+                    className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+                    onClick={() => setMenuAberto(false)}
+                    aria-label="Fechar menu"
                   />
                 )}
                 <div className="flex-1 flex flex-col overflow-hidden">
@@ -528,11 +547,34 @@ const App: FC = () => {
                       caixa principal precisa ficar visível. */}
                   <AvisoSemConexao />
                   {!pdvAtivo && <AlertaBackupFalhando />}
-                  {!pdvAtivo && vendedor?.papel === 'dono' && (
-                    <div className="h-12 shrink-0 border-b bg-background flex items-center justify-end px-6">
-                      <span data-tour="sino">
-                        <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
-                      </span>
+                  {/*
+                    A barra de cima. Antes só existia para o gerente, por causa
+                    do sino. Agora ela também carrega o botão que abre a gaveta
+                    do menu em tela estreita.
+
+                    O `lg:hidden` quando NÃO é gerente é o que preserva o
+                    aplicativo instalado: sem ele, um vendedor numa tela larga
+                    passaria a ver uma faixa vazia de 48px que nunca existiu.
+                  */}
+                  {!pdvAtivo && (
+                    <div
+                      className={`h-12 shrink-0 border-b bg-background flex items-center justify-between px-6 lg:justify-end ${
+                        vendedor?.papel === 'dono' ? '' : 'lg:hidden'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setMenuAberto(true)}
+                        aria-label="Abrir menu"
+                        className="lg:hidden -ml-2 p-2 rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <Menu className="w-5 h-5" />
+                      </button>
+                      {vendedor?.papel === 'dono' && (
+                        <span data-tour="sino">
+                          <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
+                        </span>
+                      )}
                     </div>
                   )}
                   <main className={`flex-1 overflow-auto ${pdvAtivo ? '' : 'pb-24'}`}>
@@ -853,15 +895,35 @@ const Sidebar: FC<{
   onAbrirCalculadora: () => void
   vendedor: SessaoVendedor | null
   comissoesAtivo: boolean
+  /** Só importa em tela estreita, onde ela é gaveta. */
+  aberta: boolean
+  onFechar: () => void
 }> = ({
   diasRestantes,
   onBloquear,
   onRenovarComPix,
   onAbrirCalculadora,
   vendedor,
-  comissoesAtivo
+  comissoesAtivo,
+  aberta,
+  onFechar
 }) => (
-  <nav data-tour="menu" className="w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0">
+  // ── Fixa numa tela larga, gaveta numa estreita ─────────────────────────────
+  // A partir de `lg` (1024px) ela é o que sempre foi: uma coluna ao lado do
+  // conteúdo. Abaixo disso — tablet em pé, 800px — os 224px dela comeriam mais
+  // de um quarto da largura útil, e as tabelas ficariam espremidas. Então ela
+  // sai do fluxo e desliza por cima quando chamada.
+  //
+  // Repare que ela continua SEMPRE montada, mesmo fechada: desmontar perderia
+  // o estado de rolagem do menu e faria o `data-tour` sumir no meio do tour
+  // guiado.
+  <nav
+    data-tour="menu"
+    className={`w-56 bg-slate-900 text-white flex flex-col p-4 shrink-0 z-40
+      fixed inset-y-0 left-0 transition-transform duration-200
+      ${aberta ? 'translate-x-0' : '-translate-x-full'}
+      lg:static lg:translate-x-0`}
+  >
     <div className="mb-4">
       <h1 className="text-lg font-bold text-white">FHVP Tech</h1>
       <p className="text-xs text-slate-400">Sistema de Gestão de Varejo</p>
@@ -869,7 +931,15 @@ const Sidebar: FC<{
 
     {vendedor && <UserMenu vendedor={vendedor} onSair={onBloquear} />}
 
-    <div className="flex-1 overflow-y-auto -mr-2 pr-2 space-y-4">
+    {/*
+      Escolher uma tela fecha a gaveta; abrir o menu do usuário ou a calculadora
+      não. Por isso o fechamento está AQUI, na lista de telas, e não no <nav>
+      inteiro — lá ele engoliria o clique que abre o menu do usuário, que fica
+      logo acima.
+
+      Em tela larga a gaveta não existe, e `onFechar` não faz nada.
+    */}
+    <div className="flex-1 overflow-y-auto -mr-2 pr-2 space-y-4" onClick={onFechar}>
       {CATEGORIAS_SIDEBAR.map((cat) => (
         <div key={cat.titulo}>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 px-3 mb-1">
