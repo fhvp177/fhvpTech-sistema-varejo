@@ -35,8 +35,10 @@ import { tmpdir } from 'node:os'
 
 import { arquivoDaInterface, raizDaInterface, tipoDoArquivo } from './interface'
 import { envioImediato, ligarBackupNaNuvem } from './backupNuvem'
+import { registrarHandlersNuvem } from './restaurarDaNuvem'
+import { gravarConfig, lerConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { mkdirSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 
 import { configurarPlataforma } from '@fhvptech/core/electron/plataforma'
 import { configurarNucleo } from '@fhvptech/core/electron/nucleo'
@@ -288,6 +290,9 @@ function registrarHandlers(): void {
   registrarHandlersAuth()
   // Sem `aoMudarAgenda`: aqui não há agendador de janela para reiniciar.
   registrarHandlersBackup({ aoConcluirBackup: envioImediato })
+  // Só existem aqui: no aplicativo instalado não há nuvem de onde buscar, e o
+  // lojista tem a pasta dele e o pendrive.
+  registrarHandlersNuvem()
   registrarHandlersCategorias()
   registrarHandlersChat()
   registrarHandlersClientes()
@@ -371,6 +376,46 @@ async function backupAntesDeMigrar(): Promise<void> {
   }
 }
 
+/**
+ * A pasta de backup desta loja é a desta máquina, e ponto.
+ *
+ * ── O problema que isto conserta ─────────────────────────────────────────────
+ * Quem GRAVA o backup usa sempre a pasta de dados desta máquina. Quem LISTA na
+ * tela de restauração usa o que está na configuração `backup_pasta_padrao` — e
+ * essa configuração viaja DENTRO do banco.
+ *
+ * Ou seja: um lojista que sai do aplicativo instalado para a loja hospedada traz
+ * junto, dentro dos dados, um caminho de Windows apontando para a pasta de
+ * backups do computador antigo. Aqui esse caminho não existe. Os backups
+ * continuam sendo feitos, certinhos, e a tela de restauração passa a listar
+ * NADA.
+ *
+ * É a pior forma de falhar: silenciosa, e descoberta exatamente no dia em que a
+ * pessoa precisa restaurar.
+ *
+ * O aplicativo instalado já cuidava disso no boot, mas aquele código depende do
+ * Electron e resolve um problema diferente — renomeação de pasta entre versões.
+ * Aqui a regra é mais simples e mais forte: num servidor não há usuário
+ * escolhendo pasta, então o valor certo é sempre o mesmo, e qualquer outra
+ * coisa é resíduo de outra máquina.
+ */
+function ancorarPastaDeBackup(): void {
+  const nossa = join(PASTA_DADOS, 'Backups')
+
+  if (lerConfig('backup_pasta_padrao') !== nossa) {
+    console.log(`[fhvp] pasta de backup reancorada em ${nossa}`)
+    gravarConfig('backup_pasta_padrao', nossa)
+  }
+
+  // A secundária existe para espelhar num segundo disco — pendrive, rede da
+  // loja. Num servidor não há segundo disco, e um caminho herdado de outra
+  // máquina só produziria falha de cópia a cada backup.
+  if (lerConfig('backup_pasta_secundaria')) {
+    console.log('[fhvp] pasta de backup secundária descartada (não há segundo disco aqui)')
+    gravarConfig('backup_pasta_secundaria', '')
+  }
+}
+
 export async function iniciar(): Promise<void> {
   conferirAmbiente()
 
@@ -398,6 +443,10 @@ export async function iniciar(): Promise<void> {
 
   await backupAntesDeMigrar()
   executarMigrations(obterBancoDeDados(), MIGRATIONS)
+
+  // Depois das migrations: a tabela `config` pode ser criada por uma delas, e
+  // antes disso não haveria onde gravar.
+  ancorarPastaDeBackup()
 
   // O backup só vale se sair deste disco — ver backupNuvem.ts. Falta de
   // configuração NÃO impede a loja de abrir: um sistema que se recusa a vender

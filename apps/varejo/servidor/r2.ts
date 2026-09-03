@@ -46,7 +46,27 @@ export function assinarPut(
   contentType: string,
   agora: Date
 ): { caminho: string; headers: Record<string, string | number> } {
-  const caminho = `/${cred.bucket}/` + chaveObjeto.split('/').map(encodeURIComponent).join('/')
+  return assinar('PUT', cred, chaveObjeto, '', corpo, agora, contentType)
+}
+
+/**
+ * A assinatura de qualquer método.
+ *
+ * `consulta` é a parte depois do `?`, já ordenada — a conta canônica exige as
+ * chaves em ordem alfabética, e trocar a ordem muda a assinatura. Vazia no PUT
+ * e no GET de objeto; usada só na listagem.
+ */
+export function assinar(
+  metodo: 'PUT' | 'GET',
+  cred: CredenciaisR2,
+  chaveObjeto: string,
+  consulta: string,
+  corpo: Buffer,
+  agora: Date,
+  contentType?: string
+): { caminho: string; headers: Record<string, string | number> } {
+  const caminho =
+    `/${cred.bucket}` + (chaveObjeto ? '/' + chaveObjeto.split('/').map(encodeURIComponent).join('/') : '')
   const amzDate = agora.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
   const dataStamp = amzDate.slice(0, 8)
   const host = hostDoR2(cred.contaId)
@@ -54,22 +74,26 @@ export function assinarPut(
 
   const headersCanon = `host:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`
   const signedHeaders = 'host;x-amz-content-sha256;x-amz-date'
-  const reqCanon = ['PUT', caminho, '', headersCanon, signedHeaders, payloadHash].join('\n')
+  const reqCanon = [metodo, caminho, consulta, headersCanon, signedHeaders, payloadHash].join('\n')
   const escopo = `${dataStamp}/auto/s3/aws4_request`
   const stringToSign = ['AWS4-HMAC-SHA256', amzDate, escopo, sha256hex(reqCanon)].join('\n')
   const kAssin = hmac(hmac(hmac(hmac(`AWS4${cred.segredo}`, dataStamp), 'auto'), 's3'), 'aws4_request')
   const assinatura = createHmac('sha256', kAssin).update(stringToSign).digest('hex')
 
-  return {
-    caminho,
-    headers: {
-      'x-amz-content-sha256': payloadHash,
-      'x-amz-date': amzDate,
-      Authorization: `AWS4-HMAC-SHA256 Credential=${cred.chaveId}/${escopo}, SignedHeaders=${signedHeaders}, Signature=${assinatura}`,
-      'content-type': contentType,
-      'content-length': corpo.length
-    }
+  const headers: Record<string, string | number> = {
+    'x-amz-content-sha256': payloadHash,
+    'x-amz-date': amzDate,
+    Authorization: `AWS4-HMAC-SHA256 Credential=${cred.chaveId}/${escopo}, SignedHeaders=${signedHeaders}, Signature=${assinatura}`
   }
+  // Só o envio manda corpo. Pôr `content-length: 0` num GET faria alguns
+  // intermediários tratarem a requisição como tendo corpo vazio declarado, o
+  // que é diferente de não ter corpo.
+  if (metodo === 'PUT') {
+    headers['content-type'] = contentType ?? 'application/octet-stream'
+    headers['content-length'] = corpo.length
+  }
+
+  return { caminho, headers }
 }
 
 /** Sobe um objeto. Lança com o corpo da resposta quando o R2 recusa. */
@@ -95,6 +119,88 @@ export function enviarParaR2(
     req.on('error', reject)
     req.end(corpo)
   })
+}
+
+
+/** Um backup que está guardado na nuvem. */
+export interface ObjetoNaNuvem {
+  /** Caminho completo dentro do bucket. */
+  chave: string
+  tamanhoBytes: number
+  /** Quando o R2 recebeu, em ISO. */
+  quando: string
+}
+
+/**
+ * Lê a resposta XML da listagem.
+ *
+ * Com expressão regular, e não com um analisador de XML: a resposta tem três
+ * campos por item, formato fixo, e trazer uma biblioteca inteira para isso
+ * somaria peso ao contêiner sem resolver nada que estas quatro linhas não
+ * resolvam. Se um dia o formato ficar complicado, aqui é o lugar de mudar de
+ * ideia.
+ */
+export function lerListagem(xml: string): ObjetoNaNuvem[] {
+  const itens: ObjetoNaNuvem[] = []
+  for (const bloco of xml.split('<Contents>').slice(1)) {
+    const chave = /<Key>([^<]*)<\/Key>/.exec(bloco)?.[1]
+    if (!chave) continue
+    itens.push({
+      chave,
+      tamanhoBytes: Number(/<Size>(\d+)<\/Size>/.exec(bloco)?.[1] ?? 0),
+      quando: /<LastModified>([^<]*)<\/LastModified>/.exec(bloco)?.[1] ?? ''
+    })
+  }
+  return itens
+}
+
+function pedir(
+  cred: CredenciaisR2,
+  caminho: string,
+  consulta: string,
+  headers: Record<string, string | number>
+): Promise<{ status: number; corpo: Buffer }> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      { host: hostDoR2(cred.contaId), method: 'GET', path: caminho + (consulta ? '?' + consulta : ''), headers },
+      (res) => {
+        const pedacos: Buffer[] = []
+        res.on('data', (p: Buffer) => pedacos.push(p))
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, corpo: Buffer.concat(pedacos) }))
+      }
+    )
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+/**
+ * O que existe guardado sob um prefixo, do mais recente para o mais antigo.
+ *
+ * A ordenação é feita aqui e não pelo R2: a listagem dele sai em ordem
+ * alfabética de chave, e como o nome do backup começa pela data isso quase
+ * coincide — "quase" não serve para quem está escolhendo de onde restaurar.
+ */
+export async function listarNoR2(cred: CredenciaisR2, prefixo: string): Promise<ObjetoNaNuvem[]> {
+  const consulta = `list-type=2&prefix=${encodeURIComponent(prefixo)}`
+  const { caminho, headers } = assinar('GET', cred, '', consulta, Buffer.alloc(0), new Date())
+
+  const { status, corpo } = await pedir(cred, caminho, consulta, headers)
+  if (status !== 200) {
+    throw new Error(`R2 respondeu ${status} ao listar ${prefixo}: ${corpo.toString().slice(0, 300)}`)
+  }
+  return lerListagem(corpo.toString('utf8')).sort((a, b) => b.quando.localeCompare(a.quando))
+}
+
+/** Traz um objeto de volta. Lança quando o R2 recusa. */
+export async function baixarDoR2(cred: CredenciaisR2, chaveObjeto: string): Promise<Buffer> {
+  const { caminho, headers } = assinar('GET', cred, chaveObjeto, '', Buffer.alloc(0), new Date())
+
+  const { status, corpo } = await pedir(cred, caminho, '', headers)
+  if (status !== 200) {
+    throw new Error(`R2 respondeu ${status} ao baixar ${chaveObjeto}: ${corpo.toString().slice(0, 300)}`)
+  }
+  return corpo
 }
 
 /**

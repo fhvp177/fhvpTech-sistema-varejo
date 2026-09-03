@@ -9,7 +9,15 @@ import { fecharBancoDeDados, inicializarBancoDeDados, obterBancoDeDados } from '
 import { executarMigrations } from '@fhvptech/core/electron/db/migrations'
 import { obterConfigNucleo } from '@fhvptech/core/electron/nucleo'
 
+// A ordem daqui é a ordem que aparece na tela.
 const SUBPASTAS_ORDEM = [
+  // Primeiro de propósito: quem trouxe um backup da nuvem acabou de escolhê-lo
+  // e quer restaurá-lo agora — deixá-lo no fim da lista obrigaria a procurar o
+  // arquivo que a pessoa mesma baixou dez segundos antes.
+  //
+  // Só existe na loja hospedada. No aplicativo instalado a pasta nunca é criada
+  // e a varredura simplesmente não acha nada, sem custo nenhum.
+  'da-nuvem',
   'manuais',
   'diarios',
   'semanais',
