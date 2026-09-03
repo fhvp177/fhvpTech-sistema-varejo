@@ -21,7 +21,7 @@
  *   npm run build:web
  *   npm run servidor:local
  *
- * Variáveis: FHVP_DADOS (pasta da loja), PORT (padrão 8080).
+ * Variáveis: FHVP_DADOS (pasta da loja), PORT (padrão 8710).
  */
 const { existsSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } = require('fs')
 const { join, resolve } = require('path')

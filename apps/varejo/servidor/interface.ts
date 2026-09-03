@@ -32,6 +32,10 @@ const TIPOS: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.map': 'application/json; charset=utf-8',
+  // Sem este tipo, o arquivo desceria como binário genérico e o Android
+  // ignoraria o manifesto em silêncio — a página seria "adicionada à tela
+  // inicial" como um atalho comum, com a barra do navegador e tudo.
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',

@@ -19,6 +19,24 @@
       o resultado fica borrado no meio da tela.
     -->
     <link rel="apple-touch-icon" href="./icone-512.png" />
+    <!--
+      Manifesto: é o que faz "adicionar à tela inicial" virar um atalho que abre
+      SEM a barra do navegador, com cara de aplicativo.
+
+      Vale a pena num caixa: a barra come altura de tela e o botão de voltar
+      dela é justamente o que tira o lojista do sistema por reflexo. O gesto de
+      voltar do Android continua existindo, e continua sendo tratado — ver
+      web/GuardaDoVoltar.tsx.
+
+      A orientação NÃO é travada de propósito: o tablet trabalha deitado no
+      balcão, mas nada impede o lojista de girar.
+    -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <!--
+      A cor da barra de status do Android enquanto o sistema está aberto. É o
+      mesmo tom da barra lateral, para a emenda não aparecer.
+    -->
+    <meta name="theme-color" content="#0f172a" />
     <title>FHVP Tech</title>
   </head>
   <body>
