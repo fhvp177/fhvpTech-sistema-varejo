@@ -208,3 +208,78 @@ test('o backend não conhece mais o ADMIN_TOKEN', () => {
   assert.ok(!BACKEND.includes('ADMIN_TOKEN'), 'o token antigo ainda é lido em algum lugar')
   assert.ok(BACKEND.includes("obrigatoria('ADMIN_SENHA')"))
 })
+
+// ── Cadastro de loja pelo painel ───────────────────────────────────────────
+//
+// Era a ação mais básica e a única que faltava: criar cliente exigia montar um
+// curl à mão, com um login separado antes para obter a sessão. O usuário tentou
+// e não conseguiu.
+//
+// O que estes testes seguram:
+//   • A CHAVE PRECISA APARECER. O backend a devolve UMA vez, na resposta do
+//     cadastro: ela é derivada por HMAC na hora e não fica guardada em lugar
+//     nenhum. Se a tela não a exibir, ela se perde e o único caminho é renovar
+//     a loja para gerar outra.
+//   • O CÓDIGO É A CHAVE DA NUMERAÇÃO FISCAL. Trocá-lo depois da primeira nota
+//     quebra a sequência, e isso vira problema com a SEFAZ. O aviso não é
+//     decoração.
+//   • VALIDAR ANTES DE MANDAR. O backend recusa id fora do formato, mas o erro
+//     dele chega como mensagem genérica no rodapé do diálogo; validando aqui, o
+//     cursor volta para o campo culpado.
+
+test('a tela cadastra loja, sem precisar de curl', () => {
+  assert.ok(PAINEL.includes('id="botaoNovaLoja"'), 'sumiu o botão de nova loja')
+  assert.ok(PAINEL.includes('function modalNovaLoja'))
+  assert.ok(PAINEL.includes("api('/admin/cliente', { metodo: 'POST'"))
+})
+
+test('a chave gerada é exibida, não descartada', () => {
+  // Um toast não serve: ela precisa ser copiada e colada na loja.
+  //
+  // A asserção é sobre a CHAMADA, não sobre a função existir. A primeira versão
+  // checava `includes('function mostrarChave')` e passava verde com a chamada
+  // removida: a loja era cadastrada e a chave sumia, que é o pior desfecho.
+  assert.ok(
+    PAINEL.includes('await mostrarChave(dados)'),
+    'a chave é gerada e nunca exibida'
+  )
+  assert.ok(PAINEL.includes('navigator.clipboard.writeText(chave)'))
+
+  // O texto do AVISO, e não a frase solta: ela também aparece no comentário que
+  // explica a função, e procurá-la solta deixava o teste verde sem o aviso.
+  assert.ok(
+    PAINEL.includes("aviso: 'Copie a chave agora."),
+    'sumiu o aviso de que a chave não é recuperável'
+  )
+})
+
+test('e falhar ao copiar não finge que copiou', () => {
+  // Navegador sem permissão de área de transferência: o campo continua ali,
+  // selecionável à mão. Dizer "copiado" e não ter copiado é pior que o erro.
+  assert.ok(PAINEL.includes('selecione o texto e copie'))
+})
+
+test('o aviso sobre a numeração fiscal está na tela', () => {
+  assert.ok(PAINEL.includes('chave da numeração fiscal dela'))
+  assert.ok(PAINEL.includes('não pode mudar'))
+})
+
+test('o código é validado antes de sair da tela', () => {
+  // Mesma regra do `idValido` do backend: 2 a 20 letras e números.
+  assert.ok(PAINEL.includes('/^[A-Z0-9]{2,20}$/'))
+  assert.ok(PAINEL.includes('.toUpperCase()'), 'o código precisa subir para maiúsculo')
+})
+
+test('a mensalidade do cadastro usa a mesma conversão do botão Preço', () => {
+  // Reais para centavos, vírgula ou ponto. Duas conversões diferentes na mesma
+  // tela seriam duas chances de errar o valor cobrado.
+  const i = PAINEL.indexOf('function modalNovaLoja')
+  const corpo = PAINEL.slice(i, PAINEL.indexOf('async function mostrarChave', i))
+  assert.ok(corpo.includes('Math.round(n * 100)'))
+  assert.ok(corpo.includes("replace(',', '.')"))
+})
+
+test('a linha nova aparece destacada depois do cadastro', () => {
+  // Sem isso, a pessoa fecha o diálogo e procura na tabela se deu certo.
+  assert.ok(PAINEL.includes('carregarClientes(dados.cliente.clienteId)'))
+})

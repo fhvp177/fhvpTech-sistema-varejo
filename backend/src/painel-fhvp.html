@@ -69,6 +69,12 @@
 
     <section id="painelClientes" hidden>
       <div class="cards" id="cartoesClientes"></div>
+      <!-- Cadastrar era a única ação que faltava aqui: sem ela, criar cliente
+           exigia montar um curl à mão, com login separado para pegar a sessão.
+           A chave gerada aparece no fim, para copiar. -->
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+        <button id="botaoNovaLoja" type="button">Nova loja</button>
+      </div>
       <div class="painel"><div style="overflow-x:auto"><table>
         <thead><tr>
           <th>Loja</th><th>Origem</th><th>Plano</th><th>Validade</th>
@@ -430,6 +436,7 @@
     await carregarClientes()
   }
   $('botaoAtualizar').addEventListener('click', recarregar)
+  $('botaoNovaLoja').addEventListener('click', modalNovaLoja)
 
   // ── Revendedores ─────────────────────────────────────────────────────────
 
@@ -838,6 +845,120 @@
    *
    * Vazio devolve a loja ao padrao, igual a cota faz com o teto de notas.
    */
+  /**
+   * Cadastra uma loja e mostra a chave gerada.
+   *
+   * ── Por que o código pede atenção ───────────────────────────────────────────
+   * O `clienteId` é a chave da numeração da NFC-e. Trocá-lo depois da primeira
+   * nota emitida quebra a sequência fiscal, e isso vira problema com a SEFAZ,
+   * não com o software. Daí o aviso e a pré-visualização em maiúsculas: o que
+   * se digita aqui a loja carrega para sempre.
+   *
+   * ── O que acontece com a chave ─────────────────────────────────────────────
+   * O backend a devolve UMA vez, na resposta do cadastro. Ela não fica guardada
+   * em lugar nenhum para ser consultada depois: é derivada por HMAC na hora.
+   * Por isso ela é exibida num segundo diálogo, com botão de copiar, em vez de
+   * um toast que some.
+   */
+  async function modalNovaLoja() {
+    const v = await abrirModal({
+      titulo: 'Nova loja',
+      aviso: 'O código da loja é a chave da numeração fiscal dela. Depois da primeira ' +
+        'nota emitida ele não pode mudar, então escolha pensando no longo prazo.',
+      avisoTipo: 'alerta',
+      campos: [
+        { id: 'clienteId', rotulo: 'Código da loja', dica: 'ex.: NETO',
+          ajuda: 'De 2 a 20 letras e números, sem espaço nem hífen. Vira maiúsculo.' },
+        { id: 'nome', rotulo: 'Nome da loja', dica: 'ex.: Neto Imports' },
+        { id: 'contato', rotulo: 'Contato (opcional)', dica: 'ex.: (85) 9 9999-0000' },
+        { id: 'dias', rotulo: 'Dias de licença', tipo: 'number', valor: '30',
+          ajuda: 'Quanto tempo a primeira chave vale. O padrão do sistema é 30.' },
+        { id: 'mensalidade', rotulo: 'Mensalidade (R$)',
+          dica: 'em branco = padrão',
+          ajuda: 'Vazio usa o padrão de ' + dinheiro(PRECO_PADRAO_CENTAVOS) +
+                 '. Aceita vírgula ou ponto.' },
+        { id: 'plano', rotulo: 'Plano (basico/pro)', valor: 'basico',
+          ajuda: 'Pro é o plano com nota fiscal.' }
+      ],
+      rotuloConfirmar: 'Cadastrar e gerar chave',
+      aoConfirmar: async (val) => {
+        const id = String(val.clienteId || '').trim().toUpperCase()
+        if (!/^[A-Z0-9]{2,20}$/.test(id)) {
+          return { campo: 'clienteId', mensagem: 'de 2 a 20 letras e números, sem espaço nem hífen' }
+        }
+        if (!String(val.nome || '').trim()) {
+          return { campo: 'nome', mensagem: 'informe o nome da loja' }
+        }
+        const dias = Number(val.dias)
+        if (!Number.isInteger(dias) || dias <= 0) {
+          return { campo: 'dias', mensagem: 'informe um número inteiro de dias' }
+        }
+        const plano = String(val.plano || '').trim().toLowerCase()
+        if (plano !== 'basico' && plano !== 'pro') {
+          return { campo: 'plano', mensagem: 'responda basico ou pro' }
+        }
+
+        const corpo = { clienteId: id, nome: String(val.nome).trim(), dias, plano }
+        if (String(val.contato || '').trim()) corpo.contato = String(val.contato).trim()
+
+        const bruto = String(val.mensalidade || '').trim()
+        if (bruto !== '') {
+          const n = Number(bruto.replace(/\./g, '').replace(',', '.'))
+          if (!isFinite(n) || n <= 0) {
+            return { campo: 'mensalidade', mensagem: 'informe um valor maior que zero, ou deixe vazio' }
+          }
+          corpo.valorCentavosRenovacao = Math.round(n * 100)
+        }
+
+        const resp = await api('/admin/cliente', { metodo: 'POST', corpo })
+        if (!resp.ok) return { mensagem: resp.erro }
+        // Guardado para o diálogo seguinte: o `aoConfirmar` só pode devolver
+        // erro, então a chave sai por aqui.
+        chaveRecemGerada = resp.dados
+        return null
+      }
+    })
+    if (!v || !chaveRecemGerada) return
+
+    const dados = chaveRecemGerada
+    chaveRecemGerada = null
+    await mostrarChave(dados)
+    await carregarClientes(dados.cliente.clienteId)
+  }
+
+  let chaveRecemGerada = null
+
+  /**
+   * Mostra a chave gerada, com botão de copiar.
+   *
+   * Um toast não serve: a chave precisa ser copiada e colada na loja, e um
+   * aviso que some em três segundos obrigaria a cadastrar de novo. Ela também
+   * não é recuperável depois — é derivada por HMAC no momento do cadastro.
+   */
+  async function mostrarChave(dados) {
+    const chave = dados.chave
+    await abrirModal({
+      titulo: 'Loja cadastrada',
+      subtitulo: dados.cliente.nome + ' — licença até ' + dataBr(dados.cliente.validadeAtual),
+      aviso: 'Copie a chave agora. Ela não fica guardada e não dá para consultá-la depois: ' +
+        'se perder, o caminho é renovar a loja para gerar outra.',
+      avisoTipo: 'alerta',
+      campos: [{ id: 'chave', rotulo: 'Chave de licença', valor: chave }],
+      rotuloConfirmar: 'Copiar chave',
+      rotuloCancelar: 'Fechar',
+      aoConfirmar: async () => {
+        try {
+          await navigator.clipboard.writeText(chave)
+        } catch (e) {
+          // Navegador sem permissão de área de transferência: o campo continua
+          // ali, selecionável à mão. Melhor que fingir que copiou.
+          return { campo: 'chave', mensagem: 'não consegui copiar — selecione o texto e copie' }
+        }
+        return null
+      }
+    })
+  }
+
   async function modalPreco(cl) {
     const atual = cl.valorCentavosRenovacao
     const daRevenda = Boolean(cl.revendedorId)
