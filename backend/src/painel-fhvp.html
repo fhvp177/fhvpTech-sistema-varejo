@@ -145,6 +145,58 @@
   // constante vira mentira na tela: e o unico ponto a acertar junto.
   const PRECO_PADRAO_CENTAVOS = 10000
 
+  /**
+   * Filtros de campo, aplicados a cada digitação E a cada colagem.
+   *
+   * ⚠️ Regra da casa: campo com formato TEM máscara. Não é preciosismo. Deixar
+   * digitar letra onde só cabe número empurra o erro para o servidor, que
+   * devolve mensagem genérica no rodapé do diálogo, longe do campo culpado.
+   *
+   * Cada um DEVOLVE o texto já corrigido; quem chama compara com o que estava
+   * lá e só escreve de volta se mudou, para não mexer no cursor à toa.
+   */
+  const FORMATOS = {
+    // Código de loja: exatamente o que o backend aceita em `idValido`. Sobe para
+    // maiúsculo enquanto se digita, porque é assim que vai ficar gravado.
+    // ⚠️ O acento vira a LETRA BASE, e não é descartado. Quem digita "néto"
+    // quer "NETO", e simplesmente remover o caractere devolveria "NTO": um
+    // código de loja com uma letra a menos, que vira o começo da chave e a
+    // chave da numeração fiscal. Errar aqui é caro e silencioso.
+    codigo: (v) =>
+      v.normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20),
+
+    inteiro: (v) => v.replace(/\D/g, '').slice(0, 6),
+
+    // Dinheiro: dígitos e UMA vírgula, no máximo dois decimais. Ponto digitado
+    // vira vírgula, que é como se escreve preço aqui.
+    dinheiro: (v) => {
+      let s = v.replace(/\./g, ',').replace(/[^\d,]/g, '')
+      const p = s.indexOf(',')
+      if (p !== -1) s = s.slice(0, p + 1) + s.slice(p + 1).replace(/,/g, '').slice(0, 2)
+      return s.slice(0, 12)
+    },
+
+    // Telefone brasileiro, celular ou fixo. A máscara CRESCE conforme se digita,
+    // em vez de exigir o número completo para só então formatar.
+    telefone: (v) => {
+      const d = v.replace(/\D/g, '').slice(0, 11)
+      if (d.length <= 2) return d.length ? '(' + d : ''
+      if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2)
+      if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6)
+      return '(' + d.slice(0, 2) + ') ' + d.slice(2, 3) + ' ' + d.slice(3, 7) + '-' + d.slice(7)
+    }
+  }
+
+  /** A data que uma licença de N dias vai ter, no formato da chave. */
+  function validadeEmDias(dias) {
+    const n = Number(dias)
+    if (!Number.isInteger(n) || n <= 0) return null
+    const d = new Date()
+    d.setDate(d.getDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
+
   function mostrarErro(el, msg) {
     if (!msg) { el.hidden = true; el.textContent = ''; return }
     el.textContent = msg
@@ -216,18 +268,60 @@
       }
 
       const entradas = {}
+      const previas = []
       for (const campo of (o.campos || [])) {
         const rot = document.createElement('label')
         rot.textContent = campo.rotulo
         rot.htmlFor = 'campo_' + campo.id
         caixa.appendChild(rot)
 
-        const inp = document.createElement('input')
+        /**
+          * O campo, com FORMATO quando ele tem um.
+          *
+          * ⚠️ Regra da casa, cobrada mais de uma vez: campo com formato TEM
+          * máscara. Deixar digitar letra onde só cabe número não é permissivo,
+          * é empurrar o erro para o servidor e devolver mensagem genérica. A
+          * primeira versão desta tela nasceu sem isso.
+          *
+          * A filtragem acontece no `input`, e não no `keydown`: colar texto
+          * também precisa passar pelo filtro, e teclado de celular nem sempre
+          * emite as teclas.
+          */
+        let inp
+        if (campo.opcoes) {
+          // Seleção fechada em vez de texto livre: o painel do revendedor já
+          // usa <select> nativo, e aqui a lista é de 2 a 3 itens.
+          inp = document.createElement('select')
+          for (const op of campo.opcoes) {
+            const o = document.createElement('option')
+            o.value = op.valor
+            o.textContent = op.rotulo
+            inp.appendChild(o)
+          }
+          inp.value = campo.valor == null ? campo.opcoes[0].valor : String(campo.valor)
+        } else {
+          inp = document.createElement('input')
+          inp.type = campo.tipo || 'text'
+          inp.value = campo.valor == null ? '' : String(campo.valor)
+          if (campo.dica) inp.placeholder = campo.dica
+          if (campo.tipo === 'number') { inp.inputMode = 'numeric' }
+          if (campo.maxLen) inp.maxLength = campo.maxLen
+          if (campo.formato) {
+            inp.inputMode = campo.formato === 'codigo' ? 'text' : 'numeric'
+            inp.addEventListener('input', () => {
+              const antes = inp.value
+              const depois = FORMATOS[campo.formato](antes)
+              if (depois !== antes) {
+                // Preserva a posição do cursor quando o filtro só remove do fim;
+                // reposicionar no meio de uma máscara é pior que ir para o fim.
+                const fim = inp.selectionStart === antes.length
+                inp.value = depois
+                if (!fim) inp.setSelectionRange(depois.length, depois.length)
+              }
+            })
+          }
+        }
         inp.id = 'campo_' + campo.id
-        inp.type = campo.tipo || 'text'
-        inp.value = campo.valor == null ? '' : String(campo.valor)
-        if (campo.dica) inp.placeholder = campo.dica
-        if (campo.tipo === 'number') { inp.inputMode = 'numeric' }
         inp.autocomplete = 'off'
         caixa.appendChild(inp)
         entradas[campo.id] = inp
@@ -240,7 +334,42 @@
           p.textContent = campo.ajuda
           caixa.appendChild(p)
         }
+
+        /**
+          * Prévia ao vivo do que aquele campo vai produzir.
+          *
+          * Existe porque o código da loja não é só um rótulo: ele vira o começo
+          * da chave de licença e a chave da numeração fiscal. Ver o resultado
+          * enquanto digita é a diferença entre escolher e descobrir depois.
+          */
+        if (campo.previa) {
+          const pv = document.createElement('p')
+          pv.className = 'sub mono'
+          pv.style.margin = '6px 0 0'
+          pv.style.fontSize = '13px'
+          pv.style.color = 'hsl(var(--primary))'
+          previas.push({ el: pv, calcular: campo.previa })
+          caixa.appendChild(pv)
+        }
       }
+
+      // Toda prévia reage a QUALQUER campo: a da chave depende do código e dos
+      // dias ao mesmo tempo.
+      function atualizarPrevias() {
+        if (!previas.length) return
+        const atuais = {}
+        for (const k of Object.keys(entradas)) atuais[k] = entradas[k].value
+        for (const p of previas) {
+          const txt = p.calcular(atuais)
+          p.el.textContent = txt || ''
+          p.el.hidden = !txt
+        }
+      }
+      for (const k of Object.keys(entradas)) {
+        entradas[k].addEventListener('input', atualizarPrevias)
+        entradas[k].addEventListener('change', atualizarPrevias)
+      }
+      atualizarPrevias()
 
       const erro = document.createElement('div')
       erro.className = 'aviso erro'
@@ -267,6 +396,7 @@
         vivo = false
         caixa.close()
         caixa.removeEventListener('cancel', aoCancelar)
+        caixa.removeEventListener('mousedown', aoApertar)
         caixa.removeEventListener('click', aoClicarFora)
         caixa.removeEventListener('keydown', aoTeclar)
         // Devolve o foco a quem abriu — sem isto o leitor de tela (e o Tab)
@@ -275,7 +405,24 @@
         resolver(resultado)
       }
       const aoCancelar = (ev) => { ev.preventDefault(); fechar(null) }
-      const aoClicarFora = (ev) => { if (ev.target === caixa) fechar(null) }
+      /**
+        * Fecha ao clicar FORA, e só quando o clique inteiro foi fora.
+        *
+        * ⚠️ O bug que isto conserta: selecionar o texto de um campo e soltar o
+        * botão do mouse fora da caixinha fechava o diálogo e jogava fora tudo
+        * que já estava digitado. Acontece porque o `click` do <dialog> dispara
+        * no elemento comum a onde apertou e onde soltou — e esse elemento é a
+        * própria caixa, indistinguível de um clique no fundo.
+        *
+        * Guardar ONDE O CLIQUE COMEÇOU resolve: arrastar de dentro para fora
+        * deixa de fechar, e clicar limpo no fundo continua fechando.
+        */
+      let comecouNoFundo = false
+      const aoApertar = (ev) => { comecouNoFundo = ev.target === caixa }
+      const aoClicarFora = (ev) => {
+        if (ev.target === caixa && comecouNoFundo) fechar(null)
+        comecouNoFundo = false
+      }
       const aoTeclar = (ev) => {
         if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') { ev.preventDefault(); tentar() }
       }
@@ -304,6 +451,7 @@
       cancelar.addEventListener('click', () => fechar(null))
       confirmar.addEventListener('click', tentar)
       caixa.addEventListener('cancel', aoCancelar)
+      caixa.addEventListener('mousedown', aoApertar)
       caixa.addEventListener('click', aoClicarFora)
       caixa.addEventListener('keydown', aoTeclar)
 
@@ -868,23 +1016,49 @@
       avisoTipo: 'alerta',
       campos: [
         { id: 'clienteId', rotulo: 'Código da loja', dica: 'ex.: NETO',
-          ajuda: 'De 2 a 20 letras e números, sem espaço nem hífen. Vira maiúsculo.' },
-        { id: 'nome', rotulo: 'Nome da loja', dica: 'ex.: Neto Imports' },
-        { id: 'contato', rotulo: 'Contato (opcional)', dica: 'ex.: (85) 9 9999-0000' },
-        { id: 'dias', rotulo: 'Dias de licença', tipo: 'number', valor: '30',
-          ajuda: 'Quanto tempo a primeira chave vale. O padrão do sistema é 30.' },
-        { id: 'mensalidade', rotulo: 'Mensalidade (R$)',
-          dica: 'em branco = padrão',
-          ajuda: 'Vazio usa o padrão de ' + dinheiro(PRECO_PADRAO_CENTAVOS) +
-                 '. Aceita vírgula ou ponto.' },
-        { id: 'plano', rotulo: 'Plano (basico/pro)', valor: 'basico',
-          ajuda: 'Pro é o plano com nota fiscal.' }
+          formato: 'codigo', maxLen: 20,
+          ajuda: 'De 2 a 20 letras e números. Acento, espaço e hífen não entram.',
+          previa: (val) => {
+            const id = val.clienteId || ''
+            if (id.length < 2) return ''
+            const ate = validadeEmDias(val.dias)
+            return ate
+              ? 'Chave: ' + id + ':' + ate + ':XXXXXXXXXXXXXXXX'
+              : 'Chave: ' + id + ':(defina os dias):XXXXXXXXXXXXXXXX'
+          } },
+        { id: 'nome', rotulo: 'Nome da loja', dica: 'ex.: Neto Imports', maxLen: 80 },
+        { id: 'contato', rotulo: 'Contato (opcional)', dica: '(85) 9 9999-0000',
+          formato: 'telefone' },
+        { id: 'plano', rotulo: 'Plano', valor: 'basico', opcoes: [
+          { valor: 'basico', rotulo: 'Básico' },
+          { valor: 'pro', rotulo: 'Pro (com nota fiscal)' }
+        ], ajuda: 'Só o Pro emite nota fiscal.' },
+        { id: 'dias', rotulo: 'Dias de licença', valor: '30', formato: 'inteiro',
+          ajuda: 'Quanto tempo a primeira chave vale. O padrão do sistema é 30.',
+          previa: (val) => {
+            const ate = validadeEmDias(val.dias)
+            return ate ? 'Vence em ' + dataBr(ate) : ''
+          } },
+        { id: 'mensalidade', rotulo: 'Mensalidade (R$)', dica: 'em branco = padrão',
+          formato: 'dinheiro',
+          ajuda: 'Vazio usa o padrão de ' + dinheiro(PRECO_PADRAO_CENTAVOS) + '.' },
+        // A cota entra JÁ no cadastro. Ela existia só no menu de três pontinhos,
+        // que serve para ajustar depois, mas o limite faz parte do que se combina
+        // com o cliente na hora de fechar, não de uma revisão futura.
+        { id: 'teto', rotulo: 'Notas fiscais incluídas por mês',
+          dica: 'em branco = padrão do plano', formato: 'inteiro',
+          ajuda: 'Vazio usa o padrão (100 no varejo direto). Zero é outra coisa: nenhuma incluída.' },
+        { id: 'travar', rotulo: 'Travar emissão ao estourar a cota?', valor: 'nao', opcoes: [
+          { valor: 'nao', rotulo: 'Não, apenas marcar o excedente' },
+          { valor: 'sim', rotulo: 'Sim, impedir de emitir' }
+        ], ajuda: 'O padrão MEDE em vez de travar: passar da cota vira conversa de reajuste, ' +
+          'não uma loja parada na frente do cliente.' }
       ],
       rotuloConfirmar: 'Cadastrar e gerar chave',
       aoConfirmar: async (val) => {
         const id = String(val.clienteId || '').trim().toUpperCase()
         if (!/^[A-Z0-9]{2,20}$/.test(id)) {
-          return { campo: 'clienteId', mensagem: 'de 2 a 20 letras e números, sem espaço nem hífen' }
+          return { campo: 'clienteId', mensagem: 'de 2 a 20 letras e números' }
         }
         if (!String(val.nome || '').trim()) {
           return { campo: 'nome', mensagem: 'informe o nome da loja' }
@@ -893,17 +1067,13 @@
         if (!Number.isInteger(dias) || dias <= 0) {
           return { campo: 'dias', mensagem: 'informe um número inteiro de dias' }
         }
-        const plano = String(val.plano || '').trim().toLowerCase()
-        if (plano !== 'basico' && plano !== 'pro') {
-          return { campo: 'plano', mensagem: 'responda basico ou pro' }
-        }
 
-        const corpo = { clienteId: id, nome: String(val.nome).trim(), dias, plano }
+        const corpo = { clienteId: id, nome: String(val.nome).trim(), dias, plano: val.plano }
         if (String(val.contato || '').trim()) corpo.contato = String(val.contato).trim()
 
         const bruto = String(val.mensalidade || '').trim()
         if (bruto !== '') {
-          const n = Number(bruto.replace(/\./g, '').replace(',', '.'))
+          const n = Number(bruto.replace(',', '.'))
           if (!isFinite(n) || n <= 0) {
             return { campo: 'mensalidade', mensagem: 'informe um valor maior que zero, ou deixe vazio' }
           }
@@ -912,8 +1082,25 @@
 
         const resp = await api('/admin/cliente', { metodo: 'POST', corpo })
         if (!resp.ok) return { mensagem: resp.erro }
-        // Guardado para o diálogo seguinte: o `aoConfirmar` só pode devolver
-        // erro, então a chave sai por aqui.
+
+        // A cota vai numa SEGUNDA chamada: a rota de cadastro não a aceita, e
+        // inventar um campo lá só para isto misturaria licença com cota. Se
+        // falhar, a loja JÁ existe: a mensagem precisa dizer isso, senão a
+        // pessoa tenta cadastrar de novo e leva "clienteId já existe".
+        const teto = String(val.teto || '').trim()
+        const travar = val.travar === 'sim'
+        if (teto !== '' || travar) {
+          const cota = await api('/admin/cliente/' + encodeURIComponent(id) + '/cota', {
+            metodo: 'POST',
+            corpo: { teto: teto === '' ? null : Number(teto), bloquear: travar }
+          })
+          if (!cota.ok) {
+            chaveRecemGerada = resp.dados
+            return { mensagem: 'A loja foi criada, mas a cota não foi aplicada (' + cota.erro +
+              '). Ajuste pelo menu da linha, em Cota de notas.' }
+          }
+        }
+
         chaveRecemGerada = resp.dados
         return null
       }

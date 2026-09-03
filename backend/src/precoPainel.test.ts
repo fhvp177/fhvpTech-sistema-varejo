@@ -283,3 +283,97 @@ test('a linha nova aparece destacada depois do cadastro', () => {
   // Sem isso, a pessoa fecha o diálogo e procura na tabela se deu certo.
   assert.ok(PAINEL.includes('carregarClientes(dados.cliente.clienteId)'))
 })
+
+// ── Formato de campo, prévia e o diálogo que não foge ──────────────────────
+//
+// A primeira versão deste cadastro nasceu abaixo do padrão da casa, e o usuário
+// listou quatro coisas. Três eram regras que ele já tinha dado antes.
+
+test('campo com formato TEM máscara', () => {
+  // Regra da casa, cobrada mais de uma vez. Deixar digitar letra onde só cabe
+  // número empurra o erro para o servidor, que responde com mensagem genérica
+  // no rodapé, longe do campo culpado.
+  assert.ok(PAINEL.includes('const FORMATOS = {'))
+  for (const f of ['codigo:', 'inteiro:', 'dinheiro:', 'telefone:']) {
+    assert.ok(PAINEL.includes(f), 'sumiu o formato ' + f)
+  }
+  assert.ok(
+    PAINEL.includes("inp.addEventListener('input'"),
+    'o filtro precisa rodar no input, senão colar texto passa por cima dele'
+  )
+})
+
+test('acento no código vira a letra base, e não é descartado', () => {
+  // "néto" precisa virar "NETO", não "NTO". Uma letra a menos no código muda a
+  // chave de licença E a chave da numeração fiscal.
+  assert.ok(PAINEL.includes("normalize('NFD')"), 'o acento voltou a ser descartado')
+})
+
+test('o código digitado mostra como a chave vai ficar', () => {
+  assert.ok(PAINEL.includes('previa:'), 'sumiu a prévia')
+  assert.ok(PAINEL.includes('function validadeEmDias'))
+  assert.ok(PAINEL.includes("'Chave: ' + id + ':'"))
+})
+
+test('a prévia reage a qualquer campo, não só ao próprio', () => {
+  // A da chave depende do código E dos dias ao mesmo tempo.
+  assert.ok(PAINEL.includes('function atualizarPrevias'))
+  assert.ok(PAINEL.includes("entradas[k].addEventListener('input', atualizarPrevias)"))
+})
+
+test('soltar o mouse fora não fecha o diálogo se o clique começou dentro', () => {
+  // ⚠️ O bug: selecionar o texto de um campo e soltar o botão fora da caixinha
+  // fechava tudo e jogava fora o que já estava digitado. O `click` do <dialog>
+  // dispara no elemento comum entre onde apertou e onde soltou, e esse elemento
+  // é a própria caixa — indistinguível de um clique limpo no fundo.
+  assert.ok(PAINEL.includes('let comecouNoFundo = false'))
+  assert.ok(
+    PAINEL.includes('if (ev.target === caixa && comecouNoFundo) fechar(null)'),
+    'voltou a fechar sem conferir onde o clique começou'
+  )
+  assert.ok(PAINEL.includes("caixa.addEventListener('mousedown', aoApertar)"))
+})
+
+test('e o listener novo é removido junto com os outros', () => {
+  // Diálogo é reaberto a cada ação: listener que fica acumula um por abertura.
+  assert.ok(PAINEL.includes("caixa.removeEventListener('mousedown', aoApertar)"))
+})
+
+test('a cota é definida já no cadastro', () => {
+  // Ela existia só no menu de três pontinhos, que serve para ajustar depois. O
+  // limite faz parte do que se combina ao fechar com o cliente.
+  const i = PAINEL.indexOf('async function modalNovaLoja')
+  const corpo = PAINEL.slice(i, PAINEL.indexOf('async function mostrarChave', i))
+  assert.ok(corpo.includes("id: 'teto'"), 'a cota saiu do cadastro')
+  assert.ok(corpo.includes("id: 'travar'"))
+  assert.ok(corpo.includes("+ '/cota'"), 'o cadastro não aplica a cota')
+})
+
+test('e se a cota falhar, a mensagem diz que a loja JÁ existe', () => {
+  // Sem isso a pessoa tenta cadastrar de novo e leva "clienteId já existe",
+  // achando que nada foi criado.
+  assert.ok(PAINEL.includes('A loja foi criada, mas a cota não foi aplicada'))
+})
+
+test('o plano é escolha fechada, não texto livre', () => {
+  assert.ok(PAINEL.includes('campo.opcoes'), 'o diálogo não suporta seleção')
+  const i = PAINEL.indexOf('async function modalNovaLoja')
+  const corpo = PAINEL.slice(i, PAINEL.indexOf('async function mostrarChave', i))
+  // A asserção precisa ver o campo USANDO `opcoes`. A primeira versão checava
+  // só que a chave existia em algum lugar do arquivo e que o texto 'plano'
+  // aparecia: renomear `opcoes` no campo passava verde, e o plano voltava a ser
+  // texto livre sem ninguém notar.
+  // Recortado no campo do plano, e não varrendo o corpo inteiro. Duas versões
+  // falharam antes: a primeira casava a substring de `semOpcoes`, e a segunda,
+  // ancorada na vírgula, pulava adiante e encontrava o `opcoes` do campo
+  // SEGUINTE (o de travar a cota), que também é uma seleção.
+  const iPlano = corpo.indexOf("id: 'plano'")
+  assert.ok(iPlano > -1, 'sumiu o campo de plano do cadastro')
+  const campoPlano = corpo.slice(iPlano, corpo.indexOf("{ id: '", iPlano + 10))
+  assert.match(
+    campoPlano,
+    /,\s*opcoes: \[/,
+    'o campo de plano deixou de ser uma seleção fechada'
+  )
+  assert.ok(corpo.includes("valor: 'pro'"))
+})
