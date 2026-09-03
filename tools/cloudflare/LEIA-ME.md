@@ -1,3 +1,26 @@
+# Painéis da FHVP no domínio da marca
+
+São DOIS workers nesta pasta, cada um com o seu config:
+
+| Endereço | Worker | Config | Publicar |
+|---|---|---|---|
+| `fhvptech.com/painel-do-revendedor` | `painel-do-revendedor.worker.js` | `wrangler.toml` | `npx wrangler deploy` |
+| `fhvptech.com/painel-fhvp` | `painel-fhvp.worker.js` | `wrangler-painel-fhvp.toml` | `npx wrangler deploy -c wrangler-painel-fhvp.toml` |
+
+Cada um tem a **própria lista fechada de rotas**, e é assim de propósito: um
+erro de digitação num deles não pode abrir nada do outro lado. O do revendedor
+recusa `/painel-fhvp`, e o da FHVP recusa `/revenda/*` — os dois estão cobertos
+por teste em `backend/src/painelNoDominio.test.ts`.
+
+> ⚠️ **Por que o painel da FHVP passou a ficar aqui.** A decisão original era
+> mantê-lo só no `.fly.dev`, para não pôr a administração num domínio público.
+> Isso mudou quando ele deixou de ser aberto por um segredo colado à mão e
+> ganhou login de verdade (senha forte obrigatória, comparação de tempo
+> constante, limite por IP, sessão de 12h revogável). A superfície que a decisão
+> antiga evitava é a mesma que já existia no `.fly.dev`, e agora é defendida.
+
+---
+
 # Painel do revendedor em `fhvptech.com/painel-do-revendedor`
 
 O painel roda no Fly (`licenca-gnmodas.fly.dev`). Este Worker põe a marca na
@@ -114,3 +137,50 @@ Fechado por padrão. Só a superfície do revendedor:
 O painel da FHVP (`/painel-fhvp`) e as rotas `/admin/*` **não** passam. Elas
 exigem o `ADMIN_TOKEN`, mas não têm por que ficar alcançáveis a partir de um
 endereço público de marca.
+
+
+---
+
+# Painel da FHVP em `fhvptech.com/painel-fhvp`
+
+Mesmo desenho do painel do revendedor — vale tudo que está escrito acima sobre
+a `<base>`, a CSP e a estrela na rota. As diferenças:
+
+**Rotas que passam:** a página, `painel.css`, `painel-logo.png`, `/admin-login`,
+`/admin-logout` e `/admin/*`. Nada mais — as rotas dos aplicativos (`/cobranca`,
+`/licenca`), as fiscais e as do revendedor ficam de fora.
+
+**O IP do visitante é repassado.** O backend conta tentativas de login pelo
+PRIMEIRO valor de `x-forwarded-for`, e o Worker garante que ali esteja o
+`cf-connecting-ip`. Sem isso, todo mundo que chega pelo domínio cairia no mesmo
+balde de tentativas — e um estranho conseguiria trancar o dono do lado de fora
+só gastando o limite.
+
+**Publicar:**
+
+```bash
+cd tools/cloudflare
+npx wrangler deploy -c wrangler-painel-fhvp.toml
+```
+
+**Conferir:**
+
+```bash
+# a página, e a <base> que faz os caminhos relativos resolverem
+curl -s https://fhvptech.com/painel-fhvp | grep -o '<base href="[^"]*"'
+# esperado: <base href="/painel-fhvp/">
+
+# o estilo e o logotipo
+curl -s -o /dev/null -w '%{http_code}
+' https://fhvptech.com/painel-fhvp/painel.css
+
+# o login existe e recusa senha errada
+curl -s -o /dev/null -w '%{http_code}
+' -X POST   https://fhvptech.com/painel-fhvp/admin-login   -H 'Content-Type: application/json' -d '{"senha":"errada"}'
+# esperado: 401
+
+# e o que NÃO pode passar
+curl -s -o /dev/null -w '%{http_code}
+' -X POST https://fhvptech.com/painel-fhvp/cobranca
+# esperado: 404
+```

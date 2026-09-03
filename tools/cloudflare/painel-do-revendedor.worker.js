@@ -51,6 +51,7 @@ function permitido(caminho) {
   return (
     caminho === '/painel' ||
     caminho === '/painel.css' ||
+    caminho === '/painel-ui.js' ||
     caminho === '/painel-logo.png' ||
     caminho === '/revenda' ||
     caminho.startsWith('/revenda/')

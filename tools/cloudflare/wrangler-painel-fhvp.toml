@@ -1,0 +1,31 @@
+# Worker que publica o PAINEL DA FHVP em fhvptech.com/painel-fhvp.
+#
+# Arquivo separado do `wrangler.toml` porque são dois workers na mesma zona, e
+# o wrangler lê um config por vez. O do revendedor continua sendo o padrão (roda
+# com `npx wrangler deploy`, sem argumento); este exige o `-c`.
+#
+# A rota mora AQUI, e não no painel do Cloudflare, de propósito: worker
+# configurado por clique descola do arquivo versionado — o repositório passa a
+# dizer uma coisa e a produção outra, e a próxima alteração vira arqueologia.
+#
+# Publicar:
+#   cd tools/cloudflare
+#   npx wrangler deploy -c wrangler-painel-fhvp.toml
+# (exige `npx wrangler login` uma vez, num terminal interativo)
+
+name = "painel-fhvp"
+main = "painel-fhvp.worker.js"
+compatibility_date = "2026-01-01"
+
+# Sem endereço em workers.dev: este worker leva à administração de TODAS as
+# lojas e revendedores. Um segundo endereço público seria superfície a mais sem
+# ninguém ganhar nada — e, diferente do painel do revendedor, aqui o que está
+# atrás é a carteira inteira.
+workers_dev = false
+
+# A estrela é obrigatória — sem ela só o caminho exato passaria, e o CSS, o
+# logotipo e as chamadas de API (que vêm como sufixos) ficariam de fora. Foi
+# assim que o painel do revendedor abriu sem estilo da primeira vez.
+[[routes]]
+pattern = "fhvptech.com/painel-fhvp*"
+zone_name = "fhvptech.com"
