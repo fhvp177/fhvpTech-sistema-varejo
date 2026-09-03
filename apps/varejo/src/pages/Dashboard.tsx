@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package,
+  AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package, LayoutDashboard,
   ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
   ArrowLeftRight, Target, Trophy, CalendarDays, PiggyBank, Gift, Pencil, Check, X
 } from 'lucide-react'
@@ -246,8 +246,17 @@ const Dashboard: FC = () => {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <LayoutDashboard className="w-6 h-6 text-primary" />
+            Dashboard
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Os números do período escolhido. O card de produtos parados é o único que ignora o
+            filtro — ele olha sempre os últimos 30 dias.
+          </p>
+        </div>
         {/* Filtro de período: janela móvel ou mês específico */}
         <div className="flex gap-1 p-1 bg-muted rounded-lg">
           {PERIODOS.map((p) => {

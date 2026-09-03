@@ -3,7 +3,7 @@ import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
 import { Select } from '@fhvptech/core/ui/select'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
+import { RefreshCw, Settings, Upload, Trash2, Store, ChevronDown, Sparkles, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigComissao from '@/components/ConfigComissao'
@@ -295,7 +295,13 @@ const Configuracoes: FC = () => {
 
   return (
     <div className="p-8 max-w-2xl">
-      <h2 className="text-2xl font-bold mb-6">Configurações</h2>
+      <h2 className="text-2xl font-bold flex items-center gap-2">
+        <Settings className="w-6 h-6 text-primary" />
+        Configurações
+      </h2>
+      <p className="text-sm text-muted-foreground mt-1 mb-6">
+        Ajustes da loja. Tudo aqui salva sozinho — não existe botão de confirmar.
+      </p>
 
       <SecaoConfig
         id="sistema"

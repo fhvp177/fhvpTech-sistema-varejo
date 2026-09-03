@@ -8,6 +8,7 @@ import {
   RotateCcw,
   AlertTriangle,
   CalendarClock,
+  Receipt,
   Wallet
 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
@@ -300,9 +301,12 @@ const ContasPagar: FC = () => {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Contas a Pagar</h2>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Receipt className="w-6 h-6 text-primary" />
+            Contas a Pagar
+          </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             O que a loja deve — fornecedores, aluguel, luz, salários e afins.
           </p>

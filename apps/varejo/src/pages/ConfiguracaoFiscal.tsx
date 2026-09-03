@@ -395,7 +395,10 @@ const ConfiguracaoFiscal: FC = () => {
 
   return (
     <div className="p-8 max-w-3xl">
-      <h2 className="text-2xl font-bold mb-1">Nota fiscal</h2>
+      <h2 className="text-2xl font-bold mb-1 flex items-center gap-2">
+        <FileText className="w-6 h-6 text-primary" />
+        Nota fiscal
+      </h2>
       <p className="text-sm text-muted-foreground mb-6">
         O sistema emite os dois documentos, escolhendo sozinho pelo cliente da venda: quem
         compra como consumidor recebe a <strong>NFC-e</strong>, que sai na mesma impressora

@@ -1,5 +1,5 @@
 import { FC, ReactNode, Suspense, lazy, useEffect, useState } from 'react'
-import { FileDown, Printer, FolderDown, ShoppingCart, Package, BookOpen, FileText, Receipt } from 'lucide-react'
+import { BarChart3, FileDown, Printer, FolderDown, ShoppingCart, Package, BookOpen, FileText, Receipt } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Select } from '@fhvptech/core/ui/select'
 import { Label } from '@fhvptech/core/ui/label'
@@ -247,7 +247,10 @@ const Relatorios: FC = () => {
 
   return (
     <div className="p-8 max-w-4xl">
-      <h2 className="text-2xl font-bold mb-1">Relatórios</h2>
+      <h2 className="text-2xl font-bold mb-1 flex items-center gap-2">
+        <BarChart3 className="w-6 h-6 text-primary" />
+        Relatórios
+      </h2>
       <p className="text-sm text-muted-foreground mb-6">
         Todos os relatórios do sistema num lugar só — pra imprimir ou salvar em PDF.
       </p>
