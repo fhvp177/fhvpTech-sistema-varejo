@@ -75,14 +75,20 @@
     <div id="avisoEmail" class="aviso alerta oculto"></div>
     <div id="avisoTopo" class="aviso ok oculto"></div>
 
+    <!-- Cartoes na ordem do Dashboard do app: icone, rotulo, valor. O icone
+         entra por JS (ver painel-ui.js) para nao repetir SVG no HTML. -->
     <div class="cards">
-      <div class="card"><div class="rotulo">Clientes ativos</div><div class="valor" id="numAtivos">–</div>
+      <div class="card" data-icone="circle-check-big" data-tom="ok">
+        <div class="rotulo">Clientes ativos</div><div class="valor" id="numAtivos">–</div>
         <div class="nota" id="notaAtivos"></div></div>
-      <div class="card"><div class="rotulo">Total cadastrado</div><div class="valor" id="numTotal">–</div>
+      <div class="card" data-icone="store">
+        <div class="rotulo">Total cadastrado</div><div class="valor" id="numTotal">–</div>
         <div class="nota" id="notaInativos"></div></div>
-      <div class="card"><div class="rotulo">Sua assinatura vence</div><div class="valor" id="validadeRev" style="font-size:20px">–</div>
+      <div class="card" data-icone="calendar-days">
+        <div class="rotulo">Sua assinatura vence</div><div class="valor" id="validadeRev" style="font-size:20px">–</div>
         <div class="nota" id="notaValidade"></div></div>
-      <div class="card"><div class="rotulo">Mensalidade estimada</div><div class="valor" id="mensalidade" style="font-size:20px">–</div>
+      <div class="card" data-icone="banknote">
+        <div class="rotulo">Mensalidade estimada</div><div class="valor" id="mensalidade" style="font-size:20px">–</div>
         <div class="nota" id="notaMensalidade"></div></div>
     </div>
 
@@ -121,6 +127,7 @@
   <div id="dialogo"></div>
 </div>
 
+<script src="painel-ui.js"></script>
 <script>
 (() => {
   'use strict'
@@ -609,8 +616,10 @@
       texto($('mensalidade'), reais((pb || 0) * res.ativosBasico + (pp || 0) * res.ativosPro))
       texto($('notaMensalidade'), 'estimativa pelos ativos de hoje')
     } else {
-      texto($('mensalidade'), '—')
-      texto($('notaMensalidade'), 'preços não cadastrados')
+      // Texto em vez de um traco: o cartao e grande e um traco solto no meio
+      // dele parece defeito de carregamento, nao ausencia de dado.
+      texto($('mensalidade'), 'A combinar')
+      texto($('notaMensalidade'), 'a FHVP ainda não cadastrou seus preços')
     }
 
     $('botaoNovo').disabled = !eu.podeEmitir
@@ -656,13 +665,35 @@
   })
 
   // ── Lista ───────────────────────────────────────────────────────────────
+  /**
+   * Situacao da loja, no mesmo formato do painel da FHVP: icone, cor e a
+   * primeira letra maiuscula. Os dois paineis mostram a mesma informacao, e
+   * escrever de jeitos diferentes obriga quem usa os dois a reler.
+   *
+   * Loja vencida sai em ALERTA, e nao em cinza: ela parou de funcionar, e o
+   * revendedor precisa ver isso na varredura, nao procurar.
+   */
   function etiquetaDoCliente(c) {
     const span = document.createElement('span')
-    span.className = 'etiqueta '
-    if (c.bloqueadoPor === 'fhvp') { span.className += 'erro'; span.textContent = 'bloqueada pela FHVP' }
-    else if (c.bloqueadoPor === 'revendedor') { span.className += 'alerta'; span.textContent = 'bloqueada por você' }
-    else if (c.ativo) { span.className += 'ok'; span.textContent = 'ativa' }
-    else { span.className += 'neutra'; span.textContent = 'vencida' }
+    let nomeIcone = 'circle-check-big'
+    if (c.bloqueadoPor === 'fhvp') {
+      span.className = 'etiqueta erro'
+      nomeIcone = 'lock'
+      span.dataset.texto = 'Bloqueada pela FHVP'
+    } else if (c.bloqueadoPor === 'revendedor') {
+      span.className = 'etiqueta alerta'
+      nomeIcone = 'lock'
+      span.dataset.texto = 'Bloqueada por você'
+    } else if (c.ativo) {
+      span.className = 'etiqueta ok'
+      span.dataset.texto = 'Ativa'
+    } else {
+      span.className = 'etiqueta alerta'
+      nomeIcone = 'circle-alert'
+      span.dataset.texto = 'Vencida'
+    }
+    span.appendChild(icone(nomeIcone))
+    span.appendChild(document.createTextNode(span.dataset.texto))
     return span
   }
 
@@ -700,22 +731,32 @@
       const tr = document.createElement('tr')
 
       const tdNome = document.createElement('td')
-      const nome = document.createElement('div')
-      nome.style.fontWeight = '600'
+      const ident = document.createElement('div'); ident.className = 'identidade'
+      const nome = document.createElement('span'); nome.className = 'nome'
       nome.textContent = c.nome                    // textContent: nome é texto digitado por ele
-      const cod = document.createElement('div')
-      cod.className = 'sub'; cod.style.margin = '0'
+      const cod = document.createElement('span'); cod.className = 'codigo'
       cod.textContent = c.clienteId
-      tdNome.append(nome, cod)
+      ident.append(nome, cod)
       if (c.contato) {
-        const tel = document.createElement('div')
-        tel.className = 'sub'; tel.style.margin = '0'
-        tel.textContent = c.contato
-        tdNome.appendChild(tel)
+        const tel = document.createElement('span')
+        tel.className = 'com-icone'
+        tel.style.fontSize = '12px'
+        tel.style.color = 'hsl(var(--muted-foreground))'
+        tel.appendChild(icone('phone'))
+        tel.appendChild(document.createTextNode(c.contato))
+        ident.appendChild(tel)
       }
+      tdNome.appendChild(ident)
 
       const tdPlano = document.createElement('td')
-      tdPlano.textContent = c.plano === 'pro' ? 'Pro' : 'Básico'
+      const ehPro = c.plano === 'pro'
+      const etPlano = document.createElement('span')
+      // Pro e o plano com nota fiscal: distinguir na cor evita conferir coluna
+      // por coluna quando o revendedor procura quem pode emitir.
+      etPlano.className = 'etiqueta ' + (ehPro ? 'marca' : 'neutra')
+      etPlano.appendChild(icone(ehPro ? 'file-text' : 'store'))
+      etPlano.appendChild(document.createTextNode(ehPro ? 'Pro' : 'Básico'))
+      tdPlano.appendChild(etPlano)
 
       const tdVal = document.createElement('td')
       const d = diasAte(c.validadeAtual)
@@ -740,14 +781,22 @@
       tdAcoes.className = 'acoes'
       if (eu.podeEmitir) {
         if (!c.bloqueadoPor) {
-          tdAcoes.appendChild(botao('Renovar', '', () => renovar(c)))
-          tdAcoes.appendChild(botao('Bloquear', 'perigo', () => bloquear(c)))
+          tdAcoes.appendChild(menuAcoes([
+            { texto: 'Renovar licença', icone: 'refresh-cw', aoClicar: () => renovar(c) },
+            '-',
+            { texto: 'Bloquear loja', icone: 'lock', perigo: true, aoClicar: () => bloquear(c) }
+          ]))
         } else if (c.bloqueadoPor === 'revendedor') {
-          tdAcoes.appendChild(botao('Desbloquear', 'neutro', () => desbloquear(c)))
+          tdAcoes.appendChild(menuAcoes([
+            { texto: 'Desbloquear loja', icone: 'lock-open', aoClicar: () => desbloquear(c) }
+          ]))
         } else {
+          // Bloqueio posto pela FHVP: o revendedor nao desfaz, e a tela precisa
+          // dizer isso em vez de mostrar um menu que nao resolve nada.
           const nota = document.createElement('span')
-          nota.className = 'sub'
-          nota.textContent = 'fale com a FHVP Tech'
+          nota.className = 'com-icone sub'
+          nota.appendChild(icone('circle-alert'))
+          nota.appendChild(document.createTextNode('Fale com a FHVP Tech'))
           tdAcoes.appendChild(nota)
         }
       }

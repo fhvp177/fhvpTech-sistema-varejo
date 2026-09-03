@@ -574,3 +574,134 @@ div.acoes { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap;
 @media (prefers-reduced-motion: reduce) {
   dialog[open] { animation: none; }
 }
+
+/* ── Cartões com ícone ────────────────────────────────────────────────────
+   O cartão chapado dizia o número e nada mais. Com o ícone, a leitura de
+   relance vira reconhecimento: a pessoa acha "lojas ativas" pelo símbolo antes
+   de ler o rótulo. Mesmo desenho dos cartões do Dashboard do app.
+
+   Aditivo de propósito: cartão sem `.card-topo` continua exatamente como era,
+   então o painel do revendedor não muda sozinho. */
+.card-topo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.icone-card {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+}
+.icone-card svg { width: 16px; height: 16px; }
+.icone-card.ok { background: var(--ok-fundo); color: var(--ok); }
+.icone-card.alerta { background: var(--alerta-fundo); color: var(--alerta); }
+.icone-card.erro { background: var(--erro-fundo); color: var(--erro); }
+.icone-card.neutro { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
+
+/* O valor alinhado ao ícone, não embaixo dele: a linha fica mais baixa e a
+   grade de cartões respira sem ocupar mais altura. */
+.card-topo .valor { margin-top: 0; }
+
+/* ── Menu de ações ────────────────────────────────────────────────────────
+   Quatro botões lado a lado quebravam em duas linhas e faziam cada linha da
+   tabela ter altura de parágrafo. Pior: davam o mesmo peso visual a "Renovar"
+   (rotina) e a "Bloquear" (raro e grave).
+
+   O gatilho fica sempre visível (não só no hover): ação escondida atrás de
+   passar o mouse não existe para quem usa teclado nem para quem não descobre. */
+.menu-acoes { position: relative; display: inline-block; }
+.menu-acoes > button {
+  padding: 6px 9px;
+  line-height: 0;
+}
+.menu-acoes > button svg { width: 16px; height: 16px; }
+.menu-lista {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 5px);
+  z-index: 30;
+  min-width: 190px;
+  background: var(--papel);
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--raio);
+  box-shadow: 0 12px 30px -12px rgba(2, 6, 23, 0.3);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.menu-lista[hidden] { display: none; }
+.menu-lista button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  justify-content: flex-start;
+  background: transparent;
+  color: hsl(var(--foreground));
+  border: 0;
+  box-shadow: none;
+  font-weight: 500;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.menu-lista button:hover:not(:disabled) {
+  background: hsl(var(--muted));
+  transform: none;
+}
+.menu-lista button svg {
+  width: 15px;
+  height: 15px;
+  color: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+}
+/* Ação destrutiva no fim, separada por um traço: é o que impede o clique de
+   inércia depois de duas ações de rotina. */
+.menu-lista .separador {
+  height: 1px;
+  background: hsl(var(--border));
+  margin: 4px 2px;
+}
+.menu-lista button.perigo { color: var(--erro); }
+.menu-lista button.perigo:hover:not(:disabled) { background: var(--erro-fundo); }
+.menu-lista button.perigo svg { color: var(--erro); }
+
+/* ── Linha de tabela ──────────────────────────────────────────────────────
+   Realce no hover para não perder a linha ao correr o olho até a coluna de
+   ações, que fica longe do nome em telas largas. */
+tbody tr { transition: background-color 140ms ease; }
+tbody tr:hover { background: hsl(var(--muted) / 0.55); }
+
+/* Nome da loja e código, um sobre o outro, sem quebrar no meio da palavra. */
+.identidade { display: flex; flex-direction: column; gap: 1px; }
+.identidade .nome { font-weight: 600; }
+.identidade .codigo {
+  font-size: 11.5px;
+  color: hsl(var(--muted-foreground));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Célula com ícone + texto (origem, plano, recuperação). */
+.com-icone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.com-icone svg {
+  width: 14px;
+  height: 14px;
+  color: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+}
+.etiqueta svg { width: 12px; height: 12px; }
+
+/* Icone do cartao em cima, como no Dashboard do app: o olho pousa no simbolo,
+   desce para o rotulo e termina no numero. */
+.card > .icone-card { margin-bottom: 10px; }
+.card > .rotulo + .valor { margin-top: 1px; }

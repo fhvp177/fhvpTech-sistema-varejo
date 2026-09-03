@@ -11,6 +11,7 @@ import { dirname } from 'node:path'
 import type { Cliente, Cobranca } from './tipos.ts'
 import type { Revendedor } from './revenda.ts'
 import type { SessaoRevenda, PedidoRecuperacao } from './revendaAuth.ts'
+import type { SessaoAdmin } from './adminAuth.ts'
 
 const DB_PATH = process.env.DB_PATH ?? './data/licenca.db'
 
@@ -54,6 +55,29 @@ db.exec(`
     expiraEm TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_revenda_sessoes_dono ON revenda_sessoes (revendedorId);
+
+  -- Sessões do painel da FHVP. Só o HASH do token entra aqui: banco vazado
+  -- não pode virar acesso ao painel que abre todas as lojas.
+  --
+  -- Não há tabela de CONTA: a senha vive só no segredo ADMIN_SENHA do Fly, e
+  -- trocar o segredo já é o reset. Ver o cabeçalho de adminAuth.ts.
+  CREATE TABLE IF NOT EXISTS admin_sessoes (
+    tokenHash TEXT PRIMARY KEY,
+    criadaEm TEXT NOT NULL,
+    expiraEm TEXT NOT NULL
+  );
+
+  -- Tentativas de login do painel, por ORIGEM e hora.
+  --
+  -- Por origem (IP), e não um contador só: global, qualquer estranho trancaria
+  -- o dono do lado de fora só gastando as tentativas — negação de serviço
+  -- barata contra a única conta que existe.
+  CREATE TABLE IF NOT EXISTS admin_login_tentativas (
+    origem TEXT NOT NULL,
+    hora TEXT NOT NULL,
+    total INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (origem, hora)
+  );
 
   -- Tentativas de login por revendedor e hora. Mesmo padrão do
   -- recuperacao_uso: freia força bruta sem precisar de infra nova.
@@ -208,6 +232,24 @@ const stmts = {
   apagarSessaoRevenda: db.prepare('DELETE FROM revenda_sessoes WHERE tokenHash = ?'),
   apagarSessoesDoRevendedor: db.prepare('DELETE FROM revenda_sessoes WHERE revendedorId = ?'),
   limparSessoesVencidas: db.prepare('DELETE FROM revenda_sessoes WHERE expiraEm <= ?'),
+  setSessaoAdmin: db.prepare(
+    `INSERT INTO admin_sessoes (tokenHash, criadaEm, expiraEm)
+     VALUES (@tokenHash, @criadaEm, @expiraEm)`
+  ),
+  getSessaoAdmin: db.prepare('SELECT * FROM admin_sessoes WHERE tokenHash = ?'),
+  apagarSessaoAdmin: db.prepare('DELETE FROM admin_sessoes WHERE tokenHash = ?'),
+  apagarTodasSessoesAdmin: db.prepare('DELETE FROM admin_sessoes'),
+  limparSessoesAdminVencidas: db.prepare('DELETE FROM admin_sessoes WHERE expiraEm <= ?'),
+  getTentativasAdmin: db.prepare(
+    'SELECT total FROM admin_login_tentativas WHERE origem = ? AND hora = ?'
+  ),
+  incTentativasAdmin: db.prepare(
+    `INSERT INTO admin_login_tentativas (origem, hora, total) VALUES (?, ?, 1)
+     ON CONFLICT(origem, hora) DO UPDATE SET total = total + 1`
+  ),
+  zerarTentativasAdmin: db.prepare(
+    'DELETE FROM admin_login_tentativas WHERE origem = ? AND hora = ?'
+  ),
   getTentativasLogin: db.prepare(
     'SELECT total FROM revenda_login_tentativas WHERE revendedorId = ? AND hora = ?'
   ),
@@ -479,6 +521,54 @@ export function listarClientesDoRevendedor(revendedorId: string): Cliente[] {
 }
 
 // ── Sessões do painel do revendedor ────────────────────────────────────────
+
+// ── Painel da FHVP ──────────────────────────────────────────────────────────
+
+export function gravarSessaoAdmin(sessao: SessaoAdmin): void {
+  stmts.setSessaoAdmin.run(sessao)
+}
+
+export function obterSessaoAdmin(tokenHash: string): SessaoAdmin | null {
+  return (stmts.getSessaoAdmin.get(tokenHash) as SessaoAdmin | undefined) ?? null
+}
+
+export function apagarSessaoAdmin(tokenHash: string): void {
+  stmts.apagarSessaoAdmin.run(tokenHash)
+}
+
+/**
+ * Derruba TODAS as sessões do painel.
+ *
+ * Chamado no boot: se o backend subiu, ou a senha mudou (o único motivo de
+ * mexer no segredo é esse) ou a máquina reiniciou. Nos dois casos, manter
+ * sessão antiga viva significaria que trocar a senha NÃO expulsa quem já
+ * estava dentro — e trocar a senha é exatamente o que se faz quando se
+ * desconfia de alguém.
+ */
+export function apagarTodasSessoesAdmin(): number {
+  const r = stmts.apagarTodasSessoesAdmin.run() as { changes: number }
+  return r.changes
+}
+
+export function limparSessoesAdminVencidas(agora: string = new Date().toISOString()): number {
+  const r = stmts.limparSessoesAdminVencidas.run(agora) as { changes: number }
+  return r.changes
+}
+
+export function contarTentativasAdmin(origem: string, hora: string): number {
+  const r = stmts.getTentativasAdmin.get(origem, hora) as { total: number } | undefined
+  return r?.total ?? 0
+}
+
+export function registrarTentativaAdmin(origem: string, hora: string): void {
+  stmts.incTentativasAdmin.run(origem, hora)
+}
+
+export function zerarTentativasAdmin(origem: string, hora: string): void {
+  stmts.zerarTentativasAdmin.run(origem, hora)
+}
+
+// ── Painel do revendedor ────────────────────────────────────────────────────
 
 export function gravarSessaoRevenda(sessao: SessaoRevenda): void {
   stmts.setSessaoRevenda.run(sessao)

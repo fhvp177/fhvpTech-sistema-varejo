@@ -36,7 +36,15 @@ import {
   contarNotasMesDeTodos,
   contarNotasMes,
   levantarImpedimentosDoCliente,
-  apagarClienteDoBanco
+  apagarClienteDoBanco,
+  gravarSessaoAdmin,
+  obterSessaoAdmin,
+  apagarSessaoAdmin,
+  apagarTodasSessoesAdmin,
+  limparSessoesAdminVencidas,
+  contarTentativasAdmin,
+  registrarTentativaAdmin,
+  zerarTentativasAdmin
 } from './db.ts'
 import { foiRenovado, motivoDaRecusa, podeApagar } from './exclusaoCliente.ts'
 import { avaliarCota, cotaPadrao } from './cotaNotas.ts'
@@ -62,6 +70,16 @@ import { registrarRotasRelay } from './relay.ts'
 import { registrarRotasFiscais } from './rotasFiscais.ts'
 import { registrarRotasRevenda } from './rotasRevenda.ts'
 import { gerarHashSenha, senhaAceitavel, emailAceitavel } from './revendaAuth.ts'
+import {
+  hashTokenAdmin,
+  montarSessaoAdmin,
+  origemDoPedido,
+  passouDoLimiteAdmin,
+  senhaAdminAceitavel,
+  senhaAdminConfere,
+  sessaoAdminExpirada,
+  tokenAdminDoCabecalho
+} from './adminAuth.ts'
 function obrigatoria(chave: string): string {
   const v = process.env[chave]
   if (!v) throw new Error(`env ${chave} obrigatória`)
@@ -70,8 +88,37 @@ function obrigatoria(chave: string): string {
 
 const config: Config = {
   CHAVE_HMAC: obrigatoria('CHAVE_HMAC'),
-  ADMIN_TOKEN: obrigatoria('ADMIN_TOKEN')
+  ADMIN_SENHA: obrigatoria('ADMIN_SENHA')
 }
+
+/**
+ * A senha do painel é forte o bastante para o que ela abre?
+ *
+ * ── Por que só AVISA, e não derruba o boot ──────────────────────────────────
+ * Recusar subir com senha fraca pareceria mais rigoroso, e seria pior: este
+ * backend valida licença de TODA loja em produção. Derrubá-lo por causa de uma
+ * senha fraca trocaria um risco (alguém talvez acertar a senha) por um dano
+ * certo (todas as lojas sem licença agora).
+ *
+ * O aviso é gritado no log, que é onde quem acabou de rodar `fly secrets set`
+ * está olhando.
+ */
+const forcaDaSenha = senhaAdminAceitavel(config.ADMIN_SENHA)
+if (!forcaDaSenha.ok) {
+  console.warn(`[fhvp] ⚠️  ADMIN_SENHA fraca: ${forcaDaSenha.erro}`)
+  console.warn('[fhvp] ⚠️  esta senha abre TODAS as lojas e revendedores.')
+  console.warn("[fhvp] ⚠️  troque com: fly secrets set ADMIN_SENHA='...' --app licenca-gnmodas")
+}
+
+/**
+ * Toda sessão do painel morre quando o backend sobe.
+ *
+ * O único motivo de mexer no segredo é trocar a senha, e trocar a senha reinicia
+ * a máquina. Se as sessões sobrevivessem, trocar a senha NÃO expulsaria quem já
+ * estava dentro — e trocar a senha é exatamente o que se faz quando se
+ * desconfia de alguém. O custo é ter que entrar de novo depois de um deploy.
+ */
+apagarTodasSessoesAdmin()
 
 // Toggle entre mock e EfiPay real baseado em ter ou não credenciais.
 // Em dev local sem EfiPay configurado, usa o mock. Em produção, real.
@@ -105,6 +152,22 @@ app.get('/painel.css', async (c) => {
   const css = await readFile(CAMINHO_CSS_PAINEL, 'utf8')
   return c.body(css, 200, {
     'Content-Type': 'text/css; charset=utf-8',
+    'Cache-Control': 'public, max-age=300'
+  })
+})
+
+/**
+ * Pecas de interface compartilhadas pelos dois paineis (icones, cartao, menu).
+ *
+ * Servido como arquivo, e nao embutido em cada pagina, pela mesma razao da
+ * folha de estilo: sao duas telas que precisam parecer o mesmo produto, e
+ * codigo duplicado diverge na segunda alteracao.
+ */
+const CAMINHO_UI_PAINEL = new URL('./painel-ui.js', import.meta.url)
+app.get('/painel-ui.js', async (c) => {
+  const js = await readFile(CAMINHO_UI_PAINEL, 'utf8')
+  return c.body(js, 200, {
+    'Content-Type': 'text/javascript; charset=utf-8',
     'Cache-Control': 'public, max-age=300'
   })
 })
@@ -189,7 +252,7 @@ app.get('/painel', async (c) => {
     // Nada nesta página vem de fora, então travar as origens é de graça e
     // fecha a porta pra injeção de script de terceiro.
     'Content-Security-Policy':
-      "default-src 'none'; script-src 'unsafe-inline'; " +
+      "default-src 'none'; script-src 'self' 'unsafe-inline'; " +
       // 'self' entrou para a folha de identidade (/painel.css) e o logotipo;
       // 'unsafe-inline' segue porque as páginas ainda têm estilo embutido.
       "style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
@@ -217,7 +280,7 @@ app.get('/painel-fhvp', async (c) => {
   const html = await readFile(CAMINHO_PAINEL_FHVP, 'utf8')
   return c.html(html, 200, {
     'Content-Security-Policy':
-      "default-src 'none'; script-src 'unsafe-inline'; " +
+      "default-src 'none'; script-src 'self' 'unsafe-inline'; " +
       // 'self' entrou para a folha de identidade (/painel.css) e o logotipo;
       // 'unsafe-inline' segue porque as páginas ainda têm estilo embutido.
       "style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
@@ -239,16 +302,72 @@ registrarRotasRelay(app, config.CHAVE_HMAC)
 registrarRotasFiscais(app)
 
 // Painel do revendedor. Registrado ANTES do guarda do /admin/* de propósito:
-// são portarias independentes, e nenhuma rota /revenda/* aceita o ADMIN_TOKEN.
+// são portarias independentes, e nenhuma rota /revenda/* aceita a sessão do
+// painel da FHVP — nem o contrário.
 registrarRotasRevenda(app, config.CHAVE_HMAC, criarCobrancaPIX)
 
 // ───── Admin ─────────────────────────────────────────────────────────
-// Protege rotas /admin/* com Bearer token (vem do env ADMIN_TOKEN).
+/**
+ * Login do painel da FHVP.
+ *
+ * ── Por que não é `/admin/login` ─────────────────────────────────────────────
+ * O guarda logo abaixo protege `/admin/*`, e uma rota de login lá dentro
+ * exigiria estar logado para logar. Fora do prefixo, e a leitura fica óbvia.
+ *
+ * ── O que esta rota se recusa a contar ───────────────────────────────────────
+ * Erro de senha e limite estourado devolvem mensagens diferentes de propósito
+ * (quem esgotou precisa saber que é só esperar), mas nenhuma das duas diz se a
+ * senha chegou perto. Não existe "usuário não encontrado" aqui: a conta é uma
+ * só, e a única informação é a senha.
+ */
+app.post('/admin-login', async (c) => {
+  const origem = origemDoPedido(c.req.header('x-forwarded-for'))
+  const hora = new Date().toISOString().slice(0, 13) // AAAA-MM-DDTHH
+
+  if (passouDoLimiteAdmin(contarTentativasAdmin(origem, hora))) {
+    return c.json(
+      { erro: 'muitas tentativas — espere a virada da hora e tente de novo' },
+      429
+    )
+  }
+
+  const body = await c.req.json<{ senha?: string }>().catch(() => ({ senha: undefined }))
+
+  if (!senhaAdminConfere(body.senha, config.ADMIN_SENHA)) {
+    // Conta ANTES de responder: contar só no sucesso não freou nada, e contar
+    // depois de um `return` é o jeito clássico de o limite nunca subir.
+    registrarTentativaAdmin(origem, hora)
+    return c.json({ erro: 'senha incorreta' }, 401)
+  }
+
+  // Acertou: zera o balde desta origem para que uma sequência de erros de
+  // digitação não persiga quem já provou quem é.
+  zerarTentativasAdmin(origem, hora)
+  limparSessoesAdminVencidas()
+
+  const { token, sessao } = montarSessaoAdmin()
+  gravarSessaoAdmin(sessao)
+  return c.json({ token, expiraEm: sessao.expiraEm })
+})
+
+/** Encerra a sessão atual. O painel chama ao sair; o token morre na hora. */
+app.post('/admin-logout', async (c) => {
+  const token = tokenAdminDoCabecalho(c.req.header('authorization'))
+  if (token) apagarSessaoAdmin(hashTokenAdmin(token))
+  return c.json({ ok: true })
+})
+
+// Protege rotas /admin/* com a sessão criada no /admin-login.
 app.use('/admin/*', async (c, next) => {
-  const auth = c.req.header('authorization') ?? ''
-  const token = auth.replace(/^Bearer\s+/i, '')
-  if (token !== config.ADMIN_TOKEN) {
-    return c.json({ erro: 'não autorizado' }, 401)
+  const token = tokenAdminDoCabecalho(c.req.header('authorization'))
+  if (!token) return c.json({ erro: 'não autenticado' }, 401)
+
+  const sessao = obterSessaoAdmin(hashTokenAdmin(token))
+  if (!sessao || sessaoAdminExpirada(sessao)) {
+    if (sessao) apagarSessaoAdmin(sessao.tokenHash)
+    // "inválida OU expirada" numa frase só: separar as duas contaria a um
+    // estranho que aquele token já existiu.
+    return c.json({ erro: 'sessão inválida ou expirada — entre novamente' }, 401)
   }
   await next()
 })

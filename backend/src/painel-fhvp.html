@@ -29,11 +29,11 @@
     <div class="marca" style="text-align:center">FHVP <span>Tech</span></div>
     <div class="selo">Administração</div>
     <p class="sub" style="text-align:center;margin-top:10px">Revendedores e lojas da rede.</p>
-    <label for="campoToken">Token de administração</label>
-    <input id="campoToken" type="password" autocomplete="off" spellcheck="false"
-           placeholder="cole o ADMIN_TOKEN">
+    <label for="campoSenha">Senha</label>
+    <input id="campoSenha" type="password" autocomplete="current-password" spellcheck="false"
+           placeholder="sua senha de administração">
     <p class="sub" style="margin:8px 0 0;font-size:13px">
-      O token fica só na memória desta aba. Recarregar a página pede de novo — de propósito.
+      A sessão dura 12 horas e morre ao fechar a aba. Um deploy também derruba todas.
     </p>
     <div id="erroLogin" class="aviso erro" hidden style="margin-top:14px"></div>
     <button id="botaoEntrar" type="submit" style="width:100%;margin-top:18px">Entrar</button>
@@ -72,6 +72,7 @@
       <div class="painel"><div style="overflow-x:auto"><table>
         <thead><tr>
           <th>Loja</th><th>Origem</th><th>Plano</th><th>Validade</th>
+          <th class="num">Mensalidade</th>
           <th class="num">Notas</th><th class="num">Excedente</th><th>Situação</th><th></th>
         </tr></thead>
         <tbody id="corpoClientes"></tbody>
@@ -82,34 +83,61 @@
 
 <dialog id="dialogo" aria-labelledby="dialogoTitulo"></dialog>
 
+<script src="painel-ui.js"></script>
 <script>
 (function () {
   'use strict'
 
   /**
-   * ── Por que o token NÃO é guardado ────────────────────────────────────────
-   * O ADMIN_TOKEN abre todas as lojas e todos os revendedores, e trocá-lo exige
-   * mexer nos segredos do Fly e reiniciar o backend — ou seja, é caro de
-   * revogar. Guardá-lo em localStorage transformaria qualquer comprometimento
-   * do navegador (extensão, XSS num outro site do mesmo perfil, máquina
-   * emprestada) numa perda permanente e silenciosa.
+   * ── O que esta tela guarda, e por quê ─────────────────────────────────────
+   * Até aqui esta tela pedia um segredo do SERVIDOR colado à mão, e o mantinha
+   * só na memória: recarregar a página exigia colar de novo. Era proteção
+   * legítima, porque aquele segredo não expirava nem dava para revogar sem
+   * redeploy — mas cobrou a conta no dia em que ninguém mais tinha o valor
+   * anotado. O Fly não devolve o conteúdo de um secret.
    *
-   * Em memória, o estrago fica limitado ao tempo da aba aberta. O preço é ter
-   * que colar o token de novo depois de recarregar — que é justamente o
-   * lembrete de que esta tela não é para ficar aberta o dia todo.
+   * Agora a senha entra UMA vez e sai daqui como token de sessão: opaco, 12h de
+   * validade, guardado no servidor apenas como hash. É isso que permitiu
+   * afrouxar a regra — o que sobrevive a um F5 não é mais a credencial, e
+   * qualquer deploy ou troca de senha o derruba na hora.
    *
-   * Diferente do painel do revendedor, que usa sessão de verdade (token opaco
-   * em banco, revogável na hora): lá havia como construir isso porque cada
-   * revendedor tem conta própria. Aqui a "conta" é o segredo do servidor.
+   * Mesmo desenho do painel do revendedor. A diferença que restava (lá cada um
+   * tem conta própria; aqui a conta é do servidor) deixou de importar quando a
+   * senha virou um segredo do Fly, trocável sem tocar no código.
    */
-  let token = ''
+  // Guardado por ABA, e não pelo navegador: a sessão morre ao fechar a aba, mas
+  // sobrevive a um F5 — que era a reclamação de quem colava o segredo à mão.
+  // Painel que abre todas as lojas não deve ficar destrancado num PC
+  // compartilhado só porque alguém não deslogou.
+  const CHAVE_SESSAO = 'fhvp_admin_token'
+  let token = sessionStorage.getItem(CHAVE_SESSAO) || ''
   let revendedores = []
   let clientes = []
 
   const $ = (id) => document.getElementById(id)
   const dinheiro = (centavos) =>
     (Number(centavos || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-  const dataBr = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '—')
+  const dataBr = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : 'sem data')
+
+  /**
+   * Dias inteiros de `de` ate `ate`, ambos no formato AAAA-MM-DD.
+   *
+   * Monta as datas com `T00:00` para o horario local. `new Date('2026-09-03')`
+   * sem hora e lido como UTC, e no Brasil isso vira 21h do dia ANTERIOR: a
+   * conta erraria por um dia toda tarde. Mesma armadilha ja documentada no app.
+   */
+  function diasEntre(de, ate) {
+    const a = new Date(de + 'T00:00')
+    const b = new Date(ate + 'T00:00')
+    if (isNaN(a) || isNaN(b)) return null
+    return Math.round((b - a) / 86400000)
+  }
+
+  // Espelha o padrao do backend (o ultimo `?? 10000` da rota /cobranca). Aqui
+  // ele so ROTULA a coluna quando a loja nao tem preco proprio — quem decide o
+  // valor cobrado continua sendo o servidor. Se um dia o padrao mudar la, esta
+  // constante vira mentira na tela: e o unico ponto a acertar junto.
+  const PRECO_PADRAO_CENTAVOS = 10000
 
   function mostrarErro(el, msg) {
     if (!msg) { el.hidden = true; el.textContent = ''; return }
@@ -133,7 +161,13 @@
     }
     let dados = {}
     try { dados = await resp.json() } catch (e) { /* resposta sem corpo */ }
-    if (resp.status === 401) { sair('token recusado pelo servidor'); return { ok: false, erro: 'não autorizado' } }
+    // 401 em QUALQUER rota derruba a sessão — menos no próprio login, onde 401
+    // é só "senha errada" e mandar para a tela de entrada apagaria a mensagem
+    // antes de a pessoa lê-la.
+    if (resp.status === 401 && !caminho.startsWith('/admin-login')) {
+      sair('sua sessão expirou — entre novamente')
+      return { ok: false, erro: 'não autorizado' }
+    }
     return resp.ok ? { ok: true, dados } : { ok: false, erro: dados.erro || ('erro ' + resp.status) }
   }
 
@@ -279,29 +313,63 @@
   $('formLogin').addEventListener('submit', async (ev) => {
     ev.preventDefault()
     const botao = $('botaoEntrar')
-    const digitado = $('campoToken').value.trim()
-    if (!digitado) return
+    const senha = $('campoSenha').value
+    if (!senha) return
     botao.disabled = true
     mostrarErro($('erroLogin'), '')
 
-    token = digitado
-    const r = await api('/admin/revendedores')
+    // A senha vai UMA vez, troca por um token de sessão, e não volta mais a
+    // sair daqui. Nenhum pedido seguinte a carrega.
+    const login = await api('/admin-login', { metodo: 'POST', corpo: { senha } })
     botao.disabled = false
-    if (!r.ok) {
-      token = ''
-      mostrarErro($('erroLogin'), r.erro === 'não autorizado' ? 'Token recusado.' : r.erro)
+
+    // Limpo antes de qualquer desvio: errar a senha não deixa ela parada no
+    // DOM, onde uma inspeção casual a mostraria em claro.
+    $('campoSenha').value = ''
+
+    if (!login.ok) {
+      mostrarErro($('erroLogin'), login.erro || 'não foi possível entrar')
+      $('campoSenha').focus()
       return
     }
-    // O campo é limpo assim que o token entra na memória: ele não deve seguir
-    // no DOM, onde qualquer inspeção casual o mostraria em claro.
-    $('campoToken').value = ''
+
+    token = login.dados.token
+    sessionStorage.setItem(CHAVE_SESSAO, token)
+    await abrirPainel()
+  })
+
+  /**
+   * Mostra o painel com a sessão que já está em mãos.
+   *
+   * Separado do submit porque serve a DOIS caminhos: o login e a retomada
+   * depois de um F5. Sem isso, recarregar a página com sessão válida cairia na
+   * tela de entrada — que é exatamente o incômodo que este trabalho remove.
+   */
+  async function abrirPainel() {
+    const r = await api('/admin/revendedores')
+    if (!r.ok) {
+      // Sessão morta (deploy, 12h, senha trocada). O `sair` já foi chamado pelo
+      // 401 dentro do api(); aqui só não seguimos para a tela de dentro.
+      return false
+    }
     $('telaLogin').hidden = true
     $('telaApp').hidden = false
     aplicar(r.dados)
     await carregarClientes()
-  })
+    return true
+  }
 
   function sair(motivo) {
+    // Avisa o servidor para o token morrer agora, e não só quando expirar.
+    // Sem `await`: a tela não deve esperar a rede para destrancar o operador.
+    if (token) {
+      const morrendo = token
+      fetch('admin-logout', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + morrendo }
+      }).catch(() => {})
+    }
+    sessionStorage.removeItem(CHAVE_SESSAO)
     token = ''
     revendedores = []
     clientes = []
@@ -336,14 +404,28 @@
     desenharRevendedores()
   }
 
-  async function carregarClientes() {
+  /**
+   * Depois de uma acao, a tabela inteira e redesenhada e a linha que mudou fica
+   * indistinguivel das outras. `destacar` guarda qual foi, e o desenho aplica
+   * `anim-linha-entra` nela: um clarao que some.
+   *
+   * Informa, nao enfeita. Sem isso a pessoa fecha o modal e precisa procurar na
+   * tabela se o que ela pediu aconteceu. Segue a regra da casa: animacao que
+   * nao conta nada e imposto cobrado toda vez.
+   */
+  let destacar = null
+
+  async function carregarClientes(idDestaque) {
+    if (idDestaque) destacar = idDestaque
     const r = await api('/admin/clientes')
     if (!r.ok) { mostrarErro($('erroGeral'), r.erro); return }
     clientes = (r.dados && r.dados.clientes) || []
     desenharClientes()
+    destacar = null
   }
 
-  async function recarregar() {
+  async function recarregar(idDestaque) {
+    if (idDestaque) destacar = idDestaque
     await carregarRevendedores()
     await carregarClientes()
   }
@@ -363,20 +445,14 @@
     const ativos = revendedores.reduce((s, r) => s + (r.clientesAtivos || 0), 0)
     const lojas = revendedores.reduce((s, r) => s + (r.clientes || 0), 0)
     const bloqueados = revendedores.filter((r) => r.bloqueado).length
-    const cartoes = [
-      ['Revendedores', String(revendedores.length)],
-      ['Lojas na rede', String(lojas)],
-      ['Lojas ativas', String(ativos)],
-      ['Bloqueados', String(bloqueados)]
-    ]
-    $('cartoesRevenda').replaceChildren(...cartoes.map(([rot, val]) => {
-      const d = document.createElement('div')
-      d.className = 'card anim-pop'
-      const r = document.createElement('div'); r.className = 'rotulo'; r.textContent = rot
-      const v = document.createElement('div'); v.className = 'valor'; v.textContent = val
-      d.append(r, v)
-      return d
-    }))
+    // O tom do ultimo cartao acompanha o numero: zero suspenso e uma boa
+    // noticia em cinza, e um suspenso e um alerta que merece o olho.
+    $('cartoesRevenda').replaceChildren(
+      cartao('Revendedores', String(revendedores.length), 'handshake'),
+      cartao('Lojas na rede', String(lojas), 'store'),
+      cartao('Lojas ativas', String(ativos), 'circle-check-big', ativos > 0 ? 'ok' : 'neutro'),
+      cartao('Suspensos', String(bloqueados), 'ban', bloqueados > 0 ? 'erro' : 'neutro')
+    )
 
     const corpo = $('corpoRevendedores')
     if (revendedores.length === 0) {
@@ -390,12 +466,17 @@
 
     corpo.replaceChildren(...revendedores.map((rv) => {
       const tr = document.createElement('tr')
+      if (destacar === rv.revendedorId) tr.className = 'anim-linha-entra'
       const sit = situacaoRevendedor(rv)
 
       const tdNome = document.createElement('td')
-      const nome = document.createElement('div'); nome.textContent = rv.nome || rv.revendedorId
-      const id = document.createElement('div'); id.className = 'mono fraco'; id.textContent = rv.revendedorId
-      tdNome.append(nome, id)
+      const ident = document.createElement('div'); ident.className = 'identidade'
+      const nome = document.createElement('span'); nome.className = 'nome'
+      nome.textContent = rv.nome || rv.revendedorId
+      const id = document.createElement('span'); id.className = 'codigo'
+      id.textContent = rv.revendedorId
+      ident.append(nome, id)
+      tdNome.appendChild(ident)
 
       const tdValidade = document.createElement('td')
       tdValidade.textContent = dataBr(rv.validade)
@@ -415,23 +496,30 @@
       const etRec = document.createElement('span')
       const podeRec = rv.podeRecuperarSenha
       etRec.className = 'etiqueta ' + (podeRec ? 'ok' : 'alerta')
-      etRec.textContent = podeRec ? 'e-mail ok' : 'sem e-mail'
+      etRec.appendChild(icone(podeRec ? 'mail-check' : 'mail-x'))
+      // "sem e-mail" e um problema pendente, nao um estado neutro: sem ele o
+      // revendedor que perder a senha vira telefonema para a FHVP.
+      etRec.appendChild(document.createTextNode(podeRec ? 'E-mail cadastrado' : 'Sem e-mail'))
       tdRec.appendChild(etRec)
 
       const tdAcoes = document.createElement('td'); tdAcoes.className = 'acoes'
-      const caixa = document.createElement('div'); caixa.className = 'acoes'
-      caixa.append(
-        botao('Validade', 'neutro', () => modalValidade(rv)),
-        botao(rv.bloqueado ? 'Desbloquear' : 'Estrangular', 'neutro', () => modalBloqueio(rv)),
-        botao('Senha', 'neutro', () => modalSenha(rv)),
-        botao('Cortar', 'perigo-forte', () => modalCortar(rv))
-      )
-      tdAcoes.appendChild(caixa)
+      tdAcoes.appendChild(menuAcoes([
+        { texto: 'Ajustar validade', icone: 'calendar-days', aoClicar: () => modalValidade(rv) },
+        { texto: 'Redefinir senha', icone: 'key-round', aoClicar: () => modalSenha(rv) },
+        '-',
+        {
+          texto: rv.bloqueado ? 'Reativar' : 'Suspender emissão',
+          icone: rv.bloqueado ? 'play' : 'pause',
+          aoClicar: () => modalBloqueio(rv)
+        },
+        { texto: 'Bloquear rede', icone: 'octagon-alert', perigo: true, aoClicar: () => modalCortar(rv) }
+      ]))
 
       tr.append(tdNome, tdValidade, tdSit, tdLojas, tdAtivas, tdRec, tdAcoes)
       return tr
     }))
   }
+
 
   function botao(texto, classe, aoClicar) {
     const b = document.createElement('button')
@@ -457,30 +545,43 @@
         return resp.ok ? null : { mensagem: resp.erro }
       }
     })
-    if (r) await recarregar()
+    if (r) await recarregar(rv.revendedorId)
   }
 
   /**
-   * Estrangular ≠ cortar, e a tela precisa deixar isso óbvio.
+   * Suspender ≠ bloquear a rede, e a tela precisa deixar isso óbvio.
    *
-   * Bloquear o revendedor NÃO derruba as lojas dele: elas seguem funcionando
-   * até a data de cada uma, e a carteira murcha sozinha no ritmo do ciclo. É a
-   * ação do dia a dia (atraso de pagamento). Cortar é outra coisa, mora noutro
-   * botão e pede o código digitado — ver `modalCortar`.
+   * Suspender NÃO desliga as lojas do revendedor. Elas seguem funcionando até
+   * a validade de cada uma, e a carteira dele encolhe sozinha no ritmo do
+   * ciclo. É a ação do dia a dia, para atraso de pagamento.
+   *
+   * Bloquear a rede é outra coisa: desliga as lojas na hora, mora noutro item
+   * do menu e exige o código digitado. Ver `modalCortar`.
+   *
+   * ── Sobre os nomes ─────────────────────────────────────────────────────────
+   * Estas ações se chamavam "Estrangular" e "Cortar". Descrever cobrança de
+   * parceiro com esse vocabulário não combina com o produto, e a tela é lida
+   * por quem administra a operação todo dia. "Suspender emissão" e "Bloquear
+   * rede" dizem exatamente o que acontece, sem precisar de metáfora.
    */
   async function modalBloqueio(rv) {
     const bloqueando = !rv.bloqueado
     const r = await abrirModal({
-      titulo: bloqueando ? 'Estrangular ' + rv.nome + '?' : 'Desbloquear ' + rv.nome + '?',
+      titulo: bloqueando
+        ? 'Suspender a emissão de ' + rv.nome + '?'
+        : 'Reativar ' + rv.nome + '?',
       aviso: bloqueando
         ? 'As lojas dele CONTINUAM funcionando até a validade de cada uma. O que para é o painel: ele deixa de emitir e de renovar chaves, e a carteira vence sozinha. Pagar não desfaz isto.'
         : 'Ele volta a emitir e renovar chaves imediatamente.',
+      // 'aviso' e nao 'erro': suspender e reversivel e faz parte do ciclo
+      // normal de cobranca. Vermelho aqui gastaria o alarme que a acao de
+      // baixo precisa.
       avisoTipo: bloqueando ? 'alerta' : 'ok',
       campos: bloqueando
         ? [{ id: 'motivo', rotulo: 'Motivo', dica: 'ex.: mensalidade em atraso desde 10/09',
              ajuda: 'Fica gravado para quem for destravar depois entender o porquê.' }]
         : [],
-      rotuloConfirmar: bloqueando ? 'Estrangular' : 'Desbloquear',
+      rotuloConfirmar: bloqueando ? 'Suspender' : 'Reativar',
       perigo: bloqueando,
       aoConfirmar: async (v) => {
         const resp = await api('/admin/revendedor/' + encodeURIComponent(rv.revendedorId) + '/bloqueio',
@@ -488,7 +589,7 @@
         return resp.ok ? null : { mensagem: resp.erro }
       }
     })
-    if (r) await recarregar()
+    if (r) await recarregar(rv.revendedorId)
   }
 
   async function modalSenha(rv) {
@@ -507,28 +608,30 @@
         return resp.ok ? null : { campo: 'senha', mensagem: resp.erro }
       }
     })
-    if (r) await recarregar()
+    if (r) await recarregar(rv.revendedorId)
   }
 
   /**
-   * O botão nuclear.
+   * A ação mais grave da tela.
    *
-   * Cortar derruba as lojas do revendedor — é o oposto do estrangulamento, que
-   * respeita o ciclo. Existe para fraude, e por isso o backend exige o código
-   * digitado no corpo do pedido (`confirmarId`): um clique errado não pode
-   * apagar a operação de um parceiro.
+   * Bloquear a rede desliga TODAS as lojas do revendedor na hora. É o oposto
+   * de suspender, que respeita o ciclo de cada loja. Existe para fraude, e por
+   * isso o backend exige o código digitado no corpo do pedido (`confirmarId`):
+   * um clique errado não pode parar a operação de um parceiro.
    *
    * A confirmação por digitação é chata de propósito. É o único lugar da tela
    * onde a chatice é a funcionalidade.
    */
   async function modalCortar(rv) {
     const r = await abrirModal({
-      titulo: 'CORTAR ' + rv.nome + '?',
-      aviso: 'Isto derruba as lojas dele. Diferente de estrangular, que só impede novas chaves e deixa cada loja viver até a data dela. Use para fraude, não para atraso.',
+      titulo: 'Bloquear a rede de ' + rv.nome + '?',
+      aviso: 'Todas as lojas deste revendedor param de funcionar imediatamente. ' +
+        'Diferente de suspender, que apenas impede chaves novas e deixa cada loja ' +
+        'operar até a validade dela. Use para fraude, não para atraso de pagamento.',
       avisoTipo: 'erro',
       campos: [{ id: 'confirmar', rotulo: 'Digite o código do revendedor para confirmar',
         dica: rv.revendedorId, ajuda: 'A digitação existe para separar isto de um clique errado.' }],
-      rotuloConfirmar: 'Cortar',
+      rotuloConfirmar: 'Bloquear rede',
       perigo: true,
       aoConfirmar: async (v) => {
         if (v.confirmar !== rv.revendedorId) {
@@ -539,7 +642,7 @@
         return resp.ok ? null : { mensagem: resp.erro }
       }
     })
-    if (r) await recarregar()
+    if (r) await recarregar(rv.revendedorId)
   }
 
   // ── Lojas ────────────────────────────────────────────────────────────────
@@ -548,26 +651,26 @@
     const comExcedente = clientes.filter((c) => (c.notas && c.notas.excedentes) > 0)
     const totalNotas = clientes.reduce((s, c) => s + ((c.notas && c.notas.emitidas) || 0), 0)
     const deRevenda = clientes.filter((c) => c.revendedorId).length
-    const cartoes = [
-      ['Lojas', String(clientes.length)],
-      ['De revendedor', String(deRevenda)],
-      ['Notas no mês', String(totalNotas)],
-      ['Acima da cota', String(comExcedente.length)]
-    ]
-    $('cartoesClientes').replaceChildren(...cartoes.map(([rot, val]) => {
-      const d = document.createElement('div')
-      d.className = 'card anim-pop'
-      const r = document.createElement('div'); r.className = 'rotulo'; r.textContent = rot
-      const v = document.createElement('div'); v.className = 'valor'; v.textContent = val
-      d.append(r, v)
-      return d
-    }))
+    $('cartoesClientes').replaceChildren(
+      cartao('Lojas', String(clientes.length), 'store'),
+      cartao('De revendedor', String(deRevenda), 'handshake'),
+      cartao('Notas no mês', String(totalNotas), 'file-text'),
+      // Excedente e o unico numero desta fileira que custa dinheiro a alguem.
+      cartao(
+        'Acima da cota',
+        String(comExcedente.length),
+        'triangle-alert',
+        comExcedente.length > 0 ? 'alerta' : 'neutro'
+      )
+    )
 
     const corpo = $('corpoClientes')
     if (clientes.length === 0) {
       const tr = document.createElement('tr')
       const td = document.createElement('td')
-      td.colSpan = 8; td.className = 'vazio'
+      // 9 = as colunas do <thead> desta tabela. Menos que isso e a mensagem
+      // para no meio da largura, com colunas vazias sobrando do lado.
+      td.colSpan = 9; td.className = 'vazio'
       td.textContent = 'Nenhuma loja cadastrada.'
       tr.appendChild(td); corpo.replaceChildren(tr)
       return
@@ -575,6 +678,7 @@
 
     corpo.replaceChildren(...clientes.map((cl) => {
       const tr = document.createElement('tr')
+      if (destacar === cl.clienteId) tr.className = 'anim-linha-entra'
       const notas = cl.notas || { emitidas: 0, teto: null, excedentes: 0 }
 
       const tdNome = document.createElement('td')
@@ -586,11 +690,14 @@
       if (cl.revendedorId) {
         const et = document.createElement('span')
         et.className = 'etiqueta neutra'
-        et.textContent = cl.revendedorId
+        et.appendChild(icone('handshake'))
+        et.appendChild(document.createTextNode(cl.revendedorId))
         tdOrigem.appendChild(et)
       } else {
-        tdOrigem.textContent = 'FHVP direto'
-        tdOrigem.className = 'fraco'
+        const dir = document.createElement('span'); dir.className = 'com-icone fraco'
+        dir.appendChild(icone('building-2'))
+        dir.appendChild(document.createTextNode('FHVP direto'))
+        tdOrigem.appendChild(dir)
       }
 
       const tdPlano = document.createElement('td')
@@ -598,6 +705,24 @@
 
       const tdValidade = document.createElement('td')
       tdValidade.textContent = dataBr(cl.validadeAtual)
+
+      // Mensalidade: mostra o valor fixo desta loja, ou o padrao em cinza.
+      // Sem esta coluna, o preco combinado com cada cliente so existiria dentro
+      // do banco — e a pergunta "quanto o fulano paga?" viraria consulta ao
+      // suporte toda vez.
+      const tdPreco = document.createElement('td'); tdPreco.className = 'num'
+      if (cl.revendedorId) {
+        // Loja de revendedor nao paga a FHVP: quem cobra ela e o revendedor, e
+        // a rota de renovacao recusa essas lojas. Mostrar um preco aqui seria
+        // dizer que cobramos algo que nao cobramos.
+        tdPreco.textContent = '—'
+        tdPreco.className = 'num fraco'
+      } else if (cl.valorCentavosRenovacao) {
+        tdPreco.textContent = dinheiro(cl.valorCentavosRenovacao)
+      } else {
+        tdPreco.textContent = dinheiro(PRECO_PADRAO_CENTAVOS)
+        tdPreco.className = 'num fraco'
+      }
 
       const tdNotas = document.createElement('td'); tdNotas.className = 'num'
       tdNotas.textContent = notas.teto === null
@@ -616,32 +741,68 @@
         tdExc.className = 'num fraco'
       }
 
+      /**
+       * A situacao da loja, em UMA etiqueta.
+       *
+       * Antes esta coluna so falava de bloqueio e de cota, e mostrava um traco
+       * para todo o resto. O problema: loja VENCIDA caia no traco. Num painel
+       * cujo trabalho e cuidar de licenca, vencimento e exatamente o que precisa
+       * saltar aos olhos, e ele estava invisivel: so aparecia para quem
+       * conferisse data por data na coluna do lado.
+       *
+       * A ordem e de gravidade, e a primeira que casar ganha a etiqueta:
+       * bloqueio (alguem decidiu), vencida (parou de funcionar), vence em
+       * poucos dias (vai parar), cota travando, e so entao "em dia".
+       */
       const tdSit = document.createElement('td')
+      const et = document.createElement('span')
+      const hojeIso = new Date().toISOString().slice(0, 10)
+      const validade = cl.validadeAtual ? String(cl.validadeAtual).slice(0, 10) : null
+      const diasAteVencer = validade ? diasEntre(hojeIso, validade) : null
+
       if (cl.bloqueadoPor) {
-        const et = document.createElement('span')
         et.className = 'etiqueta erro'
-        et.textContent = 'bloqueada · ' + cl.bloqueadoPor
-        tdSit.appendChild(et)
-      } else if (notas.bloqueiaAcimaDoTeto) {
-        const et = document.createElement('span')
+        et.appendChild(icone('lock'))
+        et.appendChild(document.createTextNode(
+          cl.bloqueadoPor === 'revendedor' ? 'Bloqueada pelo revendedor' : 'Bloqueada'
+        ))
+      } else if (validade && validade < hojeIso) {
+        et.className = 'etiqueta erro'
+        et.appendChild(icone('circle-alert'))
+        et.appendChild(document.createTextNode('Vencida'))
+      } else if (diasAteVencer !== null && diasAteVencer <= 7) {
+        // Sete dias e o que da tempo de cobrar antes de a loja parar.
         et.className = 'etiqueta alerta'
-        et.textContent = 'cota trava'
-        tdSit.appendChild(et)
+        et.appendChild(icone('clock'))
+        et.appendChild(document.createTextNode(
+          diasAteVencer === 0 ? 'Vence hoje' : 'Vence em ' + diasAteVencer + 'd'
+        ))
+      } else if (notas.bloqueiaAcimaDoTeto) {
+        et.className = 'etiqueta alerta'
+        et.appendChild(icone('triangle-alert'))
+        et.appendChild(document.createTextNode('Cota trava emissão'))
       } else {
-        tdSit.textContent = '—'
-        tdSit.className = 'fraco'
+        et.className = 'etiqueta ok'
+        et.appendChild(icone('circle-check-big'))
+        et.appendChild(document.createTextNode('Em dia'))
       }
+      tdSit.appendChild(et)
 
       const tdAcoes = document.createElement('td'); tdAcoes.className = 'acoes'
-      const caixa = document.createElement('div'); caixa.className = 'acoes'
-      caixa.append(
-        botao('Renovar', 'neutro', () => modalRenovarCliente(cl)),
-        botao('Cota', 'neutro', () => modalCota(cl)),
-        botao(cl.bloqueadoPor ? 'Desbloquear' : 'Bloquear', 'neutro', () => modalBloqueioCliente(cl))
-      )
-      tdAcoes.appendChild(caixa)
+      tdAcoes.appendChild(menuAcoes([
+        { texto: 'Renovar licença', icone: 'refresh-cw', aoClicar: () => modalRenovarCliente(cl) },
+        { texto: 'Mensalidade', icone: 'banknote', aoClicar: () => modalPreco(cl) },
+        { texto: 'Cota de notas', icone: 'file-text', aoClicar: () => modalCota(cl) },
+        '-',
+        {
+          texto: cl.bloqueadoPor ? 'Desbloquear loja' : 'Bloquear loja',
+          icone: cl.bloqueadoPor ? 'lock-open' : 'lock',
+          perigo: !cl.bloqueadoPor,
+          aoClicar: () => modalBloqueioCliente(cl)
+        }
+      ]))
 
-      tr.append(tdNome, tdOrigem, tdPlano, tdValidade, tdNotas, tdExc, tdSit, tdAcoes)
+      tr.append(tdNome, tdOrigem, tdPlano, tdValidade, tdPreco, tdNotas, tdExc, tdSit, tdAcoes)
       return tr
     }))
   }
@@ -663,7 +824,64 @@
         return resp.ok ? null : { mensagem: resp.erro }
       }
     })
-    if (r) await carregarClientes()
+    if (r) await carregarClientes(cl.clienteId)
+  }
+
+  /**
+   * Preco da mensalidade desta loja.
+   *
+   * O valor digitado aqui SOBRESCREVE o que o aplicativo pede na hora de gerar
+   * o PIX de renovacao — e por isso muda o preco sem release nenhum do app.
+   *
+   * Digita-se em REAIS, nao em centavos: ninguem negocia mensalidade em
+   * centavos, e a rota espera centavos. A conversao mora aqui, num lugar so.
+   *
+   * Vazio devolve a loja ao padrao, igual a cota faz com o teto de notas.
+   */
+  async function modalPreco(cl) {
+    const atual = cl.valorCentavosRenovacao
+    const daRevenda = Boolean(cl.revendedorId)
+    const r = await abrirModal({
+      titulo: 'Preço da mensalidade',
+      subtitulo:
+        (cl.nome || cl.clienteId) +
+        (atual ? ' — hoje ' + dinheiro(atual) : ' — hoje no padrão de ' + dinheiro(PRECO_PADRAO_CENTAVOS)),
+      // A loja de revendedor nem chega a gerar PIX pra FHVP: a rota de
+      // renovacao a recusa. Sem este aviso, daria pra "definir o preco" dela e
+      // esperar que algo acontecesse — e nada aconteceria, em silencio.
+      aviso: daRevenda
+        ? 'Esta loja é de revendedor (' + cl.revendedorId + '), e quem cobra dela é ele. ' +
+          'Um preço aqui não muda nada: a renovação dela nem passa pela FHVP.'
+        : 'Vale da próxima cobrança em diante. Um QR já aberto mantém o valor com que foi criado, até expirar.',
+      avisoTipo: daRevenda ? 'erro' : 'alerta',
+      campos: [
+        { id: 'valor', rotulo: 'Mensalidade (R$)', valor: atual ? (atual / 100).toFixed(2).replace('.', ',') : '',
+          dica: 'em branco = padrão',
+          ajuda: 'Vazio devolve a loja ao padrão de ' + dinheiro(PRECO_PADRAO_CENTAVOS) +
+                 '. Aceita vírgula ou ponto — 149,90 e 149.90 são a mesma coisa.' }
+      ],
+      rotuloConfirmar: 'Salvar',
+      aoConfirmar: async (v) => {
+        const bruto = String(v.valor || '').trim()
+        const corpo = {}
+        if (bruto === '') {
+          corpo.valorCentavos = null
+        } else {
+          // Aceita 149,90 e 149.90. O lojista digita como fala.
+          const n = Number(bruto.replace(/\./g, '').replace(',', '.'))
+          if (!isFinite(n) || n <= 0) {
+            return { campo: 'valor', mensagem: 'informe um valor maior que zero, ou deixe vazio' }
+          }
+          // Arredonda pra centavo inteiro: 149.999 viraria fracao de centavo e
+          // a EfiPay recusaria a cobranca.
+          corpo.valorCentavos = Math.round(n * 100)
+        }
+        const resp = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/preco',
+          { metodo: 'POST', corpo })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await carregarClientes(cl.clienteId)
   }
 
   async function modalCota(cl) {
@@ -695,7 +913,7 @@
         return resp.ok ? null : { mensagem: resp.erro }
       }
     })
-    if (r) await carregarClientes()
+    if (r) await carregarClientes(cl.clienteId)
   }
 
   async function modalBloqueioCliente(cl) {
@@ -718,7 +936,19 @@
         return resp.ok ? null : { mensagem: resp.erro }
       }
     })
-    if (r) await carregarClientes()
+    if (r) await carregarClientes(cl.clienteId)
+  }
+
+  /**
+   * Retoma a sessão ao abrir a página.
+   *
+   * É o que faz o F5 deixar de expulsar quem já entrou — o incômodo que motivou
+   * trocar o token colado à mão por um login de verdade. Se a sessão não valer
+   * mais (12h, deploy, senha trocada), o 401 dentro do `api()` já devolve para a
+   * tela de entrada; aqui basta não seguir.
+   */
+  if (token) {
+    abrirPainel().catch(() => {})
   }
 })()
 </script>

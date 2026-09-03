@@ -68,5 +68,11 @@ export type Cobranca = {
 // pra que o código de domínio não dependa de process.env espalhado.
 export type Config = {
   CHAVE_HMAC: string
-  ADMIN_TOKEN: string
+  /**
+   * Senha do painel da FHVP. Substituiu o antigo `ADMIN_TOKEN`.
+   *
+   * É a fonte da verdade: não há cópia no banco, e trocar este segredo já é o
+   * reset da senha. O porquê está no cabeçalho de `adminAuth.ts`.
+   */
+  ADMIN_SENHA: string
 }
