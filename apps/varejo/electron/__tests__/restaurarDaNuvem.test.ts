@@ -165,3 +165,49 @@ describe('a tela enxerga a pasta certa desta máquina', () => {
     expect(posAncorar, 'a reancoragem não roda depois das migrations').toBeGreaterThan(posMigrar)
   })
 })
+
+
+describe('a ordem do boot deixa uma loja NOVA subir', () => {
+  /**
+   * ── O bug que isto trava ────────────────────────────────────────────────────
+   * O `BackupManager` lê a tabela `config` ao nascer. Num banco recém-criado
+   * essa tabela só existe DEPOIS da migration 001.
+   *
+   * Ao reordenar o boot para permitir a cópia antes de migrar, o gerente passou
+   * a ser ligado ANTES das migrations — e toda loja nova morria no primeiro
+   * boot com "no such table: config". Loja já existente não sentia nada, porque
+   * a tabela já estava lá.
+   *
+   * Ou seja: o modo de falha atingia exatamente quem ainda não existe, e
+   * passava despercebido em quem já existe. Só apareceu porque um teste subiu
+   * o servidor sobre uma pasta vazia.
+   */
+  it('o gerente de backup não é ligado antes das migrations', () => {
+    const posMigrar = SERVIDOR.indexOf('executarMigrations(obterBancoDeDados()')
+    const posLigar = SERVIDOR.indexOf('if (!temBackupManager()) inicializarBackupManager()')
+
+    expect(posLigar, 'sumiu o ligamento do gerente de backup').toBeGreaterThan(-1)
+    expect(
+      posLigar,
+      'ligar o gerente antes das migrations derruba o primeiro boot de toda loja nova'
+    ).toBeGreaterThan(posMigrar)
+  })
+
+  /**
+   * O outro lado: quando HÁ histórico, a cópia precisa do gerente ligado antes
+   * de migrar — e ali a tabela com certeza existe, porque a 001 já rodou.
+   */
+  it('mas a cópia pré-migration liga o gerente por conta própria', () => {
+    const inicio = SERVIDOR.indexOf('async function backupAntesDeMigrar')
+    const fim = SERVIDOR.indexOf('\n}', inicio)
+    const corpo = SERVIDOR.slice(inicio, fim)
+
+    expect(corpo, 'a cópia não liga o gerente que ela precisa').toContain(
+      'inicializarBackupManager()'
+    )
+    expect(
+      corpo.indexOf('jaAplicadas === 0'),
+      'sem a saída para banco novo, o gerente seria ligado sem a tabela existir'
+    ).toBeLessThan(corpo.indexOf('inicializarBackupManager()'))
+  })
+})

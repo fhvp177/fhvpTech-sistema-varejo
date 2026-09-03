@@ -47,7 +47,8 @@ import { processarChamada } from '@fhvptech/core/electron/multicaixa/servidor'
 import { inicializarBancoDeDados, obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import {
   inicializarBackupManager,
-  obterBackupManager
+  obterBackupManager,
+  temBackupManager
 } from '@fhvptech/core/electron/backup/BackupManager'
 import { executarMigrations, migrationsPendentes } from '@fhvptech/core/electron/db/migrations'
 import { validarLicenca } from '@fhvptech/core/electron/licenca'
@@ -361,10 +362,20 @@ async function backupAntesDeMigrar(): Promise<void> {
   if (pendentes.length === 0) return
 
   // Banco recém-criado: todas estão pendentes e não há nada a proteger.
+  //
+  // ⚠️ Sair aqui também é o que mantém o primeiro boot possível. O
+  // `BackupManager` lê a tabela `config` ao nascer, e num banco novo essa
+  // tabela só existe DEPOIS da migration 001. Ligá-lo antes disso derrubava o
+  // boot com "no such table: config" — em toda loja nova, e só nelas.
   if (jaAplicadas === 0) {
     console.log(`[fhvp] loja nova — aplicando ${pendentes.length} migrations do zero`)
     return
   }
+
+  // Daqui para baixo há histórico, então a migration 001 já rodou e a `config`
+  // existe. É seguro ligar o gerente de backup agora, que é o que permite
+  // tirar a cópia antes de mexer no esquema.
+  inicializarBackupManager()
 
   console.log(`[fhvp] ${pendentes.length} migration(s) para aplicar; guardando cópia antes`)
   try {
@@ -430,6 +441,9 @@ export async function iniciar(): Promise<void> {
   configurarNucleo({ criarTabelas, migrations: MIGRATIONS, validarLicenca })
   inicializarBancoDeDados(criarTabelas)
 
+  await backupAntesDeMigrar()
+  executarMigrations(obterBancoDeDados(), MIGRATIONS)
+
   // Backup também aqui — e com mais razão que no balcão. Numa loja instalada, o
   // pior caso é o computador do lojista pifar; aqui os dados de terceiros estão
   // sob a nossa guarda, e não existe ninguém do outro lado para copiar a pasta.
@@ -438,11 +452,11 @@ export async function iniciar(): Promise<void> {
   // avisa a janela, coisas que servidor não tem. Quem dispara backup por tempo
   // aqui é outro mecanismo, ainda por fazer.
   //
-  // Vem ANTES das migrations de propósito — ver logo abaixo.
-  inicializarBackupManager()
-
-  await backupAntesDeMigrar()
-  executarMigrations(obterBancoDeDados(), MIGRATIONS)
+  // DEPOIS das migrations: o gerente lê a tabela `config` ao nascer, e num
+  // banco novo ela só existe a partir da migration 001. A cópia pré-migration
+  // liga o gerente por conta própria quando precisa — e só quando já há
+  // histórico, ou seja, quando a tabela com certeza existe.
+  if (!temBackupManager()) inicializarBackupManager()
 
   // Depois das migrations: a tabela `config` pode ser criada por uma delas, e
   // antes disso não haveria onde gravar.

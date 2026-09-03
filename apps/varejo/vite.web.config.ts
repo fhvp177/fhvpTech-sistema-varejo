@@ -56,6 +56,25 @@ if (!FEATURES) {
 
 export default defineConfig({
   root: resolve(__dirname, '.'),
+  /**
+   * O que está em `public-web/` é copiado para a raiz do `dist-web` sem passar
+   * pelo empacotador — sem hash no nome, sem transformação.
+   *
+   * ── Por que o nome NÃO pode levar hash ─────────────────────────────────────
+   * `favicon.ico` é pedido pelo navegador sozinho, nesse endereço exato, mesmo
+   * sem nenhuma tag na página. Um `favicon-a1b2c3.ico`, como o empacotador
+   * faria, nunca seria encontrado por esse pedido automático.
+   *
+   * ── Por que uma pasta própria, e não a `public/` padrão ────────────────────
+   * A `public/` padrão fica dentro do `root`, que os DOIS builds compartilham.
+   * Usá-la despejaria o favicon também no pacote do aplicativo instalado, onde
+   * ele não serve para nada — a janela do Electron tira o ícone do
+   * `electron-builder`, por outro caminho.
+   *
+   * Os arquivos são os MESMOS do ícone do app (`resources/`), copiados de
+   * propósito: a aba do navegador e o atalho no Windows mostram a mesma marca.
+   */
+  publicDir: resolve(__dirname, 'public-web'),
   // Caminhos relativos no HTML gerado: assim o mesmo build serve tanto a raiz
   // de um domínio quanto um subcaminho, sem recompilar.
   base: './',

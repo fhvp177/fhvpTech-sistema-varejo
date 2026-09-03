@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+    <!--
+      Ícone da aba. Caminho relativo, como todo o resto: assim a mesma página
+      serve na raiz de um domínio ou num subcaminho, sem recompilar.
+
+      O `.ico` carrega seis tamanhos (16 a 256) e o navegador escolhe o que
+      precisa — é o mesmo arquivo do ícone do aplicativo instalado, para a aba
+      e o atalho no Windows mostrarem a mesma marca.
+    -->
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <!--
+      Para quando o lojista fixa a página na tela inicial do tablet. O Android
+      quer um ícone grande aqui; sem ele, o sistema recorta o favicon de 32px e
+      o resultado fica borrado no meio da tela.
+    -->
+    <link rel="apple-touch-icon" href="./icone-512.png" />
     <title>FHVP Tech</title>
   </head>
   <body>
