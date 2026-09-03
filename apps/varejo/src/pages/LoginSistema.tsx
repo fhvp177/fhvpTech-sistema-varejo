@@ -52,6 +52,16 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
     }
   }, [carregandoLista, vendedores, selecionado])
 
+  // Põe o cursor no primeiro nome assim que a lista aparece. É o que torna a
+  // troca de conta do caixa (F7) possível sem tirar a mão do teclado — o porquê
+  // está na própria lista, mais abaixo.
+  const primeiroVendedorRef = useRef<HTMLButtonElement>(null)
+  const listaVisivel =
+    !carregandoLista && !selecionado && !mostrarRecuperacao && !mostrarConfigurarMaquina
+  useEffect(() => {
+    if (listaVisivel) primeiroVendedorRef.current?.focus()
+  }, [listaVisivel, vendedores.length])
+
   // Mantém o cursor no campo do PIN — inclusive DEPOIS de errar, que é quando
   // ele se perdia. O porquê (e por que `focus()` dentro de `entrar()` não
   // resolve) está no próprio hook, junto com os outros lugares que sofriam do
@@ -219,12 +229,47 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
       return (
         <div className="space-y-4">
           <p className="text-sm text-slate-600 text-center">Quem está entrando agora?</p>
-          <ul className="space-y-2 max-h-80 overflow-y-auto -mr-1 pr-1">
-            {vendedores.map((v) => (
+          {/*
+            ── Por que esta lista anda pelo teclado ──────────────────────────────
+            Ela é o meio do caminho do "trocar de conta" no caixa (F7): dois
+            vendedores dividem o balcão e quem chega precisa entrar no próprio
+            nome pra venda — e a comissão — sair certa.
+
+            Sem isto, chegar aqui pelo teclado era impossível na prática. Esta
+            tela é uma SOBREPOSIÇÃO: o app inteiro segue montado atrás dela, e
+            com ele os botões dele na ordem de tabulação. Medido num caixa com o
+            carrinho aberto, os vendedores eram os focáveis 19, 20 e 21 de 24 —
+            uns vinte Tabs às cegas por cima de uma tela que nem dá pra ver.
+
+            Focar o primeiro item e ligar as setas resolve sem depender do Tab.
+            (O foco ainda VAZA pro app de trás se alguém insistir no Tab; isso é
+            anterior a esta tela e está anotado, mas não atrapalha mais quem só
+            quer trocar de conta.)
+          */}
+          <ul
+            className="space-y-2 max-h-80 overflow-y-auto -mr-1 pr-1"
+            onKeyDown={(e) => {
+              if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+              e.preventDefault()
+              const botoes = Array.from(
+                e.currentTarget.querySelectorAll<HTMLButtonElement>('button')
+              )
+              const atual = botoes.indexOf(document.activeElement as HTMLButtonElement)
+              // Anda em roda: de baixo volta pro topo, e vice-versa. Numa lista
+              // de 2 ou 3 nomes, esbarrar na ponta seria só irritante.
+              const passo = e.key === 'ArrowDown' ? 1 : -1
+              const proximo = (atual + passo + botoes.length) % botoes.length
+              botoes[proximo]?.focus()
+            }}
+          >
+            {vendedores.map((v, i) => (
               <li key={v.id}>
                 <button
+                  // Só o primeiro: é ele que recebe o foco quando a lista
+                  // aparece, e as setas levam aos outros a partir dali.
+                  ref={i === 0 ? primeiroVendedorRef : undefined}
                   onClick={() => setSelecionado(v)}
-                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition text-left"
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 focus:outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/40 transition text-left"
                 >
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ${
