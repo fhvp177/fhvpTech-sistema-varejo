@@ -185,6 +185,16 @@ const stmts = {
   setCliente: db.prepare(
     'INSERT INTO clientes (clienteId, data) VALUES (?, ?) ON CONFLICT(clienteId) DO UPDATE SET data = excluded.data'
   ),
+  contarEmissoesDoCliente: db.prepare(
+    'SELECT COUNT(*) AS n FROM nfce_emissao WHERE cliente_id = ?'
+  ),
+  contarSeriesUsadas: db.prepare(
+    'SELECT COUNT(*) AS n FROM nfce_numero WHERE cliente_id = ? AND proximo > 1'
+  ),
+  apagarCliente: db.prepare('DELETE FROM clientes WHERE clienteId = ?'),
+  apagarNumeracaoDoCliente: db.prepare('DELETE FROM nfce_numero WHERE cliente_id = ?'),
+  apagarContagemDoCliente: db.prepare('DELETE FROM nfce_contagem WHERE cliente_id = ?'),
+  apagarChatDoCliente: db.prepare('DELETE FROM chat_custo WHERE cliente_id = ?'),
   getRevendedor: db.prepare('SELECT data FROM revendedores WHERE revendedorId = ?'),
   listRevendedores: db.prepare('SELECT data FROM revendedores'),
   setRevendedor: db.prepare(
@@ -405,6 +415,41 @@ export function obterCliente(clienteId: string): Cliente | null {
 
 export function gravarCliente(cliente: Cliente): void {
   stmts.setCliente.run(cliente.clienteId, JSON.stringify(cliente))
+}
+
+/**
+ * O que este cliente já produziu, para decidir se o cadastro pode ser apagado.
+ *
+ * ⚠️ `nfce_numero.proximo > 1` conta mesmo sem emissão. Um número pode ter sido
+ * RESERVADO e a transmissão ter falhado — para a SEFAZ aquele número existe.
+ * Olhar só as emissões deixaria passar justamente o caso mais confuso.
+ */
+export function levantarImpedimentosDoCliente(clienteId: string): {
+  emissoes: number
+  seriesUsadas: number
+} {
+  const e = stmts.contarEmissoesDoCliente.get(clienteId) as { n: number }
+  const s = stmts.contarSeriesUsadas.get(clienteId) as { n: number }
+  return { emissoes: e.n, seriesUsadas: s.n }
+}
+
+/**
+ * Apaga o cadastro e o que ficava pendurado nele.
+ *
+ * Numa transação: apagar o cliente e deixar a contagem de notas para trás
+ * deixaria um fantasma reaparecendo no relatório de cota do mês.
+ *
+ * Não confere se PODE — a decisão é de quem chama (ver exclusaoCliente.ts).
+ * Repetir a regra aqui seria criar duas versões dela para se afastarem.
+ */
+export function apagarClienteDoBanco(clienteId: string): void {
+  const emTransacao = db.transaction((id: string) => {
+    stmts.apagarCliente.run(id)
+    stmts.apagarNumeracaoDoCliente.run(id)
+    stmts.apagarContagemDoCliente.run(id)
+    stmts.apagarChatDoCliente.run(id)
+  })
+  emTransacao(clienteId)
 }
 
 // Lista todos os clientes (uso admin: conferir cadastro e preço de cada loja).

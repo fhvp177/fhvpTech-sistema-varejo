@@ -34,8 +34,11 @@ import {
   listarClientesDoRevendedor,
   apagarSessoesDoRevendedor,
   contarNotasMesDeTodos,
-  contarNotasMes
+  contarNotasMes,
+  levantarImpedimentosDoCliente,
+  apagarClienteDoBanco
 } from './db.ts'
+import { foiRenovado, motivoDaRecusa, podeApagar } from './exclusaoCliente.ts'
 import { avaliarCota, cotaPadrao } from './cotaNotas.ts'
 import {
   clienteBloqueado,
@@ -396,13 +399,19 @@ app.post('/admin/cliente', async (c) => {
 
   const chave = await gerarChaveLicenca(config.CHAVE_HMAC, clienteId, teto.expiracao)
 
+  // O MESMO instante nos dois campos, de propósito. Duas chamadas ao relógio
+  // caem em milissegundos diferentes, e é essa diferença que distingue
+  // "cadastrado agora" de "já renovou" (ver foiRenovado em exclusaoCliente.ts).
+  // Com dois valores, um cadastro recém-criado parecia ter história.
+  const agoraCadastro = new Date().toISOString()
+
   const cliente: Cliente = {
     clienteId,
     nome: body.nome,
     contato: body.contato,
-    criadoEm: new Date().toISOString(),
+    criadoEm: agoraCadastro,
     validadeAtual: teto.expiracao,
-    ultimoPagamentoEm: new Date().toISOString(),
+    ultimoPagamentoEm: agoraCadastro,
     valorCentavosRenovacao: body.valorCentavosRenovacao,
     revendedorId: revendedor?.revendedorId,
     plano: body.plano
@@ -443,6 +452,48 @@ app.post('/admin/cliente/:clienteId/renovar', async (c) => {
 // Tranca/destranca a renovação de UMA loja. Não derruba o período corrente —
 // a licença dela segue valendo offline até a data. `porQuem` é o que impede o
 // revendedor de desfazer um bloqueio da FHVP.
+/**
+ * Apaga o cadastro de um cliente — só enquanto ele ainda não produziu nada.
+ *
+ * ── Por que a regra é estreita ──────────────────────────────────────────────
+ * O `clienteId` é a chave da numeração da NFC-e. Apagar um cliente que já
+ * emitiu, e depois recriar o mesmo id, reiniciaria a sequência — e nota com
+ * número repetido é problema com a SEFAZ, não com o software. Não é um erro
+ * que se conserta com um segundo DELETE.
+ *
+ * O caso que esta rota atende é outro, e é o comum: cadastrou `NETOIMPORTS`,
+ * queria `NETO`, percebeu em cinco minutos. Antes disso existir, o conselho era
+ * "na dúvida cadastre curto" — o medo de errar moldando o nome que o cliente
+ * carrega para sempre.
+ *
+ * ── Não existe `?forcar=1` ──────────────────────────────────────────────────
+ * Foi tentador e ficou de fora. Uma saída de emergência nesta rota seria usada
+ * no dia de pressa, que é exatamente o dia em que ninguém lê o aviso. Cliente
+ * com história se ENCERRA bloqueando a renovação; o cadastro fica, porque a
+ * numeração fiscal dele precisa continuar existindo.
+ */
+app.delete('/admin/cliente/:clienteId', async (c) => {
+  const clienteId = c.req.param('clienteId')
+  const cliente = obterCliente(clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+
+  const impedimentos = {
+    ...levantarImpedimentosDoCliente(clienteId),
+    renovado: foiRenovado(cliente),
+    temCnpj: Boolean(cliente.cnpjEmitente)
+  }
+
+  if (!podeApagar(impedimentos)) {
+    // 409 e não 403: não é falta de permissão, é o estado do recurso que não
+    // permite. Quem lê o código do erro precisa saber que insistir não ajuda.
+    return c.json({ erro: motivoDaRecusa(clienteId, impedimentos), impedimentos }, 409)
+  }
+
+  apagarClienteDoBanco(clienteId)
+  console.log(`[admin] cliente ${clienteId} apagado (sem emissão, sem renovação)`)
+  return c.json({ ok: true, apagado: clienteId })
+})
+
 app.post('/admin/cliente/:clienteId/bloqueio', async (c) => {
   const clienteId = c.req.param('clienteId')
   const body = await c.req.json<{
