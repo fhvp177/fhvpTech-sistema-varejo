@@ -245,7 +245,9 @@ const Dashboard: FC = () => {
   if (!carregouMetricas) return <DashboardSkeleton />
 
   return (
-    <div className="p-4 lg:p-8">
+    /* `entrada-escalonada`: os blocos sobem e aparecem um após o outro, uma
+       vez só, na abertura. Ver §10 no index.css. */
+    <div className="entrada-escalonada p-4 lg:p-8">
       <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         {/*
           ⚠️ Some no celular (roteiro §5.1). A pílula acesa na ilha já diz que
@@ -300,6 +302,7 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── Alertas de inadimplência (destaque no topo) ── */}
+      <RotuloSecao>Precisa de atenção</RotuloSecao>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/*
           A faixa de 4px vira 2px e sai do vermelho literal para o token
@@ -392,7 +395,13 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── KPIs do período ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <RotuloSecao>Números do período</RotuloSecao>
+      {/*
+        No celular: UM cartão, com fios separando as quatro células. No desktop:
+        quatro cartões soltos, como sempre foi. `divide-*` só existe abaixo de
+        `lg`, e é ele que substitui as quatro bordas.
+      */}
+      <div className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-xl border bg-card mb-6 lg:grid-cols-4 lg:gap-4 lg:divide-x-0 lg:divide-y-0 lg:rounded-none lg:border-0 lg:bg-transparent">
         <CardKPI
           icone={<TrendingUp className="w-5 h-5 text-primary" />}
           corIcone="bg-primary-soft"
@@ -443,6 +452,7 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── Lucro & margem + Meta do mês ── */}
+      <RotuloSecao>Resultado</RotuloSecao>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <CardLucro
           metricas={metricas}
@@ -453,6 +463,7 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── Gráfico de vendas + Top produtos ── */}
+      <RotuloSecao>Vendas</RotuloSecao>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Gráfico de vendas no tempo */}
         <div className="lg:col-span-2 border rounded-xl p-4 bg-card">
@@ -572,30 +583,35 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── Forma de pagamento + Top categorias ── */}
+      <RotuloSecao>Como o dinheiro entrou</RotuloSecao>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
         <CardFormaPagamento metricas={metricas} carregando={carregandoMetricas} />
         <CardTopCategorias metricas={metricas} carregando={carregandoMetricas} />
       </div>
 
       {/* ── Ranking de vendedores + Vendas por dia da semana ── */}
+      <RotuloSecao>Equipe e movimento</RotuloSecao>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
         <CardRankingVendedores metricas={metricas} carregando={carregandoMetricas} />
         <CardDiaSemana metricas={metricas} carregando={carregandoMetricas} />
       </div>
 
       {/* ── A receber + A pagar (as duas pontas do caixa) ── */}
+      <RotuloSecao>As duas pontas do caixa</RotuloSecao>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
         <CardRecebivel metricas={metricas} rotuloPeriodo={rotuloPeriodo} />
         <CardAPagar metricas={metricas} rotuloPeriodo={rotuloPeriodo} />
       </div>
 
       {/* ── Produtos parados + Estoque baixo ── */}
+      <RotuloSecao>Estoque</RotuloSecao>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
         <CardProdutosParados metricas={metricas} carregando={carregandoMetricas} />
         <CardEstoqueBaixo metricas={metricas} />
       </div>
 
       {/* ── Aniversariantes do mês ── */}
+      <RotuloSecao>Clientes</RotuloSecao>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
         <CardAniversariantes metricas={metricas} />
       </div>
@@ -636,6 +652,22 @@ const SkeletonLista: FC<{ linhas?: number; comRank?: boolean }> = ({ linhas = 5,
 
 type Delta = { pct: number; valido: boolean }
 
+/**
+ * Rótulo de seção do celular (roteiro do mobile, §5.2).
+ *
+ * "O padrão mais barato do documento": uma linha de 15px de altura, 11px em
+ * caixa alta espaçada e cinza, que faz o trabalho que um título de 34px estava
+ * tentando fazer — dizer onde um assunto começa.
+ *
+ * `lg:hidden` porque no desktop os blocos já se separam sozinhos pela largura:
+ * lá eles ficam lado a lado, e um rótulo por cima de cada par seria ruído.
+ */
+const RotuloSecao: FC<{ children: React.ReactNode }> = ({ children }) => (
+  <h2 className="lg:hidden mt-6 mb-2 text-[11px] font-semibold uppercase tracking-[0.10em] text-muted-foreground">
+    {children}
+  </h2>
+)
+
 type CardKPIProps = {
   icone: React.ReactNode
   corIcone: string
@@ -648,6 +680,19 @@ type CardKPIProps = {
   subtexto?: React.ReactNode
 }
 
+/**
+ * Um número do período.
+ *
+ * ── Duas formas, e a do celular não é a do desktop encolhida ─────────────────
+ * No monitor ele é um CARTÃO: borda, respiro e um quadrado de ícone que ajuda o
+ * olho a achar o bloco entre outros quatro na horizontal.
+ *
+ * No celular ele é uma CÉLULA de um cartão único, e o quadrado de ícone some.
+ * Quatro cartões com borda e ícone de 40px gastavam uma tela inteira para dizer
+ * quatro números; como células separadas por fio, os quatro cabem na altura que
+ * dois ocupavam. É o "BALANÇO DO DIA" do Kiko, e é o que faz a tela parecer
+ * feita para o aparelho em vez de espremida nele.
+ */
 const CardKPI: FC<CardKPIProps> = ({
   icone, corIcone, titulo, valor, delta, valorAnterior, rotuloComparativo, mostrarComparativo, subtexto
 }) => {
@@ -658,12 +703,18 @@ const CardKPI: FC<CardKPIProps> = ({
     : 'text-muted-foreground'
   const sinal = delta.pct > 0 ? '+' : ''
   return (
-    <div className="anim-gatilho border rounded-xl p-4 bg-card">
-      <div className={`anim-alvo-salta w-10 h-10 rounded-lg ${corIcone} flex items-center justify-center mb-3`}>
+    <div className="anim-gatilho bg-card p-3.5 lg:rounded-xl lg:border lg:p-4">
+      {/* O quadrado do ícone só no desktop: na célula ele empurraria o número
+          para baixo sem ajudar a achar nada, porque a coluna já é estreita. */}
+      <div className={`anim-alvo-salta hidden lg:flex w-10 h-10 rounded-lg ${corIcone} items-center justify-center mb-3`}>
         {icone}
       </div>
-      <p className="text-sm text-muted-foreground">{titulo}</p>
-      <p className="text-2xl font-bold mt-0.5">{valor}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground lg:text-sm lg:font-normal lg:normal-case lg:tracking-normal">
+        {titulo}
+      </p>
+      {/* 26px é o número herói da §9. Na monoespaçada, para os valores das
+          quatro células alinharem em coluna. */}
+      <p className="num mt-0.5 text-[26px] leading-tight lg:font-bold lg:text-2xl">{valor}</p>
       {mostrarComparativo && (
         <>
           <div className={`flex items-center gap-1 mt-1 text-xs ${corDelta}`}>

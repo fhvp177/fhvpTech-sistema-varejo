@@ -233,6 +233,35 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(TW).toContain('hoverOnlyWhenSupported: true')
   })
 
+  it('★ o Painel tem forma de celular, nao o desktop encolhido', () => {
+    // Tres marcas do roteiro, e as tres sao ESTRUTURAIS: sem elas a tela volta
+    // a ser quatro cartoes soltos e blocos colados um no outro.
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+
+    // 1. rotulo de secao antes de cada bloco (§5.2)
+    expect(PAINEL).toContain('const RotuloSecao')
+    const rotulos = (PAINEL.match(/<RotuloSecao>/g) || []).length
+    expect(rotulos, 'faltou rotulo de secao em algum bloco').toBeGreaterThanOrEqual(8)
+
+    // 2. os quatro KPI viram UM cartao com fios, so no celular
+    expect(PAINEL).toContain('divide-x divide-y')
+    expect(PAINEL).toContain('lg:divide-x-0 lg:divide-y-0')
+    // o quadrado de icone some na celula
+    expect(PAINEL).toContain('hidden lg:flex w-10 h-10')
+
+    // 3. numero heroi de 26px, na monoespaçada (§9)
+    expect(PAINEL).toContain('num mt-0.5 text-[26px]')
+  })
+
+  it('★ a entrada e escalonada, roda uma vez e tem TETO', () => {
+    // Sem o teto o 12º bloco chegaria quase um segundo depois do primeiro, e a
+    // tela pareceria travada em vez de animada.
+    expect(CSS).toContain('entrada-escalonada')
+    expect(CSS).toContain('nth-child(n + 6)')
+    const bloco = CSS.slice(CSS.indexOf('surgir-bloco') - 600, CSS.indexOf('entrada-escalonada'))
+    expect(bloco).toContain('prefers-reduced-motion: no-preference')
+  })
+
   it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {
     // ⚠️ A primeira tentativa fixava a posição dele pelo CSS. Isso tirava o
     // botão de cima do conteúdo e MATAVA o arraste junto, que era justamente o

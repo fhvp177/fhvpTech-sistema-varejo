@@ -450,6 +450,38 @@
     transform: translateY(1px);
   }
 
+  /* ---------- a entrada, escalonada (§10) ----------
+     Cada bloco do Painel sobe 9px e aparece, um logo depois do outro. É o que
+     faz a tela CHEGAR em vez de piscar inteira de uma vez.
+
+     Anima `opacity` e `transform`: os dois são resolvidos pela GPU. `top` ou
+     `height` passariam pelo layout a cada quadro e engasgariam num aparelho
+     modesto.
+
+     ⚠️ O escalonamento TRAVA no 6º. Sem o teto, o bloco 12 chegaria quase um
+     segundo depois do primeiro, e a tela pareceria travada em vez de animada. */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes surgir-bloco {
+      from {
+        opacity: 0;
+        transform: translateY(9px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    [data-alvo='web'] .entrada-escalonada > * {
+      animation: surgir-bloco 0.36s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    }
+    [data-alvo='web'] .entrada-escalonada > *:nth-child(2) { animation-delay: 0.05s }
+    [data-alvo='web'] .entrada-escalonada > *:nth-child(3) { animation-delay: 0.1s }
+    [data-alvo='web'] .entrada-escalonada > *:nth-child(4) { animation-delay: 0.15s }
+    [data-alvo='web'] .entrada-escalonada > *:nth-child(5) { animation-delay: 0.2s }
+    [data-alvo='web'] .entrada-escalonada > *:nth-child(n + 6) { animation-delay: 0.24s }
+  }
+
   /* ---------- o respiro de quem rola (§3.3-d) ----------
      92px = altura da ilha + folga. Sem isto ela cobre o fim da lista para
      sempre, e o lojista nunca descobre que havia mais uma linha.
