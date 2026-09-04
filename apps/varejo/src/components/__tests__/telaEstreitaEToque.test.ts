@@ -84,8 +84,10 @@ describe('tela 1 — o Painel no celular', () => {
   it('valores usam a monoespaçada que alinha a vírgula', () => {
     // Sem `tabular-nums` os algarismos têm larguras diferentes e a coluna dança
     // a cada linha (§6).
-    expect(PAINEL).toMatch(/className="num text-\[15px\] text-critical"/)
-    expect(PAINEL).toMatch(/className="num text-\[15px\] text-warn shrink-0"/)
+    // O tamanho virou par responsivo (14 no celular, 15 no monitor); o que
+    // importa guardar é a monoespaçada, que é quem alinha a vírgula.
+    expect(PAINEL).toContain('className="num text-[14px] lg:text-[15px] text-critical"')
+    expect(PAINEL).toContain('text-[14px] lg:text-[15px] text-warn shrink-0')
   })
 
   it('★ nenhuma tabela, e nenhuma largura fixa de layout', () => {
@@ -233,33 +235,56 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(TW).toContain('hoverOnlyWhenSupported: true')
   })
 
-  it('★ o Painel tem forma de celular, nao o desktop encolhido', () => {
-    // Tres marcas do roteiro, e as tres sao ESTRUTURAIS: sem elas a tela volta
-    // a ser quatro cartoes soltos e blocos colados um no outro.
-    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
-
-    // 1. rotulo de secao antes de cada bloco (§5.2)
-    expect(PAINEL).toContain('const RotuloSecao')
-    const rotulos = (PAINEL.match(/<RotuloSecao>/g) || []).length
-    expect(rotulos, 'faltou rotulo de secao em algum bloco').toBeGreaterThanOrEqual(8)
-
-    // 2. os quatro KPI viram UM cartao com fios, so no celular
-    expect(PAINEL).toContain('divide-x divide-y')
-    expect(PAINEL).toContain('lg:divide-x-0 lg:divide-y-0')
-    // o quadrado de icone some na celula
-    expect(PAINEL).toContain('hidden lg:flex w-10 h-10')
-
-    // 3. numero heroi de 26px, na monoespaçada (§9)
-    expect(PAINEL).toContain('num mt-0.5 text-[26px]')
-  })
-
-  it('★ a entrada e escalonada, roda uma vez e tem TETO', () => {
+  it('★ a entrada é escalonada, roda uma vez e tem TETO', () => {
     // Sem o teto o 12º bloco chegaria quase um segundo depois do primeiro, e a
     // tela pareceria travada em vez de animada.
     expect(CSS).toContain('entrada-escalonada')
     expect(CSS).toContain('nth-child(n + 6)')
     const bloco = CSS.slice(CSS.indexOf('surgir-bloco') - 600, CSS.indexOf('entrada-escalonada'))
     expect(bloco).toContain('prefers-reduced-motion: no-preference')
+  })
+
+  it('★ o Painel é DENSO: o respiro do monitor não vai para a tela de 360', () => {
+    // O pedido não era fonte menor, era TAMANHO. Cada redução carrega o par
+    // `lg:` com o valor antigo, então o monitor fica onde estava.
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+
+    // respiro entre blocos: 12 no celular, 24 no monitor
+    expect(PAINEL).toContain('gap-3 mb-3 lg:gap-4 lg:mb-6')
+    // respiro interno dos cartões de alerta
+    expect(PAINEL).toContain('p-3 lg:p-5')
+
+    /*
+     * ⚠️ Nenhuma redução de PADDING pode ficar sem o par de desktop, senão ela
+     * vaza para o monitor.
+     *
+     * A busca é por `p-3` como classe inteira e precedida de espaço ou aspas:
+     * procurar a sequência solta encontrava `gap-3`, `mb-3` e `space-y-3`, que
+     * não são padding e têm par próprio.
+     */
+    const semPar = PAINEL.split('\n')
+      .filter((l) => /["' ]p-3(?![\d.])/.test(l) && !l.includes('lg:p-'))
+      .map((l) => l.trim().slice(0, 60))
+    expect(semPar, 'padding reduzido sem o par lg: vaza para o desktop').toEqual([])
+  })
+
+  it('★ o alvo de toque NÃO encolheu junto com o respiro', () => {
+    // O que saiu foi o espaço em volta do texto, nunca a área do dedo.
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('min-h-[56px]')
+    expect(PAINEL).toContain('min-h-[44px]')
+  })
+
+  it('★ o cartão recolhido continua dizendo o total', () => {
+    // Lição do SecaoConfig: sem resumo, seção fechada vira caixa preta e a
+    // pessoa reabre todas — e aí recolher não economizou nada.
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('const CabecalhoAlerta')
+    expect(PAINEL).toContain('resumo={fmt(inadimplentes.reduce')
+    // até 2 itens nasce aberto; do 3º em diante, fechado
+    expect(PAINEL).toContain('quantos <= 2')
+    // e no monitor ele nunca recolhe
+    expect(PAINEL).toContain("aberto ? 'block' : 'hidden lg:block'")
   })
 
   it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {

@@ -1,8 +1,9 @@
-import { FC, useCallback, useEffect, useMemo, useState } from 'react'
+import { FC, ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package, LayoutDashboard,
   ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
-  ArrowLeftRight, Target, Trophy, CalendarDays, PiggyBank, Gift, Pencil, Check, X
+  ArrowLeftRight, Target, Trophy, CalendarDays, PiggyBank, Gift, Pencil, Check, X,
+  ChevronDown
 } from 'lucide-react'
 import FiltroMesPopover from '@/components/FiltroMesPopover'
 import {
@@ -240,6 +241,50 @@ const Dashboard: FC = () => {
     return resp.success
   }
 
+  /*
+   * Quais cartões de alerta estão abertos.
+   *
+   * ⚠️ Lembrado no aparelho, como no `SecaoConfig`: quem abriu para ver a lista
+   * costuma voltar ali logo depois, e reabrir na mão toda vez é atrito bobo.
+   *
+   * Nasce ABERTO quando há até dois itens — nesse tamanho o cartão já cabe na
+   * tela e recolher só custaria um toque. Do terceiro em diante ele nasce
+   * fechado, que é quando a economia é real.
+   *
+   * `localStorage` pode não existir (janela anônima, armazenamento bloqueado),
+   * e nesse caso o padrão vale — nada quebra por causa de uma preferência.
+   */
+  const [alertasAbertos, setAlertasAbertos] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    const inicial: Record<string, boolean> = {}
+    for (const [id, quantos] of [
+      ['inadimplentes', inadimplentes.length],
+      ['vencem-hoje', vencendoHoje.length]
+    ] as const) {
+      let salvo: string | null = null
+      try {
+        salvo = localStorage.getItem(`painel_alerta_${id}`)
+      } catch {
+        // sem armazenamento: cai no padrão
+      }
+      inicial[id] = salvo === null ? quantos <= 2 : salvo === '1'
+    }
+    setAlertasAbertos(inicial)
+  }, [inadimplentes.length, vencendoHoje.length])
+
+  const alternarAlerta = useCallback((id: string) => {
+    setAlertasAbertos((antes) => {
+      const novo = !antes[id]
+      try {
+        localStorage.setItem(`painel_alerta_${id}`, novo ? '1' : '0')
+      } catch {
+        // preferência não guardada; a tela funciona igual
+      }
+      return { ...antes, [id]: novo }
+    })
+  }, [])
+
   // Primeira abertura: enquanto os números não chegam, a tela inteira é uma
   // silhueta (mesma do fallback lazy lá no App, então não há "pisca" duplo).
   if (!carregouMetricas) return <DashboardSkeleton />
@@ -302,34 +347,34 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── Alertas de inadimplência (destaque no topo) ── */}
-      <RotuloSecao>Precisa de atenção</RotuloSecao>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 lg:gap-4 lg:mb-6">
         {/*
           A faixa de 4px vira 2px e sai do vermelho literal para o token
           `critical-fill` — que é a cor CHEIA, própria de faixa, onde não há
           texto por cima. O texto usa `critical`, a versão escurecida. Um token
           só obrigaria a escolher entre faixa suja e texto ilegível.
         */}
-        <div className="rounded-xl border border-t-2 border-t-critical-fill bg-card shadow-sm p-4 lg:p-5">
-          <h3 className="flex items-center gap-2.5 text-[15px] font-semibold text-foreground mb-3 lg:mb-5">
-            <AlertTriangle className="w-[18px] h-[18px] text-critical shrink-0" />
-            Inadimplentes
-            {inadimplentes.length > 0 && (
-              <span className="bg-critical-fill text-on-fill text-xs font-bold rounded-xl px-2.5 py-0.5">
-                {inadimplentes.length}
-              </span>
-            )}
-          </h3>
+        <div className="rounded-xl border border-t-2 border-t-critical-fill bg-card shadow-sm p-3 lg:p-5">
+          <CabecalhoAlerta
+            id="inadimplentes"
+            icone={<AlertTriangle className="w-[18px] h-[18px] text-critical shrink-0" />}
+            titulo="Inadimplentes"
+            quantidade={inadimplentes.length}
+            resumo={fmt(inadimplentes.reduce((s, c) => s + c.total_devido, 0))}
+            aberto={alertasAbertos['inadimplentes'] ?? true}
+            onAlternar={() => alternarAlerta('inadimplentes')}
+            classeEtiqueta="bg-critical-fill text-on-fill"
+          >
           {inadimplentes.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhum cliente inadimplente.</p>
           ) : (
-            <div className="max-h-[220px] overflow-y-auto pr-3 scrollbar-suave">
+            <div className="max-h-[180px] lg:max-h-[220px] overflow-y-auto pr-2 lg:pr-3 scrollbar-suave">
               {inadimplentes.map((c) => (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => setClienteDividas({ id: c.id, nome: c.nome })}
-                  className="w-full min-h-[56px] text-left flex justify-between items-start gap-3 py-3 border-b last:border-b-0 hover:bg-critical-soft active:bg-critical-soft transition-colors cursor-pointer"
+                  className="w-full min-h-[56px] text-left flex justify-between items-start gap-3 py-2 lg:py-3 border-b last:border-b-0 hover:bg-critical-soft active:bg-critical-soft transition-colors cursor-pointer"
                   title="Ver dívidas e parcelas em atraso"
                 >
                   {/*
@@ -339,8 +384,8 @@ const Dashboard: FC = () => {
                     que o roteiro nomeia (§11).
                   */}
                   <div className="min-w-0">
-                    <p className="font-semibold text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
-                    <p className="text-[12.5px] text-muted-foreground mt-0.5">{c.telefone}</p>
+                    <p className="font-semibold text-[14px] lg:text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
+                    <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">{c.telefone}</p>
                   </div>
                   <div className="text-right shrink-0">
                     {/*
@@ -349,8 +394,8 @@ const Dashboard: FC = () => {
                       isso os algarismos têm larguras diferentes e a coluna
                       dança a cada linha.
                     */}
-                    <p className="num text-[15px] text-critical">{fmt(c.total_devido)}</p>
-                    <p className="text-[12.5px] text-muted-foreground mt-0.5">
+                    <p className="num text-[14px] lg:text-[15px] text-critical">{fmt(c.total_devido)}</p>
+                    <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">
                       desde {fmtData(c.vencimento_mais_antigo)}
                     </p>
                   </div>
@@ -358,22 +403,24 @@ const Dashboard: FC = () => {
               ))}
             </div>
           )}
+          </CabecalhoAlerta>
         </div>
 
-        <div className="rounded-xl border border-t-2 border-t-warn bg-card shadow-sm p-4 lg:p-5">
-          <h3 className="flex items-center gap-2.5 text-[15px] font-semibold text-foreground mb-5">
-            <Clock className="w-[18px] h-[18px] text-warn shrink-0" />
-            Vencem Hoje
-            {vencendoHoje.length > 0 && (
-              <span className="bg-warn text-on-fill text-xs font-bold rounded-xl px-2.5 py-0.5">
-                {vencendoHoje.length}
-              </span>
-            )}
-          </h3>
+        <div className="rounded-xl border border-t-2 border-t-warn bg-card shadow-sm p-3 lg:p-5">
+          <CabecalhoAlerta
+            id="vencem-hoje"
+            icone={<Clock className="w-[18px] h-[18px] text-warn shrink-0" />}
+            titulo="Vencem Hoje"
+            quantidade={vencendoHoje.length}
+            resumo={fmt(vencendoHoje.reduce((s, c) => s + c.total, 0))}
+            aberto={alertasAbertos['vencem-hoje'] ?? true}
+            onAlternar={() => alternarAlerta('vencem-hoje')}
+            classeEtiqueta="bg-warn text-on-fill"
+          >
           {vencendoHoje.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhum vencimento para hoje.</p>
           ) : (
-            <div className="max-h-[220px] overflow-y-auto pr-3 scrollbar-suave">
+            <div className="max-h-[180px] lg:max-h-[220px] overflow-y-auto pr-2 lg:pr-3 scrollbar-suave">
               {vencendoHoje.map((c) => (
                 <button
                   key={c.id}
@@ -383,25 +430,20 @@ const Dashboard: FC = () => {
                   title="Ver dívidas e parcelas do cliente"
                 >
                   <div className="min-w-0">
-                    <p className="font-semibold text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
+                    <p className="font-semibold text-[14px] lg:text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
                     <p className="text-[14px] text-muted-foreground mt-0.5">{c.telefone}</p>
                   </div>
-                  <p className="num text-[15px] text-warn shrink-0">{fmt(c.total)}</p>
+                  <p className="num text-[14px] lg:text-[15px] text-warn shrink-0">{fmt(c.total)}</p>
                 </button>
               ))}
             </div>
           )}
+          </CabecalhoAlerta>
         </div>
       </div>
 
       {/* ── KPIs do período ── */}
-      <RotuloSecao>Números do período</RotuloSecao>
-      {/*
-        No celular: UM cartão, com fios separando as quatro células. No desktop:
-        quatro cartões soltos, como sempre foi. `divide-*` só existe abaixo de
-        `lg`, e é ele que substitui as quatro bordas.
-      */}
-      <div className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-xl border bg-card mb-6 lg:grid-cols-4 lg:gap-4 lg:divide-x-0 lg:divide-y-0 lg:rounded-none lg:border-0 lg:bg-transparent">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3 lg:gap-4 lg:mb-6">
         <CardKPI
           icone={<TrendingUp className="w-5 h-5 text-primary" />}
           corIcone="bg-primary-soft"
@@ -452,8 +494,7 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── Lucro & margem + Meta do mês ── */}
-      <RotuloSecao>Resultado</RotuloSecao>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3 lg:gap-4 lg:mb-6">
         <CardLucro
           metricas={metricas}
           mostrarComparativo={mostrarComparativo}
@@ -463,10 +504,9 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── Gráfico de vendas + Top produtos ── */}
-      <RotuloSecao>Vendas</RotuloSecao>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4">
         {/* Gráfico de vendas no tempo */}
-        <div className="lg:col-span-2 border rounded-xl p-4 bg-card">
+        <div className="lg:col-span-2 border rounded-xl p-3 lg:p-4 bg-card">
           <div className="flex items-center gap-2 mb-3">
             <BarChart3 className="w-5 h-5 text-muted-foreground" />
             <h3 className="font-semibold">Vendas no tempo</h3>
@@ -545,7 +585,7 @@ const Dashboard: FC = () => {
         </div>
 
         {/* Top 5 produtos */}
-        <div className="border rounded-xl p-4 bg-card">
+        <div className="border rounded-xl p-3 lg:p-4 bg-card">
           <div className="flex items-center gap-2 mb-3">
             <Award className="w-5 h-5 text-muted-foreground" />
             <h3 className="font-semibold">Top 5 produtos</h3>
@@ -553,7 +593,7 @@ const Dashboard: FC = () => {
           {carregandoMetricas ? (
             <SkeletonLista linhas={5} comRank />
           ) : metricas && metricas.top_produtos.length > 0 ? (
-            <ul className="space-y-2.5">
+            <ul className="space-y-1.5 lg:space-y-2.5">
               {metricas.top_produtos.map((p, i) => (
                 <li key={p.produto_id} className="flex items-start gap-3">
                   <div className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -583,36 +623,31 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── Forma de pagamento + Top categorias ── */}
-      <RotuloSecao>Como o dinheiro entrou</RotuloSecao>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 lg:gap-4 lg:mt-4">
         <CardFormaPagamento metricas={metricas} carregando={carregandoMetricas} />
         <CardTopCategorias metricas={metricas} carregando={carregandoMetricas} />
       </div>
 
       {/* ── Ranking de vendedores + Vendas por dia da semana ── */}
-      <RotuloSecao>Equipe e movimento</RotuloSecao>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 lg:gap-4 lg:mt-4">
         <CardRankingVendedores metricas={metricas} carregando={carregandoMetricas} />
         <CardDiaSemana metricas={metricas} carregando={carregandoMetricas} />
       </div>
 
       {/* ── A receber + A pagar (as duas pontas do caixa) ── */}
-      <RotuloSecao>As duas pontas do caixa</RotuloSecao>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 lg:gap-4 lg:mt-4">
         <CardRecebivel metricas={metricas} rotuloPeriodo={rotuloPeriodo} />
         <CardAPagar metricas={metricas} rotuloPeriodo={rotuloPeriodo} />
       </div>
 
       {/* ── Produtos parados + Estoque baixo ── */}
-      <RotuloSecao>Estoque</RotuloSecao>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 lg:gap-4 lg:mt-4">
         <CardProdutosParados metricas={metricas} carregando={carregandoMetricas} />
         <CardEstoqueBaixo metricas={metricas} />
       </div>
 
       {/* ── Aniversariantes do mês ── */}
-      <RotuloSecao>Clientes</RotuloSecao>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 lg:gap-4 lg:mt-4">
         <CardAniversariantes metricas={metricas} />
       </div>
 
@@ -653,19 +688,70 @@ const SkeletonLista: FC<{ linhas?: number; comRank?: boolean }> = ({ linhas = 5,
 type Delta = { pct: number; valido: boolean }
 
 /**
- * Rótulo de seção do celular (roteiro do mobile, §5.2).
+ * Cabeçalho de cartão de alerta que recolhe no celular.
  *
- * "O padrão mais barato do documento": uma linha de 15px de altura, 11px em
- * caixa alta espaçada e cinza, que faz o trabalho que um título de 34px estava
- * tentando fazer — dizer onde um assunto começa.
+ * ── Por que ele existe ───────────────────────────────────────────────────────
+ * "Inadimplentes" e "Vencem hoje" abrem o Painel, e com meia dúzia de linhas
+ * cada um eles comem a primeira tela inteira — o número que o dono foi ver fica
+ * três rolagens abaixo.
  *
- * `lg:hidden` porque no desktop os blocos já se separam sozinhos pela largura:
- * lá eles ficam lado a lado, e um rótulo por cima de cada par seria ruído.
+ * ── O resumo é o que faz valer ───────────────────────────────────────────────
+ * ⚠️ Lição do `SecaoConfig`: sem resumo, uma seção fechada vira caixa preta e a
+ * pessoa reabre todas. Fechado, este cabeçalho continua dizendo o total —
+ * "15 · R$ 3.240,00" — que é a resposta que 90% das aberturas procurava.
+ *
+ * ── Fechado só quando compensa ───────────────────────────────────────────────
+ * Até duas linhas ele nasce aberto: já cabem na tela, e esconder o que não
+ * estorva só custa um toque. Da terceira em diante ele nasce fechado.
  */
-const RotuloSecao: FC<{ children: React.ReactNode }> = ({ children }) => (
-  <h2 className="lg:hidden mt-6 mb-2 text-[11px] font-semibold uppercase tracking-[0.10em] text-muted-foreground">
-    {children}
-  </h2>
+const CabecalhoAlerta: FC<{
+  id: string
+  icone: ReactNode
+  titulo: string
+  quantidade: number
+  resumo: string
+  aberto: boolean
+  onAlternar: () => void
+  classeEtiqueta: string
+  children: ReactNode
+}> = ({ id, icone, titulo, quantidade, resumo, aberto, onAlternar, classeEtiqueta, children }) => (
+  <>
+    {/* No celular o cabeçalho inteiro é o botão; no monitor é só um título. */}
+    <button
+      type="button"
+      onClick={onAlternar}
+      aria-expanded={aberto}
+      aria-controls={`alerta-${id}`}
+      className="flex w-full min-h-[44px] items-center gap-2.5 text-left text-[13.5px] font-semibold text-foreground mb-2 lg:mb-5 lg:pointer-events-none lg:text-[15px]"
+    >
+      {icone}
+      {titulo}
+      {quantidade > 0 && (
+        <span className={`${classeEtiqueta} text-xs font-bold rounded-xl px-2.5 py-0.5`}>
+          {quantidade}
+        </span>
+      )}
+      {/*
+        O resumo aparece SÓ fechado, e some no monitor: lá a lista está à vista
+        e repetir o total ao lado do título seria dizer duas vezes a mesma coisa.
+      */}
+      {!aberto && (
+        <span className="num ml-auto text-[12.5px] font-normal text-muted-foreground lg:hidden">
+          {resumo}
+        </span>
+      )}
+      <ChevronDown
+        className={`ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform lg:hidden ${
+          aberto ? 'rotate-180' : ''
+        }`}
+        aria-hidden="true"
+      />
+    </button>
+    {/* `lg:block` porque no monitor ele nunca fica recolhido. */}
+    <div id={`alerta-${id}`} className={aberto ? 'block' : 'hidden lg:block'}>
+      {children}
+    </div>
+  </>
 )
 
 type CardKPIProps = {
@@ -680,19 +766,6 @@ type CardKPIProps = {
   subtexto?: React.ReactNode
 }
 
-/**
- * Um número do período.
- *
- * ── Duas formas, e a do celular não é a do desktop encolhida ─────────────────
- * No monitor ele é um CARTÃO: borda, respiro e um quadrado de ícone que ajuda o
- * olho a achar o bloco entre outros quatro na horizontal.
- *
- * No celular ele é uma CÉLULA de um cartão único, e o quadrado de ícone some.
- * Quatro cartões com borda e ícone de 40px gastavam uma tela inteira para dizer
- * quatro números; como células separadas por fio, os quatro cabem na altura que
- * dois ocupavam. É o "BALANÇO DO DIA" do Kiko, e é o que faz a tela parecer
- * feita para o aparelho em vez de espremida nele.
- */
 const CardKPI: FC<CardKPIProps> = ({
   icone, corIcone, titulo, valor, delta, valorAnterior, rotuloComparativo, mostrarComparativo, subtexto
 }) => {
@@ -703,18 +776,12 @@ const CardKPI: FC<CardKPIProps> = ({
     : 'text-muted-foreground'
   const sinal = delta.pct > 0 ? '+' : ''
   return (
-    <div className="anim-gatilho bg-card p-3.5 lg:rounded-xl lg:border lg:p-4">
-      {/* O quadrado do ícone só no desktop: na célula ele empurraria o número
-          para baixo sem ajudar a achar nada, porque a coluna já é estreita. */}
-      <div className={`anim-alvo-salta hidden lg:flex w-10 h-10 rounded-lg ${corIcone} items-center justify-center mb-3`}>
+    <div className="anim-gatilho border rounded-xl p-3 lg:p-4 bg-card">
+      <div className={`anim-alvo-salta w-10 h-10 rounded-lg ${corIcone} flex items-center justify-center mb-3`}>
         {icone}
       </div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground lg:text-sm lg:font-normal lg:normal-case lg:tracking-normal">
-        {titulo}
-      </p>
-      {/* 26px é o número herói da §9. Na monoespaçada, para os valores das
-          quatro células alinharem em coluna. */}
-      <p className="num mt-0.5 text-[26px] leading-tight lg:font-bold lg:text-2xl">{valor}</p>
+      <p className="text-sm text-muted-foreground">{titulo}</p>
+      <p className="text-2xl font-bold mt-0.5">{valor}</p>
       {mostrarComparativo && (
         <>
           <div className={`flex items-center gap-1 mt-1 text-xs ${corDelta}`}>
@@ -757,7 +824,7 @@ const CardClientes: FC<CardClientesProps> = ({
     : 'text-muted-foreground'
   const sinal = deltaNovos.pct > 0 ? '+' : ''
   return (
-    <div className="anim-gatilho border rounded-xl p-4 bg-card">
+    <div className="anim-gatilho border rounded-xl p-3 lg:p-4 bg-card">
       <div className="anim-alvo-salta w-10 h-10 rounded-lg bg-primary-soft flex items-center justify-center mb-3">
         <Users className="w-5 h-5 text-primary" />
       </div>
@@ -801,7 +868,7 @@ const CardLucro: FC<CardLucroProps> = ({ metricas, mostrarComparativo, rotuloCom
   const sinal = delta.pct > 0 ? '+' : ''
 
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <PiggyBank className="w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">Lucro &amp; margem</h3>
@@ -887,7 +954,7 @@ const CardMeta: FC<{ metricas: MetricasDashboard | null; onSalvar: (valor: numbe
   }
 
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <Target className="w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">Meta do mês</h3>
@@ -1006,7 +1073,7 @@ const CardFormaPagamento: FC<WidgetProps> = ({ metricas, carregando }) => {
   const totalVendas = dados.reduce((acc, d) => acc + d.num, 0)
 
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <CreditCard className="w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">Forma de pagamento</h3>
@@ -1072,7 +1139,7 @@ const CardTopCategorias: FC<WidgetProps> = ({ metricas, carregando }) => {
   const maxReceita = Math.max(1, ...dados.map((c) => c.receita))
 
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <Tag className="w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">Top 5 categorias</h3>
@@ -1123,7 +1190,7 @@ const CardRecebivel: FC<{ metricas: MetricasDashboard | null; rotuloPeriodo: str
   const totalPeriodo = periodo ? periodo.a_vencer + periodo.vencido : 0
 
   return (
-    <div className="anim-gatilho border rounded-xl p-4 bg-card">
+    <div className="anim-gatilho border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <Wallet className="anim-alvo-acena w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">A receber</h3>
@@ -1175,7 +1242,7 @@ const CardAPagar: FC<{ metricas: MetricasDashboard | null; rotuloPeriodo: string
   const totalPeriodo = periodo ? periodo.a_vencer + periodo.vencido : 0
 
   return (
-    <div className="anim-gatilho border rounded-xl p-4 bg-card">
+    <div className="anim-gatilho border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <Receipt className="anim-alvo-acena w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">A pagar</h3>
@@ -1221,7 +1288,7 @@ const CardAPagar: FC<{ metricas: MetricasDashboard | null; rotuloPeriodo: string
 const CardProdutosParados: FC<WidgetProps> = ({ metricas, carregando }) => {
   const produtos = metricas?.produtos_parados ?? []
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <Package className="w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">Produtos parados</h3>
@@ -1259,7 +1326,7 @@ const CardProdutosParados: FC<WidgetProps> = ({ metricas, carregando }) => {
 const CardEstoqueBaixo: FC<{ metricas: MetricasDashboard | null }> = ({ metricas }) => {
   const produtos = metricas?.estoque_baixo ?? []
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <AlertCircle className="w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">Estoque baixo</h3>
@@ -1299,7 +1366,7 @@ const CardRankingVendedores: FC<WidgetProps> = ({ metricas, carregando }) => {
   const dados = metricas?.ranking_vendedores ?? []
   const max = Math.max(1, ...dados.map((v) => v.receita))
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <Trophy className="w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">Ranking de vendedores</h3>
@@ -1349,7 +1416,7 @@ const CardDiaSemana: FC<WidgetProps> = ({ metricas, carregando }) => {
   const temVendas = max > 0
   const melhor = temVendas ? dados.find((d) => d.total === max)?.dia : null
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <CalendarDays className="w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">Vendas por dia da semana</h3>
@@ -1391,7 +1458,7 @@ const CardDiaSemana: FC<WidgetProps> = ({ metricas, carregando }) => {
 const CardAniversariantes: FC<{ metricas: MetricasDashboard | null }> = ({ metricas }) => {
   const dados = metricas?.aniversariantes_mes ?? []
   return (
-    <div className="border rounded-xl p-4 bg-card">
+    <div className="border rounded-xl p-3 lg:p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <Gift className="w-5 h-5 text-muted-foreground" />
         <h3 className="font-semibold">Aniversariantes do mês</h3>
