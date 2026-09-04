@@ -261,13 +261,25 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(CHAT).toContain('aria-label="Assistente de IA"')
   })
 
-  it('★ o sino sai da faixa branca e vira flutuante na web', () => {
-    // A faixa de topo passou a ser da marca; o sino dentro dela era o que fazia
-    // aquela tira existir sem dizer nada.
-    expect(APP).toMatch(/__ALVO__ !== 'web' && vendedor\?\.papel === 'dono'/)
-    expect(APP).toContain('fixed left-[14px] z-[19]')
-    // Canto inferior ESQUERDO: o centro é da ilha e a direita é do assistente.
-    expect(APP).toMatch(/left-\[14px\]/)
+  it('★ existe UMA faixa branca no topo, não duas', () => {
+    // A tira antiga continuou renderizando VAZIA quando o hambúrguer e o sino
+    // saíram dela, e o celular ficou com duas barras empilhadas. Ela some
+    // abaixo de 1024 — mas NÃO pode sumir da web inteira: na loja aberta num PC
+    // é ela que carrega o sino.
+    expect(APP).toContain("__ALVO__ === 'web' ? 'hidden lg:flex' : 'flex'")
+  })
+
+  it('★ o sino mora à direita da marca, e o painel dele cabe na tela', () => {
+    // Ele já esteve flutuando no canto inferior esquerdo, e isso quebrou o
+    // popup: ele se ancora ABAIXO do sino e alinhado à direita dele, então lá
+    // o topo caía fora da dobra e a âncora da direita empurrava os 320px
+    // do painel para fora pela esquerda.
+    expect(APP).not.toContain('fixed left-[14px] z-[19]')
+    const naMarca = APP.slice(APP.indexOf('<BarraMarca>'), APP.indexOf('</BarraMarca>'))
+    expect(naMarca).toContain('SinoNotificacoesHost')
+
+    const MARCA = readFileSync(join(SRC, 'components', 'BarraMarca.tsx'), 'utf8')
+    expect(MARCA).toContain('min-w-0 flex-1 truncate')
   })
 
   it('★ a faixa de topo é a marca, e só no celular', () => {

@@ -194,19 +194,25 @@ describe('o servidor RECUSA a vaga', () => {
       const nestaAbertura = await validarLicencaComRelogio()
       expect(nestaAbertura.valida).toBe(true)
 
-      // A conferência foi disparada e responde logo depois.
-      // ⚠️ 8 segundos, e não 2: rodando dezenas de arquivos em paralelo, a
-      // requisição de segundo plano disputa CPU e passa dos 2s com folga.
-      // Falhava só na suíte inteira, nunca isolado — o pior tipo de teste,
-      // porque acusa defeito onde há lentidão. Mesmo motivo do testTimeout de
-      // 30s no vitest.config.
-      for (let i = 0; i < 400 && pedidos.length === pedidosAposAtivar; i++) {
+      /*
+       * Espera o EFEITO, não o sinal intermediário.
+       *
+       * ⚠️ Antes isto aguardava o PEDIDO chegar ao servidor de mentira. Só que
+       * o pedido é empilhado quando o corpo termina de chegar, e o passe só é
+       * gravado depois que a resposta volta e o cliente a lê. Entre um e outro
+       * há uma janela em que o teste já seguiu e o arquivo ainda não mudou —
+       * era ela que falhava sob carga, e só na suíte inteira.
+       *
+       * Esperando a recusa aparecer no passe, quando a condição vale não há
+       * mais nada em voo. O teto de 8s é generoso de propósito: teste que
+       * reprova por lentidão acusa defeito onde não há.
+       */
+      let proximaAbertura = validarLicenca()
+      for (let i = 0; i < 400 && proximaAbertura.valida; i++) {
         await new Promise((r) => setTimeout(r, 20))
+        proximaAbertura = validarLicenca()
       }
       expect(pedidos.length).toBeGreaterThan(pedidosAposAtivar)
-
-      // A abertura seguinte lê o passe já com a recusa gravada.
-      const proximaAbertura = validarLicenca()
       expect(proximaAbertura.valida).toBe(false)
       expect(proximaAbertura.motivo).toBe('dispositivo')
       expect(proximaAbertura.mensagem).toContain('vaga liberada no painel')

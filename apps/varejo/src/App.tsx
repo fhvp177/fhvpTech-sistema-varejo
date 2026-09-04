@@ -584,9 +584,19 @@ const App: FC = () => {
                   */}
                   {!pdvAtivo && (
                     <div
-                      className={`h-12 shrink-0 border-b bg-background flex items-center justify-between px-6 lg:justify-end ${
-                        vendedor?.papel === 'dono' ? '' : 'lg:hidden'
-                      }`}
+                      /*
+                        ⚠️ `hidden lg:flex` na web: abaixo de 1024 quem manda
+                        no topo é a faixa da marca, e esta tira ficaria VAZIA
+                        ali — o hambúrguer saiu dela na Etapa 0 e o sino saiu
+                        logo depois. Duas faixas brancas empilhadas, uma sem
+                        nada dentro.
+
+                        Não dá para removê-la da web inteira: na loja aberta
+                        num PC é ela que carrega o sino.
+                      */
+                      className={`h-12 shrink-0 border-b bg-background items-center justify-between px-6 lg:justify-end ${
+                        __ALVO__ === 'web' ? 'hidden lg:flex' : 'flex'
+                      } ${vendedor?.papel === 'dono' ? '' : 'lg:hidden'}`}
                     >
                       {/*
                         ⚠️ §5.1: ou hambúrguer, ou barra inferior — não os dois.
@@ -626,34 +636,26 @@ const App: FC = () => {
                     A marca no topo, só no celular. É a primeira coisa da página
                     no Kiko, e é um dos motivos de ele parecer aplicativo.
                   */}
-                  {__ALVO__ === 'web' && !pdvAtivo && vendedor && <BarraMarca />}
+                  {__ALVO__ === 'web' && !pdvAtivo && vendedor && (
+                    <BarraMarca>
+                      {/*
+                        O sino mora AQUI, à direita da marca.
 
-                  {/*
-                    O sino, flutuante, no canto inferior ESQUERDO.
-
-                    Os outros dois cantos já têm dono: a ilha ocupa o centro de
-                    baixo e o assistente nasce na direita. A esquerda é o único
-                    lugar da faixa do polegar em que os três não se atropelam, e
-                    diferente do topo ela não cobre dado nenhum das listas.
-
-                    `z-index` 19, abaixo do 20 da ilha: ele nunca cobre a
-                    navegação.
-                  */}
-                  {__ALVO__ === 'web' && !pdvAtivo && vendedor?.papel === 'dono' && (
-                    <span
-                      data-tour="sino"
-                      /*
-                        O INVOLUCRO e a bolinha. O componente do sino vive no
-                        nucleo e e compartilhado com a assistencia: dar a ele
-                        um modo flutuante mudaria as duas de uma vez, por um
-                        pedido que so vale para a web do varejo.
-                      */
-                      className="fixed left-[14px] z-[19] flex h-12 w-12 items-center justify-center rounded-full border bg-background shadow-lg lg:hidden"
-                      style={{ bottom: 'calc(14px + 62px + 12px + env(safe-area-inset-bottom, 0px))' }}
-                    >
-                      <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
-                    </span>
+                        ⚠️ Ele já esteve flutuando no canto inferior esquerdo, e
+                        isso quebrou o painel dele: o popup se ancora ABAIXO do
+                        sino e alinhado à direita dele, então lá embaixo o `top`
+                        caía fora da dobra e o `right` empurrava os 320px do
+                        painel para fora pela esquerda. No topo ele cabe com
+                        folga numa tela de 360.
+                      */}
+                      {vendedor.papel === 'dono' && (
+                        <span data-tour="sino">
+                          <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
+                        </span>
+                      )}
+                    </BarraMarca>
                   )}
+
                   {/*
                     `tem-ilha` reserva a altura da barra flutuante em quem de
                     fato rola. O roteiro põe esse respiro no `body`; aqui o
