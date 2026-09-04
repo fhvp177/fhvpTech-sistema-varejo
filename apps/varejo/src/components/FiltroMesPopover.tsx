@@ -77,7 +77,12 @@ const FiltroMesPopover: FC<Props> = ({ mes, comparar, mesComparativo, ativo, max
       <button
         type="button"
         onClick={() => setAberto((a) => !a)}
-        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+        /*
+          `shrink-0` e `whitespace-nowrap`: sem eles este botão era o que
+          escapava da caixa cinza no celular, porque os irmãos com `flex-1`
+          o espremiam até ele estourar para fora (defeito nº 11).
+        */
+        className={`shrink-0 whitespace-nowrap px-2 lg:px-3 py-1.5 text-xs lg:text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${
           ativo ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
         }`}
         title="Resultados de um mês específico"

@@ -245,9 +245,15 @@ const Dashboard: FC = () => {
   if (!carregouMetricas) return <DashboardSkeleton />
 
   return (
-    <div className="p-8">
+    <div className="p-4 lg:p-8">
       <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
-        <div>
+        {/*
+          ⚠️ Some no celular (roteiro §5.1). A pílula acesa na ilha já diz que
+          você está no Painel: repetir "Dashboard" num título de 24px mais um
+          parágrafo de três linhas gastava ~40% da primeira tela antes de
+          aparecer um número. No desktop sobra espaço e o texto continua.
+        */}
+        <div className="hidden lg:block">
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <LayoutDashboard className="w-6 h-6 text-primary" />
             Dashboard
@@ -257,15 +263,22 @@ const Dashboard: FC = () => {
             filtro — ele olha sempre os últimos 30 dias.
           </p>
         </div>
-        {/* Filtro de período: janela móvel ou mês específico */}
-        <div className="flex gap-1 p-1 bg-muted rounded-lg">
+        {/*
+          Filtro de período: janela móvel ou mês específico.
+
+          ⚠️ No celular ele ocupa a linha inteira e cada botão divide o espaço
+          por igual (`flex-1`). Antes eram botões de largura natural numa
+          linha só: "7 dias" quebrava em "7 / dias", e o "Mês" era empurrado
+          para fora da caixa cinza que deveria contê-lo (defeito nº 11).
+        */}
+        <div className="flex w-full lg:w-auto gap-1 p-1 bg-muted rounded-lg">
           {PERIODOS.map((p) => {
             const ativo = modo === 'janela' && periodoDias === p.dias
             return (
               <button
                 key={p.dias}
                 onClick={() => { setModo('janela'); setPeriodoDias(p.dias) }}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                className={`flex-1 lg:flex-none px-2 lg:px-3 py-1.5 text-xs lg:text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
                   ativo
                     ? 'bg-background shadow text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
@@ -288,12 +301,18 @@ const Dashboard: FC = () => {
 
       {/* ── Alertas de inadimplência (destaque no topo) ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="rounded-xl border border-t-4 border-t-red-500 bg-card shadow-sm p-5">
-          <h3 className="flex items-center gap-2.5 text-[15px] font-semibold text-foreground mb-5">
-            <AlertTriangle className="w-[18px] h-[18px] text-red-500 shrink-0" />
+        {/*
+          A faixa de 4px vira 2px e sai do vermelho literal para o token
+          `critical-fill` — que é a cor CHEIA, própria de faixa, onde não há
+          texto por cima. O texto usa `critical`, a versão escurecida. Um token
+          só obrigaria a escolher entre faixa suja e texto ilegível.
+        */}
+        <div className="rounded-xl border border-t-2 border-t-critical-fill bg-card shadow-sm p-4 lg:p-5">
+          <h3 className="flex items-center gap-2.5 text-[15px] font-semibold text-foreground mb-3 lg:mb-5">
+            <AlertTriangle className="w-[18px] h-[18px] text-critical shrink-0" />
             Inadimplentes
             {inadimplentes.length > 0 && (
-              <span className="bg-red-500 text-white text-xs font-bold rounded-xl px-2.5 py-0.5">
+              <span className="bg-critical-fill text-on-fill text-xs font-bold rounded-xl px-2.5 py-0.5">
                 {inadimplentes.length}
               </span>
             )}
@@ -307,16 +326,30 @@ const Dashboard: FC = () => {
                   key={c.id}
                   type="button"
                   onClick={() => setClienteDividas({ id: c.id, nome: c.nome })}
-                  className="w-full text-left flex justify-between items-start gap-3 py-3 border-b border-slate-100 last:border-b-0 hover:bg-red-50/60 transition-colors cursor-pointer"
+                  className="w-full min-h-[56px] text-left flex justify-between items-start gap-3 py-3 border-b last:border-b-0 hover:bg-critical-soft active:bg-critical-soft transition-colors cursor-pointer"
                   title="Ver dívidas e parcelas em atraso"
                 >
+                  {/*
+                    `min-w-0` é obrigatório: sem ele um nome longo se recusa a
+                    encolher abaixo do próprio conteúdo e empurra o valor para
+                    fora da tela. É uma das três causas de rolagem horizontal
+                    que o roteiro nomeia (§11).
+                  */}
                   <div className="min-w-0">
                     <p className="font-semibold text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
-                    <p className="text-[14px] text-muted-foreground mt-0.5">{c.telefone}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-0.5">{c.telefone}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="font-bold text-[15px] text-red-600">{fmt(c.total_devido)}</p>
-                    <p className="text-[14px] text-red-400 mt-0.5">desde {fmtData(c.vencimento_mais_antigo)}</p>
+                    {/*
+                      `num` põe a monoespaçada com `tabular-nums`: é o que faz
+                      R$ 295,00 e R$ 70,00 alinharem a vírgula sem tabela. Sem
+                      isso os algarismos têm larguras diferentes e a coluna
+                      dança a cada linha.
+                    */}
+                    <p className="num text-[15px] text-critical">{fmt(c.total_devido)}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-0.5">
+                      desde {fmtData(c.vencimento_mais_antigo)}
+                    </p>
                   </div>
                 </button>
               ))}
@@ -324,12 +357,12 @@ const Dashboard: FC = () => {
           )}
         </div>
 
-        <div className="rounded-xl border border-t-4 border-t-amber-500 bg-card shadow-sm p-5">
+        <div className="rounded-xl border border-t-2 border-t-warn bg-card shadow-sm p-4 lg:p-5">
           <h3 className="flex items-center gap-2.5 text-[15px] font-semibold text-foreground mb-5">
-            <Clock className="w-[18px] h-[18px] text-amber-500 shrink-0" />
+            <Clock className="w-[18px] h-[18px] text-warn shrink-0" />
             Vencem Hoje
             {vencendoHoje.length > 0 && (
-              <span className="bg-amber-500 text-white text-xs font-bold rounded-xl px-2.5 py-0.5">
+              <span className="bg-warn text-on-fill text-xs font-bold rounded-xl px-2.5 py-0.5">
                 {vencendoHoje.length}
               </span>
             )}
@@ -343,14 +376,14 @@ const Dashboard: FC = () => {
                   key={c.id}
                   type="button"
                   onClick={() => setClienteDividas({ id: c.id, nome: c.nome })}
-                  className="w-full text-left flex justify-between items-start gap-3 py-3 border-b border-slate-100 last:border-b-0 hover:bg-amber-50/60 transition-colors cursor-pointer"
+                  className="w-full text-left flex justify-between items-start gap-3 py-3 border-b last:border-b-0 hover:bg-warn-soft active:bg-warn-soft transition-colors cursor-pointer"
                   title="Ver dívidas e parcelas do cliente"
                 >
                   <div className="min-w-0">
                     <p className="font-semibold text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
                     <p className="text-[14px] text-muted-foreground mt-0.5">{c.telefone}</p>
                   </div>
-                  <p className="font-bold text-[15px] text-amber-600 shrink-0">{fmt(c.total)}</p>
+                  <p className="num text-[15px] text-warn shrink-0">{fmt(c.total)}</p>
                 </button>
               ))}
             </div>
@@ -361,8 +394,8 @@ const Dashboard: FC = () => {
       {/* ── KPIs do período ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <CardKPI
-          icone={<TrendingUp className="w-5 h-5 text-blue-600" />}
-          corIcone="bg-blue-100"
+          icone={<TrendingUp className="w-5 h-5 text-primary" />}
+          corIcone="bg-primary-soft"
           titulo="Faturamento"
           valor={metricas ? fmt(metricas.faturamento_atual) : '...'}
           delta={deltaFaturamento}
@@ -371,7 +404,7 @@ const Dashboard: FC = () => {
           mostrarComparativo={mostrarComparativo}
           subtexto={
             metricas && metricas.devolucoes_atual > 0 ? (
-              <p className="text-xs text-amber-600 mt-1">
+              <p className="text-xs text-warn mt-1">
                 − {fmt(metricas.devolucoes_atual)} em devoluções · líquido{' '}
                 <span className="font-medium">
                   {fmt(metricas.faturamento_atual - metricas.devolucoes_atual)}
@@ -381,8 +414,8 @@ const Dashboard: FC = () => {
           }
         />
         <CardKPI
-          icone={<Receipt className="w-5 h-5 text-indigo-600" />}
-          corIcone="bg-indigo-100"
+          icone={<Receipt className="w-5 h-5 text-primary" />}
+          corIcone="bg-primary-soft"
           titulo="Vendas"
           valor={metricas ? String(metricas.num_vendas_atual) : '...'}
           delta={deltaVendas}
@@ -391,8 +424,8 @@ const Dashboard: FC = () => {
           mostrarComparativo={mostrarComparativo}
         />
         <CardKPI
-          icone={<ShoppingBag className="w-5 h-5 text-orange-600" />}
-          corIcone="bg-orange-100"
+          icone={<ShoppingBag className="w-5 h-5 text-primary" />}
+          corIcone="bg-primary-soft"
           titulo="Ticket médio"
           valor={metricas ? fmt(metricas.ticket_medio_atual) : '...'}
           delta={deltaTicket}
@@ -513,9 +546,9 @@ const Dashboard: FC = () => {
               {metricas.top_produtos.map((p, i) => (
                 <li key={p.produto_id} className="flex items-start gap-3">
                   <div className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0 ${
-                    i === 0 ? 'bg-amber-100 text-amber-700'
-                    : i === 1 ? 'bg-slate-200 text-slate-700'
-                    : i === 2 ? 'bg-orange-100 text-orange-700'
+                    i === 0 ? 'bg-warn-soft text-warn'
+                    : i === 1 ? 'bg-muted text-muted-foreground'
+                    : i === 2 ? 'bg-muted text-muted-foreground'
                     : 'bg-muted text-muted-foreground'
                   }`}>
                     {i + 1}
@@ -620,8 +653,8 @@ const CardKPI: FC<CardKPIProps> = ({
 }) => {
   const corDelta =
     !delta.valido ? 'text-muted-foreground'
-    : delta.pct > 0 ? 'text-green-600'
-    : delta.pct < 0 ? 'text-red-600'
+    : delta.pct > 0 ? 'text-positive'
+    : delta.pct < 0 ? 'text-critical'
     : 'text-muted-foreground'
   const sinal = delta.pct > 0 ? '+' : ''
   return (
@@ -668,19 +701,19 @@ const CardClientes: FC<CardClientesProps> = ({
 }) => {
   const corDelta =
     !deltaNovos.valido ? 'text-muted-foreground'
-    : deltaNovos.pct > 0 ? 'text-green-600'
-    : deltaNovos.pct < 0 ? 'text-red-600'
+    : deltaNovos.pct > 0 ? 'text-positive'
+    : deltaNovos.pct < 0 ? 'text-critical'
     : 'text-muted-foreground'
   const sinal = deltaNovos.pct > 0 ? '+' : ''
   return (
     <div className="anim-gatilho border rounded-xl p-4 bg-card">
-      <div className="anim-alvo-salta w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center mb-3">
-        <Users className="w-5 h-5 text-purple-600" />
+      <div className="anim-alvo-salta w-10 h-10 rounded-lg bg-primary-soft flex items-center justify-center mb-3">
+        <Users className="w-5 h-5 text-primary" />
       </div>
       <p className="text-sm text-muted-foreground">Clientes</p>
       <p className="text-2xl font-bold mt-0.5">{totalClientes != null ? totalClientes : '...'}</p>
       <p className="text-xs mt-1">
-        <span className="font-medium text-purple-600">{novosAtual != null ? `+${novosAtual}` : '—'}</span>{' '}
+        <span className="font-medium text-primary">{novosAtual != null ? `+${novosAtual}` : '—'}</span>{' '}
         <span className="text-muted-foreground">novos no período</span>
       </p>
       {mostrarComparativo && (
@@ -711,8 +744,8 @@ const CardLucro: FC<CardLucroProps> = ({ metricas, mostrarComparativo, rotuloCom
   const delta = calcularDelta(lucro, lucroAnterior)
   const corDelta =
     !delta.valido ? 'text-muted-foreground'
-    : delta.pct > 0 ? 'text-green-600'
-    : delta.pct < 0 ? 'text-red-600'
+    : delta.pct > 0 ? 'text-positive'
+    : delta.pct < 0 ? 'text-critical'
     : 'text-muted-foreground'
   const sinal = delta.pct > 0 ? '+' : ''
 
@@ -764,7 +797,7 @@ const CardLucro: FC<CardLucroProps> = ({ metricas, mostrarComparativo, rotuloCom
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Custo das vendas</span>
-              <span className="text-red-500">− {fmt(metricas.custo_vendas_atual)}</span>
+              <span className="text-critical">− {fmt(metricas.custo_vendas_atual)}</span>
             </div>
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
@@ -871,12 +904,12 @@ const CardMeta: FC<{ metricas: MetricasDashboard | null; onSalvar: (valor: numbe
           </div>
           <div className="h-3 bg-muted rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-[width] ${pct >= 100 ? 'bg-green-600' : 'bg-primary'}`}
+              className={`h-full rounded-full transition-[width] ${pct >= 100 ? 'bg-positive' : 'bg-primary'}`}
               style={{ width: `${pct}%` }}
             />
           </div>
           <div className="flex justify-between mt-1.5 text-xs">
-            <span className={`font-semibold ${pct >= 100 ? 'text-green-600' : 'text-primary'}`}>{pct}% da meta</span>
+            <span className={`font-semibold ${pct >= 100 ? 'text-positive' : 'text-primary'}`}>{pct}% da meta</span>
             <span className="text-muted-foreground">
               {falta > 0 ? `faltam ${fmt(falta)}` : 'meta batida! 🎉'}
             </span>
@@ -1060,7 +1093,7 @@ const CardRecebivel: FC<{ metricas: MetricasDashboard | null; rotuloPeriodo: str
           <p className="text-xs text-muted-foreground mt-1">
             {fmt(periodo.a_vencer)} a vencer
             {periodo.vencido > 0 && (
-              <> · <span className="font-medium text-red-600">{fmt(periodo.vencido)} em atraso</span></>
+              <> · <span className="font-medium text-critical">{fmt(periodo.vencido)} em atraso</span></>
             )}
           </p>
         )}
@@ -1111,7 +1144,7 @@ const CardAPagar: FC<{ metricas: MetricasDashboard | null; rotuloPeriodo: string
           <p className="text-xs text-muted-foreground mt-1">
             {fmt(periodo.a_vencer)} a vencer
             {periodo.vencido > 0 && (
-              <> · <span className="font-medium text-red-600">{fmt(periodo.vencido)} vencido</span></>
+              <> · <span className="font-medium text-critical">{fmt(periodo.vencido)} vencido</span></>
             )}
           </p>
         )}
@@ -1195,8 +1228,8 @@ const CardEstoqueBaixo: FC<{ metricas: MetricasDashboard | null }> = ({ metricas
             <li key={`${p.produto_id}-${p.tamanho ?? ''}`} className="flex items-center gap-2 text-sm">
               <span className={`text-xs font-bold rounded px-1.5 py-0.5 shrink-0 ${
                 p.estoque <= 2
-                  ? 'bg-red-100 text-red-700'
-                  : 'bg-amber-100 text-amber-700'
+                  ? 'bg-critical-soft text-critical'
+                  : 'bg-warn-soft text-warn'
               }`}>
                 {p.estoque} un
               </span>
@@ -1230,9 +1263,9 @@ const CardRankingVendedores: FC<WidgetProps> = ({ metricas, carregando }) => {
             <li key={v.vendedor_id}>
               <div className="flex items-center gap-2 mb-1">
                 <div className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0 ${
-                  i === 0 ? 'bg-amber-100 text-amber-700'
-                  : i === 1 ? 'bg-slate-200 text-slate-700'
-                  : i === 2 ? 'bg-orange-100 text-orange-700'
+                  i === 0 ? 'bg-warn-soft text-warn'
+                  : i === 1 ? 'bg-muted text-muted-foreground'
+                  : i === 2 ? 'bg-muted text-muted-foreground'
                   : 'bg-muted text-muted-foreground'
                 }`}>
                   {i + 1}
@@ -1321,14 +1354,14 @@ const CardAniversariantes: FC<{ metricas: MetricasDashboard | null }> = ({ metri
           <ul className="space-y-2">
             {dados.map((a) => (
               <li key={a.id} className="anim-gatilho flex items-center gap-3 bg-muted/40 rounded-lg px-3 py-2">
-                <div className="w-9 h-9 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-full bg-primary-soft text-primary flex items-center justify-center shrink-0">
                   <Gift className="anim-alvo-acena w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" title={a.nome}>{a.nome}</p>
                   <p className="text-xs text-muted-foreground">{a.telefone}</p>
                 </div>
-                <span className="text-sm font-semibold text-pink-600">{a.dia}</span>
+                <span className="text-sm font-semibold text-primary">{a.dia}</span>
               </li>
             ))}
           </ul>

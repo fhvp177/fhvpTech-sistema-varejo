@@ -50,6 +50,65 @@ function arquivosDeTela(dir: string): string[] {
   return achados
 }
 
+describe('tela 1 — o Painel no celular', () => {
+  const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+
+  it('★ zero cor literal: toda cor de estado vem de token', () => {
+    // Cor literal não tem tema escuro e não há como redefini-la num lugar só.
+    // O diagnóstico chamou isso de "cores de estado sem sistema" (§1, item 10).
+    const literais = PAINEL.split('\n')
+      .map((l, i) => ({ l: l.trim(), n: i + 1 }))
+      .filter(({ l }) => /\b(text|bg|border-t|border)-(red|amber|yellow|green|blue|slate|orange|indigo|purple|pink)-\d{2,3}\b/.test(l))
+      .map(({ l, n }) => `${n}: ${l.slice(0, 70)}`)
+    expect(literais, 'cor literal sobrando no Painel').toEqual([])
+  })
+
+  it('★ o título que repete o nome da aba some no celular', () => {
+    // A pílula acesa na ilha já diz onde você está. O título de 24px mais o
+    // parágrafo de três linhas gastavam ~40% da primeira tela antes de aparecer
+    // um número (§5.1).
+    expect(PAINEL).toMatch(/<div className="hidden lg:block">\s*\n\s*<h2/)
+  })
+
+  it('★ o filtro de período cabe numa linha só', () => {
+    // Antes "7 dias" quebrava em "7 / dias" e o botão "Mês" era empurrado para
+    // fora da caixa cinza (§1, item 11).
+    expect(PAINEL).toContain('flex w-full lg:w-auto gap-1 p-1 bg-muted rounded-lg')
+    expect(PAINEL).toContain('flex-1 lg:flex-none')
+    expect(PAINEL).toContain('whitespace-nowrap')
+
+    const MES = readFileSync(join(SRC, 'components', 'FiltroMesPopover.tsx'), 'utf8')
+    expect(MES).toContain('shrink-0 whitespace-nowrap')
+  })
+
+  it('valores usam a monoespaçada que alinha a vírgula', () => {
+    // Sem `tabular-nums` os algarismos têm larguras diferentes e a coluna dança
+    // a cada linha (§6).
+    expect(PAINEL).toMatch(/className="num text-\[15px\] text-critical"/)
+    expect(PAINEL).toMatch(/className="num text-\[15px\] text-warn shrink-0"/)
+  })
+
+  it('★ nenhuma tabela, e nenhuma largura fixa de layout', () => {
+    // As duas primeiras causas de rolagem lateral que a §11 nomeia.
+    expect(PAINEL).not.toContain('<table')
+    const fixas = (PAINEL.match(/(^|[^-])w-\[(\d+)px\]/g) || [])
+      .map((m) => Number(m.match(/(\d+)/)![1]))
+      .filter((px) => px > 40)
+    expect(fixas, 'largura fixa de layout no Painel').toEqual([])
+  })
+
+  it('a linha de cliente tem alvo de toque e não estoura com nome longo', () => {
+    // `min-w-0` é a terceira causa de rolagem lateral: sem ele o nome se recusa
+    // a encolher e empurra o valor para fora da tela.
+    const linha = PAINEL.slice(
+      PAINEL.indexOf('Ver dívidas e parcelas em atraso') - 400,
+      PAINEL.indexOf('Ver dívidas e parcelas em atraso') + 400
+    )
+    expect(linha).toContain('min-h-[56px]')
+    expect(linha).toContain('min-w-0')
+  })
+})
+
 describe('a ilha de navegação do celular (roteiro §3)', () => {
   const ILHA = readFileSync(
     join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'BarraInferiorMobile.tsx'),
