@@ -35,6 +35,18 @@ export type Cliente = {
   // e é assim que um campo novo derruba a emissão de todos os clientes atuais.
   // O padrão por origem/plano está em `cotaPadrao()`, em cotaNotas.ts.
   tetoNotasMes?: number
+  // Em quantas máquinas esta loja abre o sistema.
+  //
+  // AUSENTE = ninguém combinou limite com ela, e é o estado de TODA loja que
+  // já existia quando isto nasceu. Ler ausência como zero derrubaria a
+  // ativação de todo mundo de uma vez. A contagem e as regras estão em
+  // `dispositivos.ts`.
+  limiteDispositivos?: number
+  // Deixa passar mesmo estourando o limite? Padrão não: quem contratou 2
+  // computadores tem 2, e a terceira instalação é recusada na ATIVAÇÃO, que
+  // é a hora em que ninguém está no meio de uma venda. Ligar isto é a saída
+  // para o caso combinado, loja a loja, sem ter que mexer no limite.
+  permitirAcimaDoLimite?: boolean
   // Passar da cota IMPEDE de emitir? Padrão não. A cota é régua (gatilho de
   // renegociação, porque o preço é negociado caso a caso) — não cancela. Ligar
   // isto é decisão deliberada para um caso específico, nunca a política geral.

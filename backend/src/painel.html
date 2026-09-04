@@ -485,7 +485,10 @@
     texto(botao, 'Entrando…')
     mostrar($('erroLogin'), false)
     const r = await api('/login', { metodo: 'POST',
-      corpo: { revendedorId: $('campoId').value, senha: $('campoSenha').value } })
+      // O .trim() e o mesmo cuidado do painel da FHVP: colar a senha traz
+      // espaco no fim com facilidade, e sem isto ela volta como incorreta sem
+      // pista nenhuma. O codigo do revendedor tambem vem colado.
+      corpo: { revendedorId: $('campoId').value.trim(), senha: $('campoSenha').value.trim() } })
     botao.disabled = false
     texto(botao, 'Entrar')
     if (!r.ok) {

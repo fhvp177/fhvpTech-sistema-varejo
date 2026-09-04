@@ -21,6 +21,11 @@ export default defineConfig({
     // com defeito.
     testTimeout: 30_000,
 
+    // Põe os segredos de build como global ANTES de qualquer import: sem
+    // isso o módulo de licença do core nem carrega. O porquê de não ser
+    // `define` está no próprio arquivo de setup.
+    setupFiles: ['./vitest.setup.ts'],
+
     include: ['electron/**/__tests__/**/*.test.ts', 'src/**/__tests__/**/*.test.ts'],
     globals: false,
   },

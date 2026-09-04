@@ -138,6 +138,41 @@ test('a ordem das situações é por gravidade', () => {
   assert.ok(posVencida < posVencendo, '"vencida" precisa ganhar de "vence em breve"')
 })
 
+// ── Espaço colado junto da senha ───────────────────────────────────────────
+
+test('★ os dois painéis cortam espaço em volta da senha antes de enviar', () => {
+  // Quem administra recebe a senha por mensagem e COLA no campo. Colar traz
+  // espaço no fim com facilidade, e sem o corte a senha certa volta como
+  // "senha incorreta", sem pista nenhuma na tela, ainda gastando uma das 10
+  // tentativas por hora. Aconteceu em 2026-09-04.
+  assert.match(
+    PAINEL,
+    /const senha = \$\('campoSenha'\)\.value\.trim\(\)/,
+    'o painel da FHVP voltou a enviar a senha com o espaço colado junto'
+  )
+  assert.match(
+    REVENDA,
+    /senha: \$\('campoSenha'\)\.value\.trim\(\)/,
+    'o painel do revendedor voltou a enviar a senha com o espaço colado junto'
+  )
+})
+
+test('★ o SERVIDOR não corta espaço: quem decide o que é a senha é o dono dela', () => {
+  // O corte é conveniência de digitação, e lugar de conveniência é na tela. No
+  // servidor ele mudaria QUAIS senhas são válidas para todo mundo, incluindo
+  // uma que tenha espaço de propósito nas pontas.
+  const corpo = BACKEND.slice(
+    BACKEND.indexOf("app.post('/admin-login'"),
+    BACKEND.indexOf("app.post('/admin-logout'")
+  )
+  assert.ok(corpo.length > 100, 'sumiu a rota de login do painel')
+  assert.equal(
+    /senha[^\n]*\.trim\(\)/.test(corpo),
+    false,
+    'o servidor passou a limpar a senha: isso muda quais senhas valem'
+  )
+})
+
 // ── Ícones ─────────────────────────────────────────────────────────────────
 
 test('os ícones são embutidos, porque a CSP proíbe buscar de fora', () => {
@@ -145,6 +180,40 @@ test('os ícones são embutidos, porque a CSP proíbe buscar de fora', () => {
   // enfeitar a tela é troca ruim.
   assert.ok(UI.includes('const ICONES = {'))
   assert.ok(!/<img[^>]+https?:/.test(PAINEL), 'entrou imagem externa na página')
+})
+
+test('★ todo ícone nasce com tamanho, sem depender de onde foi posto', () => {
+  // O bug: na lista de máquinas o monitor ocupou a largura inteira da caixa e
+  // jogou nome, data e botão para fora da tela. A causa não foi aquela tela:
+  // o tamanho vinha SÓ de regras de contêiner, e SVG com viewBox e sem largura
+  // estica até o pai. Toda tela nova erraria igual, em silêncio.
+  assert.match(
+    UI,
+    /'<svg class="icone'/,
+    'o ícone deixou de carregar a própria classe: tela nova volta a sair gigante'
+  )
+  const regra = CSS.match(/\.icone \{([^}]*)\}/)
+  assert.ok(regra, 'sumiu o tamanho padrão do ícone no CSS')
+  assert.match(regra[1], /width:\s*\d+px/)
+  assert.match(regra[1], /height:\s*\d+px/)
+})
+
+test('a classe do ícone é a mesma nos dois lados', () => {
+  // Renomear de um lado só devolve o bug inteiro, e nada quebra visivelmente
+  // até alguém abrir a tela certa.
+  const noJs = UI.match(/'<svg class="([a-z-]+)/)
+  assert.ok(noJs, 'não achei a classe que o ícone recebe')
+  assert.ok(
+    CSS.includes('.' + noJs[1] + ' {'),
+    `o CSS não define .${noJs[1]}: o tamanho padrão do ícone virou letra morta`
+  )
+})
+
+test('as regras de contêiner continuam existindo, e continuam ganhando', () => {
+  // Especificidade maior que `.icone`, então o que já estava certo não muda.
+  for (const seletor of ['.com-icone svg', '.etiqueta svg', '.icone-card svg']) {
+    assert.ok(CSS.includes(seletor), `sumiu a regra ${seletor}`)
+  }
 })
 
 test('nenhum ícone ficou pela metade', () => {

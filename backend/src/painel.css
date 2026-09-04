@@ -687,6 +687,21 @@ tbody tr:hover { background: hsl(var(--muted) / 0.55); }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* Tamanho PADRÃO de qualquer ícone, no próprio ícone.
+
+   ⚠️ Sem isto, o tamanho vem só das regras de contêiner logo abaixo, e um
+   ícone posto numa tela nova estica até a largura do pai. Foi o que
+   aconteceu na lista de máquinas: o monitor ocupou a caixa inteira e jogou
+   nome, data e botão para fora da tela.
+
+   As regras de contêiner (`.com-icone svg`, `.etiqueta svg`) têm
+   especificidade maior e continuam mandando onde já mandavam. */
+.icone {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 /* Célula com ícone + texto (origem, plano, recuperação). */
 .com-icone {
   display: inline-flex;

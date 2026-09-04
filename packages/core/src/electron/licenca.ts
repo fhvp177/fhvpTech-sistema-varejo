@@ -14,10 +14,15 @@
  * .env.example para o conjunto de variáveis necessárias.
  */
 import { createHmac, createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
-import { pastaDados } from './plataforma'
+import { pastaDados, versaoApp } from './plataforma'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import {
+  identidadeDoDispositivo,
+  identificadorLocal
+} from '@fhvptech/core/electron/dispositivo'
+import { modoMulticaixa } from '@fhvptech/core/electron/multicaixa/config'
 import {
   avaliarRelogio,
   calcularAncora,
@@ -43,6 +48,23 @@ const SALT_AES = __SALT_AES__
 // e é por isso que o caminho offline existe (ver decidirTratamento).
 const URL_BACKEND = 'https://licenca-gnmodas.fly.dev'
 const TIMEOUT_HORA_SERVIDOR_MS = 6000
+
+/**
+ * Endereço do backend.
+ *
+ * `FHVP_BACKEND_URL` existe para apontar um licenciador LOCAL durante o
+ * desenvolvimento. Sem isso, a única forma de exercitar a vaga de
+ * dispositivo seria contra PRODUÇÃO, o que é inaceitável para um caminho
+ * que decide se a loja abre.
+ *
+ * Mesma ideia e mesmo nome de variável do `backendUrl.ts` de cada app, que já
+ * fazia isto para as rotas fiscais. Em produção ela não existe e
+ * tudo cai no Fly de sempre.
+ */
+function urlDoBackend(): string {
+  const override = process.env.FHVP_BACKEND_URL
+  return (override && override.trim()) || URL_BACKEND
+}
 
 function derivarChaveAES(): Buffer {
   return scryptSync(CHAVE_AES, SALT_AES, 32)
@@ -210,7 +232,7 @@ export async function obterHoraDoServidor(): Promise<number | null> {
     const controle = new AbortController()
     const alarme = setTimeout(() => controle.abort(), TIMEOUT_HORA_SERVIDOR_MS)
     try {
-      const resposta = await fetch(URL_BACKEND + '/', {
+      const resposta = await fetch(urlDoBackend() + '/', {
         method: 'HEAD',
         cache: 'no-store',
         signal: controle.signal
@@ -240,7 +262,15 @@ export type StatusRelogio = {
  */
 export async function validarLicencaComRelogio(): Promise<StatusLicenca> {
   const status = validarLicenca()
-  if (status.motivo !== 'relogio') return status
+
+  if (status.motivo !== 'relogio') {
+    // Licença ausente ou vencida não pergunta por vaga: a tela de ativação já
+    // vai perguntar, na hora de ativar.
+    if (!status.valida && status.motivo !== 'dispositivo') return status
+    await reconferirVaga()
+    const depois = validarLicenca()
+    return status.aviso && !depois.aviso ? { ...depois, aviso: status.aviso } : depois
+  }
 
   const agora = Date.now()
   const horaServidor = await obterHoraDoServidor()
@@ -274,6 +304,152 @@ export function destravarRelogio(): { destravado: boolean } {
   return { destravado: verificarRelogio().ok }
 }
 
+// ── Vaga de dispositivo ─────────────────────────────────────────────────────
+//
+// O plano do lojista pode dizer "até 2 computadores". Como a licença é validada
+// offline, quem conta as máquinas é o servidor: cada instalação se apresenta e
+// pede uma vaga. O porquê de cada regra está em `backend/src/dispositivos.ts`.
+//
+// ★ A REGRA QUE MANDA AQUI: só um "não" EXPLÍCITO do servidor fecha o sistema.
+// Internet caída, servidor fora do ar, resposta estranha, nada disso bloqueia
+// nada. É a mesma disciplina do guardião de relógio ("não deu para saber" nunca
+// vira "não pode"), e pelo mesmo motivo: loja parada é o pior desfecho
+// possível, pior até que um cliente usando uma máquina a mais.
+
+const CAMINHO_VAGA = '/licenca/dispositivo'
+const TIMEOUT_VAGA_MS = 3500
+
+type PasseDispositivo = {
+  /** De qual instalação é este passe. */
+  deviceId: string
+  /** A última resposta EXPLÍCITA do servidor. */
+  resposta: 'sim' | 'nao'
+  /** A partir de quando vale perguntar de novo (ms). */
+  reconferirEm: number
+  /** O que dizer ao lojista. Só existe quando a resposta foi não. */
+  mensagem?: string
+}
+
+function caminhoPasse(): string {
+  return join(pastaDados(), 'licenca.dispositivo')
+}
+
+function lerPasse(): PasseDispositivo | null {
+  try {
+    const caminho = caminhoPasse()
+    if (!existsSync(caminho)) return null
+    const bruto = JSON.parse(descriptografar(readFileSync(caminho, 'utf8').trim())) as PasseDispositivo
+    if (bruto.resposta !== 'sim' && bruto.resposta !== 'nao') return null
+    // ⚠️ Passe de OUTRA instalação não vale. Sem isto, copiar a pasta de dados
+    // levaria junto um "sim" que não é desta máquina.
+    if (bruto.deviceId !== identificadorLocal()) return null
+    return bruto
+  } catch {
+    return null
+  }
+}
+
+function escreverPasse(passe: PasseDispositivo): void {
+  try {
+    writeFileSync(caminhoPasse(), criptografar(JSON.stringify(passe)), 'utf8')
+  } catch {
+    // Sem passe gravado o sistema só pergunta de novo na próxima abertura.
+  }
+}
+
+/** O modo do multicaixa vira a origem que o servidor registra. */
+function origemDestaMaquina(): 'principal' | 'terminal' {
+  try {
+    return modoMulticaixa() === 'terminal' ? 'terminal' : 'principal'
+  } catch {
+    return 'principal'
+  }
+}
+
+/**
+ * Apresenta esta máquina ao servidor e pede a vaga.
+ *
+ * Devolve o passe quando houve resposta, e `null` quando não houve. `null` NÃO
+ * é recusa: é silêncio, e silêncio não bloqueia ninguém.
+ */
+async function pedirVaga(chave: string): Promise<PasseDispositivo | null> {
+  const identidade = await identidadeDoDispositivo()
+  const controle = new AbortController()
+  const alarme = setTimeout(() => controle.abort(), TIMEOUT_VAGA_MS)
+  try {
+    const resposta = await fetch(urlDoBackend() + CAMINHO_VAGA, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      cache: 'no-store',
+      signal: controle.signal,
+      body: JSON.stringify({
+        chave,
+        deviceId: identidade.deviceId,
+        digital: identidade.digital,
+        nome: identidade.nome,
+        origem: origemDestaMaquina(),
+        versao: versaoApp()
+      })
+    })
+
+    if (resposta.status === 403) {
+      const corpo = (await resposta.json()) as { mensagem?: string }
+      const passe: PasseDispositivo = {
+        deviceId: identidade.deviceId,
+        resposta: 'nao',
+        // Recusa se reconfere na abertura seguinte: quem liberou uma vaga no
+        // painel espera que a loja volte sozinha, sem desinstalar nada.
+        reconferirEm: 0,
+        mensagem: corpo.mensagem
+      }
+      escreverPasse(passe)
+      return passe
+    }
+
+    if (!resposta.ok) return null
+
+    const corpo = (await resposta.json()) as { reconferirEm?: string }
+    const quando = Date.parse(String(corpo.reconferirEm ?? ''))
+    const passe: PasseDispositivo = {
+      deviceId: identidade.deviceId,
+      resposta: 'sim',
+      reconferirEm: Number.isFinite(quando) ? quando : Date.now() + 12 * 3_600_000
+    }
+    escreverPasse(passe)
+    return passe
+  } catch {
+    // Sem rede, sem servidor, resposta ilegível. Nada disso é um "não".
+    return null
+  } finally {
+    clearTimeout(alarme)
+  }
+}
+
+/**
+ * Reconfere a vaga desta máquina, se for hora.
+ *
+ * ── Por que nem sempre espera a resposta ────────────────────────────────────
+ * Quem já tem um "sim" no bolso não pode ficar parado na abertura esperando um
+ * servidor que talvez esteja fora: a conferência dele acontece em segundo
+ * plano e vale para a PRÓXIMA abertura. Espera de verdade só nos dois casos em
+ * que a resposta muda o que aparece na tela agora: a primeira vez (ainda não
+ * há passe nenhum) e depois de uma recusa (para a loja voltar sozinha assim
+ * que uma vaga for liberada).
+ */
+async function reconferirVaga(): Promise<void> {
+  const chave = chaveLicencaLocal()
+  if (!chave) return
+
+  const passe = lerPasse()
+  if (passe && passe.resposta === 'sim' && Date.now() < passe.reconferirEm) return
+
+  if (passe && passe.resposta === 'sim') {
+    void pedirVaga(chave)
+    return
+  }
+  await pedirVaga(chave)
+}
+
 export type StatusLicenca = {
   valida: boolean
   diasRestantes?: number
@@ -281,11 +457,15 @@ export type StatusLicenca = {
   clienteId?: string
   aviso?: string
   /**
-   * Por que não vale. Só 'relogio' tem tratamento próprio — os demais caem na
-   * tela de ativação de sempre. Campo novo e opcional: quem não olha continua
+   * Por que não vale. Só 'relogio' tem tratamento próprio; os demais caem na
+   * tela de ativação de sempre. Campo opcional: quem não olha continua
    * funcionando igual.
+   *
+   * 'dispositivo' é o servidor dizendo que esta máquina não tem vaga no plano
+   * da loja. A `mensagem` já vem pronta de lá, com os nomes dos computadores
+   * em uso, porque é o painel que sabe quais são.
    */
-  motivo?: 'relogio'
+  motivo?: 'relogio' | 'dispositivo'
   /** Âncora que causou o bloqueio, em ms. Interno, para o conserto. */
   ancoraRelogio?: number
   /** Preenchido por validarLicencaComRelogio() quando a trava de relógio pega. */
@@ -342,6 +522,25 @@ export function validarLicenca(): StatusLicenca {
     const conteudo = readFileSync(caminho, 'utf8').trim()
     const chaveDecriptada = descriptografar(conteudo)
     const status = validarChave(chaveDecriptada)
+
+    // A vaga só é consultada depois de a licença passar. Uma loja com licença
+    // vencida tem que ver "vencida", que é o problema dela; falar de máquina
+    // ali mandaria o lojista resolver a coisa errada.
+    if (status.valida) {
+      const passe = lerPasse()
+      if (passe?.resposta === 'nao') {
+        return {
+          valida: false,
+          motivo: 'dispositivo',
+          clienteId: status.clienteId,
+          mensagem:
+            passe.mensagem ??
+            'Esta máquina não está entre as liberadas no plano desta loja. ' +
+              'Fale com a FHVP Tech.'
+        }
+      }
+    }
+
     return guard.aviso ? { ...status, aviso: guard.aviso } : status
   } catch {
     return { valida: false, mensagem: 'Arquivo de licença corrompido. Reinsira a chave.' }
@@ -382,13 +581,39 @@ export function chaveLicencaLocal(): string | null {
   }
 }
 
-export function ativarLicenca(chave: string): StatusLicenca {
+/**
+ * Ativa a licença nesta máquina.
+ *
+ * ★ A vaga é pedida ANTES de gravar a chave. Gravar primeiro e recusar depois
+ * deixaria a instalação com uma licença válida no disco e o sistema fechado,
+ * que é o estado mais confuso possível para quem está instalando.
+ *
+ * A recusa por vaga é a ÚNICA que vem do servidor, e por isso a única que
+ * depende de internet. Sem resposta, a ativação segue: instalar numa loja com
+ * a internet caída tem que continuar funcionando, e a conferência acontece
+ * sozinha na próxima abertura.
+ */
+export async function ativarLicenca(chave: string): Promise<StatusLicenca> {
   const status = validarChave(chave)
   if (!status.valida) return status
   const guard = verificarRelogio()
   if (!guard.ok) {
     return { valida: false, mensagem: guard.mensagem, motivo: 'relogio', ancoraRelogio: guard.ancora }
   }
+
+  const passe = await pedirVaga(chave.trim())
+  if (passe?.resposta === 'nao') {
+    return {
+      valida: false,
+      motivo: 'dispositivo',
+      clienteId: status.clienteId,
+      mensagem:
+        passe.mensagem ??
+        'Esta máquina não está entre as liberadas no plano desta loja. ' +
+          'Fale com a FHVP Tech.'
+    }
+  }
+
   writeFileSync(caminhoLicenca(), criptografar(chave.trim()), 'utf8')
   escreverHeartbeat({ ts: Date.now(), ignorarAte: lerHeartbeat()?.ignorarAte ?? 0 })
   return guard.aviso ? { ...status, aviso: guard.aviso } : status

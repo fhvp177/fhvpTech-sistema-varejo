@@ -25,9 +25,11 @@ export function registrarHandlersLicenca(): void {
     }
   })
 
-  registrarCanal('licenca:ativar', (chave: string) => {
+  // Assíncrono porque a ativação pergunta ao servidor se esta máquina cabe no
+  // plano da loja (ver `ativarLicenca`). Sem resposta, ela segue em frente.
+  registrarCanal('licenca:ativar', async (chave: string) => {
     try {
-      const status = ativarLicenca(chave)
+      const status = await ativarLicenca(chave)
       return { success: true, data: status }
     } catch (error) {
       return { success: false, error: (error as Error).message }

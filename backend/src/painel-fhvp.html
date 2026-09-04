@@ -79,7 +79,8 @@
         <thead><tr>
           <th>Loja</th><th>Origem</th><th>Plano</th><th>Validade</th>
           <th class="num">Mensalidade</th>
-          <th class="num">Notas</th><th class="num">Excedente</th><th>Situação</th><th></th>
+          <th class="num">Notas</th><th class="num">Excedente</th>
+          <th class="num">Máquinas</th><th>Situação</th><th></th>
         </tr></thead>
         <tbody id="corpoClientes"></tbody>
       </table></div></div>
@@ -189,6 +190,15 @@
   }
 
   /** A data que uma licença de N dias vai ter, no formato da chave. */
+  /**
+   * Dias sem sinal ate a vaga de uma maquina voltar sozinha.
+   *
+   * Espelha `DIAS_SEM_SINAL_LIBERA` do servidor. Aqui ele so ESCREVE o
+   * texto da tela; quem decide continua sendo o servidor. Se um dia mudar
+   * la, esta constante vira mentira: e o unico ponto a acertar junto.
+   */
+  const DIAS_SEM_SINAL = 30
+
   function validadeEmDias(dias) {
     const n = Number(dias)
     if (!Number.isInteger(n) || n <= 0) return null
@@ -371,6 +381,17 @@
       }
       atualizarPrevias()
 
+      /**
+       * Conteudo solto depois dos campos.
+       *
+       * Existe porque uma tela precisa mostrar uma LISTA com botao em cada
+       * linha (os computadores da loja), e isso nao cabe no formato de
+       * campo. Fica aqui, e nao numa segunda funcao de dialogo, para nao
+       * haver duas caixas com comportamentos que divergem na terceira
+       * alteracao.
+       */
+      for (const bloco of (o.blocos || [])) caixa.appendChild(bloco)
+
       const erro = document.createElement('div')
       erro.className = 'aviso erro'
       erro.hidden = true
@@ -467,7 +488,19 @@
   $('formLogin').addEventListener('submit', async (ev) => {
     ev.preventDefault()
     const botao = $('botaoEntrar')
-    const senha = $('campoSenha').value
+    /**
+     * Espaco em volta da senha nao conta.
+     *
+     * ⚠️ Quem administra recebe a senha por mensagem e COLA aqui, e colar traz
+     * espaco no fim com facilidade. Sem esta linha, a senha certa volta como
+     * "senha incorreta", sem nenhuma pista na tela, e ainda gasta uma das 10
+     * tentativas por hora. Ja aconteceu.
+     *
+     * O corte e SO nas pontas: espaco no MEIO e caractere de senha como outro
+     * qualquer e continua valendo. E o servidor nao mexe em nada disso, porque
+     * quem compara la nao pode adivinhar o que o dono quis digitar.
+     */
+    const senha = $('campoSenha').value.trim()
     if (!senha) return
     botao.disabled = true
     mostrarErro($('erroLogin'), '')
@@ -806,6 +839,11 @@
     const comExcedente = clientes.filter((c) => (c.notas && c.notas.excedentes) > 0)
     const totalNotas = clientes.reduce((s, c) => s + ((c.notas && c.notas.emitidas) || 0), 0)
     const deRevenda = clientes.filter((c) => c.revendedorId).length
+    // Loja abrindo em mais maquinas do que contratou e conversa de reajuste,
+    // igual ao excedente de notas. Por isso os dois ficam lado a lado.
+    const acimaDeMaquinas = clientes.filter(
+      (c) => c.dispositivos && c.dispositivos.acimaDoLimite
+    )
     $('cartoesClientes').replaceChildren(
       cartao('Lojas', String(clientes.length), 'store'),
       cartao('De revendedor', String(deRevenda), 'handshake'),
@@ -816,6 +854,12 @@
         String(comExcedente.length),
         'triangle-alert',
         comExcedente.length > 0 ? 'alerta' : 'neutro'
+      ),
+      cartao(
+        'Acima do limite de máquinas',
+        String(acimaDeMaquinas.length),
+        'monitor',
+        acimaDeMaquinas.length > 0 ? 'alerta' : 'neutro'
       )
     )
 
@@ -823,9 +867,9 @@
     if (clientes.length === 0) {
       const tr = document.createElement('tr')
       const td = document.createElement('td')
-      // 9 = as colunas do <thead> desta tabela. Menos que isso e a mensagem
+      // 10 = as colunas do <thead> desta tabela. Menos que isso e a mensagem
       // para no meio da largura, com colunas vazias sobrando do lado.
-      td.colSpan = 9; td.className = 'vazio'
+      td.colSpan = 10; td.className = 'vazio'
       td.textContent = 'Nenhuma loja cadastrada.'
       tr.appendChild(td); corpo.replaceChildren(tr)
       return
@@ -897,6 +941,27 @@
       }
 
       /**
+       * Em quantas maquinas a loja abre.
+       *
+       * Traco quando ninguem combinou limite com ela, que e o estado de toda
+       * loja anterior a este recurso: mostrar "3 / 0" ali diria que ela esta
+       * irregular, e ela nao esta.
+       */
+      const maquinas = cl.dispositivos || { emUso: 0, limite: null, acimaDoLimite: false }
+      const tdMaq = document.createElement('td'); tdMaq.className = 'num'
+      if (maquinas.limite === null) {
+        tdMaq.textContent = maquinas.emUso > 0 ? String(maquinas.emUso) : '—'
+        tdMaq.className = 'num fraco'
+      } else if (maquinas.acimaDoLimite) {
+        const et = document.createElement('span')
+        et.className = 'etiqueta alerta'
+        et.textContent = maquinas.emUso + ' / ' + maquinas.limite
+        tdMaq.appendChild(et)
+      } else {
+        tdMaq.textContent = maquinas.emUso + ' / ' + maquinas.limite
+      }
+
+      /**
        * A situacao da loja, em UMA etiqueta.
        *
        * Antes esta coluna so falava de bloqueio e de cota, e mostrava um traco
@@ -936,6 +1001,10 @@
         et.className = 'etiqueta alerta'
         et.appendChild(icone('triangle-alert'))
         et.appendChild(document.createTextNode('Cota trava emissão'))
+      } else if (maquinas.acimaDoLimite) {
+        et.className = 'etiqueta alerta'
+        et.appendChild(icone('monitor'))
+        et.appendChild(document.createTextNode('Máquinas acima do plano'))
       } else {
         et.className = 'etiqueta ok'
         et.appendChild(icone('circle-check-big'))
@@ -948,6 +1017,7 @@
         { texto: 'Renovar licença', icone: 'refresh-cw', aoClicar: () => modalRenovarCliente(cl) },
         { texto: 'Mensalidade', icone: 'banknote', aoClicar: () => modalPreco(cl) },
         { texto: 'Cota de notas', icone: 'file-text', aoClicar: () => modalCota(cl) },
+        { texto: 'Máquinas', icone: 'monitor', aoClicar: () => modalDispositivos(cl) },
         '-',
         {
           texto: cl.bloqueadoPor ? 'Desbloquear loja' : 'Bloquear loja',
@@ -957,7 +1027,7 @@
         }
       ]))
 
-      tr.append(tdNome, tdOrigem, tdPlano, tdValidade, tdPreco, tdNotas, tdExc, tdSit, tdAcoes)
+      tr.append(tdNome, tdOrigem, tdPlano, tdValidade, tdPreco, tdNotas, tdExc, tdMaq, tdSit, tdAcoes)
       return tr
     }))
   }
@@ -1033,6 +1103,13 @@
           { valor: 'basico', rotulo: 'Básico' },
           { valor: 'pro', rotulo: 'Pro (com nota fiscal)' }
         ], ajuda: 'Só o Pro emite nota fiscal.' },
+        // Quantos computadores o plano dela inclui. Entra no CADASTRO porque
+        // faz parte do que se combina na hora de fechar, junto do preço, e
+        // não de uma revisão futura. O menu da linha continua ajustando.
+        { id: 'dispositivos', rotulo: 'Máquinas incluídas',
+          dica: 'em branco = sem limite', formato: 'inteiro',
+          ajuda: 'Em quantas máquinas o sistema abre. Vazio deixa sem limite, ' +
+                 'que é como ficam as lojas antigas. O 2º caixa conta como uma.' },
         { id: 'dias', rotulo: 'Dias de licença', valor: '30', formato: 'inteiro',
           ajuda: 'Quanto tempo a primeira chave vale. O padrão do sistema é 30.',
           previa: (val) => {
@@ -1070,6 +1147,18 @@
 
         const corpo = { clienteId: id, nome: String(val.nome).trim(), dias, plano: val.plano }
         if (String(val.contato || '').trim()) corpo.contato = String(val.contato).trim()
+
+        // Diferente da cota, o limite de máquinas vai na MESMA chamada do
+        // cadastro: ele é uma propriedade da licença, e mandá-lo depois abriria
+        // a janela em que a loja existe sem o limite que foi combinado.
+        const maquinasBruto = String(val.dispositivos || '').trim()
+        if (maquinasBruto !== '') {
+          const n = Number(maquinasBruto)
+          if (!Number.isInteger(n) || n < 1) {
+            return { campo: 'dispositivos', mensagem: 'informe 1 ou mais, ou deixe vazio' }
+          }
+          corpo.limiteDispositivos = n
+        }
 
         const bruto = String(val.mensalidade || '').trim()
         if (bruto !== '') {
@@ -1218,6 +1307,164 @@
         corpo.bloquear = sim
         const resp = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/cota',
           { metodo: 'POST', corpo })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await carregarClientes(cl.clienteId)
+  }
+
+  /**
+   * Em quantas máquinas esta loja abre, e QUAIS são.
+   *
+   * ── Por que a lista mostra nome e data ──────────────────────────────────────
+   * A pergunta que se faz nesta tela nunca é "quantas?", é "qual eu tiro?". O
+   * cliente liga dizendo que trocou a máquina do balcão; sem o nome dela e o
+   * último acesso, escolher qual liberar vira sorteio.
+   *
+   * ── O que "liberar" faz, e o que não faz ───────────────────────────────────
+   * A máquina liberada não para na hora, e nem deveria: ela descobre na
+   * conferência seguinte. Ao voltar, ela DISPUTA a vaga como qualquer outra, e
+   * é isso que faz liberar servir para tirar uma máquina a mais, não só para
+   * acomodar uma nova.
+   */
+  async function modalDispositivos(cl) {
+    const lista = document.createElement('div')
+    lista.style.marginTop = '14px'
+
+    function linhaVazia(texto) {
+      const p = document.createElement('p')
+      p.className = 'sub'
+      p.style.margin = '0'
+      p.textContent = texto
+      return p
+    }
+
+    async function pintar() {
+      const resp = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/dispositivos')
+      if (!resp.ok) {
+        lista.replaceChildren(linhaVazia('Não deu para carregar as máquinas: ' + resp.erro))
+        return
+      }
+      const dados = resp.dados
+      if (!dados.dispositivos.length) {
+        lista.replaceChildren(linhaVazia(
+          'Nenhuma máquina registrada ainda. A loja aparece aqui na primeira vez ' +
+          'que o sistema dela falar com o servidor.'
+        ))
+        return
+      }
+
+      lista.replaceChildren(...dados.dispositivos.map((d) => {
+        const item = document.createElement('div')
+        item.style.display = 'flex'
+        item.style.alignItems = 'center'
+        item.style.gap = '10px'
+        item.style.padding = '10px 0'
+        item.style.borderTop = '1px solid hsl(var(--border))'
+
+        const simbolo = icone(d.origem === 'terminal' ? 'laptop' : 'monitor')
+
+        const texto = document.createElement('div')
+        texto.style.flex = '1 1 auto'
+        texto.style.minWidth = '0'
+        const nome = document.createElement('div')
+        nome.textContent = d.nome
+        if (!d.ativo) nome.className = 'fraco'
+        const detalhe = document.createElement('div')
+        detalhe.className = 'sub'
+        detalhe.style.fontSize = '13px'
+        detalhe.textContent = d.liberadoEm
+          ? 'Vaga liberada em ' + dataBr(d.liberadoEm)
+          : (d.origem === 'terminal' ? '2º caixa' : 'Instalação completa') +
+            ' · último acesso ' + dataBr(d.ultimoEm) +
+            (d.versao ? ' · versão ' + d.versao : '')
+        texto.append(nome, detalhe)
+
+        item.append(simbolo, texto)
+
+        if (d.liberadoEm) {
+          const et = document.createElement('span')
+          et.className = 'etiqueta neutra'
+          et.textContent = 'Liberada'
+          item.appendChild(et)
+        } else if (!d.ativo) {
+          // Sumida ha tempo demais: a vaga dela ja voltou sozinha, e dizer isso
+          // evita a pergunta "por que ela ainda aparece na lista?".
+          const et = document.createElement('span')
+          et.className = 'etiqueta neutra'
+          et.textContent = 'Sem sinal'
+          item.appendChild(et)
+        } else {
+          const b = botao('Liberar vaga', 'neutro', async () => {
+            b.disabled = true
+            const r = await api(
+              '/admin/cliente/' + encodeURIComponent(cl.clienteId) +
+                '/dispositivo/' + encodeURIComponent(d.deviceId),
+              { metodo: 'DELETE' }
+            )
+            if (!r.ok) {
+              b.disabled = false
+              mostrarErro($('dialogoErroDispositivos'), r.erro)
+              return
+            }
+            await pintar()
+          })
+          item.appendChild(b)
+        }
+        return item
+      }))
+    }
+
+    const resumo = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/dispositivos')
+    if (!resumo.ok) return
+    const situacao = resumo.dados.situacao
+    await pintar()
+
+    const erroLista = document.createElement('div')
+    erroLista.id = 'dialogoErroDispositivos'
+    erroLista.className = 'aviso erro'
+    erroLista.hidden = true
+    erroLista.style.marginTop = '10px'
+
+    const r = await abrirModal({
+      titulo: 'Máquinas',
+      subtitulo:
+        (cl.nome || cl.clienteId) + ' — ' + situacao.emUso + ' em uso' +
+        (situacao.limite === null ? ' (sem limite combinado)' : ' de ' + situacao.limite),
+      aviso: 'Vaga de máquina que fica ' + DIAS_SEM_SINAL + ' dias sem dar sinal volta sozinha. ' +
+        'Liberar à mão é para quando o cliente trocou de máquina e não dá para esperar.',
+      campos: [
+        { id: 'limite', rotulo: 'Máquinas incluídas', formato: 'inteiro',
+          valor: situacao.limite === null ? '' : String(situacao.limite),
+          dica: 'em branco = sem limite',
+          ajuda: 'Vazio deixa a loja sem limite, que é como estão todas as antigas. ' +
+                 'O menor valor aceito é 1.' },
+        { id: 'permitir', rotulo: 'Deixar passar acima do limite?',
+          valor: resumo.dados.permitirAcimaDoLimite ? 'sim' : 'nao',
+          opcoes: [
+            { valor: 'nao', rotulo: 'Não, recusar a instalação' },
+            { valor: 'sim', rotulo: 'Sim, deixar entrar e me avisar' }
+          ],
+          ajuda: 'A recusa acontece na ATIVAÇÃO, quando ninguém está no meio de uma venda. ' +
+                 'Ligar isto deixa a loja passar do combinado e marca ela no painel.' }
+      ],
+      blocos: [lista, erroLista],
+      rotuloConfirmar: 'Salvar',
+      aoConfirmar: async (v) => {
+        const bruto = String(v.limite || '').trim()
+        const corpo = { permitirAcima: v.permitir === 'sim' }
+        if (bruto === '') corpo.limite = null
+        else {
+          const n = Number(bruto)
+          if (!Number.isInteger(n) || n < 1) {
+            return { campo: 'limite', mensagem: 'informe 1 ou mais, ou deixe vazio' }
+          }
+          corpo.limite = n
+        }
+        const resp = await api(
+          '/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/dispositivos',
+          { metodo: 'POST', corpo }
+        )
         return resp.ok ? null : { mensagem: resp.erro }
       }
     })

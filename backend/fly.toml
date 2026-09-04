@@ -26,3 +26,7 @@ primary_region = "gru"
 [env]
   DB_PATH = "/data/licenca.db"
   NODE_ENV = "production"
+  # Tem que ser IGUAL ao internal_port acima: e por esta porta que o Fly
+  # bate para saber se a maquina esta viva. Explicito de proposito, para a
+  # producao nao depender do padrao do codigo, que e outro (ver index.ts).
+  PORT = "8080"

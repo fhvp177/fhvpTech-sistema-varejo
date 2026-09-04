@@ -52,6 +52,62 @@ export function somarDiasNaExpiracao(
   return calcularExpiracao(diasContratados, base)
 }
 
+export type ChaveConferida =
+  | { ok: true; clienteId: string; expiracao: string }
+  | { ok: false; erro: string }
+
+/**
+ * Compara dois textos gastando o MESMO tempo, acertando ou errando.
+ *
+ * ⚠️ Não é preciosismo. Com `===`, o servidor responde mais rápido quanto
+ * menos prefixo estiver certo, e essa diferença, medida muitas vezes,
+ * entrega o HMAC byte a byte. Trocar por `===` não deixa vermelho nenhum
+ * teste de comportamento: por isso existe teste lendo o fonte.
+ */
+export function iguaisEmTempoConstante(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diferenca = 0
+  for (let i = 0; i < a.length; i++) diferenca |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diferenca === 0
+}
+
+/**
+ * A chave apresentada foi mesmo emitida por nós?
+ *
+ * ★ Serve à rota de vaga de dispositivo, que é PÚBLICA. Ali a chave faz as
+ * vezes de credencial, e é por isso que o `clienteId` sai DE DENTRO dela.
+ * Aceitar um `clienteId` solto no corpo do pedido deixaria qualquer pessoa
+ * lotar as vagas da loja dos outros.
+ *
+ * Validade não é conferida aqui de propósito: licença vencida já trava o
+ * app pelo caminho offline, e recusar a vaga por isso atrapalharia
+ * justamente quem está renovando.
+ */
+export async function conferirChaveDeLicenca(
+  segredo: string,
+  chave: unknown
+): Promise<ChaveConferida> {
+  if (typeof chave !== 'string') return { ok: false, erro: 'chave obrigatória' }
+  const partes = chave.trim().split(':')
+  if (partes.length !== 3) return { ok: false, erro: 'chave em formato inválido' }
+
+  const [clienteId, expiracao, hmac] = partes
+  // Aceita o id direto (LOJA) e o de revendedor (REV-LOJA), que é o único
+  // formato com hífen que existe.
+  if (!/^[A-Z0-9]{2,20}(-[A-Z0-9]{2,20})?$/.test(clienteId)) {
+    return { ok: false, erro: 'chave em formato inválido' }
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiracao)) {
+    return { ok: false, erro: 'chave em formato inválido' }
+  }
+
+  const esperado = await calcularHMAC(segredo, clienteId, expiracao)
+  if (!iguaisEmTempoConstante(hmac.toUpperCase(), esperado)) {
+    return { ok: false, erro: 'chave inválida' }
+  }
+  return { ok: true, clienteId, expiracao }
+}
+
 export async function gerarChaveLicenca(
   segredo: string,
   clienteId: string,

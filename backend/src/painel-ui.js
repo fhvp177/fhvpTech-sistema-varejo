@@ -42,6 +42,9 @@
     'lock-open': '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     'mail-check': '<path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><path d="m16 19 2 2 4-4"/>',
     'mail-x': '<path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h9"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><path d="m17 17 4 4"/><path d="m21 17-4 4"/>',
+    'laptop': '<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+    'monitor': '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>',
+    'circle-minus': '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/>',
     'octagon-alert': '<polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
     'phone': '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
     'pause': '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
@@ -52,15 +55,26 @@
     'users': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   }
 
-  /** Devolve o SVG de um icone. `tom` vira a cor via CSS, nunca fixa aqui. */
+  /**
+   * Devolve o SVG de um icone. `tom` vira a cor via CSS, nunca fixa aqui.
+   *
+   * ⚠️ A classe `icone` vai no PROPRIO SVG, e nao num invólucro. SVG com
+   * viewBox e sem largura estica ate o tamanho do pai, e o tamanho vinha so
+   * de regras de conteiner (`.com-icone svg` e companhia). Icone posto numa
+   * tela nova saia gigante, em silencio: foi assim que a lista de maquinas
+   * nasceu com um monitor ocupando a largura toda e o botao fora da tela.
+   *
+   * As regras de conteiner tem especificidade maior e continuam mandando
+   * onde ja existiam, entao nada do que estava certo muda.
+   */
   function icone(nome, extra) {
     const d = ICONES[nome]
     if (!d) return document.createComment('icone ' + nome + ' inexistente')
     const wrap = document.createElement('span')
-    wrap.className = extra || ''
     wrap.style.display = 'inline-flex'
     wrap.innerHTML =
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
+      '<svg class="icone' + (extra ? ' ' + extra : '') + '" ' +
+      'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
       'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
       'stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'
     return wrap.firstChild

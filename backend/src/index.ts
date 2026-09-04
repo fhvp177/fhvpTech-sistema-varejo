@@ -35,6 +35,9 @@ import {
   apagarSessoesDoRevendedor,
   contarNotasMesDeTodos,
   contarNotasMes,
+  listarDispositivos,
+  gravarDispositivo,
+  dispositivosDeTodos,
   levantarImpedimentosDoCliente,
   apagarClienteDoBanco,
   gravarSessaoAdmin,
@@ -48,6 +51,14 @@ import {
 } from './db.ts'
 import { foiRenovado, motivoDaRecusa, podeApagar } from './exclusaoCliente.ts'
 import { avaliarCota, cotaPadrao } from './cotaNotas.ts'
+import {
+  avaliarDispositivos,
+  decidirVaga,
+  estaAtiva,
+  nomeSeguroDeMaquina,
+  HORAS_ENTRE_CONFERENCIAS,
+  type OrigemDispositivo
+} from './dispositivos.ts'
 import {
   clienteBloqueado,
   limitarAoTeto,
@@ -63,7 +74,8 @@ import { enviarCodigoRecuperacao } from './email.ts'
 import {
   calcularExpiracao,
   somarDiasNaExpiracao,
-  gerarChaveLicenca
+  gerarChaveLicenca,
+  conferirChaveDeLicenca
 } from './licenca.ts'
 import { licencaAtiva } from './licencaGuard.ts'
 import { registrarRotasRelay } from './relay.ts'
@@ -236,6 +248,125 @@ app.get('/suporte/:clienteId', (c) => {
   })
 })
 
+/**
+ * Teto simples de pedidos de vaga por IP.
+ *
+ * Mora na memoria, e nao no banco, de propósito: reiniciar o processo zerar a
+ * contagem aqui não custa nada, porque quem tem chave válida é cliente de
+ * verdade. Serve contra script bobo, não contra adversário determinado.
+ */
+const MAX_VAGAS_POR_HORA = 60
+const pedidosDeVagaPorIp = new Map<string, { hora: string; n: number }>()
+
+function passouDoLimiteDeVagas(origem: string, hora: string): boolean {
+  if (pedidosDeVagaPorIp.size > 5000) {
+    for (const [ip, reg] of pedidosDeVagaPorIp) {
+      if (reg.hora !== hora) pedidosDeVagaPorIp.delete(ip)
+    }
+  }
+  const atual = pedidosDeVagaPorIp.get(origem)
+  if (!atual || atual.hora !== hora) {
+    pedidosDeVagaPorIp.set(origem, { hora, n: 1 })
+    return false
+  }
+  atual.n += 1
+  return atual.n > MAX_VAGAS_POR_HORA
+}
+
+/**
+ * Vaga de dispositivo: a maquina se apresenta e pede para abrir o sistema.
+ *
+ * ── Por que esta rota e PUBLICA ─────────────────────────────────────────────
+ * Quem chama e a loja, que nao tem sessao de painel nenhuma. O que faz as vezes
+ * de credencial e a propria chave de licenca: ela e assinada por HMAC com um
+ * segredo que so este servidor tem, e o `clienteId` sai DE DENTRO dela.
+ * ★ Aceitar um `clienteId` solto no corpo deixaria qualquer pessoa lotar as
+ * vagas da loja dos outros, que e um jeito barato de derrubar um concorrente.
+ *
+ * ── O que ela devolve, e o que o app faz com isso ───────────────────────────
+ * `concedida: true` vira passe local. O 403 com `concedida: false` e a UNICA
+ * resposta que impede a ativacao. Silencio (rede caida, servidor fora) nao e
+ * resposta: o app segue trabalhando e pergunta de novo depois.
+ */
+app.post('/licenca/dispositivo', async (c) => {
+  const origem = origemDoPedido(c.req.header('x-forwarded-for'))
+  if (passouDoLimiteDeVagas(origem, new Date().toISOString().slice(0, 13))) {
+    return c.json({ erro: 'muitos pedidos — tente novamente mais tarde' }, 429)
+  }
+
+  const body = await c.req
+    .json<{
+      chave?: string
+      deviceId?: string
+      digital?: string
+      nome?: string
+      origem?: OrigemDispositivo
+      versao?: string
+    }>()
+    .catch(() => null)
+  if (!body) return c.json({ erro: 'corpo inválido' }, 400)
+
+  const conferida = await conferirChaveDeLicenca(config.CHAVE_HMAC, body.chave)
+  if (!conferida.ok) return c.json({ erro: conferida.erro }, 400)
+
+  const deviceId = typeof body.deviceId === 'string' ? body.deviceId.trim() : ''
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(deviceId)) {
+    return c.json({ erro: 'deviceId inválido' }, 400)
+  }
+  // Digital vazia e ESTADO VALIDO: a coleta de hardware pode falhar num PC
+  // qualquer, e recusar a instalacao por isso seria punir o cliente por um
+  // driver. O que nao entra e lixo com cara de digital.
+  const digital = typeof body.digital === 'string' ? body.digital.trim() : ''
+  if (digital !== '' && !/^[a-f0-9]{16,64}$/.test(digital)) {
+    return c.json({ erro: 'digital inválida' }, 400)
+  }
+
+  const cliente = obterCliente(conferida.clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+
+  const agoraMs = Date.now()
+  const veredito = decidirVaga({
+    existentes: listarDispositivos(cliente.clienteId),
+    pedido: {
+      deviceId,
+      digital,
+      nome: nomeSeguroDeMaquina(body.nome),
+      origem: body.origem === 'terminal' ? 'terminal' : 'principal',
+      versao: typeof body.versao === 'string' ? body.versao.slice(0, 20) : undefined
+    },
+    limite: cliente.limiteDispositivos,
+    permitirAcimaDoLimite: cliente.permitirAcimaDoLimite === true,
+    agoraMs
+  })
+
+  if (!veredito.concedida) {
+    return c.json(
+      {
+        concedida: false,
+        motivo: veredito.motivo,
+        limite: veredito.limite,
+        mensagem: veredito.mensagem,
+        // So o nome e a data: e o que a tela precisa para a pessoa reconhecer
+        // qual computador liberar. Digital e identificador nao voltam.
+        emUso: veredito.emUso.map((d) => ({ nome: d.nome, ultimoEm: d.ultimoEm }))
+      },
+      403
+    )
+  }
+
+  gravarDispositivo(cliente.clienteId, veredito.registro, veredito.substitui)
+
+  return c.json({
+    concedida: true,
+    motivo: veredito.motivo,
+    limite: cliente.limiteDispositivos ?? null,
+    emUso: veredito.emUso,
+    // Quando perguntar de novo. Vai junto para o app nao carregar uma copia da
+    // constante e os dois lados nao discordarem do prazo.
+    reconferirEm: new Date(agoraMs + HORAS_ENTRE_CONFERENCIAS * 3_600_000).toISOString()
+  })
+})
+
 // Painel do revendedor: página única, servida pelo próprio backend.
 //
 // Mesma origem da API de propósito — sem CORS, sem token viajando entre
@@ -385,6 +516,8 @@ app.use('/admin/*', async (c, next) => {
 app.get('/admin/clientes', (c) => {
   const mes = c.req.query('mes')
   const contagem = contarNotasMesDeTodos(mes)
+  const maquinasPorLoja = dispositivosDeTodos()
+  const agoraMs = Date.now()
 
   const clientes = listarClientes().map((cl) => {
     const teto =
@@ -414,7 +547,16 @@ app.get('/admin/clientes', (c) => {
         // Verdadeiro só quando alguém ligou o bloqueio nesta loja. Serve para a
         // tela mostrar que ali existe uma cancela, não só uma régua.
         bloqueiaAcimaDoTeto: cl.bloquearAcimaDoTeto === true
-      }
+      },
+      // Em quantas máquinas esta loja abre. Vem já na lista, e não só na
+      // tela de detalhe, porque a pergunta que se faz olhando a carteira
+      // inteira é "quem está usando mais do que contratou?".
+      dispositivos: avaliarDispositivos(
+        maquinasPorLoja.get(cl.clienteId) ?? [],
+        cl.limiteDispositivos,
+        agoraMs
+      ),
+      permitirAcimaDoLimite: cl.permitirAcimaDoLimite === true
     }
   })
 
@@ -466,6 +608,110 @@ app.post('/admin/cliente/:clienteId/cota', async (c) => {
   })
 })
 
+/**
+ * As maquinas desta loja, para a tela mostrar qual liberar.
+ */
+app.get('/admin/cliente/:clienteId/dispositivos', (c) => {
+  const clienteId = c.req.param('clienteId')
+  const cliente = obterCliente(clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+
+  const agoraMs = Date.now()
+  const lista = listarDispositivos(clienteId)
+  return c.json({
+    clienteId,
+    limite: cliente.limiteDispositivos ?? null,
+    permitirAcimaDoLimite: cliente.permitirAcimaDoLimite === true,
+    situacao: avaliarDispositivos(lista, cliente.limiteDispositivos, agoraMs),
+    dispositivos: lista
+      .map((d) => ({ ...d, ativo: estaAtiva(d, agoraMs) }))
+      .sort((a, b) => (a.ultimoEm < b.ultimoEm ? 1 : -1))
+  })
+})
+
+/**
+ * Ajusta em quantas maquinas esta loja abre.
+ *
+ * `limite: null` devolve a loja ao estado "sem limite combinado", que e o de
+ * quem nunca negociou isso. NAO e o mesmo que zero.
+ *
+ * ⚠️ Zero e RECUSADO aqui. Na cota de notas ele tem uso ("nenhuma incluida"),
+ * mas em dispositivo ele significa "esta loja nao abre em lugar nenhum", que e
+ * quase sempre engano de digitacao e cujo estrago aparece so na proxima
+ * instalacao, longe de quem digitou. Para desligar uma loja existem o bloqueio
+ * e a validade, que dizem o que sao.
+ */
+app.post('/admin/cliente/:clienteId/dispositivos', async (c) => {
+  const clienteId = c.req.param('clienteId')
+  const cliente = obterCliente(clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+
+  const body = await c.req.json<{ limite?: number | null; permitirAcima?: boolean }>()
+
+  if (body.limite !== undefined) {
+    if (body.limite === null) {
+      delete cliente.limiteDispositivos
+    } else if (!Number.isInteger(body.limite) || body.limite < 1) {
+      return c.json(
+        { erro: 'limite deve ser inteiro >= 1, ou null para deixar sem limite' },
+        400
+      )
+    } else {
+      cliente.limiteDispositivos = body.limite
+    }
+  }
+  if (body.permitirAcima !== undefined) {
+    cliente.permitirAcimaDoLimite = body.permitirAcima === true
+  }
+  gravarCliente(cliente)
+
+  return c.json({
+    ok: true,
+    clienteId,
+    limite: cliente.limiteDispositivos ?? null,
+    permitirAcimaDoLimite: cliente.permitirAcimaDoLimite === true,
+    situacao: avaliarDispositivos(
+      listarDispositivos(clienteId),
+      cliente.limiteDispositivos,
+      Date.now()
+    )
+  })
+})
+
+/**
+ * Devolve a vaga de uma maquina.
+ *
+ * O registro NAO e apagado: ele fica marcado com a data, porque saber que
+ * aquele computador existiu e o que explica a conta depois.
+ *
+ * ★ A maquina liberada nao para na hora, e nem deveria: ela descobre na
+ * conferencia seguinte. E, ao voltar, ela DISPUTA a vaga como qualquer outra
+ * (ver `decidirVaga`). E isso que faz liberar valer para tirar um computador a
+ * mais, e nao so para acomodar um novo.
+ */
+app.delete('/admin/cliente/:clienteId/dispositivo/:deviceId', (c) => {
+  const clienteId = c.req.param('clienteId')
+  const deviceId = c.req.param('deviceId')
+  const cliente = obterCliente(clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+
+  const alvo = listarDispositivos(clienteId).find((d) => d.deviceId === deviceId)
+  if (!alvo) return c.json({ erro: 'dispositivo não encontrado' }, 404)
+  if (alvo.liberadoEm) return c.json({ erro: 'esta vaga já estava liberada' }, 409)
+
+  gravarDispositivo(clienteId, { ...alvo, liberadoEm: new Date().toISOString() })
+
+  return c.json({
+    ok: true,
+    liberado: alvo.nome,
+    situacao: avaliarDispositivos(
+      listarDispositivos(clienteId),
+      cliente.limiteDispositivos,
+      Date.now()
+    )
+  })
+})
+
 // Cria um cliente novo e devolve a 1ª chave (válida por `diasIniciais`).
 // Aceita opcionalmente `valorCentavosRenovacao` pra fixar preço por cliente
 // — quando definido, sobrescreve o que o app manda em POST /cobranca.
@@ -480,6 +726,10 @@ app.post('/admin/cliente', async (c) => {
     // que é o caso de todo cliente direto da FHVP.
     revendedorId?: string
     plano?: 'basico' | 'pro'
+    // Em quantas máquinas a loja abre. Vem no CADASTRO porque faz parte do
+    // que se combina na hora de fechar, e não de uma revisão futura. Ausente
+    // segue significando sem limite.
+    limiteDispositivos?: number
   }>()
   if (!body.clienteId || !body.nome) {
     return c.json({ erro: 'clienteId e nome são obrigatórios' }, 400)
@@ -533,7 +783,8 @@ app.post('/admin/cliente', async (c) => {
     ultimoPagamentoEm: agoraCadastro,
     valorCentavosRenovacao: body.valorCentavosRenovacao,
     revendedorId: revendedor?.revendedorId,
-    plano: body.plano
+    plano: body.plano,
+    limiteDispositivos: body.limiteDispositivos
   }
   gravarCliente(cliente)
 
@@ -1230,7 +1481,21 @@ async function confirmarPagamento(txid: string): Promise<ResultadoPagamento> {
   return { ok: true, cobranca: cobrancaPaga, chave }
 }
 
-const porta = Number(process.env.PORT ?? 8080)
+/**
+ * Porta do servidor local.
+ *
+ * ⚠️ NAO voltar para 8080. Esta maquina roda outros projetos, e o 8080 e de
+ * um deles (o site do Kiko Pescados, publicado por tunel do Cloudflare).
+ * Subir aqui na 8080 nao da erro de porta ocupada: o outro app ouve em IPv4
+ * e este acaba em IPv6, os dois no ar ao mesmo tempo. O tunel resolve
+ * `localhost` preferindo IPv6 e passa a entregar ESTE backend aos visitantes
+ * do site do outro projeto. Ja aconteceu duas vezes, em 2026-09-03.
+ *
+ * Em producao quem manda e o `PORT` do fly.toml, que existe justamente para
+ * o Fly nao depender do padrao daqui.
+ */
+const PORTA_PADRAO_LOCAL = 4899
+const porta = Number(process.env.PORT ?? PORTA_PADRAO_LOCAL)
 serve({ fetch: app.fetch, port: porta }, (info) => {
   console.log(`licenca API ouvindo em http://0.0.0.0:${info.port}`)
 })

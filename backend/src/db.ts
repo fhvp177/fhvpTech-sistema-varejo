@@ -9,6 +9,7 @@ import Database from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Cliente, Cobranca } from './tipos.ts'
+import type { Dispositivo } from './dispositivos.ts'
 import type { Revendedor } from './revenda.ts'
 import type { SessaoRevenda, PedidoRecuperacao } from './revendaAuth.ts'
 import type { SessaoAdmin } from './adminAuth.ts'
@@ -189,6 +190,21 @@ db.exec(`
     total INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (cliente_id, mes)
   );
+
+  -- Maquinas que abrem o sistema de cada loja. E o unico lugar do sistema
+  -- onde elas sao CONTADAS: a licenca e validada offline, entao nenhuma
+  -- maquina sabe da existencia das outras. As regras estao em dispositivos.ts.
+  --
+  -- A chave e o par (loja, deviceId). A digital do hardware fica DENTRO do
+  -- JSON, e nao na chave, porque ela muda quando o cliente troca uma peca, e
+  -- chave primaria que muda vira registro orfao segurando uma vaga.
+  CREATE TABLE IF NOT EXISTS dispositivos (
+    clienteId TEXT NOT NULL,
+    deviceId TEXT NOT NULL,
+    data TEXT NOT NULL,
+    PRIMARY KEY (clienteId, deviceId)
+  );
+  CREATE INDEX IF NOT EXISTS idx_dispositivos_loja ON dispositivos (clienteId);
 `)
 
 // A tabela pode ter nascido antes da NF-e existir; acrescenta a coluna quando
@@ -219,6 +235,16 @@ const stmts = {
   apagarNumeracaoDoCliente: db.prepare('DELETE FROM nfce_numero WHERE cliente_id = ?'),
   apagarContagemDoCliente: db.prepare('DELETE FROM nfce_contagem WHERE cliente_id = ?'),
   apagarChatDoCliente: db.prepare('DELETE FROM chat_custo WHERE cliente_id = ?'),
+  listDispositivos: db.prepare('SELECT data FROM dispositivos WHERE clienteId = ?'),
+  listTodosDispositivos: db.prepare('SELECT clienteId, data FROM dispositivos'),
+  setDispositivo: db.prepare(
+    `INSERT INTO dispositivos (clienteId, deviceId, data) VALUES (?, ?, ?)
+     ON CONFLICT(clienteId, deviceId) DO UPDATE SET data = excluded.data`
+  ),
+  apagarDispositivo: db.prepare(
+    'DELETE FROM dispositivos WHERE clienteId = ? AND deviceId = ?'
+  ),
+  apagarDispositivosDoCliente: db.prepare('DELETE FROM dispositivos WHERE clienteId = ?'),
   getRevendedor: db.prepare('SELECT data FROM revendedores WHERE revendedorId = ?'),
   listRevendedores: db.prepare('SELECT data FROM revendedores'),
   setRevendedor: db.prepare(
@@ -490,6 +516,7 @@ export function apagarClienteDoBanco(clienteId: string): void {
     stmts.apagarNumeracaoDoCliente.run(id)
     stmts.apagarContagemDoCliente.run(id)
     stmts.apagarChatDoCliente.run(id)
+    stmts.apagarDispositivosDoCliente.run(id)
   })
   emTransacao(clienteId)
 }
@@ -498,6 +525,57 @@ export function apagarClienteDoBanco(clienteId: string): void {
 export function listarClientes(): Cliente[] {
   const rows = stmts.listClientes.all() as Array<{ data: string }>
   return rows.map((r) => JSON.parse(r.data) as Cliente)
+}
+
+// Maquinas de uma loja. Guardadas como JSON, igual clientes e revendedores:
+// o formato do registro mora em dispositivos.ts, e espalhar as colunas aqui
+// obrigaria as rotas a remonta-lo na mao toda vez.
+export function listarDispositivos(clienteId: string): Dispositivo[] {
+  const rows = stmts.listDispositivos.all(clienteId) as Array<{ data: string }>
+  return rows.map((r) => JSON.parse(r.data) as Dispositivo)
+}
+
+/**
+ * As maquinas de TODAS as lojas, numa consulta so.
+ *
+ * A lista do painel desenha uma linha por loja e quer a contagem em cada
+ * uma. Perguntar loja a loja daria uma consulta por cliente para montar uma
+ * tabela, que e exatamente o que `contarNotasMesDeTodos` evita ali do lado.
+ */
+export function dispositivosDeTodos(): Map<string, Dispositivo[]> {
+  const rows = stmts.listTodosDispositivos.all() as Array<{
+    clienteId: string
+    data: string
+  }>
+  const porLoja = new Map<string, Dispositivo[]>()
+  for (const r of rows) {
+    const d = JSON.parse(r.data) as Dispositivo
+    const atual = porLoja.get(r.clienteId)
+    if (atual) atual.push(d)
+    else porLoja.set(r.clienteId, [d])
+  }
+  return porLoja
+}
+
+/**
+ * Grava a maquina e, quando ela HERDOU a vaga de um registro anterior (o
+ * cliente formatou o PC), apaga o antigo na MESMA transacao.
+ *
+ * Em dois passos, uma falha no meio deixaria a loja com duas linhas para uma
+ * maquina so: uma vaga a menos do que ela pagou, e ninguem entendendo por que.
+ */
+export function gravarDispositivo(
+  clienteId: string,
+  d: Dispositivo,
+  substitui?: string
+): void {
+  const emTransacao = db.transaction(() => {
+    if (substitui && substitui !== d.deviceId) {
+      stmts.apagarDispositivo.run(clienteId, substitui)
+    }
+    stmts.setDispositivo.run(clienteId, d.deviceId, JSON.stringify(d))
+  })
+  emTransacao()
 }
 
 export function obterRevendedor(revendedorId: string): Revendedor | null {
