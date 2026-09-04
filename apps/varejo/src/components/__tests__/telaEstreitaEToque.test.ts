@@ -233,10 +233,52 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(TW).toContain('hoverOnlyWhenSupported: true')
   })
 
-  it('o Assistente mora acima da ilha, e abaixo dela na pilha', () => {
-    const bloco = blocoDaIlha()
-    expect(bloco).toMatch(/\.fab-assistente\s*\{[^}]*z-index: 19/)
-    expect(bloco).toMatch(/bottom: calc\(14px \+ 62px/)
+  it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {
+    // ⚠️ A primeira tentativa fixava a posição dele pelo CSS. Isso tirava o
+    // botão de cima do conteúdo e MATAVA o arraste junto, que era justamente o
+    // que o dono usava. A regra certa não é amarrar: é mudar o padrão.
+    const CHAT = readFileSync(join(SRC, 'components', 'ChatAssistente.tsx'), 'utf8')
+
+    // 88 = 14 (folga da ilha) + 62 (altura dela) + 12 de respiro.
+    expect(CHAT).toMatch(/window\.innerWidth < 1024/)
+    expect(CHAT).toContain('{ right: 14, bottom: 88 }')
+
+    // O arraste segue vivo: sem `touch-none` o navegador lê o gesto como
+    // rolagem e o botão não sai do lugar.
+    expect(CHAT).toContain('onPointerDown={aoPressionar}')
+    expect(CHAT).toContain('touch-none')
+
+    // E nada no CSS pode voltar a amarrar as duas propriedades.
+    expect(blocoDaIlha()).not.toContain('.fab-assistente')
+  })
+
+  it('★ no celular ele é só o círculo, sem o rótulo', () => {
+    // A cápsula com a palavra "Assistente" tinha quase 150px numa tela de 360 e
+    // cobria nome de cliente, preço e valor de venda nas quatro capturas.
+    const CHAT = readFileSync(join(SRC, 'components', 'ChatAssistente.tsx'), 'utf8')
+    expect(CHAT).toContain('h-12 w-12 touch-none')
+    expect(CHAT).toMatch(/hidden text-sm font-medium lg:inline/)
+    expect(CHAT).toContain('aria-label="Assistente de IA"')
+  })
+
+  it('★ o sino sai da faixa branca e vira flutuante na web', () => {
+    // A faixa de topo passou a ser da marca; o sino dentro dela era o que fazia
+    // aquela tira existir sem dizer nada.
+    expect(APP).toMatch(/__ALVO__ !== 'web' && vendedor\?\.papel === 'dono'/)
+    expect(APP).toContain('fixed left-[14px] z-[19]')
+    // Canto inferior ESQUERDO: o centro é da ilha e a direita é do assistente.
+    expect(APP).toMatch(/left-\[14px\]/)
+  })
+
+  it('★ a faixa de topo é a marca, e só no celular', () => {
+    const MARCA = readFileSync(join(SRC, 'components', 'BarraMarca.tsx'), 'utf8')
+    expect(MARCA).toContain('lg:hidden')
+    expect(MARCA).toContain('sticky top-0')
+    // Abaixo do 20 da ilha: a faixa nunca cobre a navegação.
+    expect(MARCA).toContain('z-[15]')
+    // O nome é texto de verdade, não recorte da imagem: acompanha o tema
+    // escuro e o leitor de tela o lê.
+    expect(MARCA).toMatch(/FHVP <span className="text-primary">Tech<\/span>/)
   })
 
   it('a barra do núcleo não conhece o roteador', () => {

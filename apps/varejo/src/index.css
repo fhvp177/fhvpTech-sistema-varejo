@@ -450,21 +450,6 @@
     transform: translateY(1px);
   }
 
-  /* ---------- o outro flutuante: o Assistente (§4) ----------
-     Ele é arrastável e guarda onde foi largado, o que é útil no monitor e é
-     exatamente o que o põe sobre um nome de cliente no celular: a posição
-     salva numa tela de 1400px não quer dizer nada numa de 360.
-
-     Aqui as duas propriedades são redefinidas, e a posição salva simplesmente
-     não é consultada. Ele passa a morar ACIMA da ilha, alinhado a ela:
-     `z-index: 19` fica abaixo do 20 dela, e os 62px são a altura dela, então
-     ele nunca a cobre nem cobre a última linha da lista. */
-  [data-alvo='web'] .fab-assistente {
-    right: max(14px, calc(50vw - 202px + 14px));
-    bottom: calc(14px + 62px + env(safe-area-inset-bottom, 0px));
-    z-index: 19;
-  }
-
   /* ---------- o respiro de quem rola (§3.3-d) ----------
      92px = altura da ilha + folga. Sem isto ela cobre o fim da lista para
      sempre, e o lojista nunca descobre que havia mais uma linha.

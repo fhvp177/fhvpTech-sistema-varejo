@@ -69,6 +69,7 @@ import { construirSlidesGuia } from './data/slidesGuia'
 import NovidadesModal, { type ItemNovidade } from '@fhvptech/core/ui/NovidadesModal'
 import { NOVIDADES, novidadesParaMostrar } from './data/novidades'
 import SinoNotificacoesHost from './components/SinoNotificacoesHost'
+import { BarraMarca } from './components/BarraMarca'
 import { ToastProvider, useToast } from '@fhvptech/core/ui/toast'
 import { ConfirmProvider } from '@fhvptech/core/ui/confirm'
 import { ImpressaoProvider } from './components/ImpressaoProvider'
@@ -607,12 +608,51 @@ const App: FC = () => {
                           <Menu className="w-5 h-5" />
                         </button>
                       )}
-                      {vendedor?.papel === 'dono' && (
+                      {/*
+                        O sino só fica AQUI no programa instalado. Na web ele
+                        virou um flutuante (logo abaixo): a faixa de topo passou
+                        a ser da marca, e o sino dentro dela era o que fazia
+                        aquela tira branca existir sem dizer nada.
+                      */}
+                      {__ALVO__ !== 'web' && vendedor?.papel === 'dono' && (
                         <span data-tour="sino">
                           <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
                         </span>
                       )}
                     </div>
+                  )}
+
+                  {/*
+                    A marca no topo, só no celular. É a primeira coisa da página
+                    no Kiko, e é um dos motivos de ele parecer aplicativo.
+                  */}
+                  {__ALVO__ === 'web' && !pdvAtivo && vendedor && <BarraMarca />}
+
+                  {/*
+                    O sino, flutuante, no canto inferior ESQUERDO.
+
+                    Os outros dois cantos já têm dono: a ilha ocupa o centro de
+                    baixo e o assistente nasce na direita. A esquerda é o único
+                    lugar da faixa do polegar em que os três não se atropelam, e
+                    diferente do topo ela não cobre dado nenhum das listas.
+
+                    `z-index` 19, abaixo do 20 da ilha: ele nunca cobre a
+                    navegação.
+                  */}
+                  {__ALVO__ === 'web' && !pdvAtivo && vendedor?.papel === 'dono' && (
+                    <span
+                      data-tour="sino"
+                      /*
+                        O INVOLUCRO e a bolinha. O componente do sino vive no
+                        nucleo e e compartilhado com a assistencia: dar a ele
+                        um modo flutuante mudaria as duas de uma vez, por um
+                        pedido que so vale para a web do varejo.
+                      */
+                      className="fixed left-[14px] z-[19] flex h-12 w-12 items-center justify-center rounded-full border bg-background shadow-lg lg:hidden"
+                      style={{ bottom: 'calc(14px + 62px + 12px + env(safe-area-inset-bottom, 0px))' }}
+                    >
+                      <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
+                    </span>
                   )}
                   {/*
                     `tem-ilha` reserva a altura da barra flutuante em quem de

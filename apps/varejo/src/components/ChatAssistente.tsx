@@ -1,5 +1,5 @@
 import { FC, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
-import { Bot, Send, X, Sparkles } from 'lucide-react'
+import { Bot, Send, X, BotMessageSquare } from 'lucide-react'
 
 type Mensagem = { role: 'user' | 'assistant'; content: string; erro?: boolean }
 
@@ -13,7 +13,21 @@ const SUGESTOES = [
 // inferior-direito mantém o comportamento atual: a janela "cresce" pra cima/
 // esquerda a partir do botão. Persistido pra lembrar onde o lojista largou.
 type Pos = { right: number; bottom: number }
-const POS_PADRAO: Pos = { right: 24, bottom: 24 }
+/**
+ * Onde ele nasce quando ninguém o arrastou ainda.
+ *
+ * ⚠️ No celular a ilha de navegação ocupa a faixa de baixo, então 24px o
+ * deixaria em cima dela. Os 88px = 14 (folga da ilha) + 62 (altura dela) +
+ * 12 de respiro.
+ *
+ * Isto é um PADRÃO, não uma amarra: quem arrastar continua mandando. Fixar a
+ * posição pelo CSS resolveria o estorvo e mataria o arraste junto — foi o que
+ * eu fiz na primeira tentativa, e estava errado.
+ */
+const POS_PADRAO: Pos =
+  typeof window !== 'undefined' && window.innerWidth < 1024
+    ? { right: 14, bottom: 88 }
+    : { right: 24, bottom: 24 }
 const MARGEM = 8
 const STORAGE_KEY = 'chat-assistente-pos'
 
@@ -156,10 +170,20 @@ const ChatAssistente: FC = () => {
           onPointerDown={aoPressionar}
           onClick={() => { if (!moveuRef.current) setAberto(true) }}
           title="Assistente de IA — arraste para mover"
-          className="flex touch-none items-center gap-2 rounded-full bg-blue-600 px-4 py-3 text-white shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-colors"
+          aria-label="Assistente de IA"
+          /*
+            Só o círculo, sem o rótulo. Numa tela de 360px a cápsula com a
+            palavra "Assistente" tinha quase 150px de largura e cobria nome de
+            cliente, preço e valor de venda — era o pior vizinho da tela.
+
+            48px é maior que os 44 que o dedo pede, então encolher não custou
+            alcance. `touch-none` continua: é o que impede o navegador de
+            interpretar o arraste como rolagem.
+          */
+          className="flex h-12 w-12 touch-none items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/90 lg:h-auto lg:w-auto lg:gap-2 lg:px-4 lg:py-3"
         >
-          <Sparkles className="w-5 h-5" />
-          <span className="text-sm font-medium">Assistente</span>
+          <BotMessageSquare className="w-5 h-5 shrink-0" />
+          <span className="hidden text-sm font-medium lg:inline">Assistente</span>
         </button>
       ) : (
         <div className="flex w-[380px] max-w-[calc(100vw-3rem)] flex-col rounded-xl border border-slate-200 bg-white shadow-2xl">
