@@ -1,6 +1,6 @@
 {
   "name": "fhvptech-assistencia",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Sistema de gestão para assistência técnica (FHVP Tech)",
   "main": "out/main/index.js",
   "author": "",
