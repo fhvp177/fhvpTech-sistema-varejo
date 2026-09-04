@@ -173,6 +173,56 @@ test('★ o SERVIDOR não corta espaço: quem decide o que é a senha é o dono 
   )
 })
 
+// ── Excluir loja ───────────────────────────────────────────────────────────
+
+test('★ excluir loja exige DIGITAR o código, não só clicar', () => {
+  // Mesma proteção do "Bloquear rede". Sem ela, a ação mais destrutiva do
+  // painel fica a um clique errado de distância, numa tela que lista todas as
+  // lojas uma embaixo da outra.
+  const modal = PAINEL.slice(
+    PAINEL.indexOf('async function modalExcluirCliente'),
+    PAINEL.indexOf('async function modalBloqueioCliente')
+  )
+  assert.ok(modal.length > 200, 'sumiu o diálogo de excluir loja')
+  assert.match(modal, /v\.confirmar !== cl\.clienteId/)
+  assert.match(modal, /perigo: true/)
+  assert.match(modal, /metodo: 'DELETE'/)
+})
+
+test('★ a tela NÃO decide quem pode ser apagado: quem decide é o servidor', () => {
+  // As travas (nota emitida, série reservada, renovação, CNPJ) moram na rota.
+  // Repetidas aqui, divergiriam na primeira alteração, e a tela passaria a
+  // prometer o que o servidor recusa — ou pior, a esconder o que ele permite.
+  const modal = PAINEL.slice(
+    PAINEL.indexOf('async function modalExcluirCliente'),
+    PAINEL.indexOf('async function modalBloqueioCliente')
+  )
+  for (const trava of ['emissoes', 'seriesUsadas', 'renovado', 'cnpjEmitente']) {
+    assert.equal(
+      modal.includes(trava),
+      false,
+      `a tela passou a decidir por "${trava}", que é regra do servidor`
+    )
+  }
+  assert.match(modal, /resp\.ok \? null : \{ mensagem: resp\.erro \}/)
+})
+
+test('a exclusão avisa que o sistema instalado NÃO para', () => {
+  // A licença é validada offline: apagar o cadastro não fecha a loja. Sem este
+  // aviso, apagar vira uma expectativa errada sobre o que aconteceu.
+  const modal = PAINEL.slice(
+    PAINEL.indexOf('async function modalExcluirCliente'),
+    PAINEL.indexOf('async function modalBloqueioCliente')
+  )
+  assert.match(modal, /NÃO para/)
+  assert.match(modal, /offline/)
+})
+
+test('a ação destrutiva fica no fim do menu, com o ícone dela', () => {
+  assert.match(PAINEL, /texto: 'Excluir loja',\s*\n\s*icone: 'trash-2',\s*\n\s*perigo: true/)
+  assert.ok(UI.includes("'trash-2':"), 'falta o ícone trash-2 em painel-ui.js')
+})
+
 // ── Ícones ─────────────────────────────────────────────────────────────────
 
 test('os ícones são embutidos, porque a CSP proíbe buscar de fora', () => {

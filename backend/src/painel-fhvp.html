@@ -1024,6 +1024,12 @@
           icone: cl.bloqueadoPor ? 'lock-open' : 'lock',
           perigo: !cl.bloqueadoPor,
           aoClicar: () => modalBloqueioCliente(cl)
+        },
+        {
+          texto: 'Excluir loja',
+          icone: 'trash-2',
+          perigo: true,
+          aoClicar: () => modalExcluirCliente(cl)
         }
       ]))
 
@@ -1469,6 +1475,44 @@
       }
     })
     if (r) await carregarClientes(cl.clienteId)
+  }
+
+  /**
+   * Apaga o cadastro de uma loja.
+   *
+   * ⚠️ O que isto NAO faz: parar o sistema que ja esta instalado. A licenca e
+   * validada OFFLINE, entao a loja continua abrindo ate a data da chave dela.
+   * O que some e o vinculo com o servidor: renovacao, PIX, chatbot, nota fiscal
+   * e a contagem de maquinas.
+   *
+   * Quem decide se pode apagar e o SERVIDOR, e ele recusa cadastro com nota
+   * emitida, numero de serie reservado, renovacao ou CNPJ vinculado. A recusa
+   * volta em 409 com o motivo escrito; a tela so mostra.
+   */
+  async function modalExcluirCliente(cl) {
+    const r = await abrirModal({
+      titulo: 'Excluir a loja ' + (cl.nome || cl.clienteId) + '?',
+      aviso: 'O cadastro sai do licenciador junto com a contagem de notas, o custo de ' +
+        'chatbot e as máquinas registradas. O sistema já instalado NÃO para: a licença ' +
+        'vale offline até ' + dataBr(cl.validadeAtual) + '. Não há como desfazer.',
+      avisoTipo: 'erro',
+      campos: [
+        { id: 'confirmar', rotulo: 'Digite o código da loja para confirmar',
+          dica: cl.clienteId,
+          ajuda: 'A digitação existe para separar isto de um clique errado.' }
+      ],
+      rotuloConfirmar: 'Excluir loja',
+      perigo: true,
+      aoConfirmar: async (v) => {
+        if (v.confirmar !== cl.clienteId) {
+          return { campo: 'confirmar', mensagem: 'o código não confere' }
+        }
+        const resp = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId),
+          { metodo: 'DELETE' })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await carregarClientes()
   }
 
   async function modalBloqueioCliente(cl) {
