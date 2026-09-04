@@ -81,6 +81,28 @@ export function podeApagar(i: Impedimentos): boolean {
 }
 
 /**
+ * Impedimento que NENHUMA confirmação derruba.
+ *
+ * ★ A linha é entre regra COMERCIAL e regra FISCAL, e ela é o ponto todo da
+ * exclusão forçada.
+ *
+ * Renovação paga é comercial: diz que houve dinheiro, e quem administra pode
+ * saber que aquele dinheiro foi um teste dele mesmo, feito para exercitar o
+ * fluxo do PIX. É o mesmo raciocínio que este módulo já aplica à validade
+ * estendida à mão, no cabeçalho: não faz sentido a regra proteger alguém de
+ * si mesmo.
+ *
+ * Nota emitida, número de série reservado e CNPJ vinculado são fiscais. Para
+ * a SEFAZ aquele número existe, e apagar o cadastro deixa a numeração livre
+ * para recomeçar do 1 se um dia nascer outro cadastro com o mesmo id. Isso
+ * não é decisão de dono: é problema com o fisco, e por isso não há
+ * confirmação, marcação ou insistência que passe por cima.
+ */
+export function impedimentoFiscal(i: Impedimentos): boolean {
+  return i.emissoes > 0 || i.seriesUsadas > 0 || i.temCnpj
+}
+
+/**
  * A frase que explica a recusa a quem está do outro lado da API.
  *
  * Diz o QUE impede e o que fazer no lugar — "não pode" sozinho faria a pessoa

@@ -223,6 +223,56 @@ test('a ação destrutiva fica no fim do menu, com o ícone dela', () => {
   assert.ok(UI.includes("'trash-2':"), 'falta o ícone trash-2 em painel-ui.js')
 })
 
+test('★ a rota só aceita forçar quando o impedimento NÃO é fiscal', () => {
+  const rota = BACKEND.slice(
+    BACKEND.indexOf("app.delete('/admin/cliente/:clienteId'"),
+    BACKEND.indexOf("app.post('/admin/cliente/:clienteId/bloqueio'")
+  )
+  assert.ok(rota.length > 200, 'sumiu a rota de exclusão')
+  // O padrão é NÃO forçar. Um `!== '0'` no lugar do `=== '1'` faria toda
+  // exclusão nascer forçada, e a trava comercial deixaria de existir sem
+  // que nada na tela mudasse.
+  assert.match(rota, /c\.req\.query\('forcar'\) === '1'/)
+  assert.match(rota, /const travaFiscal = impedimentoFiscal\(impedimentos\)/)
+  assert.match(rota, /!podeApagar\(impedimentos\) && \(!forcado \|\| travaFiscal\)/)
+})
+
+test('a recusa fiscal DIZ que não tem como forçar, em vez de só negar', () => {
+  const rota = BACKEND.slice(
+    BACKEND.indexOf("app.delete('/admin/cliente/:clienteId'"),
+    BACKEND.indexOf("app.post('/admin/cliente/:clienteId/bloqueio'")
+  )
+  assert.match(rota, /não tem como ser forçada/)
+  assert.match(rota, /forcavel: !travaFiscal/)
+})
+
+test('a exclusão forçada fica no log, separada da comum', () => {
+  // Apagar cadastro com pagamento é decisão que alguém vai querer reconstituir
+  // depois. O log é o único lugar onde ela sobra.
+  const rota = BACKEND.slice(
+    BACKEND.indexOf("app.delete('/admin/cliente/:clienteId'"),
+    BACKEND.indexOf("app.post('/admin/cliente/:clienteId/bloqueio'")
+  )
+  assert.match(rota, /À FORÇA/)
+})
+
+test('a tela oferece a força, e explica o que ela NÃO alcança', () => {
+  const modal = PAINEL.slice(
+    PAINEL.indexOf('async function modalExcluirCliente'),
+    PAINEL.indexOf('async function modalBloqueioCliente')
+  )
+  // ⚠️ Casar só com /valor: 'nao'/ não serve: a LISTA DE OPÇÕES tem uma opção
+  // com esse mesmo valor, então a asserção passava mesmo com o campo abrindo
+  // em 'sim'. A mutação pegou isso.
+  assert.match(
+    modal,
+    /id: 'forcar', rotulo: '[^']+', valor: 'nao'/,
+    'a força não pode vir marcada por padrão'
+  )
+  assert.match(modal, /nota emitida/)
+  assert.match(modal, /forcar === 'sim' \? '\?forcar=1' : ''/)
+})
+
 // ── Ícones ─────────────────────────────────────────────────────────────────
 
 test('os ícones são embutidos, porque a CSP proíbe buscar de fora', () => {

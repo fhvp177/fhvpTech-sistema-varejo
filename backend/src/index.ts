@@ -49,7 +49,12 @@ import {
   registrarTentativaAdmin,
   zerarTentativasAdmin
 } from './db.ts'
-import { foiRenovado, motivoDaRecusa, podeApagar } from './exclusaoCliente.ts'
+import {
+  foiRenovado,
+  impedimentoFiscal,
+  motivoDaRecusa,
+  podeApagar
+} from './exclusaoCliente.ts'
 import { avaliarCota, cotaPadrao } from './cotaNotas.ts'
 import {
   avaliarDispositivos,
@@ -853,15 +858,36 @@ app.delete('/admin/cliente/:clienteId', async (c) => {
     temCnpj: Boolean(cliente.cnpjEmitente)
   }
 
-  if (!podeApagar(impedimentos)) {
+  // `?forcar=1` derruba a trava COMERCIAL (renovação paga) e só ela. O que é
+  // fiscal continua recusado, com ou sem insistência: ver `impedimentoFiscal`.
+  const forcado = c.req.query('forcar') === '1'
+  const travaFiscal = impedimentoFiscal(impedimentos)
+
+  if (!podeApagar(impedimentos) && (!forcado || travaFiscal)) {
     // 409 e não 403: não é falta de permissão, é o estado do recurso que não
     // permite. Quem lê o código do erro precisa saber que insistir não ajuda.
-    return c.json({ erro: motivoDaRecusa(clienteId, impedimentos), impedimentos }, 409)
+    const base = motivoDaRecusa(clienteId, impedimentos)
+    return c.json(
+      {
+        erro: travaFiscal
+          ? `${base} Esta recusa é fiscal e não tem como ser forçada.`
+          : `${base} Para apagar assim mesmo, marque a opção de ignorar a trava de renovação.`,
+        impedimentos,
+        // Diz à tela se existe caminho adiante, em vez de deixá-la adivinhar
+        // pelo texto da mensagem.
+        forcavel: !travaFiscal
+      },
+      409
+    )
   }
 
   apagarClienteDoBanco(clienteId)
-  console.log(`[admin] cliente ${clienteId} apagado (sem emissão, sem renovação)`)
-  return c.json({ ok: true, apagado: clienteId })
+  console.log(
+    forcado && impedimentos.renovado
+      ? `[admin] cliente ${clienteId} apagado À FORÇA (tinha renovação paga)`
+      : `[admin] cliente ${clienteId} apagado (sem emissão, sem renovação)`
+  )
+  return c.json({ ok: true, apagado: clienteId, forcado })
 })
 
 app.post('/admin/cliente/:clienteId/bloqueio', async (c) => {

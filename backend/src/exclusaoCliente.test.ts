@@ -22,6 +22,7 @@ import assert from 'node:assert/strict'
 
 import {
   foiRenovado,
+  impedimentoFiscal,
   motivoDaRecusa,
   podeApagar,
   type Impedimentos
@@ -165,4 +166,55 @@ test('a recusa aponta a saída certa: bloquear a renovação', () => {
 test('e explica por que, em vez de só proibir', () => {
   const m = motivoDaRecusa('NETO', { ...LIMPO, emissoes: 1 })
   assert.ok(m.includes('SEFAZ'))
+})
+
+// ── A linha da exclusão forçada ────────────────────────────────────────────
+//
+// Forçar derruba a trava COMERCIAL (renovação paga) e só ela. O que é fiscal
+// continua recusado com ou sem insistência. Se esta separação cair, apagar um
+// cadastro que emitiu nota libera a numeração da NFC-e para recomeçar do 1 num
+// cadastro futuro de mesmo id, e nota com número repetido vira problema com a
+// SEFAZ, não com o software.
+
+test('★ nota emitida é impedimento FISCAL: força nenhuma alcança', () => {
+  assert.equal(
+    impedimentoFiscal({ emissoes: 1, seriesUsadas: 0, renovado: false, temCnpj: false }),
+    true
+  )
+})
+
+test('★ número de série reservado também, mesmo sem nota transmitida', () => {
+  // O número foi RESERVADO: para a SEFAZ ele existe, ainda que a transmissão
+  // tenha falhado. É o caso mais fácil de subestimar.
+  assert.equal(
+    impedimentoFiscal({ emissoes: 0, seriesUsadas: 1, renovado: false, temCnpj: false }),
+    true
+  )
+})
+
+test('★ CNPJ vinculado também: a loja configurou dados fiscais de verdade', () => {
+  assert.equal(
+    impedimentoFiscal({ emissoes: 0, seriesUsadas: 0, renovado: false, temCnpj: true }),
+    true
+  )
+})
+
+test('★ renovação paga NÃO é fiscal: é a única coisa que a força derruba', () => {
+  assert.equal(
+    impedimentoFiscal({ emissoes: 0, seriesUsadas: 0, renovado: true, temCnpj: false }),
+    false
+  )
+})
+
+test('cadastro limpo não tem impedimento de espécie nenhuma', () => {
+  const limpo = { emissoes: 0, seriesUsadas: 0, renovado: false, temCnpj: false }
+  assert.equal(impedimentoFiscal(limpo), false)
+  assert.equal(podeApagar(limpo), true)
+})
+
+test('a força não é atalho: sem ela, renovação continua impedindo', () => {
+  assert.equal(
+    podeApagar({ emissoes: 0, seriesUsadas: 0, renovado: true, temCnpj: false }),
+    false
+  )
 })

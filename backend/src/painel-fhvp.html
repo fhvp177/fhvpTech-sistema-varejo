@@ -1499,7 +1499,15 @@
       campos: [
         { id: 'confirmar', rotulo: 'Digite o código da loja para confirmar',
           dica: cl.clienteId,
-          ajuda: 'A digitação existe para separar isto de um clique errado.' }
+          ajuda: 'A digitação existe para separar isto de um clique errado.' },
+        { id: 'forcar', rotulo: 'Ignorar a trava de renovação paga?', valor: 'nao',
+          opcoes: [
+            { valor: 'nao', rotulo: 'Não' },
+            { valor: 'sim', rotulo: 'Sim, sei que houve pagamento e quero apagar' }
+          ],
+          ajuda: 'Serve para loja de teste onde VOCÊ exercitou o PIX. Não alcança ' +
+                 'nota emitida, número de série reservado nem CNPJ vinculado: essas ' +
+                 'são fiscais e continuam recusadas.' }
       ],
       rotuloConfirmar: 'Excluir loja',
       perigo: true,
@@ -1507,7 +1515,9 @@
         if (v.confirmar !== cl.clienteId) {
           return { campo: 'confirmar', mensagem: 'o código não confere' }
         }
-        const resp = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId),
+        const resp = await api(
+          '/admin/cliente/' + encodeURIComponent(cl.clienteId) +
+            (v.forcar === 'sim' ? '?forcar=1' : ''),
           { metodo: 'DELETE' })
         return resp.ok ? null : { mensagem: resp.erro }
       }
