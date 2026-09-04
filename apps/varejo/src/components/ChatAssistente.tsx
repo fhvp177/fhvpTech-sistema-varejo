@@ -1,4 +1,4 @@
-import { FC, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { FC, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Bot, Send, X, BotMessageSquare } from 'lucide-react'
 
 type Mensagem = { role: 'user' | 'assistant'; content: string; erro?: boolean }
@@ -146,24 +146,22 @@ const ChatAssistente: FC = () => {
   }
 
   /*
-   * A posição vai como VARIÁVEL, não como `right`/`bottom` embutidos.
+   * A posição vem do estado do arraste, direto no estilo.
    *
-   * Estilo embutido vence qualquer seletor, então com `right` direto aqui não
-   * haveria como o celular reposicionar o botão sem `!important` nem uma
-   * condicional em JavaScript. Como variável, o desktop consome o valor salvo
-   * do arraste e o celular o ignora, redefinindo as duas propriedades no CSS
-   * (ver `.fab-assistente` no index.css, §4 do roteiro).
+   * ⚠️ Já esteve como VARIÁVEL de CSS, para uma media query poder reposicionar
+   * o botão no celular. Aquilo tinha um pré-requisito que eu não escrevi: uma
+   * regra BASE lendo as variáveis. Nunca houve — só a da media query. Quando
+   * ela saiu (para devolver o arraste), o botão ficou `position: fixed` sem
+   * `right` nem `bottom` e SUMIU da vista.
+   *
+   * Quem manda na posição é o arraste, e o padrão dele já nasce acima da ilha.
+   * Não há mais CSS querendo sobrepor, então o estilo embutido é o lugar certo.
    */
   return (
     <div
       ref={containerRef}
-      className="fab-assistente fixed z-50"
-      style={
-        {
-          '--fab-right': pos.right + 'px',
-          '--fab-bottom': pos.bottom + 'px'
-        } as CSSProperties
-      }
+      className="fixed z-50"
+      style={{ right: pos.right, bottom: pos.bottom }}
     >
       {!aberto ? (
         <button

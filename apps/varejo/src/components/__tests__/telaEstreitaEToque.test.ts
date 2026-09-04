@@ -252,6 +252,23 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(blocoDaIlha()).not.toContain('.fab-assistente')
   })
 
+  it('★ e ele TEM deslocamento: `fixed` sem right/bottom é um botão invisível', () => {
+    /*
+     * Foi assim que ele sumiu de verdade, e o defeito é traiçoeiro: a posição
+     * tinha virado VARIÁVEL de CSS para uma media query poder sobrepô-la, mas
+     * nunca houve uma regra BASE lendo essas variáveis — só a da media query.
+     * Quando ela saiu, o botão ficou `position: fixed` sem `right` nem
+     * `bottom` e parou onde calhou, fora da vista.
+     *
+     * Nada disso quebra build, typecheck ou teste de comportamento: o elemento
+     * existe e está no DOM. Só aparece no aparelho.
+     */
+    const CHAT = readFileSync(join(SRC, 'components', 'ChatAssistente.tsx'), 'utf8')
+    expect(CHAT).toContain('style={{ right: pos.right, bottom: pos.bottom }}')
+    // Variável de CSS aqui só volta a valer com uma regra base que a leia.
+    expect(CHAT).not.toContain('--fab-right')
+  })
+
   it('★ no celular ele é só o círculo, sem o rótulo', () => {
     // A cápsula com a palavra "Assistente" tinha quase 150px numa tela de 360 e
     // cobria nome de cliente, preço e valor de venda nas quatro capturas.
