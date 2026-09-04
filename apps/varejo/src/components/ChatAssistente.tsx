@@ -1,4 +1,4 @@
-import { FC, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { FC, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { Bot, Send, X, Sparkles } from 'lucide-react'
 
 type Mensagem = { role: 'user' | 'assistant'; content: string; erro?: boolean }
@@ -131,8 +131,26 @@ const ChatAssistente: FC = () => {
     }
   }
 
+  /*
+   * A posição vai como VARIÁVEL, não como `right`/`bottom` embutidos.
+   *
+   * Estilo embutido vence qualquer seletor, então com `right` direto aqui não
+   * haveria como o celular reposicionar o botão sem `!important` nem uma
+   * condicional em JavaScript. Como variável, o desktop consome o valor salvo
+   * do arraste e o celular o ignora, redefinindo as duas propriedades no CSS
+   * (ver `.fab-assistente` no index.css, §4 do roteiro).
+   */
   return (
-    <div ref={containerRef} className="fixed z-50" style={{ right: pos.right, bottom: pos.bottom }}>
+    <div
+      ref={containerRef}
+      className="fab-assistente fixed z-50"
+      style={
+        {
+          '--fab-right': pos.right + 'px',
+          '--fab-bottom': pos.bottom + 'px'
+        } as CSSProperties
+      }
+    >
       {!aberto ? (
         <button
           onPointerDown={aoPressionar}

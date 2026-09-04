@@ -24,6 +24,47 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+
+    /*
+     * ── Tokens semânticos (roteiro do mobile, §8) ─────────────────────────
+     *
+     * ACRÉSCIMOS. Nenhuma linha acima foi tocada, e é por isso que o desktop
+     * continua exatamente como estava.
+     *
+     * ⭐ Dois vermelhos, e a diferença é funcional:
+     *   --critical-fill  é a cor cheia, para FAIXA e BARRA, onde não há texto
+     *                    por cima.
+     *   --critical       é a versão escurecida, para TEXTO legível sobre
+     *                    branco.
+     * A cheia em texto dá contraste insuficiente; a escura numa faixa deixa a
+     * faixa suja. Um token só obrigaria a escolher qual dos dois problemas ter.
+     */
+    --critical: 6 63% 47%;
+    --critical-fill: 6 78% 57%;
+    --critical-soft: 8 67% 95%;
+
+    /*
+     * Estados do sistema, dessaturados de propósito: saturados, competiriam
+     * com o azul da marca e com o vermelho da dívida, e o olho aprenderia a
+     * ignorar cor — que é o defeito nº 9 do diagnóstico.
+     */
+    --warn: 40 70% 32%;
+    --warn-soft: 42 62% 92%;
+    --positive: 162 55% 27%;
+    --positive-soft: 158 38% 92%;
+    --info: 208 69% 34%;
+    --info-soft: 210 55% 94%;
+
+    /*
+     * O fundo da pílula da navegação e de qualquer realce do acento.
+     * NÃO se chama `--accent` porque esse nome já existe aqui com outro
+     * sentido (um cinza de realce do shadcn); reusá-lo trocaria a cor de
+     * componentes do desktop inteiro.
+     */
+    --primary-soft: 214 95% 93%;
+
+    /* Texto sobre preenchimento cheio. Muda no tema escuro. */
+    --on-fill: 0 0% 100%;
   }
 
   .dark {
@@ -46,6 +87,27 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+
+    /*
+     * Os mesmos nomes, redefinidos. ⚠️ Nenhum token pode ter sua ÚNICA
+     * definição aqui dentro: se existir só no escuro, o tema claro fica com
+     * ele indefinido e o elemento pinta transparente.
+     */
+    --critical: 6 80% 71%;
+    --critical-fill: 6 78% 57%;
+    --critical-soft: 8 40% 13%;
+
+    --warn: 42 75% 65%;
+    --warn-soft: 40 30% 14%;
+    --positive: 158 45% 60%;
+    --positive-soft: 160 25% 12%;
+    --info: 210 70% 68%;
+    --info-soft: 210 35% 15%;
+
+    --primary-soft: 217 45% 20%;
+
+    /* No escuro o acento é claro, então o texto sobre ele é escuro. */
+    --on-fill: 222.2 84% 4.9%;
   }
 }
 
@@ -56,6 +118,39 @@
   body {
     @apply bg-background text-foreground;
     font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  /*
+   * ── Tipografia da página servida pelo navegador (roteiro, §9) ────────────
+   *
+   * ⚠️ Escopada em `[data-alvo='web']` de propósito. O programa instalado
+   * continua em `system-ui`, e essa é a decisão registrada: quem já usa o
+   * sistema no balcão não deve ver a tipografia trocar numa atualização que
+   * ele não pediu.
+   *
+   * As fontes são EMPACOTADAS no build, não buscadas de fora. Duas razões: o
+   * CSP da página é `default-src 'self'` e bloquearia um servidor de fontes; e
+   * uma loja com internet ruim não pode depender de terceiro para o texto
+   * aparecer.
+   *
+   * Mono só nos números que precisam alinhar em coluna — nunca em texto com
+   * palavra, onde vira máquina de escrever.
+   */
+  [data-alvo='web'] body,
+  body[data-alvo='web'] {
+    font-family: 'IBM Plex Sans Variable', system-ui, -apple-system, sans-serif;
+  }
+
+  /*
+   * `tabular-nums` é o que faz R$ 295,00 e R$ 70,00 alinharem a vírgula sem
+   * tabela nenhuma: sem ele os algarismos têm larguras diferentes e a coluna
+   * dança a cada linha.
+   */
+  [data-alvo='web'] .num,
+  [data-alvo='web'] [data-num] {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
   }
 
   /* Scrollbar customizada — fina, arredondada e neutra, integrada ao tema */
@@ -185,5 +280,199 @@
   @page {
     size: A4;
     margin: 0;
+  }
+}
+
+/*
+ * ═══ A ilha de navegação do celular (roteiro do mobile, §3) ═════════════════
+ *
+ * Escopo: só a página servida pelo navegador, e só abaixo de 1024px. Em 1024
+ * a barra lateral do desktop assume, e este bloco inteiro deixa de existir.
+ * O corte é 1023.98px porque em 1024 já é painel — inclusive no tablet
+ * deitado, como manda a §3.8.
+ */
+@media (max-width: 1023.98px) {
+  /* ---------- a ilha ----------
+     Descolada da borda: trocar de seção não pode exigir rolar a página até o
+     fim, e a barra não disputa espaço com a barra de gestos do sistema.
+     ⚠️ NUNCA `bottom: 0`. O que dá o ar de aplicativo é justamente a folga. */
+  [data-alvo='web'] .ilha-abas {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    width: calc(100% - 28px);
+    max-width: 404px;
+    z-index: 20;
+
+    /* A grade é o coração do truque: N colunas iguais, e --n vem do
+       componente. É ela que posiciona a pílula sem nenhuma conta de pixel. */
+    display: grid;
+    grid-template-columns: repeat(var(--n), 1fr);
+    gap: 2px;
+
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
+    border-radius: 999px;
+    padding: 5px;
+    box-shadow:
+      0 6px 24px hsl(var(--foreground) / 0.16),
+      0 1px 3px hsl(var(--foreground) / 0.1);
+  }
+
+  /* Vidro fosco onde houver suporte. O fundo sólido acima é o retorno seguro,
+     e ele já está aplicado — então nada quebra onde isto não existe. */
+  @supports (backdrop-filter: blur(2px)) {
+    [data-alvo='web'] .ilha-abas {
+      background: color-mix(in srgb, hsl(var(--background)) 86%, transparent);
+      backdrop-filter: blur(14px) saturate(1.4);
+    }
+  }
+
+  /* ---------- as abas ----------
+     `position: relative` + `z-index: 1` não é enfeite: é o que garante que
+     ícone e rótulo fiquem POR CIMA da pílula, e não o contrário. */
+  [data-alvo='web'] .ilha-aba {
+    grid-row: 1;
+    grid-column: var(--i);
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 4px 7px;
+    /* 44px é o mínimo que o dedo pede; a ilha usa mais porque é tocada o dia
+       inteiro, em movimento, atrás do balcão. */
+    min-height: 52px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: hsl(var(--muted-foreground));
+    background: none;
+    border: 0;
+    border-radius: 999px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  [data-alvo='web'] .ilha-aba svg {
+    width: 18px;
+    height: 18px;
+  }
+  [data-alvo='web'] .ilha-aba[aria-current='page'] {
+    color: hsl(var(--primary));
+  }
+  [data-alvo='web'] .ilha-aba:focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 1px;
+  }
+
+  /* Muitas abas: encolhe só o RÓTULO. O alvo de toque continua o mesmo. */
+  [data-alvo='web'] .ilha-abas[data-n='5'] .ilha-aba {
+    font-size: 9.5px;
+    padding: 8px 2px 7px;
+  }
+  [data-alvo='web'] .ilha-abas[data-n='6'] .ilha-aba {
+    font-size: 9px;
+    padding: 8px 1px 7px;
+    letter-spacing: -0.01em;
+  }
+  [data-alvo='web'] .ilha-abas[data-n='6'] .ilha-aba svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  /* ---------- a pílula ---------- */
+  [data-alvo='web'] .ilha-pilula {
+    grid-row: 1;
+    grid-column: var(--i);
+    position: relative;
+    z-index: 0;
+    border-radius: 999px;
+    background: hsl(var(--primary-soft));
+  }
+
+  /* ---------- ela escorrega, não pisca (§3.4) ---------- */
+  @media (prefers-reduced-motion: no-preference) {
+    /* A distância sai de uma CONTA, não de medida em pixel: a pílula ocupa uma
+       aba inteira, então 100% é exatamente a largura de uma aba, e +2px é o
+       vão (o `gap`). Uma casa andada = 100% + 2px — valha a barra 4, 5 ou 6
+       abas.
+
+       `--aba-de` é quantas casas atrás ficou a aba anterior. Sem ela o retorno
+       0 zera o deslocamento e nada se move, que é o certo quando não se veio
+       de outra aba. */
+    @keyframes escorregar-aba {
+      from {
+        translate: calc(var(--aba-de, 0) * (100% + 2px)) 0;
+      }
+      to {
+        translate: 0 0;
+      }
+    }
+
+    /* A curva NÃO é a de entrada. Aquela dispara e desacelera, e serve para
+       algo que APARECE. Aqui o objeto já existe e apenas VIAJA: precisa sair
+       devagar também, senão parece arrancado. Os 0,28s são medidos. */
+    [data-alvo='web'] .ilha-pilula {
+      animation: escorregar-aba 0.28s cubic-bezier(0.4, 0, 0.2, 1) both;
+    }
+  }
+
+  /* ---------- a resposta ao toque (§3.6) ----------
+     O navegador do celular pinta um retângulo cinza-azulado sobre a caixa
+     inteira do elemento tocado: ele cobre cantos arredondados e atravessa
+     sombras.
+
+     ⚠️ Desligar e não pôr nada no lugar é PIOR que o retângulo — aquele
+     lampejo é a única confirmação de que o toque pegou. Por isso cada coisa
+     clicável ganha o seu próprio `:active` logo abaixo. */
+  [data-alvo='web'] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Afunda um pixel, como uma tecla. Sem transição, de propósito: no toque
+     esta é a ÚNICA resposta que existe, e atrasá-la é atrasar a confirmação
+     justamente onde ela importa. */
+  [data-alvo='web'] .ilha-aba:active {
+    transform: translateY(1px);
+    background: hsl(var(--muted));
+  }
+
+  /* A aba ATUAL não escurece o fundo: o fundo dela é a PÍLULA, que é irmã e
+     fica por baixo — o cinza do botão a apagaria sob o dedo. Quem afunda é a
+     pílula, junto com o ícone, e é isso que se sente.
+     `translate` (da animação) e `transform` (daqui) são propriedades
+     diferentes e se somam: uma não anula a outra. */
+  [data-alvo='web'] .ilha-aba[aria-current='page']:active {
+    background: none;
+  }
+  [data-alvo='web'] .ilha-abas:has(.ilha-aba[aria-current='page']:active) .ilha-pilula {
+    transform: translateY(1px);
+  }
+
+  /* ---------- o outro flutuante: o Assistente (§4) ----------
+     Ele é arrastável e guarda onde foi largado, o que é útil no monitor e é
+     exatamente o que o põe sobre um nome de cliente no celular: a posição
+     salva numa tela de 1400px não quer dizer nada numa de 360.
+
+     Aqui as duas propriedades são redefinidas, e a posição salva simplesmente
+     não é consultada. Ele passa a morar ACIMA da ilha, alinhado a ela:
+     `z-index: 19` fica abaixo do 20 dela, e os 62px são a altura dela, então
+     ele nunca a cobre nem cobre a última linha da lista. */
+  [data-alvo='web'] .fab-assistente {
+    right: max(14px, calc(50vw - 202px + 14px));
+    bottom: calc(14px + 62px + env(safe-area-inset-bottom, 0px));
+    z-index: 19;
+  }
+
+  /* ---------- o respiro de quem rola (§3.3-d) ----------
+     92px = altura da ilha + folga. Sem isto ela cobre o fim da lista para
+     sempre, e o lojista nunca descobre que havia mais uma linha.
+
+     ⚠️ No roteiro isto é `padding-bottom` no `body`. Aqui o `body` NÃO rola:
+     a casca é `h-screen` com `overflow-hidden` e quem rola é o `<main>`. A
+     regra é a mesma, aplicada a quem de fato rola. */
+  [data-alvo='web'] .tem-ilha {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
   }
 }

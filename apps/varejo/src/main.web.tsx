@@ -20,6 +20,21 @@
  * nenhum por um instante a cada abertura. Importando a folha AQUI, ela vira um
  * `<link>` no próprio HTML e chega junto com a página.
  */
+/*
+ * As fontes vão EMPACOTADAS, não buscadas de fora. Duas razões: o CSP desta
+ * página é `default-src 'self'` e bloquearia um servidor de fontes; e uma loja
+ * com internet ruim não pode depender de terceiro para o texto aparecer.
+ *
+ * ⚠️ Só aqui, na entrada WEB. O programa instalado segue em `system-ui`, e essa
+ * é a decisão registrada: quem já usa o sistema no balcão não deve ver a
+ * tipografia trocar numa atualização que não pediu.
+ *
+ * A Sans é a versão variável (um arquivo cobre todos os pesos); da Mono entram
+ * só os dois pesos usados em número, para não carregar o que ninguém lê.
+ */
+import '@fontsource-variable/ibm-plex-sans/standard.css'
+import '@fontsource/ibm-plex-mono/500.css'
+import '@fontsource/ibm-plex-mono/600.css'
 import './index.css'
 import { instalarApiWeb } from './web/api'
 

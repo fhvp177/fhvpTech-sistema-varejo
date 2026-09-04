@@ -1,5 +1,14 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  /*
+   * ⚠️ Roteiro do mobile, §3.6: sem isto o Tailwind gera `:hover` puro, o
+   * celular entra no estado de hover ao tocar e FICA PRESO nele depois que
+   * o dedo sai — o item continua destacado como se o ponteiro estivesse em
+   * cima. Com a flag, todo `hover:` nasce dentro de `@media (hover: hover)`.
+   *
+   * Em quem tem mouse nada muda, então o desktop não é afetado.
+   */
+  future: { hoverOnlyWhenSupported: true },
   darkMode: ['class'],
   content: [
     './index.html',
@@ -16,9 +25,39 @@ module.exports = {
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+
+        /*
+         * Tokens semânticos do roteiro do mobile (§8). Existem para que
+         * nenhuma cor literal precise aparecer no JSX: `text-critical` em vez
+         * de `text-red-600`, que ninguém consegue redefinir no tema escuro.
+         *
+         * `critical` tem dois tons de propósito: `fill` é a cor cheia da faixa
+         * (sem texto por cima) e o DEFAULT é o tom escurecido, legível como
+         * texto sobre branco.
+         */
+        critical: {
+          DEFAULT: 'hsl(var(--critical))',
+          fill: 'hsl(var(--critical-fill))',
+          soft: 'hsl(var(--critical-soft))'
+        },
+        warn: {
+          DEFAULT: 'hsl(var(--warn))',
+          soft: 'hsl(var(--warn-soft))'
+        },
+        positive: {
+          DEFAULT: 'hsl(var(--positive))',
+          soft: 'hsl(var(--positive-soft))'
+        },
+        info: {
+          DEFAULT: 'hsl(var(--info))',
+          soft: 'hsl(var(--info-soft))'
+        },
+        'on-fill': 'hsl(var(--on-fill))',
         primary: {
           DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))'
+          foreground: 'hsl(var(--primary-foreground))',
+          /* Fundo suave do acento: pílula da navegação e realces. */
+          soft: 'hsl(var(--primary-soft))'
         },
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',

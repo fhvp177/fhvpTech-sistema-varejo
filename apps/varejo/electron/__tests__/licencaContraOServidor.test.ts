@@ -195,7 +195,12 @@ describe('o servidor RECUSA a vaga', () => {
       expect(nestaAbertura.valida).toBe(true)
 
       // A conferência foi disparada e responde logo depois.
-      for (let i = 0; i < 100 && pedidos.length === pedidosAposAtivar; i++) {
+      // ⚠️ 8 segundos, e não 2: rodando dezenas de arquivos em paralelo, a
+      // requisição de segundo plano disputa CPU e passa dos 2s com folga.
+      // Falhava só na suíte inteira, nunca isolado — o pior tipo de teste,
+      // porque acusa defeito onde há lentidão. Mesmo motivo do testTimeout de
+      // 30s no vitest.config.
+      for (let i = 0; i < 400 && pedidos.length === pedidosAposAtivar; i++) {
         await new Promise((r) => setTimeout(r, 20))
       }
       expect(pedidos.length).toBeGreaterThan(pedidosAposAtivar)

@@ -1,6 +1,19 @@
 import { createContext, FC, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { MemoryRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
+import {
+  MemoryRouter,
+  Routes,
+  Route,
+  NavLink,
+  Navigate,
+  useNavigate,
+  useLocation
+} from 'react-router-dom'
+import {
+  BarraInferiorMobile,
+  type ItemBarraInferior
+} from '@fhvptech/core/ui/BarraInferiorMobile'
 import { GuardaDoVoltar } from './web/GuardaDoVoltar'
+import type { SecaoMais } from './pages/Mais'
 import {
   Lock,
   LayoutDashboard,
@@ -71,6 +84,7 @@ const ConfiguracaoFiscal = __FEAT_NFE__ ? lazy(() => import('./pages/Configuraca
 // Calculadora do balcão — existe em todos os planos (é ferramenta de operação,
 // não de plano). Carregada sob demanda: só entra na memória se for aberta.
 const Calculadora = lazy(() => import('./components/Calculadora'))
+const Mais = lazy(() => import('./pages/Mais'))
 
 const FallbackCarregando: FC = () => (
   <div className="flex-1 flex items-center justify-center p-8">
@@ -573,14 +587,26 @@ const App: FC = () => {
                         vendedor?.papel === 'dono' ? '' : 'lg:hidden'
                       }`}
                     >
-                      <button
-                        type="button"
-                        onClick={() => setMenuAberto(true)}
-                        aria-label="Abrir menu"
-                        className="lg:hidden -ml-2 p-2 rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        <Menu className="w-5 h-5" />
-                      </button>
+                      {/*
+                        ⚠️ §5.1: ou hambúrguer, ou barra inferior — não os dois.
+                        Na web quem navega abaixo de 1024px é a ilha, e o "Mais"
+                        dela é uma rota de verdade. Duas navegações concorrentes
+                        ensinam dois caminhos para a mesma coisa, e nenhum dos
+                        dois bem.
+
+                        No programa instalado o botão continua: lá não há ilha,
+                        e a gaveta é a navegação da janela estreita.
+                      */}
+                      {__ALVO__ !== 'web' && (
+                        <button
+                          type="button"
+                          onClick={() => setMenuAberto(true)}
+                          aria-label="Abrir menu"
+                          className="lg:hidden -ml-2 p-2 rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          <Menu className="w-5 h-5" />
+                        </button>
+                      )}
                       {vendedor?.papel === 'dono' && (
                         <span data-tour="sino">
                           <SinoNotificacoesHost onRenovarComPix={abrirPagamento} />
@@ -588,7 +614,16 @@ const App: FC = () => {
                       )}
                     </div>
                   )}
-                  <main className={`flex-1 overflow-auto ${pdvAtivo ? '' : 'pb-24'}`}>
+                  {/*
+                    `tem-ilha` reserva a altura da barra flutuante em quem de
+                    fato rola. O roteiro põe esse respiro no `body`; aqui o
+                    body não rola (a casca é `h-screen` com `overflow-hidden`),
+                    então ele vai no `<main>`. Sem isso a última linha de
+                    qualquer lista fica escondida atrás da ilha para sempre.
+                  */}
+                  <main
+                    className={`flex-1 overflow-auto ${pdvAtivo ? '' : 'pb-24 tem-ilha'}`}
+                  >
                     <ChecklistPrimeirosPassos
                       estado={onboarding}
                       ehDono={vendedor?.papel === 'dono'}
@@ -612,6 +647,16 @@ const App: FC = () => {
                         <Route path="/" element={<Navigate to="/produtos" replace />} />
                       )}
                       <Route path="/fornecedores" element={<Fornecedores />} />
+                      {/*
+                        A aba "Mais" do celular. Recebe as MESMAS seções da barra
+                        lateral: duas listas separadas divergiriam no dia em que
+                        uma aba nova nascesse, aparecendo num lugar e sumindo no
+                        outro.
+                      */}
+                      <Route
+                        path="/mais"
+                        element={<Mais secoes={secoesVisiveis(vendedor, comissoesAtivo)} />}
+                      />
                       <Route
                         path="/contas-pagar"
                         element={
@@ -679,6 +724,18 @@ const App: FC = () => {
                       />
                     </Routes>
                   </main>
+                  {/*
+                    A barra só existe na página servida pelo navegador: no
+                    aplicativo instalado a janela é grande e a barra lateral
+                    fica sempre à vista, então uma fileira a mais embaixo seria
+                    espaço tirado da tabela sem nada em troca.
+
+                    E some com o caixa aberto, junto com a barra lateral: lá a
+                    tela inteira é do atendimento.
+                  */}
+                  {__ALVO__ === 'web' && !pdvAtivo && vendedor && (
+                    <BarraInferiorVarejo ehDono={vendedor.papel === 'dono'} />
+                  )}
                 </div>
               </div>
               <IndicadorBackupAtivo />
@@ -897,6 +954,106 @@ const UserMenu: FC<{ vendedor: SessaoVendedor; onSair: () => void }> = ({
 const TourHost: FC<{ passos: PassoTour[]; onFechar: () => void }> = ({ passos, onFechar }) => {
   const navigate = useNavigate()
   return <TourGuiado passos={passos} onNavegar={navigate} onFechar={onFechar} />
+}
+
+/**
+ * Os caminhos mais percorridos do celular, em cima da barra do núcleo.
+ *
+ * A escolha dos quatro (mais o "Mais") não é arbitrária: caixa é onde o dia
+ * inteiro acontece, painel é o que o dono abre para saber como foi, e produtos
+ * e clientes são as duas consultas que interrompem uma venda. O resto do
+ * sistema é semanal ou mensal, e semanal cabe atrás de um toque a mais.
+ *
+ * Vendedor não vê "Painel" porque a rota nem existe para ele: `/` o manda para
+ * produtos. Sem esta condição, a barra dele teria um botão que se recusa a
+ * levar aonde diz.
+ */
+/**
+ * As seções que ESTA pessoa pode abrir, já sem o que a ilha de navegação
+ * mostra.
+ *
+ * ── Por que tirar o que já está na barra ─────────────────────────────────────
+ * "Mais" é, por definição, o que não coube nas abas (§5.1). Repetir Caixa,
+ * Painel, Produtos e Clientes aqui daria dois caminhos para o mesmo lugar, e o
+ * segundo mais longo — exatamente a confusão que a página existe para desfazer.
+ *
+ * ── Por que filtra em vez de bloquear ────────────────────────────────────────
+ * A barra lateral do desktop MOSTRA o item restrito e o marca como "Restrito ao
+ * gerente", porque lá sobra espaço e saber que existe tem valor. Numa lista de
+ * celular, linha que não abre é linha que gasta o polegar à toa.
+ */
+const ROTAS_NA_ILHA = ['/', '/vendas', '/produtos', '/clientes']
+
+function secoesVisiveis(
+  vendedor: { papel?: string } | null | undefined,
+  comissoesAtivo: boolean
+): SecaoMais[] {
+  const ehDono = vendedor?.papel === 'dono'
+  return CATEGORIAS_SIDEBAR.map((cat) => ({
+    titulo: cat.titulo,
+    itens: cat.itens
+      .filter((item) => !ROTAS_NA_ILHA.includes(item.to))
+      .filter((item) => !item.requerComissoes || comissoesAtivo)
+      .filter((item) => !item.somenteDono || ehDono)
+      .map(({ to, label, icon }) => ({ to, label, icon }))
+  })).filter((cat) => cat.itens.length > 0)
+}
+
+const BarraInferiorVarejo: FC<{ ehDono: boolean }> = ({ ehDono }) => {
+  const navegar = useNavigate()
+  const { pathname } = useLocation()
+
+  const ir = (rota: string) => () => navegar(rota)
+
+  const itens: ItemBarraInferior[] = [
+    {
+      id: 'vendas',
+      rotulo: 'Caixa',
+      icone: ShoppingCart,
+      ativo: pathname === '/vendas',
+      aoTocar: ir('/vendas')
+    },
+    ...(ehDono && __FEAT_DASHBOARD__
+      ? [
+          {
+            id: 'painel',
+            rotulo: 'Painel',
+            icone: LayoutDashboard,
+            ativo: pathname === '/',
+            aoTocar: ir('/')
+          }
+        ]
+      : []),
+    {
+      id: 'produtos',
+      rotulo: 'Produtos',
+      icone: Package,
+      ativo: pathname === '/produtos',
+      aoTocar: ir('/produtos')
+    },
+    {
+      id: 'clientes',
+      rotulo: 'Clientes',
+      icone: Users,
+      ativo: pathname === '/clientes',
+      aoTocar: ir('/clientes')
+    },
+    /*
+      "Mais" é uma ROTA, não uma gaveta que abre por cima (§5.1). Sendo página,
+      o botão "voltar" do aparelho funciona e ela rola sem disputar o gesto com
+      a lista de trás. E, por ser um lugar de verdade, ela ACENDE como as
+      outras — diferente da versão anterior, em que era só uma porta.
+    */
+    {
+      id: 'mais',
+      rotulo: 'Mais',
+      icone: Menu,
+      ativo: pathname === '/mais',
+      aoTocar: ir('/mais')
+    }
+  ]
+
+  return <BarraInferiorMobile itens={itens} />
 }
 
 const Sidebar: FC<{
