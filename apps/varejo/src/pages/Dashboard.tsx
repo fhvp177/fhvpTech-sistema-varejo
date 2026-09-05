@@ -1,4 +1,4 @@
-import { CSSProperties, FC, useEffect, useMemo, useState } from 'react'
+import { CSSProperties, FC, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package, LayoutDashboard,
   ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
