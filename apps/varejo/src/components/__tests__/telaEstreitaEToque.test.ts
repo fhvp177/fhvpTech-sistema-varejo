@@ -654,6 +654,32 @@ describe('tela 6 — Mais', () => {
 })
 
 describe('aba carregada sob demanda depois de um deploy', () => {
+  it('★ todo componente sob demanda tem fronteira de Suspense', () => {
+    /*
+     * ⚠️ Um `lazy()` que suspende sem `<Suspense>` acima faz o React derrubar a
+     * ÁRVORE INTEIRA: tela branca, sem mensagem, e só na rota daquele
+     * componente. A rota "/mais" nasceu assim na etapa 0 e o defeito ficou
+     * escondido até alguém abrir a aba pela primeira vez.
+     *
+     * A varredura é estrutural de propósito: em jsdom o `lazy` resolve rápido
+     * demais e um teste de comportamento passaria verde com o defeito presente.
+     */
+    const semComent = semComentarios(APP)
+    const sobDemanda = [...semComent.matchAll(/const (\w+) = [^\n]*lazy(?:ComRecarga)?\(/g)].map((m) => m[1])
+    expect(sobDemanda.length, 'nenhum componente sob demanda encontrado — a varredura quebrou')
+      .toBeGreaterThan(3)
+
+    const desprotegidos: string[] = []
+    for (const nome of sobDemanda) {
+      const usos = [...semComent.matchAll(new RegExp(`<${nome}[\\s/>]`, 'g'))]
+      for (const uso of usos) {
+        const antes = semComent.slice(Math.max(0, uso.index - 400), uso.index)
+        if (!antes.includes('<Suspense')) desprotegidos.push(nome)
+      }
+    }
+    expect(desprotegidos, 'componente sob demanda sem Suspense derruba a tela inteira').toEqual([])
+  })
+
   it('★ uma aba que ainda não foi aberta não vira tela branca', () => {
     /*
      * Cada compilação gera nomes de arquivo novos e apaga os antigos. Quem está

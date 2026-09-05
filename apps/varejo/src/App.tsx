@@ -749,9 +749,21 @@ const App: FC = () => {
                         uma aba nova nascesse, aparecendo num lugar e sumindo no
                         outro.
                       */}
+                      {/*
+                        ⚠️ O `Suspense` NÃO é enfeite. Componente `lazy()` que
+                        suspende sem uma fronteira acima faz o React derrubar a
+                        árvore inteira: tela branca, sem mensagem, e só nesta
+                        rota. Esta era a única rota sob demanda sem a dela, e o
+                        defeito ficou escondido desde a etapa 0 porque ninguém
+                        tinha aberto a aba ainda.
+                      */}
                       <Route
                         path="/mais"
-                        element={<Mais secoes={secoesVisiveis(vendedor, comissoesAtivo)} />}
+                        element={
+                          <Suspense fallback={<FallbackCarregando />}>
+                            <Mais secoes={secoesVisiveis(vendedor, comissoesAtivo)} />
+                          </Suspense>
+                        }
                       />
                       <Route
                         path="/contas-pagar"
