@@ -6,6 +6,8 @@ import { Select } from '@fhvptech/core/ui/select'
 import FolhaA4Preview, { SlotDado } from '../components/FolhaA4Preview'
 import { nomeImpressao } from '../utils/nomeImpressao'
 import { useImprimirJanela } from '@/components/ImpressaoProvider'
+import { useEhCelular } from '@/hooks/useEhCelular'
+import DicaRolante from '@/components/DicaRolante'
 
 type Variacao = {
   id: number
@@ -35,7 +37,14 @@ type Etiquetavel = {
   preco: number
 }
 
+// Quanto a folha A4 encolhe na prévia.
+//
+// ⚠️ No celular ela precisa ser MENOR. A4 tem 210mm, que a 96dpi dão 793,7px;
+// a 0,40 sobram 317, e a coluna útil de uma tela de 360 tem 304 depois das
+// margens. Passava por 13px — e 13px de estouro são rolagem lateral na página
+// inteira (§11). A 0,34 a folha fica com 270 e sobra respiro.
 const SCALE = 0.40
+const SCALE_CELULAR = 0.34
 
 const EtiquetasA4: FC = () => {
   const [produtos, setProdutos] = useState<Produto[]>([])
@@ -48,6 +57,7 @@ const EtiquetasA4: FC = () => {
   const [mostrarPreco, setMostrarPreco] = useState(true)
   const [mostrarLinhasGuia, setMostrarLinhasGuia] = useState(false)
   const imprimirJanela = useImprimirJanela()
+  const ehCelular = useEhCelular()
 
   useEffect(() => {
     window.api.produtos.listar().then((r) => {
@@ -146,6 +156,7 @@ const EtiquetasA4: FC = () => {
   }
 
   const totalEtiquetas = todosSlots.length
+  const escala = ehCelular ? SCALE_CELULAR : SCALE
 
   const opcoesExibicao: Array<{
     label: string
@@ -159,9 +170,20 @@ const EtiquetasA4: FC = () => {
   ]
 
   return (
-    <div className="flex h-full">
+    /*
+      ⭐ No celular as duas colunas viram uma. Não cabem: o painel da esquerda
+      tem 288px fixos e o da direita nunca cabe no que sobra de uma tela de 360,
+      então a página rolava de lado e metade da tela ficava fora — é o que as
+      fotos dele mostram.
+
+      ⚠️ E a altura deixa de ser `h-full`: no monitor os dois painéis rolam
+      dentro de si; no celular quem rola é a página. Caixa rolante dentro de
+      página rolante é a receita do dedo que raspa e nada anda — a mesma lição
+      do carrinho do PDV.
+    */
+    <div className="flex flex-col lg:h-full lg:flex-row">
       {/* ── Painel esquerdo: seleção de produtos ── */}
-      <div className="w-72 border-r flex flex-col shrink-0 no-print">
+      <div className="etiq-produtos flex flex-col border-t lg:w-72 lg:shrink-0 lg:border-l-0 lg:border-t-0 lg:border-r no-print">
         <div className="p-3 border-b">
           <h2 className="font-semibold text-sm mb-2 flex items-center gap-1.5">
             <Tag className="w-4 h-4" />
@@ -171,23 +193,26 @@ const EtiquetasA4: FC = () => {
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Buscar por nome ou código..."
+              placeholder={ehCelular ? '' : 'Buscar por nome ou código...'}
+              aria-label="Buscar por nome ou código"
               value={filtro}
               onChange={(e) => setFiltro(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full pl-8 pr-3 py-1.5 lg:py-1.5 h-11 lg:h-auto text-sm border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
+            {/* A dica só existe com o campo vazio; ao digitar, some ela e o movimento. */}
+            {ehCelular && filtro === '' && <DicaRolante texto="Buscar por nome ou código" />}
           </div>
           {selecoes.size > 0 && (
             <button
               onClick={() => setSelecoes(new Map())}
-              className="text-xs text-red-500 hover:text-red-700 mt-1.5 underline-offset-2 hover:underline"
+              className="text-xs text-destructive mt-1.5 underline-offset-2 hover:underline min-h-[44px] lg:min-h-0"
             >
               Limpar seleção ({selecoes.size})
             </button>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+        <div className="p-2 space-y-0.5 lg:flex-1 lg:overflow-y-auto">
           {etiquetaveisFiltrados.length === 0 && (
             <p className="text-xs text-muted-foreground p-2 text-center">
               Nenhum produto encontrado.
@@ -205,12 +230,17 @@ const EtiquetasA4: FC = () => {
                     : 'border-transparent hover:border-border hover:bg-muted/50'
                 }`}
               >
-                <div className="flex items-start gap-2">
+                {/*
+                  ⚠️ No celular quem vira alvo é a LINHA INTEIRA, e não a caixinha
+                  de 14px — que o §7 reprovaria sozinho. O `<label>` faz isso sem
+                  JavaScript nenhum e sem tirar a caixinha de quem usa teclado.
+                */}
+                <label className="flex items-start gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={selecionado}
                     onChange={() => toggleProduto(e.chave)}
-                    className="accent-blue-600 w-3.5 h-3.5 cursor-pointer mt-0.5 shrink-0"
+                    className="accent-blue-600 w-5 h-5 lg:w-3.5 lg:h-3.5 cursor-pointer mt-0.5 shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate leading-tight">{e.nome}</p>
@@ -222,7 +252,7 @@ const EtiquetasA4: FC = () => {
                       })}
                     </p>
                   </div>
-                </div>
+                </label>
                 {selecionado && (
                   <div className="flex items-center gap-1.5 mt-1.5 ml-5">
                     <span className="text-xs text-muted-foreground">Qtd:</span>
@@ -245,21 +275,29 @@ const EtiquetasA4: FC = () => {
         </div>
       </div>
 
-      {/* ── Painel direito: controles + prévia ── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/*
+        ── Painel direito: controles + prévia ──
+
+        ⚠️ No celular esta caixa deixa de gerar quadro (`display: contents` no
+        CSS): controles e prévia viram filhos diretos da página e cada um recebe
+        seu próprio `order`. Sem isso os dois andariam colados, e a lista de
+        produtos — que é a mais longa — não teria como ficar por último.
+      */}
+      <div className="etiq-direita flex-1 flex flex-col min-w-0">
         {/* Barra de controles */}
-        <div className="border-b p-3 flex flex-wrap gap-x-6 gap-y-3 items-end bg-background no-print">
-          <div>
+        <div className="etiq-controles border-b p-3 flex flex-wrap gap-x-6 gap-y-3 items-end bg-background no-print">
+          <div className="w-full lg:w-auto">
             <label className="text-xs text-muted-foreground block mb-1">Layout</label>
             <Select
               value={layout.id}
               onChange={handleLayoutChange}
-              className="h-9 w-64"
+              className="h-11 lg:h-9 w-full lg:w-64"
+              classNameContainer="w-full lg:w-64"
               opcoes={PRESETS.map((p) => ({ valor: p.id, rotulo: p.nome }))}
             />
           </div>
 
-          <div>
+          <div className="w-full lg:w-auto">
             <label className="text-xs text-muted-foreground block mb-1">
               Pular posições iniciais
             </label>
@@ -273,30 +311,36 @@ const EtiquetasA4: FC = () => {
                   Math.min(maxPosicao, Math.max(0, parseInt(e.target.value) || 0))
                 )
               }
-              className="w-20 text-sm border rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="num w-20 h-11 lg:h-auto text-sm border rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
-          <div className="flex gap-4 items-end flex-wrap">
+          {/*
+            ⚠️ No celular cada opção vira uma pastilha de 44px. Como caixinha
+            solta de 13px ao lado de um rótulo minúsculo, errar o alvo era o
+            normal — e desmarcar "Preço" sem querer só se descobre com a folha
+            impressa na mão.
+          */}
+          <div className="flex w-full flex-wrap items-end gap-2 lg:w-auto lg:gap-4">
             {opcoesExibicao.map(({ label, value, set }) => (
               <label
                 key={label}
-                className="text-xs flex items-center gap-1.5 cursor-pointer select-none"
+                className="flex min-h-[44px] cursor-pointer select-none items-center gap-2 rounded-lg border px-3 text-xs lg:min-h-0 lg:rounded-none lg:border-0 lg:px-0 lg:gap-1.5"
               >
                 <input
                   type="checkbox"
                   checked={value}
                   onChange={(e) => set(e.target.checked)}
-                  className="accent-blue-600"
+                  className="accent-blue-600 h-4 w-4 lg:h-auto lg:w-auto"
                 />
                 {label}
               </label>
             ))}
           </div>
 
-          <div className="flex items-center gap-3 ml-auto">
+          <div className="flex w-full items-center gap-3 lg:ml-auto lg:w-auto">
             {totalEtiquetas > 0 && (
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
+              <span className="num text-xs text-muted-foreground whitespace-nowrap">
                 {totalEtiquetas} etiq. · {folhas.length} folha
                 {folhas.length !== 1 ? 's' : ''}
               </span>
@@ -314,7 +358,7 @@ const EtiquetasA4: FC = () => {
                 }
               }}
               disabled={totalEtiquetas === 0}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="ml-auto flex h-11 lg:h-auto items-center justify-center gap-1.5 px-4 lg:py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Printer className="w-4 h-4" />
               Imprimir
@@ -322,9 +366,17 @@ const EtiquetasA4: FC = () => {
           </div>
         </div>
 
-        {/* Área de prévia */}
-        <div className="flex-1 overflow-y-auto bg-slate-100 p-6 no-print">
+        {/*
+          Área de prévia.
+
+          ⚠️ No celular ela SOME enquanto não há folha. Vazia, ela gastaria uma
+          tela inteira entre os ajustes e a lista — e a frase dela dizia
+          "selecione produtos na lista AO LADO", que numa coluna só nem verdade
+          era. Quem abre a tela cai direto na lista, que é o que veio fazer.
+        */}
+        <div className="etiq-previa bg-slate-100 p-3 lg:flex-1 lg:overflow-y-auto lg:p-6 no-print">
           {folhas.length === 0 ? (
+            ehCelular ? null : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center text-muted-foreground">
                 <Tag className="w-10 h-10 mx-auto mb-2 opacity-20" />
@@ -333,8 +385,9 @@ const EtiquetasA4: FC = () => {
                 </p>
               </div>
             </div>
+            )
           ) : (
-            <div className="flex flex-col gap-6 items-center">
+            <div className="flex flex-col gap-4 lg:gap-6 items-center">
               {folhas.map((slots, i) => (
                 <div key={i}>
                   <p className="text-xs text-muted-foreground text-center mb-1.5 font-medium">
@@ -342,8 +395,8 @@ const EtiquetasA4: FC = () => {
                   </p>
                   <div
                     style={{
-                      width: `calc(210mm * ${SCALE})`,
-                      height: `calc(297mm * ${SCALE})`,
+                      width: `calc(210mm * ${escala})`,
+                      height: `calc(297mm * ${escala})`,
                       overflow: 'hidden',
                       position: 'relative',
                       boxShadow: '0 2px 10px rgba(0,0,0,0.18)',
@@ -352,7 +405,7 @@ const EtiquetasA4: FC = () => {
                   >
                     <div
                       style={{
-                        transform: `scale(${SCALE})`,
+                        transform: `scale(${escala})`,
                         transformOrigin: 'top left',
                         position: 'absolute',
                         top: 0,

@@ -500,6 +500,25 @@
     [data-alvo='web'] .entrada-escalonada > *:nth-child(n + 6) { animation-delay: 0.24s }
   }
 
+  /* ---------- Etiquetas A4: uma coluna, na ordem de quem usa ----------
+     No monitor são dois painéis lado a lado: produtos à esquerda, ajustes e
+     prévia à direita. No celular não cabem — o da esquerda tem 288px fixos — e
+     a página rolava de lado com metade da tela fora.
+
+     Empilhados, a ordem do arquivo seria a errada: a lista de produtos é a mais
+     longa e empurraria o botão Imprimir para depois de centenas de itens. Então
+     no celular a ordem é ajustes → prévia → produtos.
+
+     ⚠️ `order` no CSS, e não blocos duplicados no JSX: duas cópias da prévia
+     dariam duas folhas A4 no DOM, e a escondida mede zero. É a mesma técnica
+     que sobe o gráfico no Painel, e pelo mesmo motivo. */
+  [data-alvo='web'] .etiq-direita {
+    display: contents;
+  }
+  [data-alvo='web'] .etiq-controles { order: 1 }
+  [data-alvo='web'] .etiq-previa { order: 2 }
+  [data-alvo='web'] .etiq-produtos { order: 3 }
+
   /* ---------- a altura que de fato se vê (§3.3) ----------
      ⚠️ Ele reclamou DUAS vezes de "a primeira rolagem não vai até embaixo,
      preciso rolar de novo", a segunda já com a reserva do rodapé em 104px e 24

@@ -356,13 +356,18 @@ const Clientes: FC = () => {
     new Date(iso).toLocaleDateString('pt-BR')
 
   return (
-    {/*
+    /*
       `entrada-escalonada`: os blocos sobem e aparecem um após o outro, a
       mesma entrada do Painel. Foi pedido com estas palavras: "o fade dos
       itens aparecendo só acontece no painel inicial e nas configurações,
       consegue fazer isso também aparecer para a tela de produtos e
       clientes?". Só no celular, e só para quem não pediu menos movimento.
-    */}
+
+      ⚠️ Comentário de JavaScript, sem chaves. Entre o `(` do `return` e o
+      elemento, um comentário JSX (o de chaves) vira uma expressão IRMÃ do
+      <div>, e a tela deixa de compilar: "JSX expressions must have one parent
+      element". Dentro do elemento, o de chaves é o certo.
+    */
     <div className="entrada-escalonada p-4 lg:p-8">
       {/*
         ⚠️ O cabeçalho sai no celular, como no Painel: a pílula acesa na ilha já
