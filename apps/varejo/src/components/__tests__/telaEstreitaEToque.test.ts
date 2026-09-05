@@ -653,6 +653,37 @@ describe('tela 6 — Mais', () => {
   })
 })
 
+describe('aba carregada sob demanda depois de um deploy', () => {
+  it('★ uma aba que ainda não foi aberta não vira tela branca', () => {
+    /*
+     * Cada compilação gera nomes de arquivo novos e apaga os antigos. Quem está
+     * com a página aberta segue com o índice velho na memória: ao tocar numa aba
+     * que ainda não tinha sido carregada, o navegador busca um arquivo que não
+     * existe mais, a promessa do `lazy()` quebra e o React derruba a árvore
+     * inteira — tela branca, sem mensagem.
+     *
+     * ⚠️ Não é defeito de tela nenhuma, e na loja hospedada acontece TODA vez
+     * que se publica com alguém usando. Por isso a proteção mora no `lazy`, e
+     * não em quem chama.
+     *
+     * ⚠️ E a marca no `sessionStorage` é o que impede o laço: se recarregar não
+     * resolveu, o problema é outro e o erro tem que subir, em vez de virar uma
+     * página que se recarrega para sempre.
+     */
+    expect(APP).toContain('function lazyComRecarga')
+    expect(APP).toContain('window.location.reload()')
+    expect(APP).toContain("sessionStorage.getItem(chave) === '1'")
+    expect(APP).toContain("sessionStorage.removeItem('fhvp_recarga_por_chunk')")
+
+    // ⚠️ Toda rota sob demanda passa pelo ajudante. Uma que escape volta a
+    // dar tela branca, e só na aba que ninguém tinha aberto naquela sessão.
+    const soltas = APP.split('\n')
+      .filter((l) => /(?<!ComRecarga)\blazy\(\(\) => import\(/.test(l))
+      .map((l) => l.trim().slice(0, 60))
+    expect(soltas, 'rota sob demanda sem a proteção da recarga').toEqual([])
+  })
+})
+
 describe('a ilha de navegação do celular (roteiro §3)', () => {
   const ILHA = readFileSync(
     join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'BarraInferiorMobile.tsx'),

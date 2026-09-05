@@ -1,4 +1,4 @@
-import { createContext, FC, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { ComponentType, createContext, FC, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   MemoryRouter,
   Routes,
@@ -78,14 +78,68 @@ import { useAutoLock } from './hooks/useAutoLock'
 // Features opcionais carregadas sob demanda e gateadas por edição (build-time).
 // Quando a flag é `false`, o `lazy(import())` vira `null` e o bundler remove o
 // chunk e suas libs exclusivas do binário (ex.: recharts sai junto do Dashboard).
-const Dashboard = __FEAT_DASHBOARD__ ? lazy(() => import('./pages/Dashboard')) : null
-const EtiquetasA4 = __FEAT_ETIQUETAS__ ? lazy(() => import('./pages/EtiquetasA4')) : null
-const ChatAssistente = __FEAT_CHATBOT__ ? lazy(() => import('./components/ChatAssistente')) : null
-const ConfiguracaoFiscal = __FEAT_NFE__ ? lazy(() => import('./pages/ConfiguracaoFiscal')) : null
+/**
+ * `lazy()` que sobrevive a um deploy feito com a página aberta.
+ *
+ * ── O defeito ────────────────────────────────────────────────────────────────
+ * Cada compilação gera nomes de arquivo novos e apaga os antigos. Quem está com
+ * a página aberta segue com o índice velho na memória: ao tocar numa aba que
+ * ainda não tinha sido carregada, o navegador busca um arquivo que não existe
+ * mais, a promessa quebra e o React derruba a árvore inteira. Tela branca, sem
+ * mensagem, e só na aba que ainda não tinha sido aberta naquela sessão.
+ *
+ * ⚠️ Não é defeito de tela nenhuma. Vale para QUALQUER rota carregada sob
+ * demanda, e na loja hospedada acontece toda vez que se publica com alguém
+ * usando.
+ *
+ * ── A saída ──────────────────────────────────────────────────────────────────
+ * Recarregar UMA vez: o índice novo chega, os nomes batem, a aba abre.
+ *
+ * ⚠️ O `sessionStorage` é o que impede o laço. Se recarregar não resolveu, o
+ * problema é outro — e aí o erro tem que subir, e não virar uma página que se
+ * recarrega para sempre.
+ */
+function lazyComRecarga<T extends ComponentType<any>>(
+  importar: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    try {
+      return await importar()
+    } catch (erro) {
+      const chave = 'fhvp_recarga_por_chunk'
+      let jaTentou = false
+      try {
+        jaTentou = sessionStorage.getItem(chave) === '1'
+        if (!jaTentou) sessionStorage.setItem(chave, '1')
+      } catch {
+        // sem armazenamento: melhor recarregar uma vez do que ficar em branco
+      }
+      if (!jaTentou) {
+        window.location.reload()
+        // Promessa que nunca resolve: a página já está indo embora, e resolver
+        // aqui só renderizaria um quadro do nada antes da recarga.
+        return await new Promise<{ default: T }>(() => {})
+      }
+      throw erro
+    }
+  })
+}
+
+const Dashboard = __FEAT_DASHBOARD__ ? lazyComRecarga(() => import('./pages/Dashboard')) : null
+const EtiquetasA4 = __FEAT_ETIQUETAS__ ? lazyComRecarga(() => import('./pages/EtiquetasA4')) : null
+const ChatAssistente = __FEAT_CHATBOT__ ? lazyComRecarga(() => import('./components/ChatAssistente')) : null
+const ConfiguracaoFiscal = __FEAT_NFE__ ? lazyComRecarga(() => import('./pages/ConfiguracaoFiscal')) : null
 // Calculadora do balcão — existe em todos os planos (é ferramenta de operação,
 // não de plano). Carregada sob demanda: só entra na memória se for aberta.
-const Calculadora = lazy(() => import('./components/Calculadora'))
-const Mais = lazy(() => import('./pages/Mais'))
+const Calculadora = lazyComRecarga(() => import('./components/Calculadora'))
+const Mais = lazyComRecarga(() => import('./pages/Mais'))
+
+// A página subiu: a próxima falha de carregamento merece a recarga dela.
+try {
+  sessionStorage.removeItem('fhvp_recarga_por_chunk')
+} catch {
+  // sem armazenamento; o `lazyComRecarga` se vira
+}
 
 const FallbackCarregando: FC = () => (
   <div className="flex-1 flex items-center justify-center p-8">
