@@ -301,58 +301,39 @@ const Dashboard: FC = () => {
     /* `entrada-escalonada`: os blocos sobem e aparecem um após o outro, uma
        vez só, na abertura. Ver §10 no index.css. */
     <div className="entrada-escalonada p-4 lg:p-8">
-      <div className="ordem-filtro flex items-start justify-between mb-4 flex-wrap gap-3">
-        {/*
-          ⚠️ Some no celular (roteiro §5.1). A pílula acesa na ilha já diz que
-          você está no Painel: repetir "Dashboard" num título de 24px mais um
-          parágrafo de três linhas gastava ~40% da primeira tela antes de
-          aparecer um número. No desktop sobra espaço e o texto continua.
-        */}
-        <div className="hidden lg:block">
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <LayoutDashboard className="w-6 h-6 text-primary" />
-            Dashboard
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Os números do período escolhido. O card de produtos parados é o único que ignora o
-            filtro — ele olha sempre os últimos 30 dias.
-          </p>
-        </div>
-        {/*
-          Filtro de período: janela móvel ou mês específico.
+      {/*
+        ⭐ No celular este cabeçalho inteiro não existe: o título já sai (a pílula
+        acesa na ilha diz onde você está) e o filtro de período foi morar dentro
+        do cartão de "Vendas no tempo", que é o que ele filtra.
 
-          ⚠️ No celular ele ocupa a linha inteira e cada botão divide o espaço
-          por igual (`flex-1`). Antes eram botões de largura natural numa
-          linha só: "7 dias" quebrava em "7 / dias", e o "Mês" era empurrado
-          para fora da caixa cinza que deveria contê-lo (defeito nº 11).
-        */}
-        <div className="flex w-full lg:w-auto gap-1 p-1 bg-muted rounded-lg">
-          {PERIODOS.map((p) => {
-            const ativo = modo === 'janela' && periodoDias === p.dias
-            return (
-              <button
-                key={p.dias}
-                onClick={() => { setModo('janela'); setPeriodoDias(p.dias) }}
-                className={`flex-1 lg:flex-none px-2 lg:px-3 py-1.5 text-xs lg:text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
-                  ativo
-                    ? 'bg-background shadow text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {p.rotuloCurto}
-              </button>
-            )
-          })}
-          <FiltroMesPopover
-            mes={mesAtual}
-            comparar={compararMes}
+        ⚠️ A escolha é por `ehCelular`, e não por classe: com `hidden lg:flex` o
+        filtro existiria DUAS vezes no DOM, e o "Mês" é um painelzinho com estado
+        próprio — duas cópias, dois estados, e um deles sempre errado.
+      */}
+      {!ehCelular && (
+        <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+          <div className="hidden lg:block">
+            <h2 className="text-2xl font-bold flex items-center gap-2">
+              <LayoutDashboard className="w-6 h-6 text-primary" />
+              Dashboard
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Os números do período escolhido. O card de produtos parados é o único que ignora o
+              filtro — ele olha sempre os últimos 30 dias.
+            </p>
+          </div>
+          <FiltroPeriodo
+            modo={modo}
+            periodoDias={periodoDias}
+            mesAtual={mesAtual}
+            compararMes={compararMes}
             mesComparativo={mesComparativo}
-            ativo={modo === 'mes'}
-            maxMes={mesMaximo}
-            onApply={aplicarMes}
+            mesMaximo={mesMaximo}
+            onJanela={(dias) => { setModo('janela'); setPeriodoDias(dias) }}
+            onMes={aplicarMes}
           />
         </div>
-      </div>
+      )}
 
       {/* ── Vencimentos ── */}
       <CartaoVencimentos
@@ -527,7 +508,33 @@ const Dashboard: FC = () => {
               <span className="hidden lg:inline text-xs text-muted-foreground">{rotuloPeriodo}</span>
             </div>
           </div>
-          <p className="lg:hidden -mt-2 mb-2 text-[12px] text-muted-foreground">{rotuloPeriodo}</p>
+          {/*
+            ⭐ O seletor de período mora aqui no celular: ele filtra este gráfico,
+            e no alto da página ele era a primeira coisa que aparecia — uma barra
+            cinza antes de qualquer número.
+          */}
+          {ehCelular && (
+            <FiltroPeriodo
+              compacto
+              modo={modo}
+              periodoDias={periodoDias}
+              mesAtual={mesAtual}
+              compararMes={compararMes}
+              mesComparativo={mesComparativo}
+              mesMaximo={mesMaximo}
+              onJanela={(dias) => { setModo('janela'); setPeriodoDias(dias) }}
+              onMes={aplicarMes}
+            />
+          )}
+          {/*
+            O rótulo do período só aparece no modo "Mês", e só no celular: nos
+            outros modos a pílula acesa já diz "30 dias" com as mesmas palavras,
+            e repetir logo abaixo dela seria dizer duas vezes a mesma coisa.
+            No modo Mês, não: a pílula diz "Mês", e só esta linha diz QUAL.
+          */}
+          {modo === 'mes' && (
+            <p className="lg:hidden mt-2 text-[12px] text-muted-foreground">{rotuloPeriodo}</p>
+          )}
           {carregandoMetricas ? (
             <Skeleton className="h-56 lg:h-64 w-full" />
           ) : metricas && metricas.serie_temporal.length > 0 ? (
@@ -751,6 +758,123 @@ const SkeletonLista: FC<{ linhas?: number; comRank?: boolean }> = ({ linhas = 5,
 )
 
 type Delta = { pct: number; valido: boolean }
+
+/**
+ * O seletor de período, nas duas roupas.
+ *
+ * ── Onde ele mora ────────────────────────────────────────────────────────────
+ * No monitor, no cabeçalho do Painel, ao lado do título — como sempre esteve.
+ * No celular, DENTRO do cartão de "Vendas no tempo", que é o que ele filtra: no
+ * alto da página ele era a primeira coisa a aparecer, uma barra cinza antes de
+ * qualquer número.
+ *
+ * ⚠️ Renderizado UMA vez, escolhido em JavaScript. Com `hidden lg:flex` as duas
+ * roupas existiriam no DOM ao mesmo tempo, e o "Mês" é um painelzinho com
+ * estado próprio: duas cópias, dois estados, e um deles sempre errado.
+ *
+ * ── A pílula que escorrega ───────────────────────────────────────────────────
+ * Na roupa do celular são cinco colunas iguais, e a pílula anda entre elas — a
+ * mesma gramática das abas de Vencimentos e da ilha de navegação. Colunas
+ * IGUAIS não é capricho: é o que deixa a conta da pílula ser uma só para as
+ * cinco posições.
+ *
+ * ── Por que ele não fica mais fino que isto ──────────────────────────────────
+ * ⚠️ 44px é piso, não escolha: o bloco de `any-pointer: coarse` no `index.css`
+ * levanta todo botão da web a essa altura, porque errar o alvo trinta vezes por
+ * dia cansa mais do que parece. O que encolheu foi o resto — o recheio do
+ * trilho, o corpo da letra e o ícone do "Mês", que sai para a coluna caber.
+ */
+const FiltroPeriodo: FC<{
+  compacto?: boolean
+  modo: Modo
+  periodoDias: number
+  mesAtual: string
+  compararMes: boolean
+  mesComparativo: string
+  mesMaximo: string
+  onJanela: (dias: number) => void
+  onMes: (mes: string, comparar: boolean, mesComparativo: string) => void
+}> = ({
+  compacto, modo, periodoDias, mesAtual, compararMes, mesComparativo, mesMaximo, onJanela, onMes
+}) => {
+  if (compacto) {
+    // A quinta posição é a do "Mês"; as quatro primeiras são as janelas móveis.
+    const indice = modo === 'mes'
+      ? PERIODOS.length
+      : Math.max(0, PERIODOS.findIndex((p) => p.dias === periodoDias))
+    return (
+      <div className="filtro-periodo mt-2" role="group" aria-label="Período">
+        {/* ⚠️ IRMÃ e ANTES dos botões: elemento posicionado pinta na ordem do
+            DOM, então ela fica por baixo sem z-index em cada rótulo. */}
+        <span
+          className="filtro-periodo-pilula"
+          aria-hidden="true"
+          style={{ '--i': indice } as CSSProperties}
+        />
+        {PERIODOS.map((p) => {
+          const ativo = modo === 'janela' && periodoDias === p.dias
+          return (
+            <button
+              key={p.dias}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => onJanela(p.dias)}
+              className={`filtro-periodo-item ${ativo ? 'text-foreground' : 'text-muted-foreground'}`}
+            >
+              {p.rotuloCurto}
+            </button>
+          )
+        })}
+        <FiltroMesPopover
+          mes={mesAtual}
+          comparar={compararMes}
+          mesComparativo={mesComparativo}
+          ativo={modo === 'mes'}
+          maxMes={mesMaximo}
+          onApply={onMes}
+          className="filtro-periodo-item w-full"
+          semIcone
+        />
+      </div>
+    )
+  }
+
+  /*
+   * A roupa do monitor, igual à de sempre.
+   *
+   * `flex-1` nos botões e `shrink-0` no "Mês" continuam aqui porque esta roupa
+   * também serve o aplicativo instalado numa janela estreita — sem eles o "Mês"
+   * escapava da caixa cinza (defeito nº 11).
+   */
+  return (
+    <div className="flex w-full lg:w-auto gap-1 p-1 bg-muted rounded-lg">
+      {PERIODOS.map((p) => {
+        const ativo = modo === 'janela' && periodoDias === p.dias
+        return (
+          <button
+            key={p.dias}
+            onClick={() => onJanela(p.dias)}
+            className={`flex-1 lg:flex-none px-2 lg:px-3 py-1.5 text-xs lg:text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
+              ativo
+                ? 'bg-background shadow text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {p.rotuloCurto}
+          </button>
+        )
+      })}
+      <FiltroMesPopover
+        mes={mesAtual}
+        comparar={compararMes}
+        mesComparativo={mesComparativo}
+        ativo={modo === 'mes'}
+        maxMes={mesMaximo}
+        onApply={onMes}
+      />
+    </div>
+  )
+}
 
 /**
  * Uma linha de vencimento: cliente, telefone, valor e quando.

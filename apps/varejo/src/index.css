@@ -508,6 +508,64 @@
     padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* ---------- o seletor de período, dentro do cartão do gráfico ----------
+     Ele saiu do alto da página, onde era a primeira coisa a aparecer — uma
+     barra cinza antes de qualquer número —, e foi morar no cartão que ele
+     filtra.
+
+     Cinco colunas IGUAIS, e isso não é capricho: com larguras diferentes a
+     pílula precisaria de uma conta por posição. Iguais, a conta é uma só.
+
+     ⚠️ `min-height: 40px` aqui é o piso do DESENHO. Em tela de dedo o bloco de
+     `any-pointer: coarse` levanta todo botão para 44px, e está certo: quem
+     quiser este seletor mais baixo tem que discutir aquele bloco, não este. */
+  [data-alvo='web'] .filtro-periodo {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 3px;
+    padding: 3px;
+    border-radius: 9px;
+    background: hsl(var(--muted));
+  }
+
+  [data-alvo='web'] .filtro-periodo-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 2px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.2s ease;
+  }
+
+  /* Um quinto do vão útil: 20% do trilho menos a parte dele nos quatro
+     respiros e no recheio. Uma casa andada = a própria largura mais o respiro,
+     a mesma conta das abas de Vencimentos. */
+  [data-alvo='web'] .filtro-periodo-pilula {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(20% - 3.6px);
+    border-radius: 6px;
+    background: hsl(var(--background));
+    box-shadow: 0 1px 2px hsl(var(--foreground) / 0.12);
+    transform: translateX(calc(var(--i, 0) * (100% + 3px)));
+    transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-alvo='web'] .filtro-periodo-pilula {
+      transition: none;
+    }
+  }
+
   /* ---------- a ordem do Painel no celular ----------
      O dono quis o gráfico entre as primeiras coisas que aparecem ao abrir:
      "passa um ar estatístico". No monitor a ordem segue a do arquivo, que é a
@@ -524,7 +582,6 @@
     display: flex;
     flex-direction: column;
   }
-  [data-alvo='web'] .ordem-filtro { order: -3 }
   [data-alvo='web'] .ordem-vencimentos { order: -2 }
   [data-alvo='web'] .ordem-grafico { order: -1 }
 

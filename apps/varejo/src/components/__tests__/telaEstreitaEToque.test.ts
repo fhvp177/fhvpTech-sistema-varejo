@@ -489,7 +489,6 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
      * junto, que é o que esta reforma não pode fazer.
      */
     const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
-    expect(PAINEL).toContain('ordem-filtro')
     expect(PAINEL).toContain('ordem-vencimentos')
     expect(PAINEL).toContain('ordem-grafico')
     expect(PAINEL).toContain('par-grafico')
@@ -497,7 +496,6 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(PAINEL.split('ordem-grafico').length - 1, 'o cartão do gráfico foi duplicado').toBe(1)
 
     const movel = CSS.slice(CSS.indexOf('@media (max-width: 1023.98px)'))
-    expect(movel).toContain('.ordem-filtro { order: -3 }')
     expect(movel).toContain('.ordem-vencimentos { order: -2 }')
     expect(movel).toContain('.ordem-grafico { order: -1 }')
     // sem o flex no Painel, `order` não vale nada
@@ -528,9 +526,62 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(PAINEL).toContain('par-grafico grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4')
     // as regras de ordem moram TODAS dentro da consulta de tela estreita
     const fixo = CSS.slice(0, CSS.indexOf('@media (max-width: 1023.98px)'))
-    for (const regra of ['ordem-filtro', 'ordem-vencimentos', 'ordem-grafico', 'par-grafico']) {
+    for (const regra of ['ordem-vencimentos', 'ordem-grafico', 'par-grafico']) {
       expect(fixo, `${regra} escapou da consulta de tela estreita`).not.toContain(regra)
     }
+  })
+
+  it('★ o filtro de período mora DENTRO do cartão do gráfico, no celular', () => {
+    /*
+     * Ele filtra aquele gráfico, e no alto da página era a primeira coisa a
+     * aparecer: uma barra cinza antes de qualquer número.
+     *
+     * ⚠️ Uma instância SÓ, escolhida em JavaScript. Com `hidden lg:flex` as
+     * duas roupas existiriam ao mesmo tempo no DOM, e o "Mês" é um painelzinho
+     * com estado próprio: duas cópias, dois estados, e um deles sempre errado.
+     */
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    expect(PAINEL).toContain('const FiltroPeriodo')
+    expect(PAINEL).toContain('{ehCelular && (')
+    expect(PAINEL).toContain('{!ehCelular && (')
+    // \s+ em vez de \n literal: o arquivo é CRLF, e a âncora com \n não casa.
+    expect(PAINEL).toMatch(/<FiltroPeriodo\s+compacto/)
+    // e o painelzinho do Mês é usado uma vez em cada roupa, nunca as duas juntas
+    expect(PAINEL.split('<FiltroPeriodo').length - 1, 'o filtro foi parar em mais de dois lugares').toBe(2)
+  })
+
+  it('★ o seletor de período tem cinco colunas IGUAIS e a pílula escorrega', () => {
+    // Larguras diferentes pediriam uma conta de posição por botão; iguais, a
+    // conta é uma só — a mesma das abas de Vencimentos.
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    const bloco = PAINEL.slice(PAINEL.indexOf('<div className="filtro-periodo'))
+    expect(bloco).toContain('filtro-periodo-pilula')
+    expect(bloco.indexOf('filtro-periodo-pilula')).toBeLessThan(bloco.indexOf('PERIODOS.map'))
+
+    const movel = CSS.slice(CSS.indexOf('@media (max-width: 1023.98px)'))
+    expect(movel).toContain('grid-template-columns: repeat(5, 1fr)')
+    expect(movel).toContain('width: calc(20% - 3.6px)')
+    expect(movel).toContain('transform: translateX(calc(var(--i, 0) * (100% + 3px)))')
+    const regra = movel.slice(
+      movel.indexOf('.filtro-periodo-pilula'),
+      movel.indexOf('}', movel.indexOf('.filtro-periodo-pilula'))
+    )
+    expect(regra, 'z-index na pílula significa que a ordem do DOM deixou de bastar')
+      .not.toContain('z-index')
+  })
+
+  it('★ afinar o seletor NÃO baixou o alvo de dedo dos 44px', () => {
+    /*
+     * O que encolheu foi o desenho: recheio do trilho, corpo da letra, e o
+     * ícone do "Mês" que saiu para a coluna caber. A ALTURA de toque continua
+     * vindo do bloco de `any-pointer: coarse`, que é quem responde por ela.
+     */
+    const movel = CSS.slice(CSS.indexOf('@media (max-width: 1023.98px)'))
+    expect(movel).toContain('font-size: 11.5px')
+    const toque = CSS.slice(CSS.indexOf('@media (any-pointer: coarse)'))
+    expect(toque).toContain('min-height: 44px')
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    expect(PAINEL).toContain('semIcone')
   })
 
   it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {

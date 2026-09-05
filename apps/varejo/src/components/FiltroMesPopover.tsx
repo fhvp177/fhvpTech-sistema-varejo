@@ -24,9 +24,22 @@ type Props = {
   ativo: boolean              // modo 'mes' está ativo (destaca o botão)
   maxMes: string              // 'YYYY-MM' — bloqueia meses futuros
   onApply: (mes: string, comparar: boolean, mesComparativo: string) => void
+  /**
+   * Classe do botão, quando quem hospeda tem forma própria.
+   *
+   * É o caso do seletor dentro do cartão de "Vendas no tempo" no celular: lá
+   * este botão é uma das cinco colunas de uma grade e precisa preencher a
+   * célula. Ausente, valem as classes de sempre — o cabeçalho do monitor não
+   * sabe que isto existe.
+   */
+  className?: string
+  /** Esconde o ícone, para onde a coluna é estreita demais para ele. */
+  semIcone?: boolean
 }
 
-const FiltroMesPopover: FC<Props> = ({ mes, comparar, mesComparativo, ativo, maxMes, onApply }) => {
+const FiltroMesPopover: FC<Props> = ({
+  mes, comparar, mesComparativo, ativo, maxMes, onApply, className, semIcone
+}) => {
   const [aberto, setAberto] = useState(false)
   // Rascunho: só vira estado aplicado quando o usuário clica em "Aplicar".
   const [draftMes, setDraftMes] = useState(mes)
@@ -82,12 +95,16 @@ const FiltroMesPopover: FC<Props> = ({ mes, comparar, mesComparativo, ativo, max
           escapava da caixa cinza no celular, porque os irmãos com `flex-1`
           o espremiam até ele estourar para fora (defeito nº 11).
         */
-        className={`shrink-0 whitespace-nowrap px-2 lg:px-3 py-1.5 text-xs lg:text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${
-          ativo ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
-        }`}
+        className={
+          className
+            ? `${className} ${ativo ? 'text-foreground' : 'text-muted-foreground'}`
+            : `shrink-0 whitespace-nowrap px-2 lg:px-3 py-1.5 text-xs lg:text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+                ativo ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`
+        }
         title="Resultados de um mês específico"
       >
-        <CalendarDays className="w-3.5 h-3.5" />
+        {!semIcone && <CalendarDays className="w-3.5 h-3.5" />}
         Mês
       </button>
 
