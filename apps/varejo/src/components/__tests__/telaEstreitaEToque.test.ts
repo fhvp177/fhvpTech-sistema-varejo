@@ -615,6 +615,24 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(PAINEL).toContain('h-32 w-32 lg:h-44 lg:w-44 shrink-0')
   })
 
+  it('★ a rosca de Forma de pagamento cabe na caixa que ela tem', () => {
+    /*
+     * ⚠️ Raio em PORCENTAGEM no celular, e não em pixel. Ao encolher a caixa
+     * de 176 para 128px (para dar largura à legenda), um `outerRadius` de 70
+     * num quadrado de 128 — centro em 64 — passou a pedir mais do que cabia: o
+     * desenho parava na borda e a rosca saía com os quatro lados chanfrados,
+     * com cara de octógono.
+     *
+     * Porcentagem é do menor lado, então ela acompanha a caixa. Trocar de volta
+     * por pixel volta a cortar na próxima vez que a caixa mudar.
+     */
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    expect(PAINEL).toContain("innerRadius={ehCelular ? '52%' : 42}")
+    expect(PAINEL).toContain("outerRadius={ehCelular ? '88%' : 70}")
+    // e nenhum raio em pixel sobrou solto na tela
+    expect(PAINEL, 'raio em pixel de novo: a caixa do celular corta').not.toContain('outerRadius={70}')
+  })
+
   it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {
     // ⚠️ A primeira tentativa fixava a posição dele pelo CSS. Isso tirava o
     // botão de cima do conteúdo e MATAVA o arraste junto, que era justamente o

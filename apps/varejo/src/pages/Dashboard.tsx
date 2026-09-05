@@ -1419,6 +1419,7 @@ const ROTULOS_PAGAMENTO: Record<string, string> = {
 type WidgetProps = { metricas: MetricasDashboard | null; carregando: boolean }
 
 const CardFormaPagamento: FC<WidgetProps> = ({ metricas, carregando }) => {
+  const ehCelular = useEhCelular()
   const dados = metricas
     ? Object.entries(metricas.distribuicao_pagamento)
         .map(([chave, v]) => ({
@@ -1455,7 +1456,22 @@ const CardFormaPagamento: FC<WidgetProps> = ({ metricas, carregando }) => {
           <div className="h-32 w-32 lg:h-44 lg:w-44 shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={dados} dataKey="num" innerRadius={42} outerRadius={70} paddingAngle={2}>
+                {/*
+                  ⚠️ Raio em PORCENTAGEM no celular, não em pixel.
+                  A caixa encolheu de 176 para 128px para dar largura à legenda,
+                  e um `outerRadius` de 70 num quadrado de 128 (centro em 64)
+                  pedia mais do que cabia: o desenho parava na borda e a rosca
+                  saía com os quatro lados chanfrados, com cara de octógono.
+                  Porcentagem é do menor lado, então ela acompanha a caixa —
+                  inclusive na próxima vez que a caixa mudar de tamanho.
+                */}
+                <Pie
+                  data={dados}
+                  dataKey="num"
+                  innerRadius={ehCelular ? '52%' : 42}
+                  outerRadius={ehCelular ? '88%' : 70}
+                  paddingAngle={2}
+                >
                   {dados.map((d) => (
                     <Cell key={d.chave} fill={CORES_PAGAMENTO[d.chave]} />
                   ))}
