@@ -36,6 +36,8 @@ import {
 import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
 import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancelarVenda'
+import { useEhCelular } from '@/hooks/useEhCelular'
+import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 
 // Nota fiscal só existe no plano Pro. Com a flag falsa, o `lazy` vira null e o
 // bundler tira o componente (e o chunk) do binário do Básico.
@@ -580,9 +582,16 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     { key: 'cancelada', label: 'Canceladas' }
   ]
 
+  const ehCelular = useEhCelular()
+
   return (
-    <div className="p-8">
-      <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="p-4 lg:p-8">
+      {/*
+        ⚠️ O cabeçalho sai no celular, como nas outras telas: a pílula acesa na
+        ilha já diz onde você está, e o título de 24px mais o parágrafo gastavam
+        meia tela antes da primeira venda aparecer.
+      */}
+      <div className="hidden lg:flex items-start justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <ShoppingCart className="w-6 h-6 text-primary" />
@@ -619,19 +628,57 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
       </div>
 
       {/* Busca por cliente ou nº da venda */}
-      <div className="relative mb-4 max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por cliente ou nº da venda..."
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex items-center gap-2 mb-3 lg:mb-4">
+        <div className="relative flex-1 lg:max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por cliente ou nº da venda..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {/*
+          No celular o relatório do mês vira item de menu e a nova venda fica
+          como botão — é o que se faz ao abrir esta tela.
+        */}
+        <div className="lg:hidden">
+          <MenuAcoes
+            rotulo="Ferramentas de vendas"
+            acoes={[
+              {
+                rotulo: 'Relatório do mês',
+                icone: <FileText className="w-4 h-4" />,
+                desabilitada: lista.length === 0,
+                onSelecionar: () => { setRelMes(filtroMes || mesMaximo); setRelatorioAberto(true) }
+              }
+            ] as AcaoMenu[]}
+          />
+        </div>
+        <Button
+          onClick={onNova}
+          disabled={semCaixaPrincipal}
+          title={semCaixaPrincipal ? 'Sem conexão com o caixa principal.' : 'Nova venda (PDV)'}
+          aria-label="Nova venda"
+          className="lg:hidden h-11 w-11 shrink-0 p-0"
+        >
+          <Plus className="w-5 h-5" />
+        </Button>
       </div>
 
       {/* Filtro de status + filtro de mês */}
-      <div className="flex items-end justify-between gap-3 mb-4 border-b flex-wrap">
-        <div className="flex gap-1">
+      <div className="flex items-end justify-between gap-3 mb-3 lg:mb-4 border-b flex-wrap">
+        {/*
+          ⚠️ Seis abas de status não cabem em 360px, e as três saídas erradas do
+          §6 valem aqui igual. A saída certa para uma TIRA DE FILTROS é a que o
+          §6.1 abre como exceção: o CONTÊINER rola, a página nunca. Filtro não é
+          tabela — aqui não há nada para comparar entre colunas, só uma escolha
+          a fazer, e correr a tira com o polegar é gesto natural.
+
+          `overscroll-contain` impede que o gesto vaze para a página e dispare o
+          "voltar" do navegador, que é a segunda metade da regra.
+        */}
+        <div className="flex gap-1 max-w-full overflow-x-auto overscroll-x-contain scrollbar-suave lg:overflow-visible">
           {tabs.map(({ key, label }) => (
             <button
               key={key}
@@ -665,152 +712,308 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         </div>
       </div>
 
-      <div className="border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground w-12">#</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Data</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cliente</th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Total</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Vencimento</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-              <th className="w-32 px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {listaFiltrada.length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-center py-12 text-muted-foreground">
-                  Nenhuma venda encontrada.
-                </td>
-              </tr>
-            )}
-            {listaPaginada.map((v, i) => (
-              <tr
-                key={v.id}
-                className={`border-b border-border last:border-b-0 ${
-                  i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
-                }`}
-              >
-                <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{v.id}</td>
-                <td className="px-4 py-3 text-muted-foreground">{fmtData(v.data)}</td>
-                <td className="px-4 py-3 font-medium">
-                  <div className="truncate max-w-[240px]" title={v.cliente_nome || 'Venda avulsa'}>
-                    {v.cliente_nome || 'Venda avulsa'}
+      {/*
+        ⭐ No celular a tabela vira LISTA (roteiro §6), mesmo padrão das outras.
+
+        Sete colunas e até cinco comandos por linha não cabem em 360px. A linha
+        vira um item de duas alturas: cliente e total em cima; número, data,
+        vencimento e situação embaixo.
+
+        ⚠️ A tabela não é escondida por classe, ela não é RENDERIZADA.
+
+        ⚠️ A nota fiscal continua sendo o seu próprio botão, fora do menu: ela
+        não é uma ação que se dispara e acaba, é um componente com estado que
+        muda de cara conforme a nota exista, esteja em processamento ou tenha
+        sido cancelada. Enfiar isso num item de menu esconderia justamente o
+        estado que precisa estar à vista.
+      */}
+      {ehCelular ? (
+        listaFiltrada.length === 0 ? (
+          <div className="border rounded-xl bg-card py-12 text-center text-muted-foreground">
+            Nenhuma venda encontrada.
+          </div>
+        ) : (
+          <ul className="border rounded-xl bg-card divide-y">
+            {listaPaginada.map((v) => {
+              const selo = seloDevolucao(v)
+              /*
+               * O mesmo valor da tabela, com a mesma regra: quando há atraso ou
+               * pagamento parcial, o que aparece é o que FALTA — e a palavra que
+               * explica isso desce para a linha de baixo, para não alargar o
+               * número numa tela estreita.
+               */
+              const emAtraso =
+                !v.cancelada && v.num_parcelas && v.status_pagamento === 'inadimplente' && v.valor_inadimplente > 0
+              const restante =
+                !v.cancelada && !v.num_parcelas && v.status_pagamento !== 'pago' && v.valor_pago > 0
+              const valor = emAtraso ? v.valor_inadimplente : restante ? v.total - v.valor_pago : v.total
+              /*
+               * ⚠️ A situação vem por ESCRITO aqui, e não numa etiqueta ao lado.
+               * Medido em 360px: com a etiqueta na linha, e a coluna da direita
+               * carregando o botão de nota fiscal mais o menu, sobravam ~118px
+               * para o nome do cliente — "MARIA APARECIDA DA CONCEIÇÃO SILVA"
+               * virava "MARIA APAR...". Sem ela, o nome tem 214.
+               *
+               * Nada se perde: a situação continua legível de duas formas, a
+               * palavra aqui e a COR do valor logo acima.
+               */
+              const meta = [
+                `#${v.id}`,
+                fmtData(v.data),
+                v.cancelada ? 'cancelada' : badgeVenda(v).toLowerCase(),
+                v.cancelada
+                  ? (v.cancelada_em ? fmtDataCurta(v.cancelada_em.slice(0, 10)) : null)
+                  : v.num_parcelas
+                    ? `${v.num_parcelas}x — 1ª ${v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}`
+                    : v.data_vencimento ? `vence ${fmtDataCurta(v.data_vencimento)}` : null,
+                emAtraso ? 'em atraso' : restante ? 'restante' : null,
+                selo ? selo.label.toLowerCase() : null
+              ]
+                .filter(Boolean)
+                .join(' · ')
+              /* A cor do valor é a segunda leitura da situação, para quem corre os
+                 olhos pela coluna de dinheiro sem ler as linhas. */
+              const corValor = v.cancelada
+                ? 'text-muted-foreground line-through'
+                : v.status_pagamento === 'inadimplente'
+                  ? 'text-critical'
+                  : v.status_pagamento === 'pago'
+                    ? 'text-foreground'
+                    : 'text-warn'
+              return (
+                <li key={v.id} className="px-3 py-2.5">
+                  {/*
+                    `minmax(0,1fr)` na coluna do meio é obrigatório: sem ele um
+                    nome de cliente longo estoura a grade em vez de cortar.
+                  */}
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+                    <div className="min-w-0">
+                      <p
+                        className="truncate text-[14.5px] font-semibold leading-tight"
+                        title={v.cliente_nome || 'Venda avulsa'}
+                      >
+                        {v.cliente_nome || 'Venda avulsa'}
+                      </p>
+                      <div className="mt-0.5 flex items-baseline gap-2">
+                        <p
+                          className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground"
+                          title={v.cancelada ? (v.cancelamento_motivo ?? undefined) : undefined}
+                        >
+                          {meta}
+                        </p>
+                        <span className={`num shrink-0 text-[13.5px] font-semibold ${corValor}`}>
+                          {fmt(valor)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center">
+                      {BotaoNotaFiscal && (
+                        <Suspense fallback={null}>
+                          <BotaoNotaFiscal
+                            vendaId={v.id}
+                            aPrazo={v.status_pagamento !== 'pago'}
+                            formaJaConhecida={v.forma_pagamento}
+                            clienteTipoPessoa={v.cliente_tipo_pessoa}
+                            ehDono={ehDono}
+                            nota={notas[v.id] ?? null}
+                            onMudou={(nota) =>
+                              setNotas((m) => {
+                                if (!nota) {
+                                  const { [v.id]: _, ...resto } = m
+                                  return resto
+                                }
+                                return { ...m, [v.id]: nota }
+                              })
+                            }
+                          />
+                        </Suspense>
+                      )}
+                      <MenuAcoes
+                        rotulo={`Ações da venda #${v.id}`}
+                        acoes={[
+                          {
+                            rotulo: 'Ver detalhes',
+                            icone: <Eye className="w-4 h-4" />,
+                            onSelecionar: () => verDetalhes(v.id)
+                          },
+                          ...(v.status_pagamento !== 'pago'
+                            ? [{
+                                rotulo: 'Marcar como pago',
+                                icone: <CheckCircle className="w-4 h-4" />,
+                                onSelecionar: () => marcarComoPago(v)
+                              }]
+                            : []),
+                          {
+                            rotulo: 'Imprimir cupom',
+                            icone: <Printer className="w-4 h-4" />,
+                            onSelecionar: () => abrirMenuImprimir(v)
+                          },
+                          ...(v.status_pagamento === 'pago' && selo?.label !== 'Totalmente devolvida'
+                            ? [{
+                                rotulo: 'Devolução / troca',
+                                icone: <RotateCcw className="w-4 h-4" />,
+                                onSelecionar: () => setDevolverVendaId(v.id)
+                              }]
+                            : [])
+                        ] as AcaoMenu[]}
+                      />
+                    </div>
                   </div>
-                </td>
-                <td className="px-4 py-3 text-right font-semibold">
-                  {v.cancelada ? fmt(v.total) : v.num_parcelas && v.status_pagamento === 'inadimplente' && v.valor_inadimplente > 0
-                    ? (
-                      <span title={`Total da venda: ${fmt(v.total)}`}>
-                        {fmt(v.valor_inadimplente)}
-                        <span className="text-xs text-muted-foreground ml-1 font-normal">em atraso</span>
-                      </span>
-                    )
-                    : !v.num_parcelas && v.status_pagamento !== 'pago' && v.valor_pago > 0
+                </li>
+              )
+            })}
+          </ul>
+        )
+      ) : (
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground w-12">#</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Data</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cliente</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Total</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Vencimento</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                <th className="w-32 px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {listaFiltrada.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                    Nenhuma venda encontrada.
+                  </td>
+                </tr>
+              )}
+              {listaPaginada.map((v, i) => (
+                <tr
+                  key={v.id}
+                  className={`border-b border-border last:border-b-0 ${
+                    i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
+                  }`}
+                >
+                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{v.id}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{fmtData(v.data)}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <div className="truncate max-w-[240px]" title={v.cliente_nome || 'Venda avulsa'}>
+                      {v.cliente_nome || 'Venda avulsa'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold">
+                    {v.cancelada ? fmt(v.total) : v.num_parcelas && v.status_pagamento === 'inadimplente' && v.valor_inadimplente > 0
                       ? (
-                        <span title={`Total da venda: ${fmt(v.total)} — Pago: ${fmt(v.valor_pago)}`}>
-                          {fmt(v.total - v.valor_pago)}
-                          <span className="text-xs text-muted-foreground ml-1 font-normal">restante</span>
+                        <span title={`Total da venda: ${fmt(v.total)}`}>
+                          {fmt(v.valor_inadimplente)}
+                          <span className="text-xs text-muted-foreground ml-1 font-normal">em atraso</span>
                         </span>
                       )
-                      : fmt(v.total)}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">
-                  {v.cancelada
-                    ? `${v.cancelada_por_nome ? 'por ' + v.cancelada_por_nome + ' · ' : ''}${v.cancelada_em ? fmtDataCurta(v.cancelada_em.slice(0, 10)) : ''}`
-                    : v.num_parcelas
-                      ? `${v.num_parcelas}x — 1ª ${v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}`
-                      : v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  {v.cancelada ? (
-                    <span
-                      className="text-xs px-2 py-1 rounded-full font-medium bg-muted text-muted-foreground"
-                      title={v.cancelamento_motivo ?? ''}
-                    >
-                      Cancelada
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
-                        {badgeVenda(v)}
-                      </span>
-                      {(() => {
-                        const selo = seloDevolucao(v)
-                        return selo ? (
-                          <span title={selo.label} className="inline-flex">
-                            <RotateCcw className={`w-3.5 h-3.5 ${selo.cor}`} />
+                      : !v.num_parcelas && v.status_pagamento !== 'pago' && v.valor_pago > 0
+                        ? (
+                          <span title={`Total da venda: ${fmt(v.total)} — Pago: ${fmt(v.valor_pago)}`}>
+                            {fmt(v.total - v.valor_pago)}
+                            <span className="text-xs text-muted-foreground ml-1 font-normal">restante</span>
                           </span>
-                        ) : null
-                      })()}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1 justify-end">
-                    <Button variant="ghost" size="icon" onClick={() => verDetalhes(v.id)} title="Ver detalhes">
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    {v.status_pagamento !== 'pago' && (
+                        )
+                        : fmt(v.total)}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">
+                    {v.cancelada
+                      ? `${v.cancelada_por_nome ? 'por ' + v.cancelada_por_nome + ' · ' : ''}${v.cancelada_em ? fmtDataCurta(v.cancelada_em.slice(0, 10)) : ''}`
+                      : v.num_parcelas
+                        ? `${v.num_parcelas}x — 1ª ${v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}`
+                        : v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {v.cancelada ? (
+                      <span
+                        className="text-xs px-2 py-1 rounded-full font-medium bg-muted text-muted-foreground"
+                        title={v.cancelamento_motivo ?? ''}
+                      >
+                        Cancelada
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
+                          {badgeVenda(v)}
+                        </span>
+                        {(() => {
+                          const selo = seloDevolucao(v)
+                          return selo ? (
+                            <span title={selo.label} className="inline-flex">
+                              <RotateCcw className={`w-3.5 h-3.5 ${selo.cor}`} />
+                            </span>
+                          ) : null
+                        })()}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1 justify-end">
+                      <Button variant="ghost" size="icon" onClick={() => verDetalhes(v.id)} title="Ver detalhes">
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      {v.status_pagamento !== 'pago' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-green-600 hover:text-green-700"
+                          onClick={() => marcarComoPago(v)}
+                          title="Marcar como pago"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-green-600 hover:text-green-700"
-                        onClick={() => marcarComoPago(v)}
-                        title="Marcar como pago"
+                        onClick={() => abrirMenuImprimir(v)}
+                        title="Imprimir ou salvar cupom"
                       >
-                        <CheckCircle className="w-4 h-4" />
+                        <Printer className="w-4 h-4" />
                       </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => abrirMenuImprimir(v)}
-                      title="Imprimir ou salvar cupom"
-                    >
-                      <Printer className="w-4 h-4" />
-                    </Button>
-                    {BotaoNotaFiscal && (
-                      <Suspense fallback={null}>
-                        <BotaoNotaFiscal
-                          vendaId={v.id}
-                          aPrazo={v.status_pagamento !== 'pago'}
-                          formaJaConhecida={v.forma_pagamento}
-                          clienteTipoPessoa={v.cliente_tipo_pessoa}
-                          ehDono={ehDono}
-                          nota={notas[v.id] ?? null}
-                          onMudou={(nota) =>
-                            setNotas((m) => {
-                              if (!nota) {
-                                const { [v.id]: _, ...resto } = m
-                                return resto
-                              }
-                              return { ...m, [v.id]: nota }
-                            })
-                          }
-                        />
-                      </Suspense>
-                    )}
-                    {v.status_pagamento === 'pago' && seloDevolucao(v)?.label !== 'Totalmente devolvida' && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-blue-600 hover:text-blue-700"
-                        onClick={() => setDevolverVendaId(v.id)}
-                        title="Devolução / troca"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                      {BotaoNotaFiscal && (
+                        <Suspense fallback={null}>
+                          <BotaoNotaFiscal
+                            vendaId={v.id}
+                            aPrazo={v.status_pagamento !== 'pago'}
+                            formaJaConhecida={v.forma_pagamento}
+                            clienteTipoPessoa={v.cliente_tipo_pessoa}
+                            ehDono={ehDono}
+                            nota={notas[v.id] ?? null}
+                            onMudou={(nota) =>
+                              setNotas((m) => {
+                                if (!nota) {
+                                  const { [v.id]: _, ...resto } = m
+                                  return resto
+                                }
+                                return { ...m, [v.id]: nota }
+                              })
+                            }
+                          />
+                        </Suspense>
+                      )}
+                      {v.status_pagamento === 'pago' && seloDevolucao(v)?.label !== 'Totalmente devolvida' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-blue-600 hover:text-blue-700"
+                          onClick={() => setDevolverVendaId(v.id)}
+                          title="Devolução / troca"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <Paginacao
         paginaAtual={paginaAtual}
         totalItens={listaFiltrada.length}

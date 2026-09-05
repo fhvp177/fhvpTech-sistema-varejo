@@ -407,6 +407,101 @@ describe('o que fazia a página rolar de lado (§11)', () => {
   })
 })
 
+describe('tela 4 — Vendas no celular (roteiro §6)', () => {
+  const VENDAS = semComentarios(readFileSync(join(SRC, 'pages', 'Vendas.tsx'), 'utf8'))
+  const lista = VENDAS.slice(
+    VENDAS.indexOf('{ehCelular ? ('),
+    VENDAS.indexOf('border rounded-lg overflow-x-auto')
+  )
+
+  it('★ a tabela vira LISTA, e não existe duas vezes no DOM', () => {
+    expect(VENDAS).toContain('const ehCelular = useEhCelular()')
+    expect(VENDAS).toContain('{ehCelular ? (')
+    expect(VENDAS).not.toContain('hidden lg:table')
+    expect(lista).toContain('grid-cols-[minmax(0,1fr)_auto]')
+  })
+
+  it('★ nenhum dos cinco comandos da linha se perdeu', () => {
+    // Ver detalhes, marcar como pago, imprimir e devolução viram itens de menu;
+    // a nota fiscal continua sendo o próprio botão dela. Todos chamam as mesmas
+    // funções da tabela do monitor.
+    expect(lista).toContain('verDetalhes(v.id)')
+    expect(lista).toContain('marcarComoPago(v)')
+    expect(lista).toContain('abrirMenuImprimir(v)')
+    expect(lista).toContain('setDevolverVendaId(v.id)')
+    // ⚠️ A condição inteira, e não só a tag: com um `false &&` na frente o
+    // botão some da tela e a tag continua no arquivo. Foi outra mutação
+    // sobrevivente que mostrou.
+    expect(lista).toContain('{BotaoNotaFiscal && (')
+  })
+
+  it('★ as condições de cada comando continuam as mesmas', () => {
+    // "Marcar como pago" só no que não está pago; devolução só no que está pago
+    // e ainda não voltou inteiro. Perder essas duas condições oferece ação que
+    // vai falhar depois.
+    /*
+     * ⚠️ A âncora é o espalhamento que abre o item do menu, e não a comparação
+     * solta: `v.status_pagamento !== 'pago'` aparece TAMBÉM na propriedade
+     * `aPrazo` do botão de nota fiscal, na mesma fatia. Procurando a comparação
+     * solta, apagar a condição do menu deixava esta guarda verde — foi uma
+     * mutação sobrevivente que mostrou.
+     */
+    expect(lista).toContain("...(v.status_pagamento !== 'pago'")
+    expect(lista).toContain("...(v.status_pagamento === 'pago' && selo?.label !== 'Totalmente devolvida'")
+  })
+
+  it('★ o valor mostrado segue a mesma regra da tabela', () => {
+    /*
+     * Quando há atraso ou pagamento parcial, o que aparece é o que FALTA — e a
+     * palavra que explica isso ("em atraso", "restante") desce para a linha de
+     * baixo, para não alargar o número numa tela estreita.
+     */
+    expect(lista).toContain("v.status_pagamento === 'inadimplente' && v.valor_inadimplente > 0")
+    expect(lista).toContain('v.total - v.valor_pago')
+    expect(lista).toContain("emAtraso ? 'em atraso' : restante ? 'restante' : null")
+    expect(lista).toContain('num shrink-0 text-[13.5px] font-semibold')
+  })
+
+  it('★ a situação continua visível: por escrito E na cor do valor', () => {
+    /*
+     * ⚠️ A etiqueta colorida saiu da linha por MEDIDA, não por descuido: com
+     * ela, e com a coluna da direita carregando a nota fiscal mais o menu,
+     * sobravam ~118px para o nome do cliente numa tela de 360 — "MARIA
+     * APARECIDA DA CONCEIÇÃO SILVA" virava "MARIA APAR...". Sem ela, 214px.
+     *
+     * Nada se perde, e é isto que esta guarda cobra: a situação continua
+     * legível de DUAS formas — a palavra na linha de metadados e a cor do
+     * valor. Tirar qualquer uma das duas deixa a venda sem situação.
+     */
+    expect(lista).toContain("v.cancelada ? 'cancelada' : badgeVenda(v).toLowerCase()")
+    expect(lista).toContain('const corValor')
+    expect(lista).toContain("v.status_pagamento === 'inadimplente'\n                  ? 'text-critical'")
+    expect(lista).toContain('${corValor}')
+    // e o selo de devolução não sumiu: ele entra na linha de metadados
+    expect(lista).toContain('selo ? selo.label.toLowerCase() : null')
+  })
+
+  it('★ a tira de filtros rola sozinha, e a PÁGINA não', () => {
+    /*
+     * Seis abas de status não cabem em 360px. Para uma TIRA DE FILTROS o §6.1
+     * abre a exceção: o contêiner rola, a página nunca. Filtro não é tabela —
+     * não há nada para comparar entre colunas, só uma escolha a fazer.
+     *
+     * ⚠️ `overscroll-x-contain` é a segunda metade da regra: sem ele o gesto
+     * vaza para a página e dispara o "voltar" do navegador.
+     */
+    expect(VENDAS).toContain('overflow-x-auto overscroll-x-contain')
+    expect(VENDAS).toContain('lg:overflow-visible')
+  })
+
+  it('★ o respiro encolhe, o cabeçalho grande sai e o topo cabe', () => {
+    expect(VENDAS).toContain('<div className="p-4 lg:p-8">')
+    expect(VENDAS).toContain('hidden lg:flex items-start justify-between')
+    expect(VENDAS).toContain("rotulo: 'Relat\u00f3rio do m\u00eas'")
+    expect(VENDAS).toContain('lg:hidden h-11 w-11 shrink-0 p-0')
+  })
+})
+
 describe('a ilha de navegação do celular (roteiro §3)', () => {
   const ILHA = readFileSync(
     join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'BarraInferiorMobile.tsx'),
