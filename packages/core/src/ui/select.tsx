@@ -246,7 +246,15 @@ const Select: FC<Props> = ({
   }
 
   return (
-    <div ref={containerRef} className={cn('relative w-full', classNameContainer)}>
+    /*
+      ⚠️ `min-w-0` junto do `w-full`. Numa linha flex — o seletor ao lado de
+      um botão de ícone, que é como Categoria e Fornecedor aparecem — um item
+      nasce com `min-width: auto` e não encolhe abaixo do próprio conteúdo:
+      em vez de apertar, ele estoura a coluna. Era o que fazia o diálogo de
+      produto rolar 14px de lado no celular, mesmo com o formulário já em uma
+      coluna só. Isto só PERMITE encolher; não alarga nada.
+    */
+    <div ref={containerRef} className={cn('relative w-full min-w-0', classNameContainer)}>
       <button
         id={id}
         ref={botaoRef}

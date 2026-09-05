@@ -761,7 +761,10 @@ const Clientes: FC = () => {
             </div>
 
             {form.tipo_pessoa === 'fisica' ? (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 [&>*]:min-w-0 [&>*>*]:min-w-0 sm:grid-cols-2">
+                {/* ⚠️ Uma coluna até 640px, pelo mesmo motivo do formulário de
+                    produto: duas colunas dentro do diálogo do celular dão ~158px
+                    cada, e campo com máscara não encolhe — estoura. */}
                 <div className="grid gap-1.5">
                   <Label htmlFor="cpf">CPF (opcional)</Label>
                   <IMaskInput

@@ -882,8 +882,20 @@ const Produtos: FC = () => {
             </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 items-start">
-              <div className="col-span-2 grid gap-1.5">
+            {/*
+              ⚠️ UMA coluna até 640px. Com duas, cada uma fica com ~158px dentro
+              do diálogo do celular — e um `Select` com o botão de categoria ao
+              lado não cabe nisso. Item de grade nasce com `min-width: auto`,
+              que significa "não encolha abaixo do seu conteúdo": em vez de
+              apertar, ele ESTOURA. Era o "Fornecedor" escrito por cima do
+              "Preço de venda", e a rolagem lateral dentro do diálogo.
+
+              O `min-w-0` nos filhos é a segunda metade da correção: sem ele, um
+              nome de fornecedor comprido empurra a coluna de novo, mesmo com
+              uma coluna só.
+            */}
+            <div className="grid grid-cols-1 gap-3 items-start [&>*]:min-w-0 [&>*>*]:min-w-0 sm:grid-cols-2">
+              <div className="sm:col-span-2 grid gap-1.5">
                 <Label htmlFor="nome">
                   Nome <span className="text-destructive">*</span>
                 </Label>

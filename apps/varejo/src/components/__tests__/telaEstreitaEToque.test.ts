@@ -346,6 +346,67 @@ describe('tela 3 — Produtos no celular (roteiro §6)', () => {
   })
 })
 
+describe('o que fazia a página rolar de lado (§11)', () => {
+  it('★ formulário de duas colunas vira UMA no celular', () => {
+    /*
+     * Duas colunas dentro do diálogo do celular dão ~140px cada, e um seletor
+     * com o botão de ícone ao lado não cabe nisso. Item de grade nasce com
+     * `min-width: auto` — "não encolha abaixo do seu conteúdo" — e em vez de
+     * apertar ele ESTOURA: era o "Fornecedor" escrito por cima do "Preço de
+     * venda", e a rolagem lateral dentro do diálogo.
+     */
+    for (const tela of ['Produtos', 'Clientes']) {
+      const fonte = semComentarios(readFileSync(join(SRC, 'pages', `${tela}.tsx`), 'utf8'))
+      expect(fonte, `${tela}: formulário ainda nasce com duas colunas`)
+        .toMatch(/grid grid-cols-1 gap-\d[^"]*sm:grid-cols-2/)
+    }
+  })
+
+  it('★ o `min-w-0` do formulário alcança DOIS níveis', () => {
+    /*
+     * ⚠️ Um nível não bastava, e isso custou uma rodada inteira. Cada campo é
+     * um `grid gap-1.5` sem `grid-cols`, e grade sem coluna declarada tem UMA
+     * coluna `auto` — que se dimensiona pelo conteúdo máximo e cresce além do
+     * pai. O `min-w-0` alcançava só os campos; quem estourava era a linha
+     * DENTRO deles, o seletor ao lado do botão de ícone.
+     *
+     * Medido no navegador, em diálogo de 326px: com um nível, a linha ficava
+     * com 334px dentro de um campo de 282. Com dois, 282.
+     */
+    for (const tela of ['Produtos', 'Clientes']) {
+      const fonte = semComentarios(readFileSync(join(SRC, 'pages', `${tela}.tsx`), 'utf8'))
+      expect(fonte, `${tela}: o segundo nível do min-w-0 sumiu`).toContain('[&>*>*]:min-w-0')
+    }
+  })
+
+  it('★ o seletor aceita encolher', () => {
+    // `w-full` sem `min-w-0` não encolhe numa linha flex ao lado de um botão de
+    // ícone: estoura a coluna. Vale para os 66 seletores dos dois nichos.
+    const SELECT = readFileSync(
+      join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'select.tsx'),
+      'utf8'
+    )
+    expect(SELECT).toContain("cn('relative w-full min-w-0', classNameContainer)")
+  })
+
+  it('★ a paginação pode quebrar linha, e para de empurrar a página', () => {
+    /*
+     * Medido numa tela de 360: o grupo de botões tem 326px com quatro páginas —
+     * exatamente a largura útil — e 358px com cinco. Sem poder quebrar, da
+     * quinta página em diante ele empurrava a PÁGINA INTEIRA para o lado.
+     *
+     * `flex-wrap` no PAI já existia e não resolvia: quem não quebrava era o
+     * grupo interno.
+     */
+    const PAG = readFileSync(
+      join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'paginacao.tsx'),
+      'utf8'
+    )
+    expect(PAG).toContain('<div className="flex flex-wrap items-center justify-end gap-1">')
+    expect(PAG).toContain('<p className="min-w-0 text-xs text-muted-foreground">')
+  })
+})
+
 describe('a ilha de navegação do celular (roteiro §3)', () => {
   const ILHA = readFileSync(
     join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'BarraInferiorMobile.tsx'),

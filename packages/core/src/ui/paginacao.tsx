@@ -47,12 +47,20 @@ const Paginacao: FC<PaginacaoProps> = ({
 
   return (
     <div className="flex items-center justify-between gap-4 mt-3 flex-wrap">
-      <p className="text-xs text-muted-foreground">
+      <p className="min-w-0 text-xs text-muted-foreground">
         Mostrando <strong>{inicio}–{fim}</strong> de <strong>{totalItens}</strong> {rotuloItem}
         {' · '}
         Página {paginaSegura} de {totalPaginas}
       </p>
-      <div className="flex items-center gap-1">
+      {/*
+        ⚠️ `flex-wrap` aqui, e não só no pai. Medido numa tela de 360: o grupo
+        de botões tem 326px com quatro páginas — exatamente a largura útil — e
+        358px com cinco. Sem poder quebrar linha, da quinta página em diante ele
+        empurrava a PÁGINA INTEIRA para o lado, e a tela ficava torta.
+
+        No monitor ele cabe numa linha e a quebra nunca acontece.
+      */}
+      <div className="flex flex-wrap items-center justify-end gap-1">
         <Button
           variant="outline"
           size="sm"
