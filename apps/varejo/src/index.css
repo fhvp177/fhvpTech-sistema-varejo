@@ -501,14 +501,21 @@
   }
 
   /* ---------- o respiro de quem rola (§3.3-d) ----------
-     92px = altura da ilha + folga. Sem isto ela cobre o fim da lista para
-     sempre, e o lojista nunca descobre que havia mais uma linha.
+     104px = os 80 que a ilha ocupa do fundo (14 de afastamento + 66 de altura)
+     mais 24 de folga. Sem isto ela cobre o fim da lista para sempre, e o
+     lojista nunca descobre que havia mais uma linha.
+
+     ⚠️ Já foram 92, e 92 estava certo no papel e errado na tela: sobravam 12px
+     de folga, e a SOMBRA da ilha sobe 24 (`0 6px 24px`). O borrão caía em cima
+     da última linha, e aí parece que a barra cobre o conteúdo mesmo quando,
+     tecnicamente, não cobre. Medido no navegador com a rolagem no fim: 12px de
+     folga antes, 24 agora.
 
      ⚠️ No roteiro isto é `padding-bottom` no `body`. Aqui o `body` NÃO rola:
      a casca é `h-screen` com `overflow-hidden` e quem rola é o `<main>`. A
      regra é a mesma, aplicada a quem de fato rola. */
   [data-alvo='web'] .tem-ilha {
-    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
   }
 
   /* ---------- a dica do campo de busca, que vai e volta ----------

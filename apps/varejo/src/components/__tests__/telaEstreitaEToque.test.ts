@@ -791,7 +791,10 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     // `fixed` faz a barra aparecer; o respiro faz o CONTEÚDO terminar acima
     // dela. Faltando o segundo, a última linha da lista fica escondida para
     // sempre — nas capturas antigas a barra cortava a venda nº 66.
-    expect(blocoDaIlha()).toContain('padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px))')
+    // 104 = os 80 que a ilha ocupa do fundo (14 de afastamento + 66 de altura)
+    // mais 24 de folga. Com os 92 de antes sobravam 12px, e a SOMBRA dela sobe
+    // 24: o borrão caía na última linha e parecia que a barra cobria o conteúdo.
+    expect(blocoDaIlha()).toContain('padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px))')
     expect(APP).toContain('tem-ilha')
   })
 
