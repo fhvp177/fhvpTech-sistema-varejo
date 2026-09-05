@@ -306,45 +306,14 @@ const Dashboard: FC = () => {
    * `localStorage` pode não existir (janela anônima, armazenamento bloqueado),
    * e nesse caso o padrão vale — nada quebra por causa de uma preferência.
    */
-  /*
-   * As duas listas de vencimento numa fila só, atrasado primeiro.
-   *
-   * ⚠️ O mesmo cliente pode aparecer DUAS vezes, e está certo: uma linha é a
-   * dívida atrasada dele e a outra é a parcela que vence hoje. Deduplicar por
-   * cliente somaria coisas de prazos diferentes e esconderia o atraso.
-   */
-  const vencimentos = useMemo(
-    () => [
-      ...inadimplentes.map((c) => ({
-        chave: `atraso-${c.id}`,
-        id: c.id,
-        nome: c.nome,
-        telefone: c.telefone,
-        valor: c.total_devido,
-        detalhe: `em atraso desde ${fmtData(c.vencimento_mais_antigo)}`,
-        atrasado: true
-      })),
-      ...vencendoHoje.map((c) => ({
-        chave: `hoje-${c.id}`,
-        id: c.id,
-        nome: c.nome,
-        telefone: c.telefone,
-        valor: c.total,
-        detalhe: 'vence hoje',
-        atrasado: false
-      }))
-    ],
-    [inadimplentes, vencendoHoje]
-  )
-
-  const totalVencimentos = vencimentos.reduce((s, v) => s + v.valor, 0)
-  const temAtraso = inadimplentes.length > 0
-
   const [alertasAbertos, setAlertasAbertos] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const inicial: Record<string, boolean> = {}
-    for (const [id, quantos] of [['vencimentos', vencimentos.length]] as const) {
+    for (const [id, quantos] of [
+      ['inadimplentes', inadimplentes.length],
+      ['vencem-hoje', vencendoHoje.length]
+    ] as const) {
       let salvo: string | null = null
       try {
         salvo = localStorage.getItem(`painel_alerta_${id}`)
@@ -354,7 +323,7 @@ const Dashboard: FC = () => {
       inicial[id] = salvo === null ? quantos <= 2 : salvo === '1'
     }
     setAlertasAbertos(inicial)
-  }, [vencimentos.length])
+  }, [inadimplentes.length, vencendoHoje.length])
 
   const alternarAlerta = useCallback((id: string) => {
     setAlertasAbertos((antes) => {
@@ -429,49 +398,36 @@ const Dashboard: FC = () => {
         </div>
       </div>
 
-      {/* ── Vencimentos (destaque no topo) ── */}
-      {/*
-        ⭐ Um cartão só, no lugar de "Inadimplentes" e "Vencem Hoje".
-
-        Eram dois cartões com dois cabeçalhos e dois contornos comendo a
-        primeira tela inteira antes de aparecer um número. Numa fila só sobra
-        um cabeçalho, e a ordem — atrasado primeiro — já diz o que é urgente.
-
-        A faixa do topo acompanha o pior caso: vermelha se há atraso, âmbar se
-        só há vencimento de hoje.
-      */}
-      <div className={`rounded-xl border border-t-2 bg-card shadow-sm p-3 lg:p-5 mb-3 lg:mb-6 ${
-        temAtraso ? 'border-t-critical-fill' : 'border-t-warn'
-      }`}>
-        <CabecalhoAlerta
-          id="vencimentos"
-          icone={
-            temAtraso
-              ? <AlertTriangle className="w-[18px] h-[18px] text-critical shrink-0" />
-              : <Clock className="w-[18px] h-[18px] text-warn shrink-0" />
-          }
-          titulo="Vencimentos"
-          quantidade={vencimentos.length}
-          resumo={fmt(totalVencimentos)}
-          aberto={alertasAbertos['vencimentos'] ?? true}
-          onAlternar={() => alternarAlerta('vencimentos')}
-          classeEtiqueta={temAtraso ? 'bg-critical-fill text-on-fill' : 'bg-warn text-on-fill'}
-        >
-          {vencimentos.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum vencimento em aberto.</p>
+      {/* ── Alertas de inadimplência (destaque no topo) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 lg:gap-4 lg:mb-6">
+        {/*
+          A faixa de 4px vira 2px e sai do vermelho literal para o token
+          `critical-fill` — que é a cor CHEIA, própria de faixa, onde não há
+          texto por cima. O texto usa `critical`, a versão escurecida. Um token
+          só obrigaria a escolher entre faixa suja e texto ilegível.
+        */}
+        <div className="rounded-xl border border-t-2 border-t-critical-fill bg-card shadow-sm p-3 lg:p-5">
+          <CabecalhoAlerta
+            id="inadimplentes"
+            icone={<AlertTriangle className="w-[18px] h-[18px] text-critical shrink-0" />}
+            titulo="Inadimplentes"
+            quantidade={inadimplentes.length}
+            resumo={fmt(inadimplentes.reduce((s, c) => s + c.total_devido, 0))}
+            aberto={alertasAbertos['inadimplentes'] ?? true}
+            onAlternar={() => alternarAlerta('inadimplentes')}
+            classeEtiqueta="bg-critical-fill text-on-fill"
+          >
+          {inadimplentes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum cliente inadimplente.</p>
           ) : (
-            <div className="max-h-[220px] lg:max-h-[260px] overflow-y-auto pr-2 lg:pr-3 scrollbar-suave">
-              {vencimentos.map((v) => (
+            <div className="max-h-[180px] lg:max-h-[220px] overflow-y-auto pr-2 lg:pr-3 scrollbar-suave">
+              {inadimplentes.map((c) => (
                 <button
-                  key={v.chave}
+                  key={c.id}
                   type="button"
-                  onClick={() => setClienteDividas({ id: v.id, nome: v.nome })}
-                  className={`w-full min-h-[56px] text-left flex justify-between items-start gap-3 py-2 lg:py-3 border-b last:border-b-0 transition-colors cursor-pointer ${
-                    v.atrasado
-                      ? 'hover:bg-critical-soft active:bg-critical-soft'
-                      : 'hover:bg-warn-soft active:bg-warn-soft'
-                  }`}
-                  title="Ver dívidas e parcelas do cliente"
+                  onClick={() => setClienteDividas({ id: c.id, nome: c.nome })}
+                  className="w-full min-h-[56px] text-left flex justify-between items-start gap-3 py-2 lg:py-3 border-b last:border-b-0 hover:bg-critical-soft active:bg-critical-soft transition-colors cursor-pointer"
+                  title="Ver dívidas e parcelas em atraso"
                 >
                   {/*
                     `min-w-0` é obrigatório: sem ele um nome longo se recusa a
@@ -480,29 +436,62 @@ const Dashboard: FC = () => {
                     que o roteiro nomeia (§11).
                   */}
                   <div className="min-w-0">
-                    <p className="font-semibold text-[14px] lg:text-[15px] text-foreground truncate" title={v.nome}>{v.nome}</p>
-                    <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">{v.telefone}</p>
+                    <p className="font-semibold text-[14px] lg:text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
+                    <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">{c.telefone}</p>
                   </div>
                   <div className="text-right shrink-0">
                     {/*
                       `num` põe a monoespaçada com `tabular-nums`: é o que faz
-                      R$ 295,00 e R$ 70,00 alinharem a vírgula sem tabela.
+                      R$ 295,00 e R$ 70,00 alinharem a vírgula sem tabela. Sem
+                      isso os algarismos têm larguras diferentes e a coluna
+                      dança a cada linha.
                     */}
-                    <p className={`num text-[14px] lg:text-[15px] ${v.atrasado ? 'text-critical' : 'text-warn'}`}>
-                      {fmt(v.valor)}
+                    <p className="num text-[14px] lg:text-[15px] text-critical">{fmt(c.total_devido)}</p>
+                    <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">
+                      desde {fmtData(c.vencimento_mais_antigo)}
                     </p>
-                    {/*
-                      ⚠️ A frase existe porque COR SOZINHA não informa: numa fila
-                      única, quem não distingue vermelho de âmbar ficaria sem saber
-                      qual linha está atrasada e qual só vence hoje.
-                    */}
-                    <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">{v.detalhe}</p>
                   </div>
                 </button>
               ))}
             </div>
           )}
-        </CabecalhoAlerta>
+          </CabecalhoAlerta>
+        </div>
+
+        <div className="rounded-xl border border-t-2 border-t-warn bg-card shadow-sm p-3 lg:p-5">
+          <CabecalhoAlerta
+            id="vencem-hoje"
+            icone={<Clock className="w-[18px] h-[18px] text-warn shrink-0" />}
+            titulo="Vencem Hoje"
+            quantidade={vencendoHoje.length}
+            resumo={fmt(vencendoHoje.reduce((s, c) => s + c.total, 0))}
+            aberto={alertasAbertos['vencem-hoje'] ?? true}
+            onAlternar={() => alternarAlerta('vencem-hoje')}
+            classeEtiqueta="bg-warn text-on-fill"
+          >
+          {vencendoHoje.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum vencimento para hoje.</p>
+          ) : (
+            <div className="max-h-[180px] lg:max-h-[220px] overflow-y-auto pr-2 lg:pr-3 scrollbar-suave">
+              {vencendoHoje.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setClienteDividas({ id: c.id, nome: c.nome })}
+                  className="w-full text-left flex justify-between items-start gap-3 py-3 border-b last:border-b-0 hover:bg-warn-soft active:bg-warn-soft transition-colors cursor-pointer"
+                  title="Ver dívidas e parcelas do cliente"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[14px] lg:text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
+                    <p className="text-[14px] text-muted-foreground mt-0.5">{c.telefone}</p>
+                  </div>
+                  <p className="num text-[14px] lg:text-[15px] text-warn shrink-0">{fmt(c.total)}</p>
+                </button>
+              ))}
+            </div>
+          )}
+          </CabecalhoAlerta>
+        </div>
       </div>
 
       {/* ── KPIs do período ── */}
