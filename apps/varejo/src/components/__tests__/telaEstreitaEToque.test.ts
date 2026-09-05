@@ -552,6 +552,77 @@ describe('a dica do campo de busca, que vai e volta', () => {
   })
 })
 
+describe('tela 5 — o Caixa (PDV) no celular', () => {
+  const VENDAS = semComentarios(readFileSync(join(SRC, 'pages', 'Vendas.tsx'), 'utf8'))
+  // ⚠️ A fatia para no começo do ramo do monitor: indo até o painel direito ela
+  // passava pela tabela do desktop e via coisas que só existem lá.
+  const carrinho = VENDAS.slice(
+    VENDAS.indexOf('{ehCelularPdv ? ('),
+    VENDAS.indexOf('flex-1 border rounded-lg overflow-auto')
+  )
+
+  it('★ as duas colunas EMPILHAM: nenhuma largura fixa sobra numa tela de 360', () => {
+    /*
+     * O painel da direita tem largura fixa de 384px e o da esquerda pede o
+     * resto — numa tela de 360 isso é mais do que a tela inteira antes de
+     * qualquer conteúdo, e a página nascia torta com o carrinho fora de vista.
+     */
+    expect(VENDAS).toContain('flex flex-col lg:flex-row flex-1 min-h-0')
+    expect(VENDAS).toContain('w-full lg:w-96 border-t lg:border-t-0 lg:border-l')
+    expect(VENDAS, 'a largura fixa do painel voltou a valer no celular')
+      .not.toMatch(/className="w-96 border-l/)
+  })
+
+  it('★ o PDV para de segurar a rolagem para si', () => {
+    // No monitor o `overflow-hidden` do lado esquerdo é o que dá ao carrinho a
+    // rolagem dele. No celular ele cortaria a página: quem rola ali é o <main>.
+    expect(VENDAS).toContain('flex-1 flex flex-col p-4 lg:p-6 lg:overflow-hidden')
+    expect(VENDAS).toContain('<div className="flex flex-col lg:h-full">')
+  })
+
+  it('★ o carrinho vira lista, e os DOIS campos continuam editáveis', () => {
+    /*
+     * Mexer na quantidade e no preço no meio da venda é o que o caixa faz o dia
+     * inteiro. Perder qualquer um dos dois no celular seria perder a tela.
+     */
+    expect(VENDAS).toContain('const ehCelularPdv = useEhCelular()')
+    expect(carrinho).toContain('atualizarQtd(k, parseInt(e.target.value) || 0)')
+    expect(carrinho).toContain('atualizarPreco(k, parseFloat(e.target.value))')
+    expect(carrinho).toContain('atualizarQtd(k, 0)')
+    /* ⚠️ O estoque disponível ao lado da quantidade é o "/ N" que a pessoa LÊ,
+       e não o `max` do campo: `{item.estoque_disponivel}` aparece nos dois, e
+       apagar o texto deixava o `max` no lugar para a guarda achar. */
+    expect(carrinho).toContain('/ {item.estoque_disponivel}')
+  })
+
+  it('★ a lista do carrinho NÃO segura rolagem própria', () => {
+    // Caixa rolante dentro de página rolante é a receita do dedo que raspa e
+    // nada anda. No monitor a caixa continua com a rolagem dela.
+    expect(carrinho, 'o carrinho do celular voltou a rolar por dentro')
+      .not.toContain('overflow-auto')
+    expect(VENDAS).toContain('<div className="flex-1 border rounded-lg overflow-auto">')
+  })
+
+  it('★ os campos do carrinho têm alvo de dedo e nome acessível', () => {
+    expect(carrinho).toContain('aria-label={`Quantidade de ${item.nome}`}')
+    expect(carrinho).toContain('aria-label={`Pre\u00e7o unit\u00e1rio de ${item.nome}`}')
+    expect(carrinho).toContain('aria-label={`Tirar ${item.nome} do carrinho`}')
+    expect(carrinho).toContain('h-11 w-11 shrink-0')
+  })
+
+  it('★ o cabeçalho do caixa cabe, e continua dizendo quem está no caixa', () => {
+    /*
+     * 32px de título em 360 de tela é um terço da largura para dizer o que a
+     * pessoa acabou de fazer. E no botão de trocar conta o que fica é o NOME —
+     * a informação —, não o rótulo; o que o botão faz segue no `aria-label`.
+     */
+    expect(VENDAS).toContain('text-xl lg:text-[2rem] font-bold')
+    expect(VENDAS).toContain('aria-label="Trocar de conta"')
+    expect(VENDAS).toContain('<span className="hidden lg:inline">Trocar conta</span>')
+    expect(VENDAS).toContain('{vendedor.nome}')
+  })
+})
+
 describe('a ilha de navegação do celular (roteiro §3)', () => {
   const ILHA = readFileSync(
     join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'BarraInferiorMobile.tsx'),

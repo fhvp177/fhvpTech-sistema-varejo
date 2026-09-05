@@ -1489,6 +1489,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
 const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { setAtivo: setPdvAtivo } = usePdvMode()
+  const ehCelularPdv = useEhCelular()
   const { aberta: calculadoraAberta } = useCalculadora()
   const { ehDono, vendedor } = useSessao()
   const { bloquear } = useLock()
@@ -2116,30 +2117,50 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     })
 
   return (
-    <div className="flex flex-col h-full">
-    <div className="flex flex-1 min-h-0">
+    /*
+      ⚠️ No celular as duas colunas EMPILHAM, na ordem em que o trabalho
+      acontece: bipar, conferir o carrinho, fechar a venda.
+
+      O painel da direita tem largura fixa de 384px e o da esquerda pede o
+      resto — numa tela de 360 isso é mais do que a tela inteira antes de
+      qualquer conteúdo. E o `overflow-hidden` do lado esquerdo, que no monitor
+      dá ao carrinho a rolagem dele, no celular cortaria a página: quem rola
+      ali é o `<main>`, então o PDV deixa de segurar a rolagem para si.
+    */
+    <div className="flex flex-col lg:h-full">
+    <div className="flex flex-col lg:flex-row flex-1 min-h-0">
       {/* ── Painel esquerdo: scanner + carrinho ── */}
-      <div className="flex-1 flex flex-col p-6 overflow-hidden">
-        <div className="flex items-center gap-3 mb-4">
-          <Button variant="ghost" size="icon" onClick={onSair}>
+      <div className="flex-1 flex flex-col p-4 lg:p-6 lg:overflow-hidden">
+        <div className="flex items-center gap-2 lg:gap-3 mb-3 lg:mb-4">
+          <Button variant="ghost" size="icon" onClick={onSair} aria-label="Sair do caixa">
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h2 className="text-[2rem] font-bold">CAIXA ABERTO</h2>
+          {/* 32px de título em 360 de tela é um terço da largura para dizer o que
+              a pessoa já sabe: ela acabou de abrir o caixa. */}
+          <h2 className="shrink-0 whitespace-nowrap text-xl lg:text-[2rem] font-bold">CAIXA ABERTO</h2>
           {/* Quem está no caixa, e a saída para trocar. Mora no cabeçalho porque
               é a única coisa da tela que responde "esta venda vai sair no nome de
               quem?" — a barra lateral, que mostraria isso, some no PDV. O nome
               vem depois do rótulo, e não no lugar dele: um botão escrito só
               "Maria" não diz o que acontece se for apertado. */}
+          {/*
+            No celular a palavra "Trocar conta" sai e fica o nome de quem está
+            no caixa — que é a informação, não o rótulo. O `aria-label` e o
+            `title` continuam dizendo o que o botão faz.
+          */}
           <Button
             variant="outline"
-            className="ml-auto"
+            className="ml-auto min-w-0 shrink"
             onClick={() => void trocarDeConta()}
             title="Entrar com outra conta sem sair do caixa (F7)"
+            aria-label="Trocar de conta"
           >
-            <ArrowLeftRight className="w-4 h-4 mr-2" />
-            Trocar conta
+            <ArrowLeftRight className="w-4 h-4 shrink-0 lg:mr-2" />
+            <span className="hidden lg:inline">Trocar conta</span>
             {vendedor?.nome && (
-              <span className="ml-2 font-normal text-muted-foreground">({vendedor.nome})</span>
+              <span className="ml-1.5 lg:ml-2 min-w-0 truncate font-normal text-muted-foreground">
+                <span className="hidden lg:inline">(</span>{vendedor.nome}<span className="hidden lg:inline">)</span>
+              </span>
             )}
           </Button>
         </div>
@@ -2148,8 +2169,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           <Label className="text-xs text-muted-foreground mb-1 block">
             Leitor de código de barras (Enter para adicionar)
           </Label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
+          {/* Em 360px o campo e os dois botões não cabem numa linha: o campo fica
+              inteiro na primeira e os botões dividem a segunda. */}
+          <div className="flex flex-wrap gap-2">
+            <div className="relative w-full lg:flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 ref={scanRef}
@@ -2161,11 +2184,21 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 className="flex h-10 w-full rounded-md border-2 border-primary bg-background px-3 py-2 pl-9 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
-            <Button variant="outline" data-tour="pdv-buscar" onClick={() => { setBuscaProdutos(true); setTermoBusca('') }}>
+            <Button
+              variant="outline"
+              data-tour="pdv-buscar"
+              className="flex-1 lg:flex-none"
+              onClick={() => { setBuscaProdutos(true); setTermoBusca('') }}
+            >
               <ShoppingCart className="w-4 h-4 mr-2" />
               Buscar produto
             </Button>
-            <Button variant="outline" onClick={() => abrirProdutoRapido()} title="Cadastrar um produto novo sem sair do caixa (F6)">
+            <Button
+              variant="outline"
+              className="flex-1 lg:flex-none"
+              onClick={() => abrirProdutoRapido()}
+              title="Cadastrar um produto novo sem sair do caixa (F6)"
+            >
               <PackagePlus className="w-4 h-4 mr-2" />
               Produto
             </Button>
@@ -2194,90 +2227,173 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         </div>
 
         {/* Carrinho */}
-        <div className="flex-1 border rounded-lg overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0">
-              <tr>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produto</th>
-                <th className="text-center px-3 py-2 font-medium text-muted-foreground w-24">Qtd</th>
-                <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Unitário</th>
-                <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Subtotal</th>
-                <th className="w-10 px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {carrinho.length === 0 && (
+        {/*
+          ⭐ No celular o carrinho vira LISTA (roteiro §6). Cinco colunas com dois
+          campos editáveis dentro não cabem em 360px.
+
+          ⚠️ Os dois campos continuam editáveis: mexer na quantidade e no preço
+          no meio da venda é o que o caixa faz o dia inteiro. O que muda é que
+          eles descem para uma segunda linha, com o alvo de dedo que o §7 pede.
+
+          ⚠️ E a lista NÃO segura rolagem própria aqui: no monitor o carrinho rola
+          dentro da caixa dele, mas no celular quem rola é a página — uma caixa
+          rolante dentro de uma página rolante é a receita do dedo que raspa e
+          nada anda.
+        */}
+        {ehCelularPdv ? (
+          <div className="border rounded-lg">
+            {carrinho.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground">
+                <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                Carrinho vazio. Escaneie um produto para começar.
+              </div>
+            ) : (
+              <ul className="divide-y">
+                {carrinho.map((item) => {
+                  const k = chaveItem(item.produto_id, item.variacao_id)
+                  return (
+                    <li
+                      key={k}
+                      className={`px-3 py-2.5 ${
+                        saidaLinha.estaSaindo(k)
+                          ? 'anim-linha-sai'
+                          : linhaNova.ehNova(k)
+                            ? 'anim-linha-entra'
+                            : ''
+                      }`}
+                    >
+                      <div className="flex items-baseline gap-2">
+                        <p className="min-w-0 flex-1 truncate text-[14.5px] font-semibold leading-tight" title={item.nome}>
+                          {item.nome}
+                        </p>
+                        <span className="num shrink-0 text-[14px] font-semibold">
+                          {fmt(item.quantidade * item.preco_unitario)}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max={item.estoque_disponivel}
+                          value={item.quantidade}
+                          onChange={(e) => atualizarQtd(k, parseInt(e.target.value) || 0)}
+                          aria-label={`Quantidade de ${item.nome}`}
+                          className="num h-10 w-14 shrink-0 rounded border text-center text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                        <span className="shrink-0 text-[11.5px] text-muted-foreground">
+                          / {item.estoque_disponivel}
+                        </span>
+                        <span className="shrink-0 text-[12.5px] text-muted-foreground">×</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.preco_unitario}
+                          onChange={(e) => atualizarPreco(k, parseFloat(e.target.value))}
+                          aria-label={`Preço unitário de ${item.nome}`}
+                          className="num h-10 min-w-0 flex-1 rounded border px-2 text-right text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => atualizarQtd(k, 0)}
+                          aria-label={`Tirar ${item.nome} do carrinho`}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors active:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 border rounded-lg overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 sticky top-0">
                 <tr>
-                  <td colSpan={5} className="text-center py-16 text-muted-foreground">
-                    <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    Carrinho vazio. Escaneie um produto para começar.
-                  </td>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produto</th>
+                  <th className="text-center px-3 py-2 font-medium text-muted-foreground w-24">Qtd</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Unitário</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Subtotal</th>
+                  <th className="w-10 px-3 py-2" />
                 </tr>
-              )}
-              {carrinho.map((item, i) => {
-                const k = chaveItem(item.produto_id, item.variacao_id)
-                return (
-                <tr
-                  key={k}
-                  className={`${i % 2 === 0 ? 'bg-background' : 'bg-muted/20'} ${
-                    saidaLinha.estaSaindo(k)
-                      ? 'anim-linha-sai'
-                      : linhaNova.ehNova(k)
-                        ? 'anim-linha-entra'
-                        : ''
-                  }`}
-                >
-                  <td className="px-3 py-2 font-medium">
-                    <div className="truncate max-w-[220px]" title={item.nome}>{item.nome}</div>
-                    <div
-                      className="text-xs text-muted-foreground font-mono truncate max-w-[220px]"
-                      title={item.codigo_barras}
-                    >
-                      {item.codigo_barras}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <input
-                      type="number"
-                      min="1"
-                      max={item.estoque_disponivel}
-                      value={item.quantidade}
-                      onChange={(e) => atualizarQtd(k, parseInt(e.target.value) || 0)}
-                      className="w-16 text-center border rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    <div className="text-xs text-muted-foreground mt-0.5">/ {item.estoque_disponivel}</div>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.preco_unitario}
-                      onChange={(e) => atualizarPreco(k, parseFloat(e.target.value))}
-                      className="w-24 text-right border rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold">
-                    {fmt(item.quantidade * item.preco_unitario)}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <button
-                      onClick={() => atualizarQtd(k, 0)}
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {carrinho.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-center py-16 text-muted-foreground">
+                      <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      Carrinho vazio. Escaneie um produto para começar.
+                    </td>
+                  </tr>
+                )}
+                {carrinho.map((item, i) => {
+                  const k = chaveItem(item.produto_id, item.variacao_id)
+                  return (
+                  <tr
+                    key={k}
+                    className={`${i % 2 === 0 ? 'bg-background' : 'bg-muted/20'} ${
+                      saidaLinha.estaSaindo(k)
+                        ? 'anim-linha-sai'
+                        : linhaNova.ehNova(k)
+                          ? 'anim-linha-entra'
+                          : ''
+                    }`}
+                  >
+                    <td className="px-3 py-2 font-medium">
+                      <div className="truncate max-w-[220px]" title={item.nome}>{item.nome}</div>
+                      <div
+                        className="text-xs text-muted-foreground font-mono truncate max-w-[220px]"
+                        title={item.codigo_barras}
+                      >
+                        {item.codigo_barras}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <input
+                        type="number"
+                        min="1"
+                        max={item.estoque_disponivel}
+                        value={item.quantidade}
+                        onChange={(e) => atualizarQtd(k, parseInt(e.target.value) || 0)}
+                        className="w-16 text-center border rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <div className="text-xs text-muted-foreground mt-0.5">/ {item.estoque_disponivel}</div>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.preco_unitario}
+                        onChange={(e) => atualizarPreco(k, parseFloat(e.target.value))}
+                        className="w-24 text-right border rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold">
+                      {fmt(item.quantidade * item.preco_unitario)}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        onClick={() => atualizarQtd(k, 0)}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* ── Painel direito: resumo + pagamento ── */}
-      <div className="w-96 border-l bg-muted/20 flex flex-col p-5 gap-4 shrink-0 overflow-y-auto">
+      <div className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l bg-muted/20 flex flex-col p-4 lg:p-5 gap-4 shrink-0 lg:overflow-y-auto">
         {/* Cliente */}
         <div>
           <Label className="text-xs mb-1 block">
