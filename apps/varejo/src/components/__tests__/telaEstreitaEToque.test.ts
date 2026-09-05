@@ -136,6 +136,77 @@ describe('tela 1 — o Painel no celular', () => {
   })
 })
 
+describe('tela 2 — Clientes no celular (roteiro §6)', () => {
+  const CLIENTES = semComentarios(readFileSync(join(SRC, 'pages', 'Clientes.tsx'), 'utf8'))
+
+  it('★ a tabela vira LISTA, e não existe duas vezes no DOM', () => {
+    /*
+     * Sete colunas não cabem em 360px, e as três saídas comuns são todas ruins:
+     * deixar vazar dá rolagem lateral na página; `overflow-x` na tabela faz a
+     * pessoa rolar de lado item por item; esconder coluna com classe some com o
+     * dado sem avisar.
+     *
+     * ⚠️ E a escolha é em JavaScript, não por classe: com `hidden lg:table` as
+     * vinte linhas da página existiriam DUAS vezes no DOM, e o navegador
+     * pagaria por todas.
+     */
+    expect(CLIENTES).toContain('const ehCelular = useEhCelular()')
+    expect(CLIENTES).toContain('{ehCelular ? (')
+    expect(CLIENTES).not.toContain('hidden lg:table')
+  })
+
+  it('★ o item da lista tem a grade que impede rolagem lateral', () => {
+    // `minmax(0,1fr)` na coluna do meio é obrigatório: sem ele um nome longo
+    // estoura a grade em vez de cortar, e a página inteira passa a rolar de lado
+    // (§11). O `truncate` sozinho não resolve — ele precisa de uma coluna que
+    // aceite encolher.
+    expect(CLIENTES).toContain('grid-cols-[auto_minmax(0,1fr)_auto]')
+    expect(CLIENTES).toContain('<div className="min-w-0">')
+    expect(CLIENTES).toContain('className="num shrink-0 text-[14px] font-semibold text-critical"')
+  })
+
+  it('★ nenhum comando se perdeu na virada de tabela para lista', () => {
+    // Ver dívidas, editar e excluir continuam sendo os mesmos três, chamando as
+    // mesmas funções. A forma mudou; o que a tela FAZ, não.
+    // ⚠️ A fatia para no começo do ramo do monitor: indo até a paginação ela
+    // passava pela tabela do desktop e via coisas que só existem lá.
+    const lista = CLIENTES.slice(
+      CLIENTES.indexOf('{ehCelular ? ('),
+      CLIENTES.indexOf('border rounded-lg overflow-x-auto')
+    )
+    expect(lista).toContain('setClienteDividas(c)')
+    expect(lista).toContain('abrirEdicao(c)')
+    expect(lista).toContain('excluir(c.id, c.nome)')
+    // e só o dono edita e apaga, como no monitor
+    expect(lista).toContain('{ehDono && (')
+  })
+
+  it('★ UM identificador só, e sem cor sorteada por cliente', () => {
+    // Cor por cliente é ruído que compete com o vermelho da dívida — a única cor
+    // que precisa gritar nesta tela. Empresa mostra o prédio no lugar das
+    // iniciais, que é como a coluna de tipo do monitor continua existindo aqui.
+    // ⚠️ A fatia para no começo do ramo do monitor: indo até a paginação ela
+    // passava pela tabela do desktop e via coisas que só existem lá.
+    const lista = CLIENTES.slice(
+      CLIENTES.indexOf('{ehCelular ? ('),
+      CLIENTES.indexOf('border rounded-lg overflow-x-auto')
+    )
+    expect(lista).toContain('rounded-full bg-muted')
+    expect(lista, 'a cor sorteada voltou e briga com o vermelho da dívida')
+      .not.toContain('corDoNome')
+    expect(lista).toContain('<Building2 className="h-4 w-4" />')
+  })
+
+  it('★ o respiro da página encolhe no celular, e o do monitor fica', () => {
+    // 32px de cada lado numa tela de 360 é 18% da largura em margem.
+    expect(CLIENTES).toContain('<div className="p-4 lg:p-8">')
+    // e o título que repete o nome da aba sai, como no Painel
+    expect(CLIENTES).toContain('hidden lg:flex items-start justify-between')
+    // o "novo cliente" vira botão de 44 ao lado da busca
+    expect(CLIENTES).toContain('lg:hidden h-11 w-11 shrink-0 p-0')
+  })
+})
+
 describe('a ilha de navegação do celular (roteiro §3)', () => {
   const ILHA = readFileSync(
     join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'BarraInferiorMobile.tsx'),

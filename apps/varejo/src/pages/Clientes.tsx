@@ -20,6 +20,7 @@ import DividasClienteDialog, {
   type VendaDivida
 } from '@/components/DividasClienteDialog'
 import { useSessao } from '@/App'
+import { useEhCelular } from '@/hooks/useEhCelular'
 
 const ITENS_POR_PAGINA = 20
 
@@ -352,6 +353,8 @@ const Clientes: FC = () => {
 
   const saidaLinha = useSaidaDeLinha()
 
+  const ehCelular = useEhCelular()
+
   const excluir = async (id: number, nome: string) => {
     if (
       !(await confirmar({
@@ -370,8 +373,13 @@ const Clientes: FC = () => {
     new Date(iso).toLocaleDateString('pt-BR')
 
   return (
-    <div className="p-8">
-      <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="p-4 lg:p-8">
+      {/*
+        ⚠️ O cabeçalho sai no celular, como no Painel: a pílula acesa na ilha já
+        diz que você está em Clientes, e o título de 24px mais o parágrafo de duas
+        linhas gastavam meia tela antes do primeiro cliente aparecer.
+      */}
+      <div className="hidden lg:flex items-start justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <Users className="w-6 h-6 text-primary" />
@@ -388,130 +396,274 @@ const Clientes: FC = () => {
         </Button>
       </div>
 
-      <div className="relative mb-4 max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nome, telefone, endereço, observação..."
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          className="pl-9"
-        />
+      {/*
+        No celular a busca ocupa a linha e o "novo cliente" vira o botão quadrado
+        ao lado dela: são as duas coisas que se faz ao abrir esta tela, e juntas
+        gastam uma linha em vez de duas.
+      */}
+      <div className="flex items-center gap-2 mb-3 lg:mb-4">
+        <div className="relative flex-1 lg:max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome, telefone, endereço, observação..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Button
+          onClick={abrirNovo}
+          className="lg:hidden h-11 w-11 shrink-0 p-0"
+          aria-label="Novo cliente"
+          title="Novo cliente"
+        >
+          <Plus className="w-5 h-5" />
+        </Button>
       </div>
 
-      <div className="border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground w-10" />
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">CPF / CNPJ</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Telefone</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Endereço</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cadastro</th>
-              <th className="w-32 px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {listaFiltrada.length === 0 && (
-              <tr>
-                <td colSpan={7}>
-                  <EstadoVazio
-                    icone={<User className="w-9 h-9" />}
-                    dica={busca ? 'Tente outro nome, telefone ou documento.' : 'Use o botão "Novo cliente" para começar.'}
-                  >
-                    {busca ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}
-                  </EstadoVazio>
-                </td>
-              </tr>
-            )}
-            {listaPaginada.map((c, i) => (
-              <tr
-                key={c.id}
-                className={`border-b border-border last:border-b-0 ${
-                  saidaLinha.estaSaindo(String(c.id)) ? 'anim-linha-sai' : ''
-                } ${
-                  i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
-                }`}
-              >
-                <td className="px-4 py-3 text-muted-foreground">
-                  {c.tipo_pessoa === 'juridica'
-                    ? <Building2 className="w-4 h-4" aria-label="Empresa" />
-                    : <User className="w-4 h-4" aria-label="Pessoa física" />}
-                </td>
-                <td className="px-4 py-3 font-medium">
-                  <div className="flex items-center gap-3">
+      {/*
+        ⭐ No celular a tabela vira LISTA (roteiro §6).
+
+        Sete colunas não cabem em 360px, e as três saídas comuns são todas ruins:
+        deixar vazar dá rolagem lateral na página; `overflow-x` na tabela faz a
+        pessoa rolar de lado item por item e nunca comparar nada; esconder
+        coluna com classe some com o dado sem avisar.
+
+        Aqui a linha vira um item de duas alturas — identidade à esquerda,
+        número à direita — e as ações descem para uma terceira linha, que é o
+        que o roteiro sugere: elas não cabem ao lado do valor sem espremê-lo, e
+        cada uma precisa de 44×44.
+
+        ⚠️ A tabela não é escondida por classe, ela não é RENDERIZADA: com
+        `hidden lg:table` as vinte linhas da página existiriam duas vezes no DOM.
+
+        ⚠️ O que NÃO cabe na linha (documento, endereço, razão social) continua
+        a um toque de distância, em Editar. É uma troca consciente: o que a
+        pessoa procura correndo os olhos é nome, telefone e quanto se deve.
+      */}
+      {ehCelular ? (
+        listaFiltrada.length === 0 ? (
+          <div className="border rounded-xl bg-card">
+            <EstadoVazio
+              icone={<User className="w-9 h-9" />}
+              dica={busca ? 'Tente outro nome, telefone ou documento.' : 'Use o botão + para começar.'}
+            >
+              {busca ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}
+            </EstadoVazio>
+          </div>
+        ) : (
+          <ul className="border rounded-xl bg-card divide-y">
+            {listaPaginada.map((c) => {
+              const divida = dividasPorCliente.get(c.id)
+              return (
+                <li
+                  key={c.id}
+                  className={`px-3 py-2.5 ${saidaLinha.estaSaindo(String(c.id)) ? 'anim-linha-sai' : ''}`}
+                >
+                  {/*
+                    `minmax(0,1fr)` na coluna do meio é obrigatório: sem ele um
+                    nome longo estoura a grade em vez de cortar, e é assim que
+                    aparece rolagem horizontal onde não deveria haver nenhuma.
+                  */}
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3">
+                    {/*
+                      UM identificador só, e em cinza: cor sorteada por cliente
+                      é ruído que compete com o vermelho da dívida, que é a única
+                      cor que precisa gritar nesta tela. Empresa mostra o
+                      prédio no lugar das iniciais, que é como a coluna de tipo
+                      do monitor continua existindo aqui.
+                    */}
                     <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${corDoNome(c.nome)}`}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
                       aria-hidden
                     >
-                      {iniciaisDoNome(c.nome)}
+                      {c.tipo_pessoa === 'juridica'
+                        ? <Building2 className="h-4 w-4" />
+                        : iniciaisDoNome(c.nome)}
                     </span>
+
                     <div className="min-w-0">
-                      <div className="truncate max-w-[190px] 2xl:max-w-[260px]" title={c.nome}>{c.nome}</div>
-                      {c.tipo_pessoa === 'juridica' && c.razao_social && (
-                        <div
-                          className="text-xs text-muted-foreground font-normal truncate max-w-[190px] 2xl:max-w-[260px]"
-                          title={c.razao_social}
-                        >
-                          {c.razao_social}
-                        </div>
-                      )}
-                      {c.observacao && (
-                        <div
-                          className="text-xs text-muted-foreground font-normal italic truncate max-w-[190px] 2xl:max-w-[260px]"
-                          title={c.observacao}
-                        >
-                          {c.observacao}
-                        </div>
-                      )}
+                      <p className="truncate text-[14.5px] font-semibold leading-tight" title={c.nome}>
+                        {c.nome}
+                      </p>
+                      <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
+                        {[c.telefone, `desde ${formatarData(c.data_cadastro)}`, c.observacao]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
                     </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {c.tipo_pessoa === 'juridica' ? (c.cnpj || '—') : (c.cpf || '—')}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{c.telefone}</td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {c.endereco
-                    ? <div className="truncate max-w-[130px] 2xl:max-w-[220px]" title={c.endereco}>{c.endereco}</div>
-                    : '—'}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{formatarData(c.data_cadastro)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1 justify-end">
-                    {dividasPorCliente.has(c.id) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-amber-600 hover:text-amber-700"
-                        onClick={() => setClienteDividas(c)}
-                        title={`Ver dívidas — ${fmtMoeda(dividasPorCliente.get(c.id)!.total)} em aberto`}
-                      >
-                        <Wallet className="w-4 h-4" />
-                      </Button>
+
+                    {/*
+                      O valor não encolhe e não quebra: `num` põe a monoespaçada
+                      com `tabular-nums`, que é o que alinha a vírgula de um item
+                      para o outro sem tabela nenhuma.
+                    */}
+                    {divida && (
+                      <span className="num shrink-0 text-[14px] font-semibold text-critical">
+                        {fmtMoeda(divida.total)}
+                      </span>
                     )}
-                    {ehDono && (
-                      <>
-                        <Button variant="ghost" size="icon" onClick={() => abrirEdicao(c)}>
-                          <Pencil className="w-4 h-4" />
-                        </Button>
+                  </div>
+
+                  {(divida || ehDono) && (
+                    <div className="mt-1 flex justify-end gap-1">
+                      {divida && (
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => excluir(c.id, c.nome)}
+                          className="text-warn hover:text-warn"
+                          onClick={() => setClienteDividas(c)}
+                          aria-label={`Ver dívidas de ${c.nome}`}
+                          title={`Ver dívidas — ${fmtMoeda(divida.total)} em aberto`}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Wallet className="w-4 h-4" />
                         </Button>
-                      </>
-                    )}
-                  </div>
-                </td>
+                      )}
+                      {ehDono && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => abrirEdicao(c)}
+                            aria-label={`Editar ${c.nome}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => excluir(c.id, c.nome)}
+                            aria-label={`Excluir ${c.nome}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )
+      ) : (
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground w-10" />
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">CPF / CNPJ</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Telefone</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Endereço</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cadastro</th>
+                <th className="w-32 px-4 py-3" />
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {listaFiltrada.length === 0 && (
+                <tr>
+                  <td colSpan={7}>
+                    <EstadoVazio
+                      icone={<User className="w-9 h-9" />}
+                      dica={busca ? 'Tente outro nome, telefone ou documento.' : 'Use o botão "Novo cliente" para começar.'}
+                    >
+                      {busca ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}
+                    </EstadoVazio>
+                  </td>
+                </tr>
+              )}
+              {listaPaginada.map((c, i) => (
+                <tr
+                  key={c.id}
+                  className={`border-b border-border last:border-b-0 ${
+                    saidaLinha.estaSaindo(String(c.id)) ? 'anim-linha-sai' : ''
+                  } ${
+                    i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
+                  }`}
+                >
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {c.tipo_pessoa === 'juridica'
+                      ? <Building2 className="w-4 h-4" aria-label="Empresa" />
+                      : <User className="w-4 h-4" aria-label="Pessoa física" />}
+                  </td>
+                  <td className="px-4 py-3 font-medium">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${corDoNome(c.nome)}`}
+                        aria-hidden
+                      >
+                        {iniciaisDoNome(c.nome)}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="truncate max-w-[190px] 2xl:max-w-[260px]" title={c.nome}>{c.nome}</div>
+                        {c.tipo_pessoa === 'juridica' && c.razao_social && (
+                          <div
+                            className="text-xs text-muted-foreground font-normal truncate max-w-[190px] 2xl:max-w-[260px]"
+                            title={c.razao_social}
+                          >
+                            {c.razao_social}
+                          </div>
+                        )}
+                        {c.observacao && (
+                          <div
+                            className="text-xs text-muted-foreground font-normal italic truncate max-w-[190px] 2xl:max-w-[260px]"
+                            title={c.observacao}
+                          >
+                            {c.observacao}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {c.tipo_pessoa === 'juridica' ? (c.cnpj || '—') : (c.cpf || '—')}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{c.telefone}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {c.endereco
+                      ? <div className="truncate max-w-[130px] 2xl:max-w-[220px]" title={c.endereco}>{c.endereco}</div>
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatarData(c.data_cadastro)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1 justify-end">
+                      {dividasPorCliente.has(c.id) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-amber-600 hover:text-amber-700"
+                          onClick={() => setClienteDividas(c)}
+                          title={`Ver dívidas — ${fmtMoeda(dividasPorCliente.get(c.id)!.total)} em aberto`}
+                        >
+                          <Wallet className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {ehDono && (
+                        <>
+                          <Button variant="ghost" size="icon" onClick={() => abrirEdicao(c)}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => excluir(c.id, c.nome)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <Paginacao
         paginaAtual={paginaAtual}
         totalItens={listaFiltrada.length}
