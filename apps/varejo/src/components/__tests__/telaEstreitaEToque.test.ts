@@ -36,6 +36,21 @@ function blocoDeToque(): string {
   return fim > 0 ? resto.slice(0, fim) : resto
 }
 
+/**
+ * O fonte sem comentário nenhum.
+ *
+ * ⚠️ Guarda estrutural TEM que ler daqui. Já aconteceu três vezes nesta
+ * reforma de um teste casar com o termo dentro do comentário que explica por
+ * que aquele termo existe — e passar verde com o código apagado. O comentário
+ * cita `min-w-0`, cita `key={aba}`, cita o nome da classe: ele é justamente o
+ * lugar onde as palavras que a guarda procura aparecem de novo.
+ */
+function semComentarios(fonte: string): string {
+  return fonte
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+}
+
 function arquivosDeTela(dir: string): string[] {
   const achados: string[] = []
   for (const nome of readdirSync(dir)) {
@@ -89,10 +104,11 @@ describe('tela 1 — o Painel no celular', () => {
   it('valores usam a monoespaçada que alinha a vírgula', () => {
     // Sem `tabular-nums` os algarismos têm larguras diferentes e a coluna dança
     // a cada linha (§6).
-    // O tamanho virou par responsivo (14 no celular, 15 no monitor); o que
-    // importa guardar é a monoespaçada, que é quem alinha a vírgula.
-    expect(PAINEL).toContain('className="num text-[14px] lg:text-[15px] text-critical"')
-    expect(PAINEL).toContain('text-[14px] lg:text-[15px] text-warn shrink-0')
+    // O tamanho é par responsível (14 no celular, 15 no monitor) e a cor sai do
+    // tipo da linha, já que a mesma linha serve as duas listas. O que importa
+    // guardar é a monoespaçada, que é quem alinha a vírgula.
+    expect(PAINEL).toContain('num text-[14px] lg:text-[15px]')
+    expect(PAINEL).toContain("atrasado ? 'text-critical' : 'text-warn'")
   })
 
   it('★ nenhuma tabela, e nenhuma largura fixa de layout', () => {
@@ -107,12 +123,16 @@ describe('tela 1 — o Painel no celular', () => {
   it('a linha de cliente tem alvo de toque e não estoura com nome longo', () => {
     // `min-w-0` é a terceira causa de rolagem lateral: sem ele o nome se recusa
     // a encolher e empurra o valor para fora da tela.
-    const linha = PAINEL.slice(
-      PAINEL.indexOf('Ver dívidas e parcelas em atraso') - 400,
-      PAINEL.indexOf('Ver dívidas e parcelas em atraso') + 400
-    )
+    // ⚠️ A janela é recortada pelo próprio `</button>`, e não por uma contagem
+    // de caracteres: um comentário a mais dentro da linha faz a fatia parar
+    // antes do que ela precisa ver, e aí a guarda reprova o código certo.
+    const onde = PAINEL.indexOf('Ver dívidas e parcelas do cliente')
+    const linha = PAINEL.slice(PAINEL.lastIndexOf('<button', onde), PAINEL.indexOf('</button>', onde))
     expect(linha).toContain('min-h-[56px]')
-    expect(linha).toContain('min-w-0')
+    // ⚠️ O JSX inteiro, não a palavra solta: o comentário acima da linha explica
+    // por que o `min-w-0` existe e contém o termo. Procurando só o termo, esta
+    // guarda passaria com o atributo apagado do código.
+    expect(linha).toContain('<div className="min-w-0">')
   })
 })
 
@@ -256,8 +276,8 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
 
     // respiro entre blocos: 12 no celular, 24 no monitor
     expect(PAINEL).toContain('gap-3 mb-3 lg:gap-4 lg:mb-6')
-    // respiro interno dos cartões de alerta
-    expect(PAINEL).toContain('p-3 lg:p-5')
+    // respiro interno dos cartões
+    expect(PAINEL).toContain('p-3 lg:p-4')
 
     /*
      * ⚠️ Nenhuma redução de PADDING pode ficar sem o par de desktop, senão ela
@@ -268,7 +288,9 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
      * não são padding e têm par próprio.
      */
     const semPar = PAINEL.split('\n')
-      .filter((l) => /["' ]p-3(?![\d.])/.test(l) && !l.includes('lg:p-'))
+      // `lg:hidden` dispensa o par: o que não existe no monitor não vaza para
+      // ele. É o caso do cartão de Vencimentos, que só existe no celular.
+      .filter((l) => /["' ]p-3(?![\d.])/.test(l) && !l.includes('lg:p-') && !l.includes('lg:hidden'))
       .map((l) => l.trim().slice(0, 60))
     expect(semPar, 'padding reduzido sem o par lg: vaza para o desktop').toEqual([])
   })
@@ -277,19 +299,87 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     // O que saiu foi o espaço em volta do texto, nunca a área do dedo.
     const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
     expect(PAINEL).toContain('min-h-[56px]')
-    expect(PAINEL).toContain('min-h-[44px]')
+    // A aba de Vencimentos também é alvo de dedo, e o 44 dela mora no CSS.
+    // ⚠️ Dentro da REGRA dela: `min-height: 44px` aparece em outro ponto do
+    // arquivo, e procurar solto deixava a guarda verde com a aba encolhida.
+    const regraAba = CSS.slice(
+      CSS.indexOf("[data-alvo='web'] .aba-vencimento {"),
+      CSS.indexOf('}', CSS.indexOf("[data-alvo='web'] .aba-vencimento {"))
+    )
+    expect(regraAba).toContain('min-height: 44px')
   })
 
-  it('★ o cartão recolhido continua dizendo o total', () => {
-    // Lição do SecaoConfig: sem resumo, seção fechada vira caixa preta e a
-    // pessoa reabre todas — e aí recolher não economizou nada.
+  it('★ Vencimentos são DUAS listas no celular, nunca uma fila só', () => {
+    /*
+     * ⚠️ Juntar as duas numa fila única já foi entregue e RECUSADO pelo dono:
+     * misturar o vermelho do atraso com o âmbar do que vence hoje "dá um ar de
+     * caos". Viraram duas abas, e cada lista continua sendo a sua.
+     */
     const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
-    expect(PAINEL).toContain('const CabecalhoAlerta')
-    expect(PAINEL).toContain('resumo={fmt(inadimplentes.reduce')
-    // até 2 itens nasce aberto; do 3º em diante, fechado
-    expect(PAINEL).toContain('quantos <= 2')
-    // e no monitor ele nunca recolhe
-    expect(PAINEL).toContain("aberto ? 'block' : 'hidden lg:block'")
+    expect(PAINEL).toContain('const CartaoVencimentos')
+    expect(PAINEL).toContain('aba === 0')
+    expect(PAINEL).toContain('inadimplentes.map')
+    expect(PAINEL).toContain('vencendoHoje.map')
+    expect(PAINEL, 'as duas listas voltaram a virar uma fila só')
+      .not.toContain('...vencendoHoje.map')
+  })
+
+  it('★ a aba fechada não esconde informação: a contagem dela fica à vista', () => {
+    // Mesma lição do cabeçalho recolhível que isto substituiu: se a aba fechada
+    // não disser nada, a pessoa abre as duas toda vez — e aí a troca não
+    // economizou tela nenhuma. O total da aba ABERTA fica no cabeçalho.
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('{a.quantos}')
+    expect(PAINEL).toContain('{fmt(atual.total)}')
+    // e a etiqueta da aba fechada continua legível, em cinza
+    expect(PAINEL).toContain("'bg-foreground/10 text-muted-foreground'")
+  })
+
+  it('★ a pílula das abas é IRMÃ e vem ANTES dos botões', () => {
+    // Mesma receita da ilha de navegação: elemento posicionado pinta na ordem do
+    // DOM, então a pílula fica por baixo sem z-index em cada rótulo — e sem
+    // abrir um contexto de empilhamento por botão.
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    const bloco = PAINEL.slice(PAINEL.indexOf('<div className="abas-vencimento"'))
+    // ⚠️ Exigir que ela EXISTA antes de comparar posição: `indexOf` devolve -1
+    // quando não acha, e -1 é menor que qualquer índice — a guarda passava com a
+    // pílula apagada.
+    expect(bloco).toContain('aba-vencimento-pilula')
+    expect(bloco.indexOf('aba-vencimento-pilula')).toBeLessThan(bloco.indexOf('role="tab"'))
+    const regra = CSS.slice(
+      CSS.indexOf('.aba-vencimento-pilula'),
+      CSS.indexOf('}', CSS.indexOf('.aba-vencimento-pilula'))
+    )
+    expect(regra, 'z-index na pílula significa que a ordem do DOM deixou de bastar')
+      .not.toContain('z-index')
+  })
+
+  it('★ a troca de aba anima, toca de novo, e NÃO deixa rastro', () => {
+    /*
+     * `key={aba}` é o que faz a animação rodar a cada troca: sem ela o React
+     * reaproveita o mesmo nó e o navegador não vê animação nova.
+     *
+     * ⚠️ E sem `fill-mode`: animação de opacity/transform que fica "em vigor"
+     * abre contexto de empilhamento permanente, que foi o que escondeu o filtro
+     * de Mês atrás dos cartões.
+     */
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    expect(PAINEL).toContain('key={aba}')
+    expect(PAINEL).toContain("style={{ '--de': sentido } as CSSProperties}")
+    expect(CSS).toContain('animation: entrar-de-lado 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);')
+    expect(CSS, 'fill-mode aqui deixa contexto de empilhamento para trás')
+      .not.toContain('entrar-de-lado 0.24s cubic-bezier(0.2, 0.7, 0.3, 1) both')
+    // e ela mora dentro do respeito a quem pediu menos movimento
+    const antes = CSS.slice(CSS.indexOf('@keyframes entrar-de-lado') - 500, CSS.indexOf('@keyframes entrar-de-lado'))
+    expect(antes).toContain('prefers-reduced-motion: no-preference')
+  })
+
+  it('★ no monitor continuam os DOIS cartões, e o do celular não aparece lá', () => {
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('<div className="hidden lg:grid lg:grid-cols-2 lg:gap-4 lg:mb-6">')
+    expect(PAINEL).toContain('Inadimplentes')
+    expect(PAINEL).toContain('Vencem Hoje')
+    expect(PAINEL).toContain('lg:hidden rounded-xl border border-t-2 bg-card')
   })
 
   it('★ o gráfico muda de desenho no celular sem levar o monitor junto', () => {

@@ -507,4 +507,88 @@
   [data-alvo='web'] .tem-ilha {
     padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
   }
+
+  /* ---------- Vencimentos: duas abas, uma pílula que escorrega ----------
+     ⚠️ Juntar as duas listas numa fila só já foi tentado e RECUSADO pelo dono:
+     misturar o vermelho do atraso com o âmbar do que vence hoje "dá um ar de
+     caos". Aqui elas seguem separadas, e a cor de cada uma só aparece na vez
+     dela.
+
+     A gramática é a MESMA da ilha de navegação: uma pílula irmã dos botões,
+     que vem ANTES deles no DOM e escorrega por baixo. Repetir um idioma que a
+     pessoa já aprendeu na barra é o que faz a tela parecer uma coisa só. */
+  [data-alvo='web'] .abas-vencimento {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 10px;
+    background: hsl(var(--muted));
+  }
+
+  /* `position: relative` e NENHUM z-index: elemento posicionado pinta na ordem
+     do DOM, e os botões vêm depois da pílula. Um `z-index` em cada rótulo
+     resolveria igual e criaria um contexto de empilhamento por botão. */
+  [data-alvo='web'] .aba-vencimento {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 8px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.2s ease;
+  }
+
+  /* A largura é metade do vão útil: 50% do trilho menos a metade do respiro
+     (4px) e menos o recheio de um lado (3px). Uma casa andada = a própria
+     largura mais o respiro — a mesma conta da ilha, e pelo mesmo motivo: com
+     porcentagem pura a pílula erra o alvo por alguns pixels. */
+  [data-alvo='web'] .aba-vencimento-pilula {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(50% - 5px);
+    border-radius: 7px;
+    background: hsl(var(--background));
+    box-shadow: 0 1px 2px hsl(var(--foreground) / 0.12);
+    transform: translateX(calc(var(--i, 0) * (100% + 4px)));
+    transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-alvo='web'] .aba-vencimento-pilula {
+      transition: none;
+    }
+  }
+
+  /* A lista entra pelo lado de onde veio: da direita ao avançar, da esquerda
+     ao voltar. É movimento que INFORMA — diz que a tela não trocou de assunto,
+     só andou de lado.
+
+     ⚠️ SEM `fill-mode`. Animação de opacity/transform que fica "em vigor"
+     abre um contexto de empilhamento permanente, e foi exatamente isso que
+     escondeu o filtro de Mês atrás dos cartões. Aqui ela termina e sai. */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes entrar-de-lado {
+      from {
+        opacity: 0;
+        transform: translateX(calc(var(--de, 1) * 16px));
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    [data-alvo='web'] .painel-vencimento {
+      animation: entrar-de-lado 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+    }
+  }
 }

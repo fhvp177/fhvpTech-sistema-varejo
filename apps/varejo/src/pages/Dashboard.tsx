@@ -1,9 +1,9 @@
-import { FC, ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { CSSProperties, FC, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package, LayoutDashboard,
   ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
   ArrowLeftRight, Target, Trophy, CalendarDays, PiggyBank, Gift, Pencil, Check, X,
-  ChevronDown
+  CheckCircle2
 } from 'lucide-react'
 import FiltroMesPopover from '@/components/FiltroMesPopover'
 import {
@@ -293,50 +293,6 @@ const Dashboard: FC = () => {
     return resp.success
   }
 
-  /*
-   * Quais cartões de alerta estão abertos.
-   *
-   * ⚠️ Lembrado no aparelho, como no `SecaoConfig`: quem abriu para ver a lista
-   * costuma voltar ali logo depois, e reabrir na mão toda vez é atrito bobo.
-   *
-   * Nasce ABERTO quando há até dois itens — nesse tamanho o cartão já cabe na
-   * tela e recolher só custaria um toque. Do terceiro em diante ele nasce
-   * fechado, que é quando a economia é real.
-   *
-   * `localStorage` pode não existir (janela anônima, armazenamento bloqueado),
-   * e nesse caso o padrão vale — nada quebra por causa de uma preferência.
-   */
-  const [alertasAbertos, setAlertasAbertos] = useState<Record<string, boolean>>({})
-
-  useEffect(() => {
-    const inicial: Record<string, boolean> = {}
-    for (const [id, quantos] of [
-      ['inadimplentes', inadimplentes.length],
-      ['vencem-hoje', vencendoHoje.length]
-    ] as const) {
-      let salvo: string | null = null
-      try {
-        salvo = localStorage.getItem(`painel_alerta_${id}`)
-      } catch {
-        // sem armazenamento: cai no padrão
-      }
-      inicial[id] = salvo === null ? quantos <= 2 : salvo === '1'
-    }
-    setAlertasAbertos(inicial)
-  }, [inadimplentes.length, vencendoHoje.length])
-
-  const alternarAlerta = useCallback((id: string) => {
-    setAlertasAbertos((antes) => {
-      const novo = !antes[id]
-      try {
-        localStorage.setItem(`painel_alerta_${id}`, novo ? '1' : '0')
-      } catch {
-        // preferência não guardada; a tela funciona igual
-      }
-      return { ...antes, [id]: novo }
-    })
-  }, [])
-
   // Primeira abertura: enquanto os números não chegam, a tela inteira é uma
   // silhueta (mesma do fallback lazy lá no App, então não há "pisca" duplo).
   if (!carregouMetricas) return <DashboardSkeleton />
@@ -398,99 +354,80 @@ const Dashboard: FC = () => {
         </div>
       </div>
 
-      {/* ── Alertas de inadimplência (destaque no topo) ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 lg:gap-4 lg:mb-6">
+      {/* ── Vencimentos ── */}
+      <CartaoVencimentos
+        inadimplentes={inadimplentes}
+        vencendoHoje={vencendoHoje}
+        onAbrirCliente={(id, nome) => setClienteDividas({ id, nome })}
+      />
+
+      {/*
+        No monitor seguem os DOIS cartões, lado a lado, como sempre foram.
+        Sobra largura ali: não há o que resolver, e mexer seria mexer por mexer.
+      */}
+      <div className="hidden lg:grid lg:grid-cols-2 lg:gap-4 lg:mb-6">
         {/*
           A faixa de 4px vira 2px e sai do vermelho literal para o token
           `critical-fill` — que é a cor CHEIA, própria de faixa, onde não há
           texto por cima. O texto usa `critical`, a versão escurecida. Um token
           só obrigaria a escolher entre faixa suja e texto ilegível.
         */}
-        <div className="rounded-xl border border-t-2 border-t-critical-fill bg-card shadow-sm p-3 lg:p-5">
-          <CabecalhoAlerta
-            id="inadimplentes"
-            icone={<AlertTriangle className="w-[18px] h-[18px] text-critical shrink-0" />}
-            titulo="Inadimplentes"
-            quantidade={inadimplentes.length}
-            resumo={fmt(inadimplentes.reduce((s, c) => s + c.total_devido, 0))}
-            aberto={alertasAbertos['inadimplentes'] ?? true}
-            onAlternar={() => alternarAlerta('inadimplentes')}
-            classeEtiqueta="bg-critical-fill text-on-fill"
-          >
+        <div className="rounded-xl border border-t-2 border-t-critical-fill bg-card shadow-sm p-5">
+          <h3 className="flex items-center gap-2.5 text-[15px] font-semibold text-foreground mb-5">
+            <AlertTriangle className="w-[18px] h-[18px] text-critical shrink-0" />
+            Inadimplentes
+            {inadimplentes.length > 0 && (
+              <span className="bg-critical-fill text-on-fill text-xs font-bold rounded-xl px-2.5 py-0.5">
+                {inadimplentes.length}
+              </span>
+            )}
+          </h3>
           {inadimplentes.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhum cliente inadimplente.</p>
           ) : (
-            <div className="max-h-[180px] lg:max-h-[220px] overflow-y-auto pr-2 lg:pr-3 scrollbar-suave">
+            <div className="max-h-[220px] overflow-y-auto pr-3 scrollbar-suave">
               {inadimplentes.map((c) => (
-                <button
+                <LinhaVencimento
                   key={c.id}
-                  type="button"
-                  onClick={() => setClienteDividas({ id: c.id, nome: c.nome })}
-                  className="w-full min-h-[56px] text-left flex justify-between items-start gap-3 py-2 lg:py-3 border-b last:border-b-0 hover:bg-critical-soft active:bg-critical-soft transition-colors cursor-pointer"
-                  title="Ver dívidas e parcelas em atraso"
-                >
-                  {/*
-                    `min-w-0` é obrigatório: sem ele um nome longo se recusa a
-                    encolher abaixo do próprio conteúdo e empurra o valor para
-                    fora da tela. É uma das três causas de rolagem horizontal
-                    que o roteiro nomeia (§11).
-                  */}
-                  <div className="min-w-0">
-                    <p className="font-semibold text-[14px] lg:text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
-                    <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">{c.telefone}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    {/*
-                      `num` põe a monoespaçada com `tabular-nums`: é o que faz
-                      R$ 295,00 e R$ 70,00 alinharem a vírgula sem tabela. Sem
-                      isso os algarismos têm larguras diferentes e a coluna
-                      dança a cada linha.
-                    */}
-                    <p className="num text-[14px] lg:text-[15px] text-critical">{fmt(c.total_devido)}</p>
-                    <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">
-                      desde {fmtData(c.vencimento_mais_antigo)}
-                    </p>
-                  </div>
-                </button>
+                  nome={c.nome}
+                  telefone={c.telefone}
+                  valor={c.total_devido}
+                  detalhe={`desde ${fmtData(c.vencimento_mais_antigo)}`}
+                  atrasado
+                  onAbrir={() => setClienteDividas({ id: c.id, nome: c.nome })}
+                />
               ))}
             </div>
           )}
-          </CabecalhoAlerta>
         </div>
 
-        <div className="rounded-xl border border-t-2 border-t-warn bg-card shadow-sm p-3 lg:p-5">
-          <CabecalhoAlerta
-            id="vencem-hoje"
-            icone={<Clock className="w-[18px] h-[18px] text-warn shrink-0" />}
-            titulo="Vencem Hoje"
-            quantidade={vencendoHoje.length}
-            resumo={fmt(vencendoHoje.reduce((s, c) => s + c.total, 0))}
-            aberto={alertasAbertos['vencem-hoje'] ?? true}
-            onAlternar={() => alternarAlerta('vencem-hoje')}
-            classeEtiqueta="bg-warn text-on-fill"
-          >
+        <div className="rounded-xl border border-t-2 border-t-warn bg-card shadow-sm p-5">
+          <h3 className="flex items-center gap-2.5 text-[15px] font-semibold text-foreground mb-5">
+            <Clock className="w-[18px] h-[18px] text-warn shrink-0" />
+            Vencem Hoje
+            {vencendoHoje.length > 0 && (
+              <span className="bg-warn text-on-fill text-xs font-bold rounded-xl px-2.5 py-0.5">
+                {vencendoHoje.length}
+              </span>
+            )}
+          </h3>
           {vencendoHoje.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhum vencimento para hoje.</p>
           ) : (
-            <div className="max-h-[180px] lg:max-h-[220px] overflow-y-auto pr-2 lg:pr-3 scrollbar-suave">
+            <div className="max-h-[220px] overflow-y-auto pr-3 scrollbar-suave">
               {vencendoHoje.map((c) => (
-                <button
+                <LinhaVencimento
                   key={c.id}
-                  type="button"
-                  onClick={() => setClienteDividas({ id: c.id, nome: c.nome })}
-                  className="w-full text-left flex justify-between items-start gap-3 py-3 border-b last:border-b-0 hover:bg-warn-soft active:bg-warn-soft transition-colors cursor-pointer"
-                  title="Ver dívidas e parcelas do cliente"
-                >
-                  <div className="min-w-0">
-                    <p className="font-semibold text-[14px] lg:text-[15px] text-foreground truncate" title={c.nome}>{c.nome}</p>
-                    <p className="text-[14px] text-muted-foreground mt-0.5">{c.telefone}</p>
-                  </div>
-                  <p className="num text-[14px] lg:text-[15px] text-warn shrink-0">{fmt(c.total)}</p>
-                </button>
+                  nome={c.nome}
+                  telefone={c.telefone}
+                  valor={c.total}
+                  detalhe="vence hoje"
+                  atrasado={false}
+                  onAbrir={() => setClienteDividas({ id: c.id, nome: c.nome })}
+                />
               ))}
             </div>
           )}
-          </CabecalhoAlerta>
         </div>
       </div>
 
@@ -810,71 +747,212 @@ const SkeletonLista: FC<{ linhas?: number; comRank?: boolean }> = ({ linhas = 5,
 type Delta = { pct: number; valido: boolean }
 
 /**
- * Cabeçalho de cartão de alerta que recolhe no celular.
+ * Uma linha de vencimento: cliente, telefone, valor e quando.
  *
- * ── Por que ele existe ───────────────────────────────────────────────────────
- * "Inadimplentes" e "Vencem hoje" abrem o Painel, e com meia dúzia de linhas
- * cada um eles comem a primeira tela inteira — o número que o dono foi ver fica
- * três rolagens abaixo.
- *
- * ── O resumo é o que faz valer ───────────────────────────────────────────────
- * ⚠️ Lição do `SecaoConfig`: sem resumo, uma seção fechada vira caixa preta e a
- * pessoa reabre todas. Fechado, este cabeçalho continua dizendo o total —
- * "15 · R$ 3.240,00" — que é a resposta que 90% das aberturas procurava.
- *
- * ── Fechado só quando compensa ───────────────────────────────────────────────
- * Até duas linhas ele nasce aberto: já cabem na tela, e esconder o que não
- * estorva só custa um toque. Da terceira em diante ele nasce fechado.
+ * A mesma linha serve o celular e o monitor porque, das duas listas, o que
+ * muda é só a cor do valor e a frase embaixo dele. Deixar duas cópias quase
+ * iguais só garantiria que uma delas ficaria para trás no próximo ajuste.
  */
-const CabecalhoAlerta: FC<{
-  id: string
-  icone: ReactNode
-  titulo: string
-  quantidade: number
-  resumo: string
-  aberto: boolean
-  onAlternar: () => void
-  classeEtiqueta: string
-  children: ReactNode
-}> = ({ id, icone, titulo, quantidade, resumo, aberto, onAlternar, classeEtiqueta, children }) => (
-  <>
-    {/* No celular o cabeçalho inteiro é o botão; no monitor é só um título. */}
-    <button
-      type="button"
-      onClick={onAlternar}
-      aria-expanded={aberto}
-      aria-controls={`alerta-${id}`}
-      className="flex w-full min-h-[44px] items-center gap-2.5 text-left text-[13.5px] font-semibold text-foreground mb-2 lg:mb-5 lg:pointer-events-none lg:text-[15px]"
-    >
-      {icone}
-      {titulo}
-      {quantidade > 0 && (
-        <span className={`${classeEtiqueta} text-xs font-bold rounded-xl px-2.5 py-0.5`}>
-          {quantidade}
-        </span>
-      )}
-      {/*
-        O resumo aparece SÓ fechado, e some no monitor: lá a lista está à vista
-        e repetir o total ao lado do título seria dizer duas vezes a mesma coisa.
-      */}
-      {!aberto && (
-        <span className="num ml-auto text-[12.5px] font-normal text-muted-foreground lg:hidden">
-          {resumo}
-        </span>
-      )}
-      <ChevronDown
-        className={`ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform lg:hidden ${
-          aberto ? 'rotate-180' : ''
-        }`}
-        aria-hidden="true"
-      />
-    </button>
-    {/* `lg:block` porque no monitor ele nunca fica recolhido. */}
-    <div id={`alerta-${id}`} className={aberto ? 'block' : 'hidden lg:block'}>
-      {children}
+const LinhaVencimento: FC<{
+  nome: string
+  telefone: string
+  valor: number
+  detalhe: string
+  atrasado: boolean
+  onAbrir: () => void
+}> = ({ nome, telefone, valor, detalhe, atrasado, onAbrir }) => (
+  <button
+    type="button"
+    onClick={onAbrir}
+    className={`w-full min-h-[56px] text-left flex justify-between items-start gap-3 py-2 lg:py-3 border-b last:border-b-0 transition-colors cursor-pointer ${
+      atrasado
+        ? 'hover:bg-critical-soft active:bg-critical-soft'
+        : 'hover:bg-warn-soft active:bg-warn-soft'
+    }`}
+    title="Ver dívidas e parcelas do cliente"
+  >
+    {/*
+      `min-w-0` é obrigatório: sem ele um nome longo se recusa a encolher
+      abaixo do próprio conteúdo e empurra o valor para fora da tela. É uma das
+      três causas de rolagem horizontal que o roteiro nomeia (§11).
+    */}
+    <div className="min-w-0">
+      <p className="font-semibold text-[14px] lg:text-[15px] text-foreground truncate" title={nome}>{nome}</p>
+      <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">{telefone}</p>
     </div>
-  </>
+    <div className="text-right shrink-0">
+      {/*
+        `num` põe a monoespaçada com `tabular-nums`: é o que faz R$ 295,00 e
+        R$ 70,00 alinharem a vírgula sem tabela. Sem isso os algarismos têm
+        larguras diferentes e a coluna dança a cada linha.
+      */}
+      <p className={`num text-[14px] lg:text-[15px] ${atrasado ? 'text-critical' : 'text-warn'}`}>
+        {fmt(valor)}
+      </p>
+      <p className="text-[11.5px] lg:text-[12.5px] text-muted-foreground mt-0.5">{detalhe}</p>
+    </div>
+  </button>
 )
+
+/**
+ * Vencimentos no celular: os dois cartões viram um, com duas abas.
+ *
+ * ── Por que NÃO uma lista só ─────────────────────────────────────────────────
+ * ⚠️ Juntar as duas listas numa fila única já foi tentado e RECUSADO pelo dono,
+ * com a palavra certa: misturar o vermelho do atraso com o âmbar do que vence
+ * hoje "dá um ar de caos". Aqui elas seguem separadas, e a cor de cada uma só
+ * aparece na vez dela — a faixa do topo, o ícone e o total do cabeçalho
+ * acompanham a aba aberta. Não refazer isso sem perguntar.
+ *
+ * ── Por que abas, e não dois cartões empilhados ──────────────────────────────
+ * Empilhados, os dois comiam a primeira tela inteira antes de aparecer um
+ * número. Com abas, só uma lista ocupa espaço por vez — e a contagem da outra
+ * continua à vista na própria aba, que é o que impede a troca de esconder
+ * informação: dá para saber que há três atrasados sem abrir nada.
+ *
+ * ── A pílula que escorrega ───────────────────────────────────────────────────
+ * É a MESMA gramática da ilha de navegação lá embaixo: pílula irmã dos botões,
+ * antes deles no DOM, deslizando por baixo. Repetir um idioma que a pessoa já
+ * aprendeu na barra é o que faz a tela parecer uma coisa só.
+ */
+const CartaoVencimentos: FC<{
+  inadimplentes: ClienteInadimplente[]
+  vencendoHoje: ClienteVencendoHoje[]
+  onAbrirCliente: (id: number, nome: string) => void
+}> = ({ inadimplentes, vencendoHoje, onAbrirCliente }) => {
+  const [aba, setAba] = useState(0)
+  /** +1 entrou pela direita, -1 pela esquerda. Diz de onde a lista veio. */
+  const [sentido, setSentido] = useState(1)
+  const [escolheu, setEscolheu] = useState(false)
+
+  /*
+   * Abre na aba que tem má notícia. Sem atraso nenhum, começa em "Vencem hoje".
+   *
+   * ⚠️ Só até a pessoa tocar numa aba. Depois disso a escolha dela manda, senão
+   * a tela trocaria de aba sozinha embaixo do dedo a cada atualização dos
+   * números.
+   */
+  useEffect(() => {
+    if (escolheu) return
+    if (inadimplentes.length === 0 && vencendoHoje.length > 0) setAba(1)
+  }, [escolheu, inadimplentes.length, vencendoHoje.length])
+
+  const trocar = (i: number) => {
+    setSentido(i > aba ? 1 : -1)
+    setAba(i)
+    setEscolheu(true)
+  }
+
+  const abas = [
+    {
+      rotulo: 'Em atraso',
+      quantos: inadimplentes.length,
+      total: inadimplentes.reduce((s, c) => s + c.total_devido, 0),
+      etiqueta: 'bg-critical-fill text-on-fill',
+      texto: 'text-critical',
+      faixa: 'border-t-critical-fill',
+      vazio: 'Nenhum cliente inadimplente.'
+    },
+    {
+      rotulo: 'Vencem hoje',
+      quantos: vencendoHoje.length,
+      total: vencendoHoje.reduce((s, c) => s + c.total, 0),
+      etiqueta: 'bg-warn text-on-fill',
+      texto: 'text-warn',
+      faixa: 'border-t-warn',
+      vazio: 'Nenhum vencimento para hoje.'
+    }
+  ]
+  const atual = abas[aba]
+
+  return (
+    <div className={`lg:hidden rounded-xl border border-t-2 bg-card shadow-sm p-3 mb-3 ${atual.faixa}`}>
+      <div className="flex items-center gap-2 mb-2">
+        {aba === 0
+          ? <AlertTriangle className="w-[18px] h-[18px] text-critical shrink-0" />
+          : <Clock className="w-[18px] h-[18px] text-warn shrink-0" />}
+        <h3 className="text-[13.5px] font-semibold text-foreground">Vencimentos</h3>
+        {/* O total da aba aberta, à direita: a resposta que 90% das aberturas
+            procurava, sem ler linha nenhuma. */}
+        <span className={`num ml-auto shrink-0 text-[13px] font-bold ${atual.texto}`}>
+          {fmt(atual.total)}
+        </span>
+      </div>
+
+      {/* ⚠️ A pílula é IRMÃ dos botões e vem ANTES deles: elemento posicionado
+          pinta na ordem do DOM, então ela fica por baixo sem z-index nenhum. */}
+      <div className="abas-vencimento" role="tablist" aria-label="Vencimentos">
+        <span
+          className="aba-vencimento-pilula"
+          aria-hidden="true"
+          style={{ '--i': aba } as CSSProperties}
+        />
+        {abas.map((a, i) => (
+          <button
+            key={a.rotulo}
+            type="button"
+            role="tab"
+            aria-selected={aba === i}
+            onClick={() => trocar(i)}
+            className={`aba-vencimento ${aba === i ? 'text-foreground' : 'text-muted-foreground'}`}
+          >
+            {a.rotulo}
+            {a.quantos > 0 && (
+              <span
+                className={`text-[11px] font-bold rounded-lg px-1.5 py-0.5 ${
+                  aba === i ? a.etiqueta : 'bg-foreground/10 text-muted-foreground'
+                }`}
+              >
+                {a.quantos}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* `key={aba}` é o que faz a animação TOCAR DE NOVO a cada troca: sem ela o
+          React reaproveita o mesmo nó e o navegador não vê animação nova. */}
+      <div
+        key={aba}
+        className="painel-vencimento mt-2"
+        style={{ '--de': sentido } as CSSProperties}
+      >
+        {atual.quantos === 0 ? (
+          <div className="flex min-h-[92px] flex-col items-center justify-center gap-1.5 text-center">
+            <CheckCircle2 className="h-5 w-5 text-positive" aria-hidden="true" />
+            <p className="text-[12.5px] text-muted-foreground">{atual.vazio}</p>
+          </div>
+        ) : (
+          <div className="max-h-[200px] overflow-y-auto pr-2 scrollbar-suave">
+            {aba === 0
+              ? inadimplentes.map((c) => (
+                  <LinhaVencimento
+                    key={c.id}
+                    nome={c.nome}
+                    telefone={c.telefone}
+                    valor={c.total_devido}
+                    detalhe={`desde ${fmtData(c.vencimento_mais_antigo)}`}
+                    atrasado
+                    onAbrir={() => onAbrirCliente(c.id, c.nome)}
+                  />
+                ))
+              : vencendoHoje.map((c) => (
+                  <LinhaVencimento
+                    key={c.id}
+                    nome={c.nome}
+                    telefone={c.telefone}
+                    valor={c.total}
+                    detalhe="vence hoje"
+                    atrasado={false}
+                    onAbrir={() => onAbrirCliente(c.id, c.nome)}
+                  />
+                ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 type CardKPIProps = {
   icone: React.ReactNode
