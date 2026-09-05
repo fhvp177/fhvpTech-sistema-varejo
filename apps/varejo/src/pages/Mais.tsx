@@ -29,7 +29,12 @@ export default function Mais({ secoes }: { secoes: SecaoMais[] }) {
   const navegar = useNavigate()
 
   return (
-    <div className="p-4 space-y-6">
+    /*
+      `entrada-escalonada`: as seções sobem e aparecem uma após a outra, como
+      no Painel. Ela nasceu antes dessa regra existir e ficava sendo a única
+      aba a piscar inteira de uma vez.
+    */
+    <div className="entrada-escalonada p-4 space-y-6">
       {secoes.map((secao) => (
         <section key={secao.titulo}>
           {/*
@@ -41,7 +46,8 @@ export default function Mais({ secoes }: { secoes: SecaoMais[] }) {
             {secao.titulo}
           </h2>
 
-          <div className="rounded-lg border bg-card overflow-hidden">
+          {/* 12px, o mesmo canto de todo cartão da reforma. */}
+          <div className="rounded-xl border bg-card overflow-hidden">
             {secao.itens.map((item, i) => {
               const Icone = item.icon
               return (

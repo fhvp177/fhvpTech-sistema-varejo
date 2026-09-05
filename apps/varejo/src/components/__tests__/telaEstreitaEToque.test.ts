@@ -623,6 +623,36 @@ describe('tela 5 — o Caixa (PDV) no celular', () => {
   })
 })
 
+describe('tela 6 — Mais', () => {
+  const MAIS = semComentarios(readFileSync(join(SRC, 'pages', 'Mais.tsx'), 'utf8'))
+
+  it('★ ela fala a mesma língua das outras cinco', () => {
+    // Nasceu na etapa 0, antes de a reforma ter uma língua. Faltava o canto de
+    // 12px de todo cartão e a entrada escalonada — ela era a única aba a piscar
+    // inteira de uma vez.
+    expect(MAIS).toContain('entrada-escalonada p-4 space-y-6')
+    expect(MAIS).toContain('rounded-xl border bg-card overflow-hidden')
+  })
+
+  it('★ a linha continua sendo o alvo inteiro, e não estoura', () => {
+    // 56px de altura, a linha toda clicável, e `min-w-0` para o rótulo longo
+    // encolher em vez de empurrar a seta para fora (§11).
+    expect(MAIS).toContain('w-full min-h-[56px] flex items-center')
+    expect(MAIS).toContain('flex-1 min-w-0 truncate')
+  })
+
+  it('★ a lista vem de FORA, e não é uma segunda cópia do menu', () => {
+    /*
+     * As seções são as mesmas da barra lateral do monitor, com as mesmas regras
+     * de quem vê o quê. Reescrevê-las aqui criaria uma segunda lista para
+     * esquecer de atualizar: no dia em que uma aba nova nascesse, ela apareceria
+     * no monitor e sumiria no celular, sem ninguém perceber.
+     */
+    expect(MAIS).toContain('secoes }: { secoes: SecaoMais[] }')
+    expect(APP).toContain('secoesVisiveis(')
+  })
+})
+
 describe('a ilha de navegação do celular (roteiro §3)', () => {
   const ILHA = readFileSync(
     join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'BarraInferiorMobile.tsx'),
