@@ -15,6 +15,7 @@ import DividasClienteDialog, {
   type VendaDivida
 } from '@/components/DividasClienteDialog'
 import DashboardSkeleton from '@/components/DashboardSkeleton'
+import { useEhCelular } from '@/hooks/useEhCelular'
 import ReceberPagamentoDialog from '@/components/ReceberPagamentoDialog'
 import { Skeleton } from '@fhvptech/core/ui/skeleton'
 
@@ -138,6 +139,17 @@ const fmtCompacto = (valor: number) => {
 
 const fmtData = (iso: string) => new Date(iso + 'T00:00').toLocaleDateString('pt-BR')
 
+/**
+ * Cinza da série do período anterior, no gráfico de vendas no tempo.
+ *
+ * ⚠️ É a única cor literal que sobrou nesta tela, e ela sobrou por um
+ * motivo: o Recharts pinta SVG por propriedade, não por classe, e a barra e
+ * o quadradinho da legenda precisam ler o MESMO valor — legenda de uma cor e
+ * barra de outra é pior do que não ter legenda. Quando virar token de tema,
+ * troca-se aqui e os dois acompanham.
+ */
+const COR_PERIODO_ANTERIOR = '#94a3b8'
+
 const calcularDelta = (atual: number, anterior: number): { pct: number; valido: boolean } => {
   if (anterior === 0) return { pct: 0, valido: false }
   return { pct: ((atual - anterior) / anterior) * 100, valido: true }
@@ -216,6 +228,30 @@ const Dashboard: FC = () => {
   const deltaClientesNovos = metricas
     ? calcularDelta(metricas.clientes_novos_atual, metricas.clientes_novos_anterior)
     : { pct: 0, valido: false }
+
+  /*
+   * Quanto o gráfico soma no período.
+   *
+   * Não é número novo: é o mesmo faturamento que já está no cartão de cima,
+   * repetido no pé do gráfico porque no celular o cartão de cima já rolou
+   * para fora da tela quando o olho chega nas barras.
+   */
+  const totalSerie = useMemo(
+    () => (metricas?.serie_temporal ?? []).reduce((soma, p) => soma + p.total, 0),
+    [metricas]
+  )
+
+  /*
+   * De quantos em quantos rótulos aparece um no eixo do tempo, no celular.
+   *
+   * Trinta datas em 360px viram uma tarja cinza ilegível. Seis é o que o
+   * modelo mostra e o que cabe. Até oito pontos (a janela de 7 dias) todos
+   * cabem, e aí esconder rótulo seria esconder informação à toa.
+   */
+  const pontosDaSerie = metricas?.serie_temporal.length ?? 0
+  const intervaloRotulos = pontosDaSerie > 8 ? Math.ceil(pontosDaSerie / 6) - 1 : 0
+
+  const ehCelular = useEhCelular()
 
   const rotuloPeriodo = modo === 'janela'
     ? (PERIODOS.find((p) => p.dias === periodoDias)?.rotulo ?? '')
@@ -524,25 +560,57 @@ const Dashboard: FC = () => {
                 <ArrowLeftRight className="w-3.5 h-3.5" />
                 Comparar
               </button>
-              <span className="text-xs text-muted-foreground">{rotuloPeriodo}</span>
+              {/*
+                No monitor o período cabe na mesma linha do título. Em 360px
+                essa linha aperta o título contra o botão, então ele desce —
+                que é onde o modelo põe a data, logo abaixo do nome do cartão.
+              */}
+              <span className="hidden lg:inline text-xs text-muted-foreground">{rotuloPeriodo}</span>
             </div>
           </div>
+          <p className="lg:hidden -mt-2 mb-2 text-[12px] text-muted-foreground">{rotuloPeriodo}</p>
           {carregandoMetricas ? (
-            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-56 lg:h-64 w-full" />
           ) : metricas && metricas.serie_temporal.length > 0 ? (
-            <div className="h-64 -ml-2">
+            <>
+            {/*
+              ⭐ O desenho do celular segue o modelo que o dono mandou: barra
+              fina de topo arredondado, respiro entre elas, linha de grade
+              tracejada e rótulo espaçado.
+
+              ⚠️ Aqui não dá para usar `lg:`. O Recharts desenha SVG a partir de
+              PROPRIEDADE em JavaScript — largura de barra e passo do eixo não
+              são CSS e nenhuma classe os alcança. Por isso o `ehCelular`, e por
+              isso cada linha abaixo repete o valor de hoje no ramo do monitor,
+              mesmo quando ele é só o padrão da biblioteca: assim dá para
+              provar, lendo, que o desktop continua onde estava.
+            */}
+            <div className="h-56 lg:h-64 -ml-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={metricas.serie_temporal} margin={{ top: 5, right: 10, left: 0, bottom: 0 }} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <BarChart
+                  data={metricas.serie_temporal}
+                  margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+                  barGap={ehCelular ? 1 : 2}
+                  barCategoryGap={ehCelular ? '26%' : '10%'}
+                  maxBarSize={ehCelular ? 10 : undefined}
+                >
+                  <CartesianGrid
+                    strokeDasharray={ehCelular ? '4 4' : '3 3'}
+                    stroke="hsl(var(--border))"
+                    vertical={false}
+                  />
                   <XAxis
                     dataKey="rotulo"
-                    fontSize={11}
+                    fontSize={ehCelular ? 10 : 11}
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                     axisLine={false}
                     tickLine={false}
+                    interval={ehCelular ? intervaloRotulos : 'preserveEnd'}
+                    minTickGap={ehCelular ? 8 : 5}
                   />
                   <YAxis
-                    fontSize={11}
+                    fontSize={ehCelular ? 10 : 11}
+                    width={ehCelular ? 40 : 60}
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                     axisLine={false}
                     tickLine={false}
@@ -563,7 +631,8 @@ const Dashboard: FC = () => {
                       fontSize: 12
                     }}
                   />
-                  {compararSerie && (
+                  {/* No celular quem diz quem é quem é o rodapé, logo abaixo. */}
+                  {compararSerie && !ehCelular && (
                     <Legend
                       formatter={(v) => (v === 'total_anterior' ? 'Período anterior' : 'Período atual')}
                       wrapperStyle={{ fontSize: 12 }}
@@ -571,14 +640,46 @@ const Dashboard: FC = () => {
                   )}
                   {/* Anterior (cinza) à esquerda, atual (cor) à direita de cada par */}
                   {compararSerie && (
-                    <Bar dataKey="total_anterior" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="total_anterior" fill={COR_PERIODO_ANTERIOR} radius={[4, 4, 0, 0]} />
                   )}
                   <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            {/*
+              ⭐ O rodapé do modelo: fio, legenda à esquerda, total à direita.
+
+              É ele que faz o cartão valer sem interpretação — quem só quer o
+              número do período lê e vai embora, sem medir barra no olho.
+
+              `lg:hidden` porque no monitor a legenda do Recharts já está ali e
+              o faturamento continua à vista no cartão de cima, sem rolagem.
+            */}
+            <div className="lg:hidden mt-2 pt-2 border-t flex items-center gap-3">
+              <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                <span className="w-2.5 h-2.5 rounded-[3px] bg-primary shrink-0" aria-hidden="true" />
+                <span className="truncate">{compararSerie ? 'Período atual' : 'Faturamento'}</span>
+              </span>
+              {compararSerie && (
+                <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                  <span
+                    className="w-2.5 h-2.5 rounded-[3px] shrink-0"
+                    style={{ backgroundColor: COR_PERIODO_ANTERIOR }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">Anterior</span>
+                </span>
+              )}
+              {/*
+                ⚠️ `shrink-0` no número e `min-w-0`+`truncate` nas legendas: se um
+                dia o total não couber, quem cede espaço é a palavra, nunca o
+                dinheiro — e a página não rola para o lado (roteiro §11).
+              */}
+              <span className="num ml-auto shrink-0 text-[13px] font-bold text-foreground">{fmt(totalSerie)}</span>
+            </div>
+            </>
           ) : (
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+            <div className="h-56 lg:h-64 flex items-center justify-center text-muted-foreground text-sm">
               Sem vendas no período.
             </div>
           )}

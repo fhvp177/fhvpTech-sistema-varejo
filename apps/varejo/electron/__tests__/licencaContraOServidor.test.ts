@@ -35,9 +35,22 @@ import { ativarLicenca, validarLicenca } from '@fhvptech/core/electron/licenca'
 // O mesmo valor de mentira que o vitest.config.ts injeta.
 const SEGREDO = 'hmac-de-teste-nao-e-o-de-producao'
 
+/*
+ * ⚠️ A data da chave é montada em hora LOCAL, nunca com `toISOString()`.
+ *
+ * O validador lê a validade como `AAAA-MM-DDT23:59:59` sem fuso, o que o
+ * JavaScript entende como hora local. Montar aqui em UTC desalinhava os dois
+ * exatamente no fim do dia: das 21h em diante (fuso -3) o "ontem" do
+ * `toISOString()` ainda é o dia de hoje daqui, e a chave que este teste quer
+ * vencida continuava valendo. O teste ficava vermelho à noite e verde de
+ * manhã, sem ninguém ter mexido em nada.
+ *
+ * Mesma armadilha do "hoje calculado em UTC" que já mordeu as telas.
+ */
 function chaveDe(clienteId: string, diasAFrente = 30): string {
-  const d = new Date(Date.now() + diasAFrente * 86_400_000)
-  const exp = d.toISOString().slice(0, 10)
+  const d = new Date()
+  d.setDate(d.getDate() + diasAFrente)
+  const exp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const hmac = createHmac('sha256', SEGREDO)
     .update(`${clienteId}:${exp}`)
     .digest('hex')

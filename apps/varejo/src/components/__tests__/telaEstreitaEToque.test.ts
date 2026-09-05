@@ -287,6 +287,60 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(PAINEL).toContain("aberto ? 'block' : 'hidden lg:block'")
   })
 
+  it('★ o gráfico muda de desenho no celular sem levar o monitor junto', () => {
+    /*
+     * O Recharts desenha SVG por PROPRIEDADE, não por classe: não existe `lg:`
+     * que alcance largura de barra ou passo do eixo. Daí o `ehCelular`.
+     *
+     * ⚠️ O ramo do monitor repete o valor de HOJE, inclusive quando ele é só o
+     * padrão da biblioteca (`'10%'`, `'preserveEnd'`, `60`). Parece redundante
+     * e não é: escrito assim, dá para provar lendo que o desktop ficou onde
+     * estava. Apagar o ramo do monitor é exatamente como o desktop muda sem
+     * ninguém perceber.
+     */
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('barGap={ehCelular ? 1 : 2}')
+    expect(PAINEL).toContain("barCategoryGap={ehCelular ? '26%' : '10%'}")
+    expect(PAINEL).toContain('maxBarSize={ehCelular ? 10 : undefined}')
+    expect(PAINEL).toContain("interval={ehCelular ? intervaloRotulos : 'preserveEnd'}")
+    expect(PAINEL).toContain('width={ehCelular ? 40 : 60}')
+  })
+
+  it('★ o aplicativo INSTALADO nunca vira celular, por mais estreita que seja a janela', () => {
+    // Decisão do dono: no Electron a janela pode estar em meia tela, num
+    // monitor pequeno, e o desenho continua o de computador. Sem esta linha o
+    // hook passaria a olhar só a largura e o app instalado mudaria de cara
+    // sozinho, sem ninguém ter pedido.
+    const HOOK = readFileSync(join(SRC, 'hooks', 'useEhCelular.ts'), 'utf8')
+    expect(HOOK).toContain("if (__ALVO__ !== 'web') return false")
+    expect(HOOK).toContain('(max-width: 1023.98px)')
+    // Medido já na primeira renderização: nascer `false` e corrigir dentro do
+    // efeito faz o gráfico trocar de desenho um quadro depois, na cara de quem
+    // abriu a tela.
+    expect(HOOK).toContain('useState(medirAgora)')
+  })
+
+  it('★ o rodapé do gráfico diz o total, e some no monitor', () => {
+    // Mesma lição do cartão recolhido: quem só quer o número do período não
+    // deveria ter que medir barra no olho. No monitor ele não vai, porque lá o
+    // faturamento continua à vista no cartão de cima, sem rolagem.
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('{fmt(totalSerie)}')
+    expect(PAINEL).toContain('<div className="lg:hidden mt-2 pt-2 border-t')
+    // e a legenda do Recharts fica só no monitor, senão as duas aparecem juntas
+    expect(PAINEL).toContain('{compararSerie && !ehCelular && (')
+  })
+
+  it('★ a legenda e a barra do período anterior leem a MESMA cor', () => {
+    // Legenda de uma cor e barra de outra é pior do que não ter legenda: em vez
+    // de explicar o gráfico, ela mente sobre ele.
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('const COR_PERIODO_ANTERIOR')
+    expect(PAINEL).toContain('fill={COR_PERIODO_ANTERIOR}')
+    expect(PAINEL).toContain('backgroundColor: COR_PERIODO_ANTERIOR')
+    expect(PAINEL, 'a cor voltou a ser digitada solta na barra').not.toContain('fill="#94a3b8"')
+  })
+
   it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {
     // ⚠️ A primeira tentativa fixava a posição dele pelo CSS. Isso tirava o
     // botão de cima do conteúdo e MATAVA o arraste junto, que era justamente o
