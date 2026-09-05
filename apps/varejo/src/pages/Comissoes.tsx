@@ -14,6 +14,8 @@ import { Label } from '@fhvptech/core/ui/label'
 import { useToast } from '@fhvptech/core/ui/toast'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
 import EstadoVazio from '@fhvptech/core/ui/EstadoVazio'
+import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
+import { useEhCelular } from '@/hooks/useEhCelular'
 import {
   Dialog,
   DialogContent,
@@ -186,10 +188,18 @@ const Comissoes: FC = () => {
     }
   }
 
+  const ehCelular = useEhCelular()
+
   return (
-    <div className="p-6 space-y-5">
+    <div className="entrada-escalonada p-4 lg:p-6 space-y-4 lg:space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+        {/*
+          ⚠️ O título sai no celular, como nas outras telas: a pílula acesa na
+          ilha já diz onde você está, e 24px de título mais duas linhas de
+          parágrafo gastavam meia tela antes do primeiro vendedor aparecer. O
+          seletor de mês e os dois botões de relatório ficam.
+        */}
+        <div className="hidden lg:block">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <BadgePercent className="w-6 h-6 text-primary" /> Comissões
           </h1>
@@ -197,14 +207,15 @@ const Comissoes: FC = () => {
             Percentual sobre o valor da venda, já com o desconto abatido e sem o que foi devolvido.
           </p>
         </div>
-        <div className="flex items-end gap-2">
-          <div className="grid gap-1.5">
+        <div className="flex w-full flex-wrap items-end gap-2 lg:w-auto lg:flex-nowrap">
+          <div className="grid min-w-0 flex-1 gap-1.5 lg:flex-none">
             <Label>Mês</Label>
             <MesPicker value={mes} onChange={setMes} maxMes={mesAtualLocal()} align="right" />
           </div>
           <Button
             variant="outline"
             size="sm"
+            className="h-11 lg:h-9"
             onClick={() => gerarRelatorio(false)}
             disabled={gerando || linhas.length === 0}
           >
@@ -213,6 +224,7 @@ const Comissoes: FC = () => {
           <Button
             variant="outline"
             size="sm"
+            className="h-11 lg:h-9"
             onClick={() => gerarRelatorio(true)}
             disabled={gerando || comissionaveis.length === 0}
           >
@@ -237,6 +249,110 @@ const Comissoes: FC = () => {
         >
           Nenhuma venda em {rotuloMesComissao(mes)}.
         </EstadoVazio>
+      ) : ehCelular ? (
+        /*
+          ⭐ No celular a tabela vira LISTA (roteiro §6).
+
+          Foi o defeito que ele apontou: "também a mesma problemática do usuário
+          ter que arrastar para o lado para poder ver o restante das
+          informações". São SETE colunas — nem começam a caber em 360px.
+
+          O que fica à vista é o que se procura aqui: de quem é, quanto deu, e se
+          já foi pago. Quantidade de vendas, base e percentual descem para a
+          segunda linha; o venda-a-venda continua a um toque, em "Ver
+          detalhamento".
+        */
+        <ul className="border rounded-xl bg-card divide-y">
+          {linhas.map((l) => {
+            const semVendedor = l.comissionavel === 0
+            const pago = l.pago_em !== null
+            const divergente =
+              pago &&
+              l.valor_pago_comissao !== null &&
+              Math.abs(l.valor_pago_comissao - l.valor_comissao) >= 0.01
+            const acoes: AcaoMenu[] = semVendedor
+              ? []
+              : [
+                  {
+                    rotulo: 'Ver detalhamento',
+                    icone: <Info className="w-4 h-4" />,
+                    onSelecionar: () => abrirDetalhe(l)
+                  },
+                  pago
+                    ? {
+                        rotulo: 'Estornar pagamento',
+                        icone: <RotateCcw className="w-4 h-4" />,
+                        destrutiva: true,
+                        onSelecionar: () => estornar(l)
+                      }
+                    : {
+                        rotulo: 'Registrar pagamento',
+                        icone: <CheckCircle className="w-4 h-4" />,
+                        desabilitada: l.valor_comissao <= 0,
+                        onSelecionar: () => setPagamento({ linha: l, observacao: '' })
+                      }
+                ]
+            return (
+              <li
+                key={String(l.vendedor_id)}
+                className={`px-3 py-2.5 ${semVendedor ? 'bg-muted/30 text-muted-foreground' : ''}`}
+              >
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <p className="min-w-0 flex-1 truncate text-[14.5px] font-semibold leading-tight">
+                        {semVendedor ? <span className="italic">Sem vendedor</span> : l.vendedor_nome}
+                        {l.ativo === 0 && !semVendedor && (
+                          <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                            (inativo)
+                          </span>
+                        )}
+                      </p>
+                      <span className="num shrink-0 text-[14px] font-semibold">
+                        {dinheiro(l.valor_comissao)}
+                      </span>
+                    </div>
+                    {/*
+                      A segunda linha é a conta que gerou o número de cima: tantas
+                      vendas, sobre tanto de base, a tantos por cento. Quem cede
+                      espaço é ela, nunca o valor.
+                    */}
+                    <p className="num mt-0.5 truncate text-[12.5px] text-muted-foreground">
+                      {l.qtd_vendas} {l.qtd_vendas === 1 ? 'venda' : 'vendas'} · {dinheiro(l.base)}
+                      {!semVendedor && ' · '}
+                      {!semVendedor && (l.pct_misto === 1 ? 'misto' : percentual(l.pct_vigente))}
+                    </p>
+                    <div className="mt-1.5">
+                      {semVendedor ? (
+                        <span className="text-[11px] text-muted-foreground">não comissiona</span>
+                      ) : pago ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-700">
+                          <CheckCircle className="w-3 h-3" /> Pago em {dataBr(l.pago_em as string)}
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700">
+                          Em aberto
+                        </span>
+                      )}
+                    </div>
+                    {divergente && (
+                      <p className="mt-1 text-[11px] text-amber-700">
+                        Pago {dinheiro(l.valor_pago_comissao as number)} — houve devolução depois
+                        do fechamento.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex shrink-0 items-center">
+                    {acoes.length > 0 && (
+                      <MenuAcoes rotulo={`Ações de ${l.vendedor_nome}`} acoes={acoes} />
+                    )}
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
       ) : (
         <div className="border rounded-lg overflow-x-auto">
           <table className="w-full text-sm">

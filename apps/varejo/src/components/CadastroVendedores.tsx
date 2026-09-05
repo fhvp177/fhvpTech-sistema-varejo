@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
+import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
@@ -223,7 +224,12 @@ const CadastroVendedores: FC = () => {
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <div className="flex gap-2">
+        {/*
+          ⚠️ No celular os dois campos empilham. Lado a lado eles ficavam com
+          ~110px cada, ao lado de um botão quadrado — e "Nome do vendedor" nem
+          cabia no próprio placeholder.
+        */}
+        <div className="flex flex-col gap-2 lg:flex-row">
           <Input
             value={novoNome}
             onChange={(e) => {
@@ -234,7 +240,7 @@ const CadastroVendedores: FC = () => {
               if (e.key === 'Enter') criar()
             }}
             placeholder="Nome do vendedor"
-            className="flex-1"
+            className="min-w-0 flex-1"
           />
           <Input
             value={novoEmail}
@@ -244,10 +250,15 @@ const CadastroVendedores: FC = () => {
             }}
             placeholder="Email (opcional)"
             type="email"
-            className="flex-1"
+            className="min-w-0 flex-1"
           />
-          <Button onClick={criar} size="icon" title="Adicionar vendedor">
-            <Plus className="w-4 h-4" />
+          <Button
+            onClick={criar}
+            title="Adicionar vendedor"
+            className="h-11 w-full shrink-0 lg:h-10 lg:w-10 lg:p-0"
+          >
+            <Plus className="w-4 h-4 lg:mr-0 mr-2" />
+            <span className="lg:hidden">Adicionar vendedor</span>
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -259,7 +270,8 @@ const CadastroVendedores: FC = () => {
         <p className="text-destructive text-xs bg-destructive/10 rounded px-2 py-1.5">{erro}</p>
       )}
 
-      <div className="border rounded-lg max-h-96 overflow-y-auto">
+      {/* ⚠️ Rolagem própria só no monitor: no celular quem rola é a página. */}
+      <div className="border rounded-lg lg:max-h-96 lg:overflow-y-auto">
         {vendedores.length === 0 ? (
           <p className="text-center py-8 text-sm text-muted-foreground">
             Nenhum vendedor cadastrado.
@@ -274,7 +286,7 @@ const CadastroVendedores: FC = () => {
               if (emEdicao) {
                 return (
                   <li key={v.id} className="px-3 py-3 space-y-2 bg-blue-50/30">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Input
                         value={edicao.nome}
                         onChange={(e) => setEdicao({ ...edicao, nome: e.target.value })}
@@ -283,7 +295,7 @@ const CadastroVendedores: FC = () => {
                           if (e.key === 'Escape') cancelarEdicao()
                         }}
                         autoFocus
-                        className="h-8 flex-1"
+                        className="h-10 w-full min-w-0 lg:h-8 lg:w-auto lg:flex-1"
                         placeholder="Nome"
                       />
                       <Input
@@ -293,7 +305,7 @@ const CadastroVendedores: FC = () => {
                           if (e.key === 'Enter') salvarEdicao(v.id)
                           if (e.key === 'Escape') cancelarEdicao()
                         }}
-                        className="h-8 flex-1"
+                        className="h-10 w-full min-w-0 lg:h-8 lg:w-auto lg:flex-1"
                         placeholder="Email"
                         type="email"
                       />
@@ -308,14 +320,14 @@ const CadastroVendedores: FC = () => {
                       </div>
                       <button
                         onClick={() => salvarEdicao(v.id)}
-                        className="text-green-600 hover:text-green-700 p-1"
+                        className="flex h-11 w-11 items-center justify-center text-green-600 hover:text-green-700 lg:h-auto lg:w-auto lg:p-1"
                         title="Salvar"
                       >
                         <Check className="w-4 h-4" />
                       </button>
                       <button
                         onClick={cancelarEdicao}
-                        className="text-muted-foreground hover:text-foreground p-1"
+                        className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground lg:h-auto lg:w-auto lg:p-1"
                         title="Cancelar"
                       >
                         <X className="w-4 h-4" />
@@ -377,7 +389,53 @@ const CadastroVendedores: FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-0.5">
+                  {/*
+                    ⭐ No celular as cinco ações cabem num gatilho só (roteiro §6).
+
+                    Eram cinco botões de 26px lado a lado, numa linha que ainda
+                    tem o avatar e duas linhas de texto: nem cabem nem se
+                    acertam com o dedo, que pede 44.
+
+                    ⚠️ Nenhuma ação se perde — as cinco continuam lá, chamando as
+                    mesmas funções. No monitor os botões ficam como sempre.
+                  */}
+                  <div className="flex shrink-0 items-center lg:hidden">
+                    <MenuAcoes
+                      rotulo={`Ações de ${v.nome}`}
+                      acoes={[
+                        {
+                          rotulo: 'Redefinir PIN',
+                          icone: <KeyRound className="w-4 h-4" />,
+                          onSelecionar: () => abrirRedefinirPin(v)
+                        },
+                        {
+                          rotulo: ehDono ? 'Rebaixar a Vendedor' : 'Promover a Gerente',
+                          icone: ehDono
+                            ? <ArrowDownCircle className="w-4 h-4" />
+                            : <ArrowUpCircle className="w-4 h-4" />,
+                          onSelecionar: () => alterarPapel(v)
+                        },
+                        {
+                          rotulo: v.ativo === 1 ? 'Desativar' : 'Reativar',
+                          icone: <Power className="w-4 h-4" />,
+                          onSelecionar: () => alternarAtivo(v)
+                        },
+                        {
+                          rotulo: 'Editar nome/email',
+                          icone: <Pencil className="w-4 h-4" />,
+                          onSelecionar: () => iniciarEdicao(v)
+                        },
+                        {
+                          rotulo: 'Excluir',
+                          icone: <Trash2 className="w-4 h-4" />,
+                          destrutiva: true,
+                          onSelecionar: () => excluir(v)
+                        }
+                      ] as AcaoMenu[]}
+                    />
+                  </div>
+
+                  <div className="hidden items-center gap-0.5 lg:flex">
                     <button
                       onClick={() => abrirRedefinirPin(v)}
                       className="text-muted-foreground hover:text-blue-600 p-1.5"

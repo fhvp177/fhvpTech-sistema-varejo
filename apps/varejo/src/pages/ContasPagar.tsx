@@ -27,7 +27,10 @@ import {
 } from '@fhvptech/core/ui/dialog'
 import Paginacao from '@fhvptech/core/ui/paginacao'
 import { Select } from '@fhvptech/core/ui/select'
+import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 import { useSessao } from '@/App'
+import { useEhCelular } from '@/hooks/useEhCelular'
+import DicaRolante from '@/components/DicaRolante'
 
 const ITENS_POR_PAGINA = 20
 
@@ -295,13 +298,21 @@ const ContasPagar: FC = () => {
   const setCampo = (campo: keyof FormConta) => (valor: string) =>
     setForm((f) => ({ ...f, [campo]: valor }))
 
+  const ehCelular = useEhCelular()
+
   const restantePagando = pagando
     ? Math.max(0, +(pagando.valor_total - pagando.valor_pago).toFixed(2))
     : 0
 
   return (
-    <div className="p-8">
-      <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="entrada-escalonada p-4 lg:p-8">
+      {/*
+        ⚠️ O cabeçalho sai no celular. E com ele sai o problema que ele
+        apontou: "o botão nova conta está saindo cortado". Ele estava numa linha
+        com o título de 24px e o parágrafo, e o `justify-between` empurrava o
+        botão para fora da tela. Aqui ele vira o quadrado ao lado da busca.
+      */}
+      <div className="hidden lg:flex items-start justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <Receipt className="w-6 h-6 text-primary" />
@@ -347,8 +358,8 @@ const ContasPagar: FC = () => {
       </div>
 
       {/* Filtro por situação + busca */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="inline-flex rounded-lg border p-0.5 bg-muted/30">
+      <div className="flex flex-wrap items-center gap-2 lg:gap-3 mb-3 lg:mb-4">
+        <div className="inline-flex w-full lg:w-auto rounded-lg border p-0.5 bg-muted/30">
           {(
             [
               ['aberto', 'Em aberto'],
@@ -359,7 +370,7 @@ const ContasPagar: FC = () => {
             <button
               key={valor}
               onClick={() => setFiltro(valor)}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              className={`flex-1 lg:flex-none min-h-[44px] lg:min-h-0 px-3 py-1.5 text-sm rounded-md transition-colors ${
                 filtro === valor
                   ? 'bg-background shadow-sm font-medium'
                   : 'text-muted-foreground hover:text-foreground'
@@ -369,18 +380,154 @@ const ContasPagar: FC = () => {
             </button>
           ))}
         </div>
-        <div className="relative flex-1 min-w-[220px] max-w-sm">
+        <div className="relative flex-1 lg:min-w-[220px] lg:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por descrição, categoria, fornecedor..."
+            placeholder={ehCelular ? '' : 'Buscar por descrição, categoria, fornecedor...'}
+            aria-label="Buscar por descrição, categoria, fornecedor"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             className="pl-9"
           />
+          {/* A dica só existe com o campo vazio; ao digitar, some ela e o movimento. */}
+          {ehCelular && busca === '' && <DicaRolante texto="Buscar por descrição, categoria, fornecedor" />}
         </div>
+        {ehDono && (
+          <Button
+            onClick={abrirNova}
+            className="lg:hidden h-11 w-11 shrink-0 p-0"
+            aria-label="Nova conta"
+            title="Nova conta"
+          >
+            <Plus className="w-5 h-5" />
+          </Button>
+        )}
       </div>
 
-      {/* Tabela */}
+      {/*
+        ⭐ No celular a tabela vira LISTA (roteiro §6).
+
+        Foi um dos defeitos que ele apontou: "a conta aparece, mas o usuário
+        teria que arrastar o dedo pro lado para saber mais informações da conta,
+        além das ações ainda não estarem compactadas nos 3 pontinhos".
+
+        Cinco colunas não cabem em 360px, e `overflow-x` na tabela é justamente
+        o "arrastar o dedo pro lado" — conta por conta, sem comparar nada.
+
+        ⚠️ A tabela não é escondida por classe, ela não é RENDERIZADA: com
+        `hidden lg:table` as vinte linhas existiriam duas vezes no DOM.
+      */}
+      {ehCelular ? (
+        listaFiltrada.length === 0 ? (
+          <div className="border rounded-xl bg-card">
+            <EstadoVazio
+              icone={<Wallet className="w-9 h-9" />}
+              dica={
+                busca || filtro === 'aberto'
+                  ? undefined
+                  : 'Registre aluguel, luz, salário ou a duplicata do fornecedor.'
+              }
+            >
+              {busca
+                ? 'Nenhuma conta encontrada para a busca.'
+                : filtro === 'aberto'
+                  ? 'Nenhuma conta em aberto. Tudo pago por aqui!'
+                  : 'Nenhuma conta cadastrada.'}
+            </EstadoVazio>
+          </div>
+        ) : (
+          <ul className="border rounded-xl bg-card divide-y">
+            {listaPaginada.map((c) => {
+              const venc = textoVencimento(c)
+              const acoes: AcaoMenu[] = ehDono
+                ? [
+                    c.situacao !== 'paga'
+                      ? {
+                          rotulo: `Pagar — ${fmt(c.restante)}`,
+                          icone: <CheckCircle className="w-4 h-4" />,
+                          onSelecionar: () => abrirPagamento(c)
+                        }
+                      : {
+                          rotulo: 'Ver pagamento / desfazer',
+                          icone: <RotateCcw className="w-4 h-4" />,
+                          onSelecionar: () => abrirPagamento(c)
+                        },
+                    {
+                      rotulo: 'Editar',
+                      icone: <Pencil className="w-4 h-4" />,
+                      onSelecionar: () => abrirEdicao(c)
+                    },
+                    {
+                      rotulo: 'Excluir',
+                      icone: <Trash2 className="w-4 h-4" />,
+                      destrutiva: true,
+                      onSelecionar: () => excluir(c)
+                    }
+                  ]
+                : []
+              return (
+                <li
+                  key={c.id}
+                  className={`px-3 py-2.5 ${saidaLinha.estaSaindo(String(c.id)) ? 'anim-linha-sai' : ''}`}
+                >
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+                    <div className="min-w-0">
+                      {/*
+                        Linha 1: o que se deve e quanto. `min-w-0` na descrição e
+                        `shrink-0` no valor — quem cede espaço é o texto, nunca o
+                        dinheiro. `num` alinha a vírgula de uma conta para a outra.
+                      */}
+                      <div className="flex items-baseline gap-2">
+                        <p className="min-w-0 flex-1 truncate text-[14.5px] font-semibold leading-tight" title={c.descricao}>
+                          {c.descricao}
+                        </p>
+                        <span className="num shrink-0 text-[14px] font-semibold">
+                          {fmt(c.valor_total)}
+                        </span>
+                      </div>
+                      {/*
+                        Linha 2: QUANDO vence (que é o que se procura nesta tela) e
+                        de quem é a conta. O vencimento fica à esquerda e colorido,
+                        porque vermelho aqui quer dizer "já passou".
+                      */}
+                      <div className="mt-0.5 flex items-baseline gap-2">
+                        <span className={`shrink-0 text-[12.5px] font-medium ${venc.cor}`}>
+                          {venc.texto}
+                        </span>
+                        <p className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
+                          {[c.categoria, c.fornecedor_nome].filter(Boolean).join(' · ')}
+                        </p>
+                        {c.valor_pago > 0 && c.situacao !== 'paga' && (
+                          <span className="num shrink-0 text-[11.5px] text-muted-foreground">
+                            falta {fmt(c.restante)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1.5">
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${BADGE[c.situacao]}`}>
+                          {ROTULO_SITUACAO[c.situacao]}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/*
+                      ⚠️ Nenhuma ação se perde: pagar, editar e excluir mudam de
+                      LUGAR e continuam chamando as mesmas funções da tabela do
+                      monitor. Sem dono, sem menu — gatilho que abre painel vazio
+                      é pior que gatilho nenhum.
+                    */}
+                    <div className="flex shrink-0 items-center">
+                      {acoes.length > 0 && (
+                        <MenuAcoes rotulo={`Ações de ${c.descricao}`} acoes={acoes} />
+                      )}
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )
+      ) : (
       <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
@@ -503,6 +650,7 @@ const ContasPagar: FC = () => {
           </tbody>
         </table>
       </div>
+      )}
 
       <Paginacao
         paginaAtual={paginaAtual}
@@ -519,7 +667,13 @@ const ContasPagar: FC = () => {
             <DialogTitle>{editando ? 'Editar conta' : 'Nova conta a pagar'}</DialogTitle>
           </DialogHeader>
 
-          <div className="grid gap-4 py-2">
+          {/*
+            `[&>*>*]:min-w-0` alcanca DOIS niveis, e o segundo nao e zelo: cada
+            campo e um `grid gap-1.5` sem `grid-cols`, e grade sem coluna
+            declarada tem uma unica coluna `auto`, que cresce ALEM do pai em vez
+            de apertar.
+          */}
+          <div className="grid grid-cols-1 gap-4 py-2 [&>*]:min-w-0 [&>*>*]:min-w-0">
             <div className="grid gap-1.5">
               <Label htmlFor="descricao">
                 Descrição <span className="text-destructive">*</span>
@@ -532,7 +686,7 @@ const ContasPagar: FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 [&>*]:min-w-0 [&>*>*]:min-w-0">
               <div className="grid gap-1.5">
                 <Label htmlFor="valor">
                   Valor <span className="text-destructive">*</span>
@@ -558,7 +712,7 @@ const ContasPagar: FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 [&>*]:min-w-0 [&>*>*]:min-w-0">
               <div className="grid gap-1.5">
                 <Label htmlFor="categoria">Categoria</Label>
                 <Input

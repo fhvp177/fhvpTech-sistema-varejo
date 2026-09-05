@@ -156,6 +156,32 @@ export const IMPRESSAO_NO_NAVEGADOR: Record<string, (...args: never[]) => Promis
   },
 
   /**
+   * Preferências neutras, e elas NUNCA vão ao servidor.
+   *
+   * ⚠️ Faltar estes dois aqui era um defeito de verdade, e o dono o viu:
+   * "impressão e multicaixa não abrem aqui, ficam só carregando". Sem eles a
+   * chamada seguia para o servidor da loja, que não registra canal de impressão
+   * nenhum (o cabeçalho dele diz, por extenso, que não imprime) — aí a chamada
+   * lançava, o `.then` da tela nunca rodava e ela ficava carregando para sempre.
+   *
+   * O conteúdo é vazio de propósito: `printer` é o nome de uma impressora do
+   * Windows, que uma página não tem como escolher, e `direto` é imprimir sem
+   * abrir a caixa do sistema, que uma página não tem como fazer. Aqui quem
+   * escolhe a impressora é sempre a caixa de impressão do aparelho.
+   */
+  async obterPreferencias(): Promise<Resposta> {
+    return ok({
+      cupom: { printer: '', direto: false },
+      documento: { printer: '', direto: false }
+    })
+  },
+
+  /** Nada a guardar: não há preferência que a página possa aplicar. */
+  async salvarPreferencias(): Promise<Resposta> {
+    return ok(null)
+  },
+
+  /**
    * "Salvar em PDF" vira o próprio salvar da caixa de impressão do sistema —
    * no Android e no Chrome ela sempre oferece "Salvar como PDF". Gerar o PDF
    * por conta própria exigiria uma biblioteca inteira para chegar num resultado

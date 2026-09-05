@@ -45,9 +45,23 @@ function blocoDeToque(): string {
  * cita `min-w-0`, cita `key={aba}`, cita o nome da classe: ele é justamente o
  * lugar onde as palavras que a guarda procura aparecem de novo.
  */
+/*
+ * O fonte sem os comentários, para que uma guarda não case com a palavra que
+ * ela própria escreveu na explicação ao lado.
+ *
+ * ⚠️ O `(?<![\w'"])` não é zelo. Sem ele, `accept="image/*"` abria um
+ * comentário que só fechava 45 linhas adiante, no próximo fecha-comentário de
+ * verdade — e
+ * tudo no meio ficava INVISÍVEL para qualquer guarda que use este ajudante.
+ * Custou uma guarda de Configurações falhando com o texto bem ali no arquivo,
+ * e valia para trás: as guardas antigas estavam cegas no mesmo trecho.
+ *
+ * A regra: comentário de verdade nunca começa grudado numa letra ou numa
+ * aspa. Vem depois de espaço, de `{`, de `(` ou do começo do arquivo.
+ */
 function semComentarios(fonte: string): string {
   return fonte
-    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(?<![\w'"])\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '')
 }
 
@@ -756,6 +770,205 @@ describe('tela 7 — Fornecedores no celular (roteiro §6)', () => {
     const topo = FORN.slice(0, FORN.indexOf('{ehCelular ? ('))
     expect(topo, 'o "+" do celular passou a aparecer para o vendedor')
       .toMatch(/\{ehDono && \(\s*<Button\s+onClick=\{abrirNovo\}\s+className="lg:hidden/)
+  })
+})
+
+describe('tela 8 — Etiquetas A4 no celular', () => {
+  const ETIQ = semComentarios(readFileSync(join(SRC, 'pages', 'EtiquetasA4.tsx'), 'utf8'))
+
+  it('★ as duas colunas viram uma, e a página para de rolar de lado', () => {
+    /*
+     * As fotos dele mostravam o defeito inteiro: um painel de 288px fixos ao
+     * lado de outro que nunca cabe numa tela de 360, então a página rolava de
+     * lado e metade dela ficava fora.
+     */
+    expect(ETIQ).toContain('<div className="flex flex-col lg:h-full lg:flex-row">')
+    expect(ETIQ, 'o painel de produtos voltou a ter largura fixa no celular')
+      .toContain('lg:w-72 lg:shrink-0')
+  })
+
+  it('★ nenhum painel rola dentro da página que já rola', () => {
+    /*
+     * ⚠️ No monitor os dois painéis rolam dentro de si. No celular quem rola é
+     * a página: caixa rolante dentro de página rolante é o dedo que raspa e nada
+     * anda — a mesma lição do carrinho do PDV. E é uma das suspeitas quando ele
+     * diz que "a rolagem não vai até o fim".
+     *
+     * Por isso todo `overflow-y-auto` desta tela nasce com o par `lg:`.
+     */
+    for (const trecho of ETIQ.split('\n').filter((l) => l.includes('overflow-y-auto'))) {
+      expect(trecho, `rolagem própria sem o par lg: — ${trecho.trim()}`)
+        .toContain('lg:overflow-y-auto')
+    }
+    expect(ETIQ, 'a altura travada some no celular').not.toContain('"flex h-full"')
+  })
+
+  it('★ a ordem no celular é ajustes → prévia → produtos', () => {
+    /*
+     * Empilhados na ordem do arquivo, a lista de produtos — a mais longa —
+     * empurraria o botão Imprimir para depois de centenas de itens.
+     *
+     * ⚠️ `order` no CSS, nunca bloco duplicado no JSX: duas cópias da prévia
+     * dariam duas folhas A4 no DOM e a escondida mede zero. Mesma técnica que
+     * sobe o gráfico no Painel.
+     */
+    const movel = CSS.slice(CSS.indexOf('@media (max-width: 1023.98px)'))
+    expect(movel).toMatch(/\.etiq-direita \{\s*display: contents;/)
+    expect(movel).toContain('.etiq-controles { order: 1 }')
+    expect(movel).toContain('.etiq-previa { order: 2 }')
+    expect(movel).toContain('.etiq-produtos { order: 3 }')
+    for (const classe of ['etiq-controles', 'etiq-previa', 'etiq-produtos']) {
+      expect(ETIQ.split(classe).length - 1, `${classe} duplicado no JSX`).toBe(1)
+    }
+  })
+
+  it('★ a folha A4 cabe na tela, e por isso encolhe mais', () => {
+    /*
+     * A4 tem 210mm, que a 96dpi dão 793,7px. A 0,40 sobram 317, e a coluna útil
+     * de uma tela de 360 tem 304 depois das margens: passava por 13px — e 13px
+     * de estouro são rolagem lateral na página inteira (§11). A 0,34 a folha
+     * fica com 270 e sobra respiro.
+     */
+    expect(ETIQ).toContain('const SCALE_CELULAR = 0.34')
+    expect(ETIQ).toContain('const escala = ehCelular ? SCALE_CELULAR : SCALE')
+    expect(ETIQ, 'a prévia voltou a desenhar com a escala do monitor')
+      .not.toContain('scale(${SCALE})')
+  })
+
+  it('★ a prévia vazia não gasta uma tela', () => {
+    /*
+     * Sem folha nenhuma, ela mostrava "selecione produtos na lista AO LADO" —
+     * frase que numa coluna só nem verdade era — e ocupava a tela inteira entre
+     * os ajustes e a lista. Quem abre a tela precisa cair na lista.
+     */
+    expect(ETIQ).toContain('ehCelular ? null : (')
+  })
+
+  it('★ o dedo alcança o que se toca aqui', () => {
+    // Caixinha de 14px, botão de 30px e campo de 30px: nada disso se acerta com
+    // o dedo (§7). E quem vira alvo é a LINHA do produto, não a caixinha.
+    expect(ETIQ, 'a linha inteira deixou de ser alvo').toContain('<label className="flex items-start gap-2 cursor-pointer">')
+    expect(ETIQ).toContain('w-5 h-5 lg:w-3.5 lg:h-3.5')
+    // ⚠️ A linha INTEIRA: `min-h-[44px]` solto também casa com o "Limpar
+    // seleção", e a guarda sobrevivia à opção de exibição perder os 44px.
+    expect(ETIQ).toContain(
+      'className="flex min-h-[44px] cursor-pointer select-none items-center gap-2'
+    )
+    expect(ETIQ, 'o "Limpar seleção" perdeu o alvo dele')
+      .toContain('min-h-[44px] lg:min-h-0')
+    expect(ETIQ, 'o botão Imprimir voltou a ter 30px de altura')
+      .toContain('h-11 lg:h-auto items-center justify-center')
+  })
+
+  it('★ a busca desta tela também ganha a dica que anda', () => {
+    expect(ETIQ).toMatch(/placeholder=\{ehCelular \? '' :/)
+    expect(ETIQ).toContain('aria-label="Buscar')
+    expect(ETIQ).toContain("{ehCelular && filtro === '' && <DicaRolante")
+  })
+})
+
+describe('telas 9 e 10 — Contas a Pagar e Comissões no celular', () => {
+  /*
+   * As duas foram apontadas pelo mesmo defeito, com as palavras dele: "a conta
+   * aparece, mas o usuário teria que arrastar o dedo pro lado para saber mais
+   * informações", e "também a mesma problemática" nas comissões.
+   *
+   * São cinco e sete colunas — nem começam a caber em 360px, e `overflow-x` na
+   * tabela é exatamente o "arrastar pro lado", conta por conta, sem comparar
+   * nada.
+   */
+  for (const tela of ['ContasPagar', 'Comissoes']) {
+    const fonte = semComentarios(readFileSync(join(SRC, 'pages', `${tela}.tsx`), 'utf8'))
+
+    it(`★ ${tela}: a tabela vira lista, e não existe duas vezes no DOM`, () => {
+      expect(fonte).toContain('const ehCelular = useEhCelular()')
+      expect(fonte).toContain('ehCelular ?')
+      expect(fonte, 'a tabela ficou escondida por classe, e o DOM paga por ela')
+        .not.toContain('hidden lg:table')
+      expect(fonte).toContain('grid-cols-[minmax(0,1fr)_auto]')
+    })
+
+    it(`★ ${tela}: as ações cabem num gatilho só`, () => {
+      expect(fonte).toContain('<MenuAcoes')
+      expect(fonte, 'menu vazio abrindo para quem não pode nada')
+        .toContain('acoes.length > 0 &&')
+    })
+
+    it(`★ ${tela}: o respiro encolhe e o cabeçalho grande sai`, () => {
+      expect(fonte).toMatch(/className="entrada-escalonada p-4 lg:p-\d/)
+      expect(fonte).toContain('hidden lg:')
+    })
+  }
+
+  it('★ o botão "Nova conta" para de sair cortado', () => {
+    /*
+     * Defeito relatado: "o botão nova conta está saindo cortado". Ele vivia numa
+     * linha com o título de 24px e o parágrafo, e o `justify-between` empurrava
+     * o botão para fora da tela. No celular ele vira o quadrado de 44px ao lado
+     * da busca — e continua só para o dono, como o de texto sempre esteve.
+     */
+    const CONTAS = semComentarios(readFileSync(join(SRC, 'pages', 'ContasPagar.tsx'), 'utf8'))
+    expect(CONTAS).toContain('className="lg:hidden h-11 w-11 shrink-0 p-0"')
+    expect(CONTAS).toContain('aria-label="Nova conta"')
+    // ⚠️ A fatia para na LISTA, não no primeiro `ehCelular ?` — esse aparece
+    // antes, no `placeholder` do campo de busca, e cortaria fora o próprio botão.
+    const topo = CONTAS.slice(0, CONTAS.indexOf('<ul className="border rounded-xl'))
+    expect(topo, 'o "+" do celular passou a aparecer para o vendedor')
+      .toMatch(/\{ehDono && \(\s*<Button\s+onClick=\{abrirNova\}\s+className="lg:hidden/)
+  })
+})
+
+describe('tela 11 — Configurações no celular', () => {
+  const CFG = semComentarios(readFileSync(join(SRC, 'pages', 'Configuracoes.tsx'), 'utf8'))
+  const IMPRESSAO_WEB = readFileSync(join(SRC, 'web', 'impressao.ts'), 'utf8')
+
+  it('★ Impressão e Multicaixa deixam de carregar para sempre', () => {
+    /*
+     * ⚠️ Isto era DEFEITO, não formatação. Relatado assim: "com exceção das
+     * seções de impressão e multicaixa, que não abrem aqui, ficam só carregando".
+     *
+     * As duas perguntavam ao Electron coisas que na web não existem. Faltando o
+     * atalho do navegador, a chamada seguia para o servidor da loja — que não
+     * registra canal de impressão nem de multicaixa, e o cabeçalho dele diz isso
+     * por extenso. A chamada LANÇAVA, o `.then` da tela nunca rodava, e a seção
+     * ficava "Carregando…" para sempre.
+     *
+     * Cada uma pede uma resposta diferente: impressão existe na web (quem
+     * escolhe a impressora é a caixa do sistema), multicaixa não existe — "a web
+     * já é vários aparelhos no mesmo lugar".
+     */
+    expect(IMPRESSAO_WEB, 'sem isto a seção de impressão carrega para sempre')
+      .toContain('async obterPreferencias()')
+    expect(IMPRESSAO_WEB).toContain('async salvarPreferencias()')
+    expect(CFG, 'a seção de multicaixa voltou a aparecer na web')
+      .toContain("{__FEAT_MULTICAIXA__ && __ALVO__ !== 'web' && (")
+    expect(CFG, 'o resumo do multicaixa volta a chamar um canal que não existe')
+      .toContain("if (__FEAT_MULTICAIXA__ && __ALVO__ !== 'web') {")
+  })
+
+  it('★ as linhas de "texto à esquerda, controle à direita" sabem apertar', () => {
+    /*
+     * Sem `min-w-0` no texto, ele não encolhe: empurra o controle para fora da
+     * tela. Era o que acontecia em quase toda seção — "praticamente todas as
+     * seções necessitam de uma formatação", nas palavras dele.
+     */
+    expect(CFG).toContain('<div className="flex items-center justify-between gap-3 border-t pt-3">')
+    expect(CFG).toContain('grid grid-cols-1 sm:grid-cols-2 gap-3 [&>*]:min-w-0 [&>*>*]:min-w-0')
+    expect(CFG).toContain('className="entrada-escalonada p-4 lg:p-8 max-w-2xl"')
+  })
+
+  it('★ as cinco ações de cada vendedor cabem num gatilho só', () => {
+    // Cinco botões de 26px lado a lado, na mesma linha do avatar e de duas
+    // linhas de texto: nem cabem nem se acertam com o dedo, que pede 44 (§7).
+    const VEND = semComentarios(
+      readFileSync(join(SRC, 'components', 'CadastroVendedores.tsx'), 'utf8')
+    )
+    expect(VEND).toContain('<MenuAcoes')
+    expect(VEND).toContain('<div className="flex shrink-0 items-center lg:hidden">')
+    expect(VEND, 'os botões do monitor sumiram junto')
+      .toContain('<div className="hidden items-center gap-0.5 lg:flex">')
+    expect(VEND, 'a lista volta a rolar dentro da página que já rola')
+      .toContain('lg:max-h-96 lg:overflow-y-auto')
   })
 })
 

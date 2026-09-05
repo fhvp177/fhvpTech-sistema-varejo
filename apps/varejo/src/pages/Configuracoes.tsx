@@ -118,7 +118,9 @@ const Configuracoes: FC = () => {
     })
     // Só para o resumo da seção recolhida — o componente de dentro recarrega
     // por conta própria quando o lojista mexe. No Básico o canal não existe.
-    if (__FEAT_MULTICAIXA__) {
+    // ⚠️ Na web este canal não existe e a chamada lança — e uma promessa
+    // rejeitada sem `catch` vira erro no console a cada abertura da tela.
+    if (__FEAT_MULTICAIXA__ && __ALVO__ !== 'web') {
       window.api.multicaixa.estado().then((r) => {
         if (r.success) setEstadoMulticaixa(r.data)
       })
@@ -295,12 +297,18 @@ const Configuracoes: FC = () => {
         : `${estadoMulticaixa.terminais.length} ${estadoMulticaixa.terminais.length === 1 ? 'caixa conectado' : 'caixas conectados'}`
 
   return (
-    <div className="p-8 max-w-2xl">
-      <h2 className="text-2xl font-bold flex items-center gap-2">
-        <Settings className="w-6 h-6 text-primary" />
+    /*
+      ⚠️ O título FICA no celular, ao contrário das telas de lista. Aqui não há
+      pílula acesa na ilha dizendo onde você está — chega-se aqui por
+      "Mais › Configurações" —, e sem ele a tela abre num amontoado de sanfonas
+      sem cabeça. Só encolhe.
+    */
+    <div className="entrada-escalonada p-4 lg:p-8 max-w-2xl">
+      <h2 className="text-xl lg:text-2xl font-bold flex items-center gap-2">
+        <Settings className="w-5 h-5 lg:w-6 lg:h-6 text-primary" />
         Configurações
       </h2>
-      <p className="text-sm text-muted-foreground mt-1 mb-6">
+      <p className="text-sm text-muted-foreground mt-1 mb-4 lg:mb-6">
         Ajustes da loja. Tudo aqui salva sozinho — não existe botão de confirmar.
       </p>
 
@@ -313,8 +321,13 @@ const Configuracoes: FC = () => {
         <div className="space-y-6">
 
         <div className="border rounded-lg p-4 bg-muted/30 space-y-3">
-          <div className="flex items-start justify-between gap-4">
-            <div>
+          {/*
+            ⚠️ `flex-col` no celular: "Verificar atualizações" tem 190px e a
+            coluna útil aqui dentro tem ~264 — ao lado do texto ele saía pela
+            direita. Empilhado, o botão ocupa a linha e ganha os 44px do §7.
+          */}
+          <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-4">
+            <div className="min-w-0">
               <p className="font-medium text-sm">FHVP Tech — Sistema de Gestão</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Versão atual: <span className="font-mono font-semibold text-foreground">
@@ -337,15 +350,15 @@ const Configuracoes: FC = () => {
               size="sm"
               onClick={verificarAtualizacao}
               disabled={verificandoUpdate}
-              className="shrink-0"
+              className="h-11 w-full shrink-0 lg:h-9 lg:w-auto"
             >
               <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${verificandoUpdate ? 'animate-spin' : ''}`} />
               {verificandoUpdate ? 'Verificando...' : 'Verificar atualizações'}
             </Button>
           </div>
           {infoAtualizacao?.versaoBaixada && (
-            <div className="border-t pt-3 flex items-center justify-between gap-3">
-              <p className="text-sm text-green-700">
+            <div className="border-t pt-3 flex flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
+              <p className="min-w-0 text-sm text-green-700">
                 Atualização <span className="font-semibold">{infoAtualizacao.versaoBaixada}</span> pronta para instalar.
               </p>
               <Button size="sm" onClick={instalarAtualizacao}>
@@ -427,7 +440,12 @@ const Configuracoes: FC = () => {
           <div className="space-y-4">
             {/* Logo */}
             <div className="border rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-4">
+              {/*
+                ⚠️ No celular a logo fica em cima e os botões embaixo. Lado a
+                lado, os 96px do quadrado mais o "Trocar logo" e o "Remover"
+                não cabem nos ~264 da coluna, e o segundo botão saía pela direita.
+              */}
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="w-24 h-24 rounded-lg border bg-muted/30 flex items-center justify-center overflow-hidden shrink-0">
                   {loja.logo ? (
                     <img src={loja.logo} alt="Logo da loja" className="max-w-full max-h-full object-contain" />
@@ -435,7 +453,7 @@ const Configuracoes: FC = () => {
                     <Store className="w-8 h-8 text-muted-foreground/40" />
                   )}
                 </div>
-                <div className="flex-1 space-y-2">
+                <div className="w-full min-w-0 flex-1 space-y-2">
                   <input
                     ref={inputLogoRef}
                     type="file"
@@ -467,8 +485,8 @@ const Configuracoes: FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between border-t pt-3">
-                <div>
+              <div className="flex items-center justify-between gap-3 border-t pt-3">
+                <div className="min-w-0">
                   <p className="font-medium text-sm">Exibir logo nos cupons</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Mostra a logo no topo do cupom e do comprovante de devolução.
@@ -485,7 +503,13 @@ const Configuracoes: FC = () => {
             </div>
 
             {/* Campos de texto */}
-            <div className="grid sm:grid-cols-2 gap-3">
+            {/*
+              `[&>*]:min-w-0` é o que impede o campo de crescer além da coluna:
+              item de grade nasce com `min-width: auto` e, em vez de apertar,
+              ESTOURA. É o mesmo defeito que deixou campo por cima de campo em
+              Produtos.
+            */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 [&>*]:min-w-0 [&>*>*]:min-w-0">
               <div className="sm:col-span-2">
                 <Label className="text-sm mb-1.5 block">Nome da loja</Label>
                 <Input
@@ -573,8 +597,8 @@ const Configuracoes: FC = () => {
               onChange={(campo, valor) => atualizarLoja(campo, valor)}
             />
 
-            <div className="flex items-center gap-3">
-              <Button onClick={salvarLoja} disabled={salvandoLoja}>
+            <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:gap-3">
+              <Button onClick={salvarLoja} disabled={salvandoLoja} className="h-11 lg:h-10">
                 {salvandoLoja ? 'Salvando...' : 'Salvar dados da loja'}
               </Button>
               {feedbackLoja && (
@@ -619,7 +643,16 @@ const Configuracoes: FC = () => {
         </div>
       </SecaoConfig>
 
-      {__FEAT_MULTICAIXA__ && (
+      {/*
+        ⚠️ A seção inteira sai na web, e não é arrumação: o servidor da loja não
+        registra canal de multicaixa nenhum — "a web já é vários aparelhos no
+        mesmo lugar", diz o cabeçalho dele. A chamada lançava, o `.then` nunca
+        rodava e a seção ficava "Carregando…" para sempre. Era exatamente o que
+        o dono viu no celular.
+
+        Seção que só sabe dizer "carregando" é pior que seção nenhuma.
+      */}
+      {__FEAT_MULTICAIXA__ && __ALVO__ !== 'web' && (
       <SecaoConfig
         id="multicaixa"
         titulo="Multicaixa"
@@ -645,7 +678,7 @@ const Configuracoes: FC = () => {
           é o computador principal, e é lá que o backup se configura. */}
       {!ehCaixaAdicional && (
       <div className="space-y-6">
-        <h3 className="text-lg font-semibold border-b pb-2">Backup de Dados</h3>
+        <h3 className="text-base lg:text-lg font-semibold border-b pb-2">Backup de Dados</h3>
 
         {/* Status */}
         {status && (
@@ -668,7 +701,7 @@ const Configuracoes: FC = () => {
         )}
 
         {/* Toggle backup ativo */}
-        <div className="flex items-center justify-between p-4 border rounded-lg">
+        <div className="flex items-center justify-between gap-3 p-4 border rounded-lg">
           <div>
             <p className="font-medium text-sm">Backup automático</p>
             <p className="text-xs text-muted-foreground mt-0.5">Habilita backups periódicos e ao fechar o sistema</p>
@@ -706,8 +739,8 @@ const Configuracoes: FC = () => {
         </div>
 
         {/* Backup a cada venda */}
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
             <p className="font-medium text-sm">Fazer backup também a cada venda</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Cria um backup em segundo plano após cada venda concluída. Mantém apenas os 30 mais recentes para não inchar o disco.
@@ -746,14 +779,19 @@ const Configuracoes: FC = () => {
         {/* Pasta padrão */}
         <div>
           <Label className="text-sm font-medium mb-1.5 block">Pasta de backups</Label>
-          <div className="flex gap-2">
+          {/*
+            ⚠️ O caminho é longo e monoespaçado; ao lado de um botão ele fica com
+            uns 150px e vira "C:\\Users\\...". No celular o campo ocupa a linha e o
+            botão desce.
+          */}
+          <div className="flex flex-col gap-2 lg:flex-row">
             <input
               type="text"
               readOnly
               value={pastaPadrao}
-              className="flex-1 h-10 rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground font-mono truncate"
+              className="min-w-0 flex-1 h-10 rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground font-mono truncate"
             />
-            <Button variant="outline" onClick={selecionarPasta}>
+            <Button variant="outline" onClick={selecionarPasta} className="h-11 shrink-0 lg:h-10">
               Alterar...
             </Button>
           </div>
@@ -768,20 +806,28 @@ const Configuracoes: FC = () => {
             Pasta secundária{' '}
             <span className="text-xs font-normal text-muted-foreground">(opcional — espelho de segurança)</span>
           </Label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               type="text"
               readOnly
               value={pastaSecundaria || 'Não configurada'}
-              className={`flex-1 h-10 rounded-md border border-input px-3 py-2 text-sm font-mono truncate ${
+              className={`min-w-0 h-10 w-full rounded-md border border-input px-3 py-2 text-sm font-mono truncate lg:w-auto lg:flex-1 ${
                 pastaSecundaria ? 'bg-muted text-muted-foreground' : 'bg-muted/50 text-muted-foreground/60 italic'
               }`}
             />
-            <Button variant="outline" onClick={selecionarPastaSecundaria}>
+            <Button
+              variant="outline"
+              onClick={selecionarPastaSecundaria}
+              className="h-11 flex-1 lg:h-10 lg:flex-none"
+            >
               {pastaSecundaria ? 'Alterar...' : 'Configurar...'}
             </Button>
             {pastaSecundaria && (
-              <Button variant="outline" onClick={limparPastaSecundaria} className="text-destructive hover:text-destructive">
+              <Button
+                variant="outline"
+                onClick={limparPastaSecundaria}
+                className="h-11 flex-1 text-destructive hover:text-destructive lg:h-10 lg:flex-none"
+              >
                 Remover
               </Button>
             )}
@@ -803,14 +849,14 @@ const Configuracoes: FC = () => {
                 <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">manuais/</code>.
                 Útil antes de operações importantes.
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:gap-3">
                 {/* Cor própria: é a única ação desta seção que FAZ alguma coisa
                     agora (as outras só guardam preferência). O contorno neutro
                     a deixava indistinguível de um campo a mais. */}
                 <Button
                   onClick={fazerBackup}
                   disabled={fazendoBackup}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white lg:h-10"
                 >
                   <HardDriveDownload className="w-4 h-4 mr-2" />
                   {fazendoBackup ? 'Criando backup...' : 'Fazer backup agora'}

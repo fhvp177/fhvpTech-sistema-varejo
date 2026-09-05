@@ -35,8 +35,33 @@ const ConfigImpressao: FC = () => {
   if (!prefs) {
     return <p className="text-sm text-muted-foreground">Carregando impressoras…</p>
   }
+  /*
+   * Lista vazia quer dizer duas coisas MUITO diferentes, e a frase precisa
+   * saber qual é:
+   *
+   *  • no app instalado, que não há impressora no Windows — e aí instalar uma
+   *    resolve;
+   *  • na web, que a página não enxerga impressora nenhuma, e não vai enxergar:
+   *    quem conhece as impressoras é o sistema, e ele já mostra a lista dele na
+   *    caixa de impressão. Não há nada a instalar nem a configurar.
+   *
+   * Mandar o lojista "instalar uma impressora e reabrir a tela" no celular
+   * seria uma volta que nunca termina.
+   */
   if (impressoras.length === 0) {
-    return (
+    return __ALVO__ === 'web' ? (
+      <div className="text-sm text-muted-foreground space-y-2">
+        <p>
+          Por aqui a impressora é escolhida na hora de imprimir, na própria caixa de
+          impressão do aparelho — ela já lista as impressoras disponíveis, e também
+          oferece "Salvar como PDF".
+        </p>
+        <p>
+          Nada a configurar aqui: esta seção só tem o que ajustar no aplicativo
+          instalado no computador da loja.
+        </p>
+      </div>
+    ) : (
       <p className="text-sm text-muted-foreground">
         Nenhuma impressora instalada no Windows foi encontrada. Instale uma e reabra esta tela.
       </p>
