@@ -162,7 +162,15 @@ describe('tela 2 — Clientes no celular (roteiro §6)', () => {
     // aceite encolher.
     expect(CLIENTES).toContain('grid-cols-[auto_minmax(0,1fr)_auto]')
     expect(CLIENTES).toContain('<div className="min-w-0">')
-    expect(CLIENTES).toContain('className="num shrink-0 text-[14px] font-semibold text-critical"')
+    // A coluna do menu não encolhe.
+    expect(CLIENTES).toContain('<div className="flex shrink-0 items-center gap-1">')
+    /*
+     * ⚠️ Na linha do metadado, quem cede espaço é o texto cinza e nunca o
+     * dinheiro: `min-w-0 flex-1 truncate` no primeiro, `shrink-0` no segundo.
+     * Invertido, o valor é que seria cortado — e valor cortado não é valor.
+     */
+    expect(CLIENTES).toContain('className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground"')
+    expect(CLIENTES).toContain('className="num shrink-0 text-[13.5px] font-semibold text-critical"')
   })
 
   it('★ nenhum comando se perdeu na virada de tabela para lista', () => {
@@ -178,7 +186,7 @@ describe('tela 2 — Clientes no celular (roteiro §6)', () => {
     expect(lista).toContain('abrirEdicao(c)')
     expect(lista).toContain('excluir(c.id, c.nome)')
     // e só o dono edita e apaga, como no monitor
-    expect(lista).toContain('{ehDono && (')
+    expect(lista).toContain('...(ehDono')
   })
 
   it('★ UM identificador só, colorido por escolha do dono', () => {
@@ -202,6 +210,53 @@ describe('tela 2 — Clientes no celular (roteiro §6)', () => {
       .toContain('corDoNome(c.nome)')
     // e continua sendo UM identificador só: empresa troca as iniciais pelo prédio
     expect(lista).toContain('<Building2 className="h-4 w-4" />')
+  })
+
+  it('★ as três ações cabem num gatilho só, e o item volta à altura do roteiro', () => {
+    /*
+     * Três botões de 44×44 lado a lado ocupavam uma linha inteira do item e
+     * levavam a linha de 58 para ~106px — metade dos clientes por tela. O
+     * roteiro previa as duas saídas ("§6: numa terceira linha ou num menu"), e
+     * esta é a segunda.
+     *
+     * ⚠️ O menu NÃO pode virar desculpa para esconder ação: as três continuam
+     * lá, chamando as mesmas funções, e editar/excluir seguem só para o dono.
+     */
+    const lista = CLIENTES.slice(
+      CLIENTES.indexOf('{ehCelular ? ('),
+      CLIENTES.indexOf('border rounded-lg overflow-x-auto')
+    )
+    expect(lista).toContain('<MenuAcoes')
+    expect(lista).toContain("rotulo={`A\u00e7\u00f5es de ${c.nome}`}")
+    // a terceira linha de botões foi embora
+    expect(lista, 'a linha de botões voltou e o item cresce de novo')
+      .not.toContain('mt-1 flex justify-end gap-1')
+  })
+
+  it('★ o menu segue as TRÊS regras do portal', () => {
+    /*
+     * Ele desenha num portal preso ao `document.body`, senão seria recortado
+     * pela lista. Isso obriga às mesmas três regras do `select.tsx`, e elas só
+     * funcionam juntas: sem a primeira o menu aparece e o mouse atravessa; sem
+     * a segunda, escolher uma ação fecha o diálogo em volta; sem a terceira um
+     * menu longo não rola.
+     *
+     * O `dropdownDentroDeModal.test.ts` já varre o core e cobraria isso
+     * sozinho; aqui fica o registro de que este componente nasceu sabendo.
+     */
+    const MENU = readFileSync(
+      join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'MenuAcoes.tsx'),
+      'utf8'
+    )
+    expect(MENU).toContain("pointerEvents: 'auto'")
+    expect(MENU).toContain('onPointerDown={(e) => e.stopPropagation()}')
+    expect(MENU).toContain('onWheel={(e) => e.stopPropagation()}')
+    // gatilho e itens são alvo de dedo
+    expect(MENU).toContain('h-11 w-11')
+    expect(MENU).toContain('min-h-[44px]')
+    // e a decisão de abrir para cima ou para baixo continua sendo do ajudante
+    // que já resolveu o defeito da caixa com o fim fora da tela
+    expect(MENU).toContain('posicaoDropdown(')
   })
 
   it('★ o respiro da página encolhe no celular, e o do monitor fica', () => {

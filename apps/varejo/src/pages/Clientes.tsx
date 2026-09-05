@@ -21,6 +21,7 @@ import DividasClienteDialog, {
 } from '@/components/DividasClienteDialog'
 import { useSessao } from '@/App'
 import { useEhCelular } from '@/hooks/useEhCelular'
+import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 
 const ITENS_POR_PAGINA = 20
 
@@ -490,62 +491,72 @@ const Clientes: FC = () => {
                       <p className="truncate text-[14.5px] font-semibold leading-tight" title={c.nome}>
                         {c.nome}
                       </p>
-                      <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
-                        {[c.telefone, `desde ${formatarData(c.data_cadastro)}`, c.observacao]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </p>
+                      {/*
+                        ⚠️ O valor fica no FIM da segunda linha, e não ao lado do
+                        nome. Medido em 360px: com ele na primeira linha, e o
+                        menu cobrando 44px, sobravam ~106 para o nome —
+                        "Alexandra Caciano de Souza" virava "Alexandra ...".
+                        Aqui o nome tem ~210.
+
+                        Ele continua à direita e continua alinhado em coluna de um
+                        item para o outro, que é o que o §6 pede; só trocou de
+                        linha, porque o menu novo cobrou os 44px que faltavam.
+
+                        `min-w-0` no metadado e `shrink-0` no valor: quem cede
+                        espaço é o texto cinza, nunca o dinheiro. E `num` põe a
+                        monoespaçada com `tabular-nums`, que é o que alinha a
+                        vírgula de um item para o outro sem tabela nenhuma.
+                      */}
+                      <div className="mt-0.5 flex items-baseline gap-2">
+                        <p className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
+                          {[c.telefone, `desde ${formatarData(c.data_cadastro)}`, c.observacao]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                        {divida && (
+                          <span className="num shrink-0 text-[13.5px] font-semibold text-critical">
+                            {fmtMoeda(divida.total)}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    {/*
-                      O valor não encolhe e não quebra: `num` põe a monoespaçada
-                      com `tabular-nums`, que é o que alinha a vírgula de um item
-                      para o outro sem tabela nenhuma.
-                    */}
-                    {divida && (
-                      <span className="num shrink-0 text-[14px] font-semibold text-critical">
-                        {fmtMoeda(divida.total)}
-                      </span>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {/*
+                        ⚠️ Nenhuma ação se perde no menu: ver dívidas, editar e
+                        excluir mudam de LUGAR, não de existência, e continuam
+                        chamando as mesmas funções da tabela do monitor. Editar e
+                        excluir seguem só para o dono.
+                      */}
+                      <MenuAcoes
+                        rotulo={`Ações de ${c.nome}`}
+                        acoes={[
+                          ...(divida
+                            ? [{
+                                rotulo: `Ver dívidas — ${fmtMoeda(divida.total)}`,
+                                icone: <Wallet className="w-4 h-4" />,
+                                onSelecionar: () => setClienteDividas(c)
+                              }]
+                            : []),
+                          ...(ehDono
+                            ? [
+                                {
+                                  rotulo: 'Editar',
+                                  icone: <Pencil className="w-4 h-4" />,
+                                  onSelecionar: () => abrirEdicao(c)
+                                },
+                                {
+                                  rotulo: 'Excluir',
+                                  icone: <Trash2 className="w-4 h-4" />,
+                                  destrutiva: true,
+                                  onSelecionar: () => excluir(c.id, c.nome)
+                                }
+                              ]
+                            : [])
+                        ] as AcaoMenu[]}
+                      />
+                    </div>
                   </div>
-
-                  {(divida || ehDono) && (
-                    <div className="mt-1 flex justify-end gap-1">
-                      {divida && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-warn hover:text-warn"
-                          onClick={() => setClienteDividas(c)}
-                          aria-label={`Ver dívidas de ${c.nome}`}
-                          title={`Ver dívidas — ${fmtMoeda(divida.total)} em aberto`}
-                        >
-                          <Wallet className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {ehDono && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => abrirEdicao(c)}
-                            aria-label={`Editar ${c.nome}`}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => excluir(c.id, c.nome)}
-                            aria-label={`Excluir ${c.nome}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
                 </li>
               )
             })}
