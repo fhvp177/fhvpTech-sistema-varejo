@@ -477,6 +477,62 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     }
   })
 
+  it('★ no celular o gráfico sobe para perto do topo, e o Top 5 fica onde estava', () => {
+    /*
+     * Pedido do dono: o gráfico entre as primeiras coisas ao abrir o Painel,
+     * antes dos cartões de Faturamento/Vendas/Ticket/Clientes — "passa um ar
+     * estatístico".
+     *
+     * ⚠️ A reordenação é de CSS, não de JSX, e não é uma segunda cópia do
+     * cartão: duas cópias dariam dois gráficos no DOM, e o escondido mede zero —
+     * o Recharts desenha um SVG vazio. Reordenar no JSX mudaria o monitor
+     * junto, que é o que esta reforma não pode fazer.
+     */
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    expect(PAINEL).toContain('ordem-filtro')
+    expect(PAINEL).toContain('ordem-vencimentos')
+    expect(PAINEL).toContain('ordem-grafico')
+    expect(PAINEL).toContain('par-grafico')
+    // uma cópia só do cartão do gráfico
+    expect(PAINEL.split('ordem-grafico').length - 1, 'o cartão do gráfico foi duplicado').toBe(1)
+
+    const movel = CSS.slice(CSS.indexOf('@media (max-width: 1023.98px)'))
+    expect(movel).toContain('.ordem-filtro { order: -3 }')
+    expect(movel).toContain('.ordem-vencimentos { order: -2 }')
+    expect(movel).toContain('.ordem-grafico { order: -1 }')
+    // sem o flex no Painel, `order` não vale nada
+    expect(movel).toMatch(/\.entrada-escalonada \{\s*display: flex;\s*flex-direction: column;/)
+    // e sem o `display: contents` o Top 5 subiria junto
+    expect(movel).toMatch(/\.par-grafico \{\s*display: contents;/)
+  })
+
+  it('★ o par gráfico/Top 5 continua ENTRANDO como os outros blocos', () => {
+    // Ao virar `display: contents` a caixa deixa de ser `.entrada-escalonada > *`
+    // e os dois cartões seriam os únicos do Painel a aparecer sem animação — um
+    // solavanco no meio da tela.
+    const movel = CSS.slice(CSS.indexOf('@media (max-width: 1023.98px)'))
+    expect(movel).toMatch(/\.par-grafico > \* \{\s*animation: surgir-bloco 0\.36s cubic-bezier\(0\.2, 0\.7, 0\.3, 1\) backwards;/)
+    // ⚠️ `backwards`, nunca `both`: `both` deixa contexto de empilhamento
+    expect(movel).not.toContain('surgir-bloco 0.36s cubic-bezier(0.2, 0.7, 0.3, 1) both')
+    // e só para quem não pediu menos movimento
+    const antes = movel.slice(movel.indexOf('.par-grafico > *') - 400, movel.indexOf('.par-grafico > *'))
+    expect(antes).toContain('prefers-reduced-motion: no-preference')
+  })
+
+  it('★ a subida do gráfico NÃO vaza para o monitor', () => {
+    // Lá a ordem segue a do arquivo e os dois voltam a dividir a grade de três
+    // colunas. O `mb-3` que separa o gráfico dos KPIs no celular tem o par que
+    // o zera no monitor, senão ele viraria um respiro a mais dentro da grade.
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    expect(PAINEL).toContain('ordem-grafico lg:col-span-2 border rounded-xl p-3 mb-3 lg:mb-0 lg:p-4 bg-card')
+    expect(PAINEL).toContain('par-grafico grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4')
+    // as regras de ordem moram TODAS dentro da consulta de tela estreita
+    const fixo = CSS.slice(0, CSS.indexOf('@media (max-width: 1023.98px)'))
+    for (const regra of ['ordem-filtro', 'ordem-vencimentos', 'ordem-grafico', 'par-grafico']) {
+      expect(fixo, `${regra} escapou da consulta de tela estreita`).not.toContain(regra)
+    }
+  })
+
   it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {
     // ⚠️ A primeira tentativa fixava a posição dele pelo CSS. Isso tirava o
     // botão de cima do conteúdo e MATAVA o arraste junto, que era justamente o

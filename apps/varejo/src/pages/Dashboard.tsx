@@ -301,7 +301,7 @@ const Dashboard: FC = () => {
     /* `entrada-escalonada`: os blocos sobem e aparecem um após o outro, uma
        vez só, na abertura. Ver §10 no index.css. */
     <div className="entrada-escalonada p-4 lg:p-8">
-      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+      <div className="ordem-filtro flex items-start justify-between mb-4 flex-wrap gap-3">
         {/*
           ⚠️ Some no celular (roteiro §5.1). A pílula acesa na ilha já diz que
           você está no Painel: repetir "Dashboard" num título de 24px mais um
@@ -493,9 +493,15 @@ const Dashboard: FC = () => {
       </div>
 
       {/* ── Gráfico de vendas + Top produtos ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4">
+      {/*
+        ⭐ `par-grafico`: no celular esta caixa deixa de existir como caixa
+        (`display: contents`), e os dois cartões viram filhos diretos do Painel.
+        É o que permite o gráfico subir para perto do topo sem arrastar o Top 5
+        junto — eles só estavam na mesma caixa por causa da grade do monitor.
+      */}
+      <div className="par-grafico grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4">
         {/* Gráfico de vendas no tempo */}
-        <div className="lg:col-span-2 border rounded-xl p-3 lg:p-4 bg-card">
+        <div className="ordem-grafico lg:col-span-2 border rounded-xl p-3 mb-3 lg:mb-0 lg:p-4 bg-card">
           <div className="flex items-center gap-2 mb-3">
             <BarChart3 className="w-5 h-5 text-muted-foreground" />
             <h3 className="font-semibold">Vendas no tempo</h3>
@@ -866,7 +872,7 @@ const CartaoVencimentos: FC<{
   const atual = abas[aba]
 
   return (
-    <div className={`lg:hidden rounded-xl border border-t-2 bg-card shadow-sm p-3 mb-3 ${atual.faixa}`}>
+    <div className={`ordem-vencimentos lg:hidden rounded-xl border border-t-2 bg-card shadow-sm p-3 mb-3 ${atual.faixa}`}>
       <div className="flex items-center gap-2 mb-2">
         {aba === 0
           ? <AlertTriangle className="w-[18px] h-[18px] text-critical shrink-0" />

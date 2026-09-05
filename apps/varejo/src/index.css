@@ -508,6 +508,44 @@
     padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* ---------- a ordem do Painel no celular ----------
+     O dono quis o gráfico entre as primeiras coisas que aparecem ao abrir:
+     "passa um ar estatístico". No monitor a ordem segue a do arquivo, que é a
+     que faz sentido com três colunas.
+
+     ⚠️ Reordenar aqui, e não no JSX, é o que mantém o monitor intocado. E é
+     `order` de flex, não duplicação de bloco: duas cópias do mesmo cartão
+     dariam dois gráficos no DOM, e o escondido mede zero — o Recharts desenha
+     um SVG vazio e reclama.
+
+     Só três blocos precisam de número. Todo o resto fica em `order: 0`, que no
+     flex vem depois de qualquer negativo, na ordem do arquivo. */
+  [data-alvo='web'] .entrada-escalonada {
+    display: flex;
+    flex-direction: column;
+  }
+  [data-alvo='web'] .ordem-filtro { order: -3 }
+  [data-alvo='web'] .ordem-vencimentos { order: -2 }
+  [data-alvo='web'] .ordem-grafico { order: -1 }
+
+  /* A caixa que junta gráfico e Top 5 deixa de gerar quadro: os dois viram
+     filhos diretos do Painel e cada um anda sozinho. Sem isto, mover o gráfico
+     arrastaria o Top 5 para cima junto. */
+  [data-alvo='web'] .par-grafico {
+    display: contents;
+  }
+
+  /* ⚠️ E como deixaram de ser `.entrada-escalonada > *`, a entrada deles tem
+     que ser escrita aqui — senão os dois seriam os únicos blocos do Painel a
+     aparecer sem animação, e a tela ficaria com um solavanco no meio. Entram
+     com o atraso do teto (§10), como o 6º bloco em diante. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-alvo='web'] .par-grafico > * {
+      animation: surgir-bloco 0.36s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+      animation-delay: 0.24s;
+    }
+  }
+
   /* ---------- Vencimentos: duas abas, uma pílula que escorrega ----------
      ⚠️ Juntar as duas listas numa fila só já foi tentado e RECUSADO pelo dono:
      misturar o vermelho do atraso com o âmbar do que vence hoje "dá um ar de
