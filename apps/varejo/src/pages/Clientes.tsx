@@ -467,14 +467,18 @@ const Clientes: FC = () => {
                   */}
                   <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3">
                     {/*
-                      UM identificador só, e em cinza: cor sorteada por cliente
-                      é ruído que compete com o vermelho da dívida, que é a única
-                      cor que precisa gritar nesta tela. Empresa mostra o
-                      prédio no lugar das iniciais, que é como a coluna de tipo
-                      do monitor continua existindo aqui.
+                      UM identificador só: a bolinha faz o papel que no monitor
+                      é dividido entre a coluna de tipo e o avatar. Empresa mostra
+                      o prédio no lugar das iniciais.
+
+                      ⚠️ A cor sorteada por cliente é ESCOLHA DO DONO, contra o
+                      §6 do roteiro — que a chama de ruído competindo com o
+                      vermelho da dívida. Ela já esteve cinza aqui e ele pediu a
+                      cor de volta olhando a tela pronta. Não desfazer citando o
+                      roteiro: a pergunta já foi feita e respondida.
                     */}
                     <span
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white ${corDoNome(c.nome)}`}
                       aria-hidden
                     >
                       {c.tipo_pessoa === 'juridica'

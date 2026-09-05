@@ -55,8 +55,20 @@ const DialogContent = React.forwardRef<
       // reincidência: cada tela nova nascia desprotegida e só ganhava
       // `max-h`/`overflow` depois que alguém via o defeito na tela. Com o teto
       // no componente base, todo diálogo do monorepo já nasce se contendo.
+      // ── ⭐ Ele FLUTUA, também na tela estreita ─────────────────────────────
+      // Abaixo de 640px o diálogo não tinha canto arredondado nenhum
+      // (`sm:rounded-lg`) e, com `w-full`, encostava nas duas bordas: virava
+      // uma faixa branca colada de lado a lado, sem começo nem fim.
+      //
+      // Agora o canto é de 16px, sobra um recuo de 16px de cada lado e a
+      // sombra é a de coisa que flutua. Acima de 640px NADA muda — e a janela
+      // do aplicativo instalado nunca é menor que isso.
+      //
+      // ⚠️ O recuo vem de `w-`, e não de `max-w-`: as chamadas do monorepo
+      // passam `max-w-sm`, `max-w-md`, `max-w-[560px]`… e a última classe do
+      // mesmo grupo vence. Vindo de `max-w`, cada uma delas apagaria o recuo.
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid max-h-[90vh] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-background p-6 shadow-lg duration-200 [&>*]:min-w-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
+        'fixed left-[50%] top-[50%] z-50 grid max-h-[90vh] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-2xl border bg-background p-4 shadow-2xl duration-200 [&>*]:min-w-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:w-full sm:rounded-lg sm:p-6 sm:shadow-lg',
         className
       )}
       {...props}

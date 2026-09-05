@@ -68,6 +68,29 @@ describe('DialogContent do core', () => {
     ).toMatch(/overflow-y-auto/)
   })
 
+  it('★ FLUTUA também na tela estreita, em vez de virar faixa colada', () => {
+    /*
+     * Abaixo de 640px o diálogo não tinha canto arredondado nenhum
+     * (`sm:rounded-lg`) e, com `w-full`, encostava nas duas bordas: no celular
+     * virava uma faixa branca de lado a lado, sem começo nem fim. O dono
+     * chamou de "quadrado chapado", e a palavra estava certa.
+     *
+     * ⚠️ O recuo vem de `w-`, e não de `max-w-`. As dezenas de chamadas do
+     * monorepo passam `max-w-sm`, `max-w-md`, `max-w-[560px]`…, e a última
+     * classe do mesmo grupo vence: vindo de `max-w`, cada uma delas apagaria o
+     * recuo e o defeito voltaria em quase todo diálogo.
+     */
+    expect(classes, 'sem recuo lateral o diálogo encosta nas duas bordas')
+      .toContain('w-[calc(100%-2rem)]')
+    expect(classes, 'canto arredondado só a partir de sm é o defeito de origem')
+      .toMatch(/(^|\s)rounded-2xl(\s|$)/)
+    // e acima de 640px tudo continua como estava — a janela do app instalado
+    // nunca é menor que isso
+    expect(classes).toContain('sm:w-full')
+    expect(classes).toContain('sm:rounded-lg')
+    expect(classes).toContain('sm:p-6')
+  })
+
   it('não corta na horizontal', () => {
     // A rolagem é só vertical de propósito. Conteúdo largo se resolve com
     // `min-w-0` aqui + `overflow-x-auto` no próprio conteúdo (ver a tabela da

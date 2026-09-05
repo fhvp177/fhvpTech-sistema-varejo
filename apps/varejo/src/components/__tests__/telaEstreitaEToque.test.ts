@@ -181,19 +181,26 @@ describe('tela 2 — Clientes no celular (roteiro §6)', () => {
     expect(lista).toContain('{ehDono && (')
   })
 
-  it('★ UM identificador só, e sem cor sorteada por cliente', () => {
-    // Cor por cliente é ruído que compete com o vermelho da dívida — a única cor
-    // que precisa gritar nesta tela. Empresa mostra o prédio no lugar das
-    // iniciais, que é como a coluna de tipo do monitor continua existindo aqui.
-    // ⚠️ A fatia para no começo do ramo do monitor: indo até a paginação ela
-    // passava pela tabela do desktop e via coisas que só existem lá.
+  it('★ UM identificador só, colorido por escolha do dono', () => {
+    /*
+     * ⚠️ A cor sorteada por cliente contraria o §6 do roteiro, que a chama de
+     * ruído competindo com o vermelho da dívida. Ela JÁ esteve cinza aqui: o
+     * dono viu a tela pronta e pediu a cor de volta.
+     *
+     * Esta guarda segura a escolha DELE. Quem for "consertar" citando o
+     * roteiro encontra um teste vermelho e este comentário — a pergunta já
+     * foi feita e respondida.
+     *
+     * ⚠️ A fatia para no começo do ramo do monitor: indo até a paginação ela
+     * passava pela tabela do desktop e via coisas que só existem lá.
+     */
     const lista = CLIENTES.slice(
       CLIENTES.indexOf('{ehCelular ? ('),
       CLIENTES.indexOf('border rounded-lg overflow-x-auto')
     )
-    expect(lista).toContain('rounded-full bg-muted')
-    expect(lista, 'a cor sorteada voltou e briga com o vermelho da dívida')
-      .not.toContain('corDoNome')
+    expect(lista, 'a cor do avatar é pedido do dono, não descuido')
+      .toContain('corDoNome(c.nome)')
+    // e continua sendo UM identificador só: empresa troca as iniciais pelo prédio
     expect(lista).toContain('<Building2 className="h-4 w-4" />')
   })
 
