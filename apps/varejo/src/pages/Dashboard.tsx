@@ -797,9 +797,18 @@ const FiltroPeriodo: FC<{
 }> = ({
   compacto, modo, periodoDias, mesAtual, compararMes, mesComparativo, mesMaximo, onJanela, onMes
 }) => {
+  /*
+   * O painelzinho do "Mês" está aberto?
+   *
+   * ⚠️ A pílula precisa saber. Sem isto, tocar em "Mês" abria o painel e a
+   * pílula continuava acesa no botão anterior até alguém aplicar um mês — o
+   * toque não tinha resposta nenhuma, e parecia defeito.
+   */
+  const [mesAberto, setMesAberto] = useState(false)
+
   if (compacto) {
     // A quinta posição é a do "Mês"; as quatro primeiras são as janelas móveis.
-    const indice = modo === 'mes'
+    const indice = modo === 'mes' || mesAberto
       ? PERIODOS.length
       : Math.max(0, PERIODOS.findIndex((p) => p.dias === periodoDias))
     return (
@@ -812,7 +821,7 @@ const FiltroPeriodo: FC<{
           style={{ '--i': indice } as CSSProperties}
         />
         {PERIODOS.map((p) => {
-          const ativo = modo === 'janela' && periodoDias === p.dias
+          const ativo = modo === 'janela' && periodoDias === p.dias && !mesAberto
           return (
             <button
               key={p.dias}
@@ -834,6 +843,7 @@ const FiltroPeriodo: FC<{
           onApply={onMes}
           className="filtro-periodo-item w-full"
           semIcone
+          onAberto={setMesAberto}
         />
       </div>
     )
@@ -1440,7 +1450,9 @@ const CardFormaPagamento: FC<WidgetProps> = ({ metricas, carregando }) => {
         <p className="text-sm text-muted-foreground text-center py-12">Sem vendas no período.</p>
       ) : (
         <div className="flex items-center gap-4">
-          <div className="h-44 w-44 shrink-0">
+          {/* Menor no celular: com 176px de rosca sobravam ~130 para a
+              legenda, e "Inadimplente" não cabia em 130. */}
+          <div className="h-32 w-32 lg:h-44 lg:w-44 shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={dados} dataKey="num" innerRadius={42} outerRadius={70} paddingAngle={2}>
@@ -1470,8 +1482,14 @@ const CardFormaPagamento: FC<WidgetProps> = ({ metricas, carregando }) => {
                   className="w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: CORES_PAGAMENTO[d.chave] }}
                 />
-                <span className="flex-1">{d.nome}</span>
-                <span className="text-muted-foreground text-xs">
+                {/*
+                  ⚠️ `min-w-0` + `truncate` no nome e `shrink-0` na porcentagem.
+                  Sem os dois, um rótulo comprido ("Inadimplente") se recusa a
+                  encolher e empurra a porcentagem para fora do cartão — a
+                  mesma causa de rolagem lateral que a §11 nomeia.
+                */}
+                <span className="min-w-0 flex-1 truncate" title={d.nome}>{d.nome}</span>
+                <span className="num shrink-0 text-muted-foreground text-xs">
                   {Math.round((d.num / totalVendas) * 100)}%
                 </span>
               </li>

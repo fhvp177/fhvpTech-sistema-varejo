@@ -52,6 +52,7 @@ module.exports = {
           DEFAULT: 'hsl(var(--info))',
           soft: 'hsl(var(--info-soft))'
         },
+        marca: 'hsl(var(--marca))',
         'on-fill': 'hsl(var(--on-fill))',
         primary: {
           DEFAULT: 'hsl(var(--primary))',

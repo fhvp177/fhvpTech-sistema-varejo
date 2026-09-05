@@ -584,6 +584,37 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(PAINEL).toContain('semIcone')
   })
 
+  it('★ tocar em "Mês" acende a pílula na hora, antes de aplicar', () => {
+    /*
+     * O painelzinho do "Mês" tem estado próprio e a pílula não tinha como saber
+     * que ele foi tocado: o toque abria o painel e a pílula continuava acesa no
+     * botão anterior até alguém aplicar um mês. O toque ficava sem resposta, e
+     * isso lê como defeito mesmo quando o filtro funciona.
+     */
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    expect(PAINEL).toContain('const [mesAberto, setMesAberto] = useState(false)')
+    expect(PAINEL).toContain("modo === 'mes' || mesAberto")
+    expect(PAINEL).toContain('onAberto={setMesAberto}')
+    // e o botão de janela apaga enquanto o painel do Mês está aberto
+    expect(PAINEL).toContain('periodoDias === p.dias && !mesAberto')
+
+    // ⚠️ O aviso sai de um EFEITO: mudar estado de outro componente durante o
+    // render do seu é efeito colateral, e o React reclama em voz alta.
+    const POPOVER = semComentarios(readFileSync(join(SRC, 'components', 'FiltroMesPopover.tsx'), 'utf8'))
+    expect(POPOVER).toMatch(/useEffect\(\(\) => \{\s*onAberto\?\.\(aberto\)/)
+  })
+
+  it('★ a legenda de Forma de pagamento não empurra a porcentagem para fora', () => {
+    // Com 176px de rosca sobravam ~130 para a legenda numa tela de 360, e
+    // "Inadimplente" não cabe em 130: o rótulo se recusava a encolher e levava a
+    // porcentagem para fora do cartão.
+    const PAINEL = semComentarios(readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8'))
+    expect(PAINEL).toContain('className="min-w-0 flex-1 truncate" title={d.nome}')
+    expect(PAINEL).toContain('className="num shrink-0 text-muted-foreground text-xs"')
+    // e a rosca cede largura no celular, com o par que a devolve no monitor
+    expect(PAINEL).toContain('h-32 w-32 lg:h-44 lg:w-44 shrink-0')
+  })
+
   it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {
     // ⚠️ A primeira tentativa fixava a posição dele pelo CSS. Isso tirava o
     // botão de cima do conteúdo e MATAVA o arraste junto, que era justamente o
@@ -646,8 +677,20 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     const naMarca = APP.slice(APP.indexOf('<BarraMarca>'), APP.indexOf('</BarraMarca>'))
     expect(naMarca).toContain('SinoNotificacoesHost')
 
+    /*
+     * ⚠️ A cor do sino vem da FAIXA, de fora, e não do sino: ele é do núcleo e
+     * serve os dois nichos, então não pode saber que existe uma faixa escura no
+     * varejo web. Sem isto, o cinza que ele traz fica ilegível sobre o quase
+     * preto da marca.
+     */
     const MARCA = readFileSync(join(SRC, 'components', 'BarraMarca.tsx'), 'utf8')
-    expect(MARCA).toContain('min-w-0 flex-1 truncate')
+    expect(MARCA).toContain('[&_button]:text-white/75')
+    const SINO_NUCLEO = readFileSync(
+      join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'SinoNotificacoes.tsx'),
+      'utf8'
+    )
+    expect(SINO_NUCLEO, 'a faixa do varejo vazou para dentro do componente do núcleo')
+      .not.toContain('bg-marca')
   })
 
   it('★ a faixa de topo é a marca, e só no celular', () => {
@@ -656,9 +699,24 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(MARCA).toContain('sticky top-0')
     // Abaixo do 20 da ilha: a faixa nunca cobre a navegação.
     expect(MARCA).toContain('z-[15]')
-    // O nome é texto de verdade, não recorte da imagem: acompanha o tema
-    // escuro e o leitor de tela o lê.
-    expect(MARCA).toMatch(/FHVP <span className="text-primary">Tech<\/span>/)
+    /*
+     * ⭐ O nome é o DESENHO da logo, recortado do próprio arquivo — antes era
+     * um texto em caixa alta imitando a logo de longe, e o dono pediu o
+     * desenho de verdade.
+     *
+     * ⚠️ Daí a faixa ser escura nos DOIS temas: as letras do desenho são
+     * brancas e só têm contraste sobre o quase-preto em que foram desenhadas.
+     * A cor é `--marca`, lida do arquivo da logo, e o `theme-color` do HTML
+     * aponta para o mesmo valor — senão a barra de status do aparelho vira um
+     * retalho de outra cor colado em cima da faixa.
+     */
+    expect(MARCA).toContain('marca-nome.png')
+    expect(MARCA).toContain('bg-marca')
+    expect(MARCA).toContain("alt=\"FHVP Tech\"")
+    expect(CSS).toContain('--marca:')
+
+    const HTML = readFileSync(join(SRC, '..', 'index.web.html'), 'utf8')
+    expect(HTML, 'a barra de status deixou de acompanhar a faixa').toContain('content="#010310"')
   })
 
   it('a barra do núcleo não conhece o roteador', () => {

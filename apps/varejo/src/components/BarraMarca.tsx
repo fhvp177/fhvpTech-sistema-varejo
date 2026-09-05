@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import logoEmpresa from '@/assets/logo.png'
+import nomeDaMarca from '@/assets/marca-nome.png'
 
 /**
  * A faixa de topo do celular: a marca à esquerda, e o que for de ação à direita.
@@ -19,39 +19,46 @@ import logoEmpresa from '@/assets/logo.png'
  * `sticky` porque a marca não pode sumir ao rolar; `z-index` abaixo do 20 da
  * ilha porque a faixa nunca deve cobrir a navegação.
  *
- * ── Sobre a fonte ────────────────────────────────────────────────────────────
- * ⚠️ A tipografia exata da logo NÃO está no projeto — o desenho dela vive só
- * dentro do PNG. O que dá para fazer sem chutar é usar a própria imagem como
- * símbolo e compor o nome ao lado com a MESMA geometria: caixa alta, traço
- * largo entre letras e o azul da marca no "Tech", que é como a logo separa as
- * duas palavras. Se você me passar o arquivo da fonte, eu troco e fica idêntico.
+ * ── ⭐ O nome é a IMAGEM da logo, não um texto parecido ──────────────────────
+ * Antes o nome era escrito à mão em caixa alta com espaçamento largo, imitando
+ * a logo de longe. O dono pediu o desenho de verdade, e o desenho vive só
+ * dentro do PNG: então ele é recortado do próprio arquivo da logo
+ * (`marca-nome.png`, o pedaço com as trilhas, o "FHVP" e o "TECH").
+ *
+ * ⚠️ E é por isso que a faixa é ESCURA nos dois temas. As letras do desenho são
+ * brancas e o azul só tem contraste sobre o quase-preto em que foram
+ * desenhadas; sobre fundo claro elas sumiriam. A cor não é escolha de gosto: é
+ * `--marca`, lida do próprio arquivo da logo. O `theme-color` do
+ * `index.web.html` aponta para o mesmo valor, e é isso que faz a barra de
+ * status do aparelho continuar a faixa em vez de virar um retalho colado.
+ *
+ * O `alt` carrega o nome porque agora a imagem É o nome — quem usa leitor de
+ * tela ouve "FHVP Tech", não "logo".
  */
 export function BarraMarca({ children }: { children?: ReactNode }) {
   return (
-    <div className="sticky top-0 z-[15] flex h-14 shrink-0 items-center gap-2.5 border-b bg-background px-4 lg:hidden">
+    <div className="sticky top-0 z-[15] flex h-14 shrink-0 items-center gap-2.5 border-b border-white/10 bg-marca px-4 lg:hidden">
       <img
-        src={logoEmpresa}
-        alt=""
-        aria-hidden="true"
-        className="h-8 w-8 shrink-0 rounded-full object-contain"
+        src={nomeDaMarca}
+        alt="FHVP Tech"
+        className="h-9 w-auto shrink-0 select-none"
+        draggable={false}
       />
-      {/*
-        O nome é um texto de verdade, e não um recorte da imagem: assim ele
-        acompanha o tema escuro, o leitor de tela o lê, e não fica borrado numa
-        tela de densidade alta.
-
-        `min-w-0` + `truncate`: numa tela de 360 com o sino do lado, um nome
-        maior encolhe em vez de empurrar o sino para fora.
-      */}
-      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold uppercase tracking-[0.14em] text-foreground">
-        FHVP <span className="text-primary">Tech</span>
-      </span>
 
       {/*
         A ação da direita. O sino entra por aqui: o painel dele se ancora abaixo
         do próprio botão, então estando no topo ele abre para dentro da tela.
+
+        ⚠️ As classes de cor vêm daqui, de fora, e não do sino: ele é do núcleo
+        e serve os dois nichos, então não pode saber que existe uma faixa escura
+        no varejo web. Um seletor de descendente ganha do `text-muted-foreground`
+        que ele traz, sem tocar em uma linha do componente compartilhado.
       */}
-      {children && <div className="shrink-0">{children}</div>}
+      {children && (
+        <div className="ml-auto shrink-0 [&_button]:text-white/75 [&_button:hover]:bg-white/10 [&_button:hover]:text-white">
+          {children}
+        </div>
+      )}
     </div>
   )
 }

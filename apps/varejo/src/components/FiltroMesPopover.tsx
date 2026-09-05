@@ -35,10 +35,19 @@ type Props = {
   className?: string
   /** Esconde o ícone, para onde a coluna é estreita demais para ele. */
   semIcone?: boolean
+  /**
+   * Avisa quando o painelzinho abre e fecha.
+   *
+   * ⚠️ Existe por causa do seletor do celular: lá quem mostra a seleção é
+   * uma pílula que escorrega, e ela não tinha como saber que o "Mês" foi
+   * tocado. O resultado era tocar em "Mês", o painel abrir, e a pílula
+   * continuar acesa no botão anterior até alguém aplicar — parecia defeito.
+   */
+  onAberto?: (aberto: boolean) => void
 }
 
 const FiltroMesPopover: FC<Props> = ({
-  mes, comparar, mesComparativo, ativo, maxMes, onApply, className, semIcone
+  mes, comparar, mesComparativo, ativo, maxMes, onApply, className, semIcone, onAberto
 }) => {
   const [aberto, setAberto] = useState(false)
   // Rascunho: só vira estado aplicado quando o usuário clica em "Aplicar".
@@ -73,6 +82,12 @@ const FiltroMesPopover: FC<Props> = ({
     const selecionados = [Number(draftMes.split('-')[0]), Number(draftComp.split('-')[0])]
     return [...new Set([...base, ...selecionados])].sort((a, b) => b - a)
   })()
+
+  // Avisa fora da renderização: mudar estado de outro componente durante o
+  // render do seu é o que o React chama de efeito colateral, e ele reclama.
+  useEffect(() => {
+    onAberto?.(aberto)
+  }, [aberto, onAberto])
 
   const aplicar = () => {
     onApply(draftMes, draftComparar, draftComp)

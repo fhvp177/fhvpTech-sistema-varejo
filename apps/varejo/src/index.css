@@ -64,6 +64,9 @@
     --primary-soft: 214 95% 93%;
 
     /* Texto sobre preenchimento cheio. Muda no tema escuro. */
+    /* A cor do fundo da logo, lida do próprio arquivo (#010310). Não muda
+       com o tema: o nome desenhado é branco e só existe sobre ela. */
+    --marca: 232 88% 3%;
     --on-fill: 0 0% 100%;
   }
 
