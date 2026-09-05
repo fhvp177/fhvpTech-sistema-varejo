@@ -137,6 +137,22 @@ const fmtCompacto = (valor: number) => {
   return fmt(valor)
 }
 
+/**
+ * Rótulo do eixo de valores do gráfico, no celular: sem o "R$".
+ *
+ * ⚠️ Com o símbolo, "R$ 12,0k" não cabia na faixa do eixo e o "R" saía
+ * pela borda esquerda do cartão — e o maior deles ainda quebrava em duas
+ * linhas. Alargar a faixa resolveria roubando largura do gráfico, que é o
+ * que se quer olhar. A moeda já está dita no rodapé e no título do cartão:
+ * repeti-la cinco vezes na vertical não informa ninguém.
+ *
+ * No monitor nada muda: lá sobra largura e o `fmtCompacto` continua.
+ */
+const fmtEixoSemMoeda = (valor: number) => {
+  if (Math.abs(valor) >= 1000) return `${(valor / 1000).toFixed(1).replace('.', ',')}k`
+  return String(Math.round(valor))
+}
+
 const fmtData = (iso: string) => new Date(iso + 'T00:00').toLocaleDateString('pt-BR')
 
 /**
@@ -585,7 +601,12 @@ const Dashboard: FC = () => {
               mesmo quando ele é só o padrão da biblioteca: assim dá para
               provar, lendo, que o desktop continua onde estava.
             */}
-            <div className="h-56 lg:h-64 -ml-2">
+            {/*
+              ⚠️ A margem negativa é só do monitor. No celular ela empurrava o
+              eixo de valores para cima da borda do cartão e comia o começo de
+              cada rótulo.
+            */}
+            <div className="h-56 lg:h-64 lg:-ml-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={metricas.serie_temporal}
@@ -614,7 +635,7 @@ const Dashboard: FC = () => {
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={fmtCompacto}
+                    tickFormatter={ehCelular ? fmtEixoSemMoeda : fmtCompacto}
                   />
                   <Tooltip
                     formatter={(valor, nome) => [
@@ -867,6 +888,25 @@ type CardKPIProps = {
   subtexto?: React.ReactNode
 }
 
+/**
+ * Tamanho do número principal de um KPI, no celular.
+ *
+ * ⚠️ São dois cartões por linha em 360px: sobram ~140px de texto útil, e
+ * "R$ 30.299,75" a 24px pede 165. O valor vazava para fora do cartão.
+ *
+ * Uma classe menor fixa resolveria o número de hoje e estouraria de novo no
+ * dia em que a loja vendesse mais — que é o dia em que ele MAIS vai olhar
+ * esse cartão. Por isso o tamanho segue o COMPRIMENTO do valor: dinheiro
+ * não se corta com reticências nem se quebra em duas linhas.
+ *
+ * No monitor nada disso vale: lá o `lg:text-2xl` manda, como sempre.
+ */
+const tamanhoDoValor = (valor: string): string =>
+  valor.length > 14 ? 'text-[15px]'
+  : valor.length > 12 ? 'text-[17px]'
+  : valor.length > 9 ? 'text-[19px]'
+  : 'text-[22px]'
+
 const CardKPI: FC<CardKPIProps> = ({
   icone, corIcone, titulo, valor, delta, valorAnterior, rotuloComparativo, mostrarComparativo, subtexto
 }) => {
@@ -882,7 +922,7 @@ const CardKPI: FC<CardKPIProps> = ({
         {icone}
       </div>
       <p className="text-sm text-muted-foreground">{titulo}</p>
-      <p className="text-2xl font-bold mt-0.5">{valor}</p>
+      <p className={`${tamanhoDoValor(valor)} lg:text-2xl font-bold mt-0.5 whitespace-nowrap`}>{valor}</p>
       {mostrarComparativo && (
         <>
           <div className={`flex items-center gap-1 mt-1 text-xs ${corDelta}`}>
@@ -995,8 +1035,8 @@ const CardLucro: FC<CardLucroProps> = ({ metricas, mostrarComparativo, rotuloCom
         <>
           <p className="text-sm text-muted-foreground">Lucro bruto estimado</p>
           <div className="flex items-end justify-between gap-2">
-            <p className="text-2xl font-bold mt-0.5 text-emerald-600">{fmt(lucro)}</p>
-            <span className="text-sm font-semibold bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 whitespace-nowrap">
+            <p className="text-2xl font-bold mt-0.5 text-positive">{fmt(lucro)}</p>
+            <span className="text-sm font-semibold bg-positive-soft text-positive rounded-full px-2 py-0.5 whitespace-nowrap">
               margem {margem.toFixed(1).replace('.', ',')}%
             </span>
           </div>

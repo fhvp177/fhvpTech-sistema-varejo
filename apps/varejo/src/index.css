@@ -472,8 +472,23 @@
       }
     }
 
+    /*
+       ⚠️ `backwards`, NÃO `both`. Os dois deixam o bloco invisível antes da
+       vez dele, que é o efeito desejado. A diferença está no DEPOIS: com
+       `both` a animação continua "em vigor" para sempre, e um elemento com
+       animação de `opacity`/`transform` em vigor abre um CONTEXTO DE
+       EMPILHAMENTO próprio.
+
+       O estrago era invisível até alguém abrir o filtro de Mês: cada bloco do
+       Painel virava uma ilha de empilhamento, o `z-50` do painelzinho não
+       alcançava para fora do bloco dele, e ele abria POR BAIXO dos cartões de
+       vencimento — visível pela metade e impossível de usar.
+
+       `backwards` dá exatamente a mesma entrada e não deixa rastro: terminada
+       a animação, o elemento volta a ser um elemento comum.
+    */
     [data-alvo='web'] .entrada-escalonada > * {
-      animation: surgir-bloco 0.36s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+      animation: surgir-bloco 0.36s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
     }
     [data-alvo='web'] .entrada-escalonada > *:nth-child(2) { animation-delay: 0.05s }
     [data-alvo='web'] .entrada-escalonada > *:nth-child(3) { animation-delay: 0.1s }

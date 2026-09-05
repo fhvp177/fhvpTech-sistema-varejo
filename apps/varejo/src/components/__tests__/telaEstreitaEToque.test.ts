@@ -58,7 +58,12 @@ describe('tela 1 — o Painel no celular', () => {
     // O diagnóstico chamou isso de "cores de estado sem sistema" (§1, item 10).
     const literais = PAINEL.split('\n')
       .map((l, i) => ({ l: l.trim(), n: i + 1 }))
-      .filter(({ l }) => /\b(text|bg|border-t|border)-(red|amber|yellow|green|blue|slate|orange|indigo|purple|pink)-\d{2,3}\b/.test(l))
+      .filter(({ l }) =>
+        // ⚠️ A lista precisa ser a paleta INTEIRA. Quando ela tinha só as
+        // cores óbvias, um `text-emerald-600` passou batido no cartão de
+        // lucro e ficou meses sem tema escuro.
+        /\b(text|bg|border-t|border)-(red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-\d{2,3}\b/.test(l)
+      )
       .map(({ l, n }) => `${n}: ${l.slice(0, 70)}`)
     expect(literais, 'cor literal sobrando no Painel').toEqual([])
   })
@@ -339,6 +344,47 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(PAINEL).toContain('fill={COR_PERIODO_ANTERIOR}')
     expect(PAINEL).toContain('backgroundColor: COR_PERIODO_ANTERIOR')
     expect(PAINEL, 'a cor voltou a ser digitada solta na barra').not.toContain('fill="#94a3b8"')
+  })
+
+  it('★ a entrada não deixa contexto de empilhamento para trás', () => {
+    /*
+     * `both` mantém a animação "em vigor" depois de terminada, e animação de
+     * `opacity`/`transform` em vigor abre um contexto de empilhamento próprio.
+     * Com isso cada bloco do Painel virava uma ilha, e o `z-50` do filtro de
+     * Mês não alcançava para fora do bloco dele: o painelzinho abria POR BAIXO
+     * dos cartões de vencimento, impossível de usar.
+     *
+     * `backwards` dá a mesma entrada e não deixa rastro.
+     */
+    expect(CSS).toContain('cubic-bezier(0.2, 0.7, 0.3, 1) backwards')
+    expect(CSS, 'o `both` voltou e o filtro de Mês some atrás dos cartões')
+      .not.toContain('cubic-bezier(0.2, 0.7, 0.3, 1) both')
+  })
+
+  it('★ o eixo de valores do gráfico não vaza pela borda do cartão', () => {
+    // Com "R$" o rótulo não cabia na faixa e o "R" saía pela borda esquerda; a
+    // margem negativa, que é do monitor, ainda empurrava tudo mais 8px para
+    // fora. As duas coisas juntas eram o defeito da foto.
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('tickFormatter={ehCelular ? fmtEixoSemMoeda : fmtCompacto}')
+    expect(PAINEL).toContain('<div className="h-56 lg:h-64 lg:-ml-2">')
+    expect(PAINEL, 'a margem negativa voltou a valer no celular')
+      .not.toContain('h-56 lg:h-64 -ml-2')
+  })
+
+  it('★ o número do KPI segue o próprio comprimento, e nunca vaza', () => {
+    // Dois cartões por linha em 360px deixam ~140px: "R$ 30.299,75" a 24px
+    // pedia 165 e escorria para fora. Tamanho fixo menor resolveria hoje e
+    // estouraria de novo no dia em que a loja vendesse mais.
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('const tamanhoDoValor')
+    expect(PAINEL).toContain('${tamanhoDoValor(valor)} lg:text-2xl')
+    // e continua sem quebrar dinheiro em duas linhas
+    expect(PAINEL).toContain('whitespace-nowrap`}>{valor}</p>')
+    // quatro degraus: o maior valor que a loja pode mostrar ainda cabe
+    for (const degrau of ['> 14', '> 12', '> 9']) {
+      expect(PAINEL, `degrau ${degrau} sumiu`).toContain(degrau)
+    }
   })
 
   it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {
