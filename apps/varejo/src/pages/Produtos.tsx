@@ -24,6 +24,8 @@ import ModalCategorias from '@/components/ModalCategorias'
 import ModalImportarXml from '@/components/ModalImportarXml'
 import ModalNotasEntrada from '@/components/ModalNotasEntrada'
 import { useSessao } from '@/App'
+import { useEhCelular } from '@/hooks/useEhCelular'
+import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 
 const ITENS_POR_PAGINA = 20
 
@@ -418,9 +420,51 @@ const Produtos: FC = () => {
     }
   }
 
+  /*
+   * As ferramentas secundárias do topo, para o menu do celular.
+   *
+   * São as mesmas de sempre, chamando as mesmas funções — só deixam de disputar
+   * largura com a busca numa tela de 360, onde cinco botões lado a lado não
+   * cabem de jeito nenhum.
+   */
+  const ehCelular = useEhCelular()
+
+  const ferramentas: AcaoMenu[] = [
+    ...(ehDono
+      ? [
+          {
+            rotulo: 'Categorias',
+            icone: <Tag className="w-4 h-4" />,
+            onSelecionar: () => setModalCategoriasAberto(true)
+          },
+          {
+            rotulo: 'Notas de entrada',
+            icone: <FileText className="w-4 h-4" />,
+            onSelecionar: () => setNotasEntradaAberto(true)
+          },
+          {
+            rotulo: 'Importar XML',
+            icone: <FileUp className="w-4 h-4" />,
+            onSelecionar: () => setImportarXmlAberto(true)
+          }
+        ]
+      : []),
+    {
+      rotulo: 'Imprimir',
+      icone: <Printer className="w-4 h-4" />,
+      desabilitada: lista.length === 0,
+      onSelecionar: () => setRelatorioAberto(true)
+    }
+  ]
+
   return (
-    <div className="p-8">
-      <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="p-4 lg:p-8">
+      {/*
+        ⚠️ O cabeçalho sai no celular, como no Painel e em Clientes: a pílula
+        acesa na ilha já diz onde você está, e o título de 24px mais o parágrafo
+        gastavam meia tela antes do primeiro produto aparecer.
+      */}
+      <div className="hidden lg:flex items-start justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <Package className="w-6 h-6 text-primary" />
@@ -478,7 +522,7 @@ const Produtos: FC = () => {
       </div>
 
       {/* Busca + Leitor USB */}
-      <div className="flex gap-3 mb-4 max-w-xl">
+      <div className="flex items-center gap-2 mb-3 lg:gap-3 lg:mb-4 lg:max-w-xl">
         <div className="relative flex-1" data-tour="produtos-busca">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -488,7 +532,30 @@ const Produtos: FC = () => {
             className="pl-9"
           />
         </div>
-        <div className="relative" data-tour="produtos-leitor">
+        {/*
+          No celular as ferramentas do topo viram menu, e o "novo produto" fica
+          como botão — é o que se faz ao abrir esta tela.
+        */}
+        <div className="lg:hidden">
+          <MenuAcoes rotulo="Ferramentas de produtos" acoes={ferramentas} />
+        </div>
+        {ehDono && (
+          <Button
+            onClick={abrirNovo}
+            className="lg:hidden h-11 w-11 shrink-0 p-0"
+            aria-label="Novo produto"
+            title="Novo produto"
+          >
+            <Plus className="w-5 h-5" />
+          </Button>
+        )}
+        {/*
+          ⚠️ O leitor USB some no celular, e é a única coisa escondida nesta
+          tela. Ele é uma caixa de entrada para um leitor de código de barras
+          ligado por USB — telefone não tem um. Não carrega dado nenhum: nada
+          some de vista, só deixa de ocupar 208px de uma tela de 360.
+        */}
+        <div className="relative hidden lg:block" data-tour="produtos-leitor">
           <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             ref={inputScanRef}
@@ -501,128 +568,265 @@ const Produtos: FC = () => {
         </div>
       </div>
 
-      {/* Tabela */}
-      <div className="border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground w-16">Ref.</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Código</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Categoria</th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Preço</th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Fornecedor</th>
-              <th className="w-24 px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {listaFiltrada.length === 0 && (
-              <tr>
-                <td colSpan={8}>
-                  <EstadoVazio
-                    icone={<Package className="w-9 h-9" />}
-                    dica={busca ? 'Tente outro nome, código ou referência.' : 'Cadastre o primeiro produto para começar.'}
-                  >
-                    {busca ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
-                  </EstadoVazio>
-                </td>
-              </tr>
-            )}
-            {listaPaginada.map((p, i) => {
+      {/*
+        ⭐ No celular a tabela vira LISTA (roteiro §6), mesmo padrão de Clientes.
+
+        Oito colunas não cabem em 360px. A linha vira um item de duas alturas:
+        nome em cima, e embaixo os identificadores à esquerda com estoque e
+        preço à direita, alinhados em coluna de um item para o outro.
+
+        ⚠️ Sem avatar aqui, ao contrário de Clientes: produto não tem iniciais,
+        e os 36px do círculo sairiam do nome, que é o único jeito de reconhecer
+        um produto numa lista.
+
+        ⚠️ A tabela não é escondida por classe, ela não é RENDERIZADA: com
+        `hidden lg:table` as vinte linhas da página existiriam duas vezes no DOM.
+
+        ⚠️ A grade de tamanhos continua abrindo pelo mesmo botão e mostrando as
+        mesmas variações — ela só deixa de ser uma linha de tabela e passa a ser
+        um bloco dentro do próprio item.
+      */}
+      {ehCelular ? (
+        listaFiltrada.length === 0 ? (
+          <div className="border rounded-xl bg-card">
+            <EstadoVazio
+              icone={<Package className="w-9 h-9" />}
+              dica={busca ? 'Tente outro nome, código ou referência.' : 'Cadastre o primeiro produto para começar.'}
+            >
+              {busca ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
+            </EstadoVazio>
+          </div>
+        ) : (
+          <ul className="border rounded-xl bg-card divide-y">
+            {listaPaginada.map((p) => {
               const temGrade = p.variacoes.length > 0
               const aberto = expandido === p.id
+              const corEstoque =
+                p.estoque === 0 ? 'text-critical' : p.estoque <= 5 ? 'text-warn' : 'text-muted-foreground'
+              const identificadores = [
+                p.referencia ? `ref ${p.referencia}` : null,
+                temGrade ? null : p.codigo_barras,
+                p.categoria,
+                p.fornecedor_nome
+              ]
+                .filter(Boolean)
+                .join(' · ')
               return (
-              <Fragment key={p.id}>
-              <tr
-                className={`border-b border-border last:border-b-0 ${
-                  saidaLinha.estaSaindo(String(p.id)) ? 'anim-linha-sai' : ''
-                } ${
-                  i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
-                }`}
-              >
-                <td className="px-4 py-3 font-mono text-xs font-semibold">
-                  {p.referencia ?? '—'}
-                </td>
-                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                  {temGrade ? (
-                    <button
-                      type="button"
-                      onClick={() => setExpandido(aberto ? null : p.id)}
-                      className="flex items-center gap-1 text-primary hover:underline"
-                      title="Ver tamanhos"
-                    >
-                      {aberto ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                      <Layers className="w-3.5 h-3.5" />
-                      {p.variacoes.length} tam.
-                    </button>
-                  ) : (
-                    <div className="truncate max-w-[95px] 2xl:max-w-[130px]" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
-                  )}
-                </td>
-                <td className="px-4 py-3 font-medium">
-                  <div className="truncate max-w-[205px] 2xl:max-w-[280px]" title={p.nome}>{p.nome}</div>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {p.categoria
-                    ? <div className="truncate max-w-[95px] 2xl:max-w-[140px]" title={p.categoria}>{p.categoria}</div>
-                    : '—'}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {p.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </td>
-                <td className={`px-4 py-3 text-right font-medium ${p.estoque === 0 ? 'text-destructive' : p.estoque <= 5 ? 'text-amber-600' : ''}`}>
-                  {p.estoque}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {p.fornecedor_nome
-                    ? <div className="truncate max-w-[95px] 2xl:max-w-[160px]" title={p.fornecedor_nome}>{p.fornecedor_nome}</div>
-                    : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  {ehDono && (
-                    <div className="flex gap-1 justify-end">
-                      <Button variant="ghost" size="icon" onClick={() => abrirEdicao(p)}>
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => excluir(p.id, p.nome)}
+                <li
+                  key={p.id}
+                  className={`px-3 py-2.5 ${saidaLinha.estaSaindo(String(p.id)) ? 'anim-linha-sai' : ''}`}
+                >
+                  {/*
+                    `minmax(0,1fr)` na coluna do meio é obrigatório: sem ele um
+                    nome longo estoura a grade em vez de cortar, e é assim que
+                    aparece rolagem horizontal onde não deveria haver nenhuma.
+                  */}
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[14.5px] font-semibold leading-tight" title={p.nome}>
+                        {p.nome}
+                      </p>
+                      {/*
+                        `min-w-0` no texto cinza e `shrink-0` nos números: quem
+                        cede espaço é o identificador, nunca o estoque nem o preço.
+                        E `num` põe a monoespaçada com `tabular-nums`, que alinha a
+                        vírgula de um item para o outro sem tabela nenhuma.
+                      */}
+                      <div className="mt-0.5 flex items-baseline gap-2">
+                        <p className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
+                          {identificadores || '—'}
+                        </p>
+                        <span className={`num shrink-0 text-[12.5px] font-medium ${corEstoque}`}>
+                          {p.estoque} un.
+                        </span>
+                        <span className="num shrink-0 text-[13.5px] font-semibold">
+                          {p.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {ehDono && (
+                      <div className="flex shrink-0 items-center">
+                        <MenuAcoes
+                          rotulo={`Ações de ${p.nome}`}
+                          acoes={[
+                            {
+                              rotulo: 'Editar',
+                              icone: <Pencil className="w-4 h-4" />,
+                              onSelecionar: () => abrirEdicao(p)
+                            },
+                            {
+                              rotulo: 'Excluir',
+                              icone: <Trash2 className="w-4 h-4" />,
+                              destrutiva: true,
+                              onSelecionar: () => excluir(p.id, p.nome)
+                            }
+                          ]}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {temGrade && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setExpandido(aberto ? null : p.id)}
+                        aria-expanded={aberto}
+                        className="mt-1 flex min-h-[36px] items-center gap-1.5 text-[12.5px] font-medium text-primary"
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-              {temGrade && aberto && (
-                <tr className="bg-muted/40 border-b border-border last:border-b-0">
-                  <td colSpan={8} className="px-4 py-2">
-                    <div className="flex flex-wrap gap-2">
-                      {p.variacoes.map((v) => (
-                        <div
-                          key={v.id}
-                          className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-1.5 text-xs"
-                        >
-                          <span className="font-semibold w-7 text-center">{v.tamanho}</span>
-                          <span className="font-mono text-muted-foreground">{v.codigo_barras}</span>
-                          <span className={`font-medium ${v.estoque === 0 ? 'text-destructive' : v.estoque <= 5 ? 'text-amber-600' : ''}`}>
-                            {v.estoque} un.
-                          </span>
+                        {aberto ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                        <Layers className="w-3.5 h-3.5" />
+                        {p.variacoes.length} tamanhos
+                      </button>
+                      {aberto && (
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {p.variacoes.map((v) => (
+                            <div
+                              key={v.id}
+                              className="flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-1 text-[11.5px]"
+                            >
+                              <span className="font-semibold">{v.tamanho}</span>
+                              <span className={`num font-medium ${
+                                v.estoque === 0 ? 'text-critical' : v.estoque <= 5 ? 'text-warn' : 'text-muted-foreground'
+                              }`}>
+                                {v.estoque} un.
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )
+      ) : (
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground w-16">Ref.</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Código</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Categoria</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Preço</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estoque</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Fornecedor</th>
+                <th className="w-24 px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {listaFiltrada.length === 0 && (
+                <tr>
+                  <td colSpan={8}>
+                    <EstadoVazio
+                      icone={<Package className="w-9 h-9" />}
+                      dica={busca ? 'Tente outro nome, código ou referência.' : 'Cadastre o primeiro produto para começar.'}
+                    >
+                      {busca ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado.'}
+                    </EstadoVazio>
                   </td>
                 </tr>
               )}
-              </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+              {listaPaginada.map((p, i) => {
+                const temGrade = p.variacoes.length > 0
+                const aberto = expandido === p.id
+                return (
+                <Fragment key={p.id}>
+                <tr
+                  className={`border-b border-border last:border-b-0 ${
+                    saidaLinha.estaSaindo(String(p.id)) ? 'anim-linha-sai' : ''
+                  } ${
+                    i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
+                  }`}
+                >
+                  <td className="px-4 py-3 font-mono text-xs font-semibold">
+                    {p.referencia ?? '—'}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                    {temGrade ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandido(aberto ? null : p.id)}
+                        className="flex items-center gap-1 text-primary hover:underline"
+                        title="Ver tamanhos"
+                      >
+                        {aberto ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                        <Layers className="w-3.5 h-3.5" />
+                        {p.variacoes.length} tam.
+                      </button>
+                    ) : (
+                      <div className="truncate max-w-[95px] 2xl:max-w-[130px]" title={p.codigo_barras ?? undefined}>{p.codigo_barras}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 font-medium">
+                    <div className="truncate max-w-[205px] 2xl:max-w-[280px]" title={p.nome}>{p.nome}</div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {p.categoria
+                      ? <div className="truncate max-w-[95px] 2xl:max-w-[140px]" title={p.categoria}>{p.categoria}</div>
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {p.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </td>
+                  <td className={`px-4 py-3 text-right font-medium ${p.estoque === 0 ? 'text-destructive' : p.estoque <= 5 ? 'text-amber-600' : ''}`}>
+                    {p.estoque}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {p.fornecedor_nome
+                      ? <div className="truncate max-w-[95px] 2xl:max-w-[160px]" title={p.fornecedor_nome}>{p.fornecedor_nome}</div>
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {ehDono && (
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => abrirEdicao(p)}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => excluir(p.id, p.nome)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+                {temGrade && aberto && (
+                  <tr className="bg-muted/40 border-b border-border last:border-b-0">
+                    <td colSpan={8} className="px-4 py-2">
+                      <div className="flex flex-wrap gap-2">
+                        {p.variacoes.map((v) => (
+                          <div
+                            key={v.id}
+                            className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-1.5 text-xs"
+                          >
+                            <span className="font-semibold w-7 text-center">{v.tamanho}</span>
+                            <span className="font-mono text-muted-foreground">{v.codigo_barras}</span>
+                            <span className={`font-medium ${v.estoque === 0 ? 'text-destructive' : v.estoque <= 5 ? 'text-amber-600' : ''}`}>
+                              {v.estoque} un.
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <Paginacao
         paginaAtual={paginaAtual}
         totalItens={listaFiltrada.length}

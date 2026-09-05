@@ -269,6 +269,83 @@ describe('tela 2 — Clientes no celular (roteiro §6)', () => {
   })
 })
 
+describe('tela 3 — Produtos no celular (roteiro §6)', () => {
+  const PRODUTOS = semComentarios(readFileSync(join(SRC, 'pages', 'Produtos.tsx'), 'utf8'))
+  const lista = PRODUTOS.slice(
+    PRODUTOS.indexOf('{ehCelular ? ('),
+    PRODUTOS.indexOf('border rounded-lg overflow-x-auto')
+  )
+
+  it('★ a tabela vira LISTA, e não existe duas vezes no DOM', () => {
+    // Oito colunas não cabem em 360px, e as três saídas comuns do §6 são todas
+    // ruins. ⚠️ A escolha é em JavaScript, e não por classe: com `hidden lg:table`
+    // as vinte linhas da página existiriam duas vezes no DOM.
+    expect(PRODUTOS).toContain('const ehCelular = useEhCelular()')
+    expect(PRODUTOS).toContain('{ehCelular ? (')
+    expect(PRODUTOS).not.toContain('hidden lg:table')
+    expect(lista).toContain('grid-cols-[minmax(0,1fr)_auto]')
+  })
+
+  it('★ estoque e preço não cedem espaço; o identificador cede', () => {
+    // Numa linha só, quem tem que encolher é o texto cinza — número cortado não
+    // é número. E `num` põe a monoespaçada, que alinha a vírgula de um item para
+    // o outro sem tabela nenhuma.
+    expect(lista).toContain('min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground')
+    expect(lista).toContain('num shrink-0 text-[12.5px] font-medium')
+    expect(lista).toContain('num shrink-0 text-[13.5px] font-semibold')
+  })
+
+  it('★ estoque zerado e baixo continuam gritando, e por token', () => {
+    // Era `text-destructive` / `text-amber-600` na tabela; na lista vem dos
+    // tokens, que têm tema escuro.
+    expect(lista).toContain("p.estoque === 0 ? 'text-critical' : p.estoque <= 5 ? 'text-warn'")
+  })
+
+  it('★ a grade de tamanhos continua abrindo, com as mesmas variações', () => {
+    // Ela só deixa de ser uma linha de tabela e passa a ser um bloco dentro do
+    // próprio item — mesmo botão, mesmo estado, mesmos dados.
+    expect(lista).toContain('setExpandido(aberto ? null : p.id)')
+    expect(lista).toContain('p.variacoes.map((v)')
+    expect(lista).toContain('{v.tamanho}')
+  })
+
+  it('★ as cinco ferramentas do topo cabem em 360px', () => {
+    /*
+     * Categorias, Notas de entrada, Importar XML e Imprimir viram menu; o
+     * "novo produto" fica como botão, porque é o que se faz ao abrir a tela.
+     *
+     * ⚠️ Nenhuma sumiu, e as de dono continuam só para o dono.
+     */
+    expect(PRODUTOS).toContain('const ferramentas: AcaoMenu[]')
+    for (const r of ['Categorias', 'Notas de entrada', 'Importar XML', 'Imprimir']) {
+      expect(PRODUTOS, `${r} sumiu do menu do celular`).toContain(`rotulo: '${r}'`)
+    }
+    expect(PRODUTOS).toContain('<MenuAcoes rotulo="Ferramentas de produtos"')
+    expect(PRODUTOS).toContain('lg:hidden h-11 w-11 shrink-0 p-0')
+  })
+
+  it('★ o leitor USB é a ÚNICA coisa escondida, e não carrega dado', () => {
+    /*
+     * Ele é uma caixa de entrada para um leitor de código de barras ligado por
+     * USB, e telefone não tem um. Nada some de vista: ele só deixa de ocupar
+     * 208px de uma tela de 360.
+     *
+     * ⚠️ Esconder COLUNA de dado com classe é o que o §6 proíbe, e continua
+     * proibido — por isso a lista mostra referência, código, categoria e
+     * fornecedor na linha de identificadores.
+     */
+    expect(PRODUTOS).toContain('relative hidden lg:block" data-tour="produtos-leitor"')
+    for (const campo of ['p.referencia', 'p.codigo_barras', 'p.categoria', 'p.fornecedor_nome']) {
+      expect(lista, `${campo} sumiu da linha sem aviso`).toContain(campo)
+    }
+  })
+
+  it('★ o respiro da página encolhe, e o cabeçalho grande sai', () => {
+    expect(PRODUTOS).toContain('<div className="p-4 lg:p-8">')
+    expect(PRODUTOS).toContain('hidden lg:flex items-start justify-between')
+  })
+})
+
 describe('a ilha de navegação do celular (roteiro §3)', () => {
   const ILHA = readFileSync(
     join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'BarraInferiorMobile.tsx'),
