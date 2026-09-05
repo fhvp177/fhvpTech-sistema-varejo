@@ -25,6 +25,7 @@ import ModalImportarXml from '@/components/ModalImportarXml'
 import ModalNotasEntrada from '@/components/ModalNotasEntrada'
 import { useSessao } from '@/App'
 import { useEhCelular } from '@/hooks/useEhCelular'
+import DicaRolante from '@/components/DicaRolante'
 import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 
 const ITENS_POR_PAGINA = 20
@@ -526,11 +527,14 @@ const Produtos: FC = () => {
         <div className="relative flex-1" data-tour="produtos-busca">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome, código, categoria..."
+            placeholder={ehCelular ? '' : 'Buscar por nome, código, categoria...'}
+            aria-label="Buscar por nome, código, categoria"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             className="pl-9"
           />
+          {/* A dica só existe com o campo vazio; ao digitar, some ela e o movimento. */}
+          {ehCelular && busca === '' && <DicaRolante texto="Buscar por nome, código, categoria" />}
         </div>
         {/*
           No celular as ferramentas do topo viram menu, e o "novo produto" fica

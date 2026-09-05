@@ -37,6 +37,7 @@ import ModalElevarPrivilegio from '@/components/ModalElevarPrivilegio'
 import ModalDevolucao from '@/components/ModalDevolucao'
 import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancelarVenda'
 import { useEhCelular } from '@/hooks/useEhCelular'
+import DicaRolante from '@/components/DicaRolante'
 import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 
 // Nota fiscal só existe no plano Pro. Com a flag falsa, o `lazy` vira null e o
@@ -632,11 +633,14 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
         <div className="relative flex-1 lg:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por cliente ou nº da venda..."
+            placeholder={ehCelular ? '' : 'Buscar por cliente ou nº da venda...'}
+            aria-label="Buscar por cliente ou nº da venda"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             className="pl-9"
           />
+          {/* A dica só existe com o campo vazio; ao digitar, some ela e o movimento. */}
+          {ehCelular && busca === '' && <DicaRolante texto="Buscar por cliente ou nº da venda" />}
         </div>
         {/*
           No celular o relatório do mês vira item de menu e a nova venda fica

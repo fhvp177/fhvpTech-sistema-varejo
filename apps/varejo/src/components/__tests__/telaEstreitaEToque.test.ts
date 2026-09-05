@@ -502,6 +502,56 @@ describe('tela 4 — Vendas no celular (roteiro §6)', () => {
   })
 })
 
+describe('a dica do campo de busca, que vai e volta', () => {
+  const CSS_DICA = CSS.slice(CSS.indexOf('.dica-rolante'))
+
+  it('★ ela anda exatamente o que sobra, e a frase que CABE fica parada', () => {
+    /*
+     * O quanto ela anda é `100cqw - 100%`: a largura da janela menos a largura
+     * do texto, resolvida pelo próprio navegador com consulta de contêiner —
+     * sem medir nada em JavaScript.
+     *
+     * ⚠️ O `min()` com zero é o que faz a frase curta ficar parada. Sem ele o
+     * valor fica POSITIVO e o texto anda para a direita, para fora da caixa.
+     * Medido no navegador: dica de 210px numa janela de 174 anda -35,6px; a de
+     * 44px numa janela de 278 fica em 0.
+     */
+    expect(CSS_DICA).toContain('container-type: inline-size')
+    expect(CSS_DICA).toContain('transform: translateX(min(0px, calc(100cqw - 100%)))')
+  })
+
+  it('★ ela para quando o campo tem foco, e não existe para quem pediu quieto', () => {
+    // Animar uma coisa que fica na tela o dia inteiro só se paga porque ela
+    // INFORMA: sem ela metade da frase é ilegível. Ainda assim, ninguém precisa
+    // de movimento no canto do olho enquanto digita.
+    expect(CSS_DICA).toContain('animation-play-state: paused')
+    const antes = CSS.slice(CSS.indexOf('@keyframes dica-vai-e-volta') - 500, CSS.indexOf('@keyframes dica-vai-e-volta'))
+    expect(antes).toContain('prefers-reduced-motion: no-preference')
+  })
+
+  it('★ as três buscas trocam o placeholder pela dica, e ganham nome acessível', () => {
+    /*
+     * ⚠️ O `placeholder` é pseudo-elemento: não rola nem anima. Por isso ele sai
+     * no celular e entra a dica, que é elemento de verdade.
+     *
+     * ⚠️ E por isso o `aria-label` passa a carregar a frase inteira: sem
+     * placeholder o campo ficaria sem nome nenhum para quem usa leitor de tela —
+     * e mesmo com a dica, ela é `aria-hidden`, porque ouvir uma frase que anda
+     * não ajuda ninguém.
+     */
+    for (const tela of ['Clientes', 'Produtos', 'Vendas']) {
+      const fonte = semComentarios(readFileSync(join(SRC, 'pages', `${tela}.tsx`), 'utf8'))
+      expect(fonte, `${tela}: o placeholder não dá lugar à dica no celular`)
+        .toMatch(/placeholder=\{ehCelular \? '' :/)
+      expect(fonte, `${tela}: campo de busca sem nome acessível`).toContain('aria-label="Buscar')
+      expect(fonte, `${tela}: a dica aparece com o campo já preenchido`)
+        .toContain("{ehCelular && busca === '' && <DicaRolante")
+    }
+    const DICA = readFileSync(join(SRC, 'components', 'DicaRolante.tsx'), 'utf8')
+    expect(DICA).toContain('aria-hidden="true"')
+  })
+})
+
 describe('a ilha de navegação do celular (roteiro §3)', () => {
   const ILHA = readFileSync(
     join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'BarraInferiorMobile.tsx'),

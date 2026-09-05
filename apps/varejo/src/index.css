@@ -511,6 +511,69 @@
     padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* ---------- a dica do campo de busca, que vai e volta ----------
+     "Buscar por cliente ou nº da venda..." tem 240px; o campo, numa tela de 360
+     dividida com um menu e um botão, tem 180. O navegador corta a frase e não há
+     como ler o resto — `placeholder` é pseudo-elemento, não rola nem anima. Então
+     no celular o campo fica sem `placeholder` e ganha esta dica por cima, que é
+     elemento de verdade e pode andar.
+
+     `left: 36px` acompanha o `pl-9` que abre espaço para a lupa.
+
+     ⚠️ `container-type: inline-size` é o que permite a conta sem JavaScript: o
+     `100cqw` lá embaixo é a largura DESTA caixa. */
+  [data-alvo='web'] .dica-rolante {
+    container-type: inline-size;
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    left: 36px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    pointer-events: none;
+    font-size: 14px;
+    color: hsl(var(--muted-foreground));
+  }
+
+  [data-alvo='web'] .dica-rolante > span {
+    white-space: nowrap;
+  }
+
+  /* ⚠️ O quanto ela anda é `100cqw - 100%`: a largura da janela menos a largura
+     do texto. O `min()` com zero é o que faz a frase que CABE ficar parada — sem
+     ele, texto curto andaria para a direita, para fora da caixa.
+
+     12s de ciclo com pausa nas duas pontas: ela informa, mas fica na tela o dia
+     inteiro e não pode virar um letreiro. E quem pediu menos movimento no
+     sistema não vê movimento nenhum — só o começo da frase, que é exatamente o
+     que havia antes desta regra existir. */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes dica-vai-e-volta {
+      0%,
+      12% {
+        transform: translateX(0);
+      }
+      50%,
+      62% {
+        transform: translateX(min(0px, calc(100cqw - 100%)));
+      }
+      100% {
+        transform: translateX(0);
+      }
+    }
+
+    [data-alvo='web'] .dica-rolante > span {
+      animation: dica-vai-e-volta 12s ease-in-out infinite;
+    }
+
+    /* Enquanto se digita, ninguém precisa de movimento no canto do olho. */
+    [data-alvo='web'] .relative:focus-within .dica-rolante > span {
+      animation-play-state: paused;
+    }
+  }
+
   /* ---------- o seletor de período, dentro do cartão do gráfico ----------
      Ele saiu do alto da página, onde era a primeira coisa a aparecer — uma
      barra cinza antes de qualquer número —, e foi morar no cartão que ele
