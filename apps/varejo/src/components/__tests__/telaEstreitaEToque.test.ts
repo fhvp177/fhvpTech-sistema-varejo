@@ -89,10 +89,11 @@ describe('tela 1 — o Painel no celular', () => {
   it('valores usam a monoespaçada que alinha a vírgula', () => {
     // Sem `tabular-nums` os algarismos têm larguras diferentes e a coluna dança
     // a cada linha (§6).
-    // O tamanho virou par responsivo (14 no celular, 15 no monitor); o que
-    // importa guardar é a monoespaçada, que é quem alinha a vírgula.
-    expect(PAINEL).toContain('className="num text-[14px] lg:text-[15px] text-critical"')
-    expect(PAINEL).toContain('text-[14px] lg:text-[15px] text-warn shrink-0')
+    // O tamanho é par responsível (14 no celular, 15 no monitor) e a cor agora
+    // vem do tipo da linha, já que atrasado e vence-hoje dividem a mesma fila.
+    // O que importa guardar é a monoespaçada, que é quem alinha a vírgula.
+    expect(PAINEL).toContain('num text-[14px] lg:text-[15px]')
+    expect(PAINEL).toContain("v.atrasado ? 'text-critical' : 'text-warn'")
   })
 
   it('★ nenhuma tabela, e nenhuma largura fixa de layout', () => {
@@ -107,12 +108,20 @@ describe('tela 1 — o Painel no celular', () => {
   it('a linha de cliente tem alvo de toque e não estoura com nome longo', () => {
     // `min-w-0` é a terceira causa de rolagem lateral: sem ele o nome se recusa
     // a encolher e empurra o valor para fora da tela.
+    // ⚠️ A janela é recortada pelo próprio `</button>`, e não por uma contagem
+    // de caracteres: um comentário a mais dentro da linha já fez a fatia parar
+    // antes do que ela precisava ver, e a guarda reprovou o código certo.
+    const inicioLinha = PAINEL.indexOf('Ver dívidas e parcelas do cliente')
     const linha = PAINEL.slice(
-      PAINEL.indexOf('Ver dívidas e parcelas em atraso') - 400,
-      PAINEL.indexOf('Ver dívidas e parcelas em atraso') + 400
+      PAINEL.lastIndexOf('<button', inicioLinha),
+      PAINEL.indexOf('</button>', inicioLinha)
     )
     expect(linha).toContain('min-h-[56px]')
-    expect(linha).toContain('min-w-0')
+    // ⚠️ O JSX inteiro, não a palavra solta: o comentário logo acima da linha
+    // explica por que o `min-w-0` existe e contém o termo. Procurando só o
+    // termo, esta guarda passava mesmo com o atributo apagado do código — foi
+    // uma mutacão sobrevivente que mostrou isso.
+    expect(linha).toContain('<div className="min-w-0">')
   })
 })
 
@@ -285,7 +294,7 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     // pessoa reabre todas — e aí recolher não economizou nada.
     const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
     expect(PAINEL).toContain('const CabecalhoAlerta')
-    expect(PAINEL).toContain('resumo={fmt(inadimplentes.reduce')
+    expect(PAINEL).toContain('resumo={fmt(totalVencimentos)}')
     // até 2 itens nasce aberto; do 3º em diante, fechado
     expect(PAINEL).toContain('quantos <= 2')
     // e no monitor ele nunca recolhe
@@ -385,6 +394,32 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     for (const degrau of ['> 14', '> 12', '> 9']) {
       expect(PAINEL, `degrau ${degrau} sumiu`).toContain(degrau)
     }
+  })
+
+  it('★ Vencimentos é UM cartão, e nenhuma das duas listas se perdeu', () => {
+    /*
+     * Os dois cartões viraram uma fila só, atrasado primeiro. O que não pode
+     * acontecer é a junção comer informação:
+     *
+     *   • as duas origens continuam na fila;
+     *   • cada linha continua dizendo A QUE GRUPO pertence por ESCRITO, e não
+     *     só pela cor — numa fila única, quem não distingue vermelho de âmbar
+     *     ficaria sem saber o que está atrasado;
+     *   • o mesmo cliente pode aparecer duas vezes, e está certo: uma linha é a
+     *     dívida velha, a outra é a parcela de hoje. Por isso a chave carrega a
+     *     origem, senão o React reclama de chave repetida e some com uma.
+     */
+    const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
+    expect(PAINEL).toContain('titulo="Vencimentos"')
+    expect(PAINEL).toContain('...inadimplentes.map')
+    expect(PAINEL).toContain('...vencendoHoje.map')
+    expect(PAINEL).toContain("detalhe: 'vence hoje'")
+    expect(PAINEL).toContain('em atraso desde ${fmtData(c.vencimento_mais_antigo)}')
+    expect(PAINEL).toContain('{v.detalhe}')
+    expect(PAINEL).toContain('chave: `atraso-${c.id}`')
+    expect(PAINEL).toContain('chave: `hoje-${c.id}`')
+    // a faixa do topo acompanha o pior caso
+    expect(PAINEL).toContain("temAtraso ? 'border-t-critical-fill' : 'border-t-warn'")
   })
 
   it('★ o Assistente NASCE fora do caminho, mas continua arrastável', () => {
