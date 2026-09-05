@@ -373,7 +373,7 @@ describe('o que fazia a página rolar de lado (§11)', () => {
      * Medido no navegador, em diálogo de 326px: com um nível, a linha ficava
      * com 334px dentro de um campo de 282. Com dois, 282.
      */
-    for (const tela of ['Produtos', 'Clientes']) {
+    for (const tela of ['Produtos', 'Clientes', 'Fornecedores']) {
       const fonte = semComentarios(readFileSync(join(SRC, 'pages', `${tela}.tsx`), 'utf8'))
       expect(fonte, `${tela}: o segundo nível do min-w-0 sumiu`).toContain('[&>*>*]:min-w-0')
     }
@@ -539,7 +539,7 @@ describe('a dica do campo de busca, que vai e volta', () => {
      * e mesmo com a dica, ela é `aria-hidden`, porque ouvir uma frase que anda
      * não ajuda ninguém.
      */
-    for (const tela of ['Clientes', 'Produtos', 'Vendas']) {
+    for (const tela of ['Clientes', 'Produtos', 'Vendas', 'Fornecedores']) {
       const fonte = semComentarios(readFileSync(join(SRC, 'pages', `${tela}.tsx`), 'utf8'))
       expect(fonte, `${tela}: o placeholder não dá lugar à dica no celular`)
         .toMatch(/placeholder=\{ehCelular \? '' :/)
@@ -650,6 +650,112 @@ describe('tela 6 — Mais', () => {
      */
     expect(MAIS).toContain('secoes }: { secoes: SecaoMais[] }')
     expect(APP).toContain('secoesVisiveis(')
+  })
+})
+
+describe('tela 7 — Fornecedores no celular (roteiro §6)', () => {
+  const FORN = semComentarios(readFileSync(join(SRC, 'pages', 'Fornecedores.tsx'), 'utf8'))
+  // ⚠️ A fatia para no começo do ramo do monitor: indo até a paginação ela
+  // passaria pela tabela do desktop e veria coisas que só existem lá.
+  const lista = FORN.slice(
+    FORN.indexOf('{ehCelular ? ('),
+    FORN.indexOf('border rounded-lg overflow-x-auto')
+  )
+
+  it('★ a tabela vira LISTA, e não existe duas vezes no DOM', () => {
+    /*
+     * Esta tela nunca tinha passado pela reforma: quatro colunas num
+     * `overflow-x-auto`, que é a pior das saídas — obriga a arrastar o dedo de
+     * lado linha por linha, e ninguém compara dois fornecedores assim.
+     *
+     * ⚠️ E a escolha é em JavaScript, não por classe: com `hidden lg:table` as
+     * vinte linhas da página existiriam DUAS vezes no DOM.
+     */
+    expect(FORN).toContain('const ehCelular = useEhCelular()')
+    expect(FORN).toContain('{ehCelular ? (')
+    expect(FORN).not.toContain('hidden lg:table')
+    expect(lista.length, 'a fatia do celular ficou vazia — a varredura quebrou')
+      .toBeGreaterThan(500)
+  })
+
+  it('★ o item da lista tem a grade que impede rolagem lateral', () => {
+    // `minmax(0,1fr)` na coluna do meio é obrigatório: sem ele um nome longo
+    // estoura a grade em vez de cortar, e a página inteira passa a rolar de lado
+    // (§11). O `truncate` sozinho não resolve — ele precisa de uma coluna que
+    // aceite encolher.
+    expect(lista).toContain('grid-cols-[auto_minmax(0,1fr)_auto]')
+    expect(lista).toContain('<div className="min-w-0">')
+    expect(lista).toContain('<div className="flex shrink-0 items-center">')
+    /*
+     * ⚠️ Na segunda linha quem cede espaço é o texto cinza e nunca o
+     * telefone: `min-w-0 flex-1 truncate` no primeiro, `shrink-0` no segundo.
+     *
+     * ⚠️ E é o TELEFONE que fica no slot fixo, não o CNPJ. Foi o contrário
+     * na primeira tentativa e a régua de 360px reprovou: o CNPJ tomava 124px
+     * e sobravam 66 para o contato, com o telefone saindo pela metade. Com o
+     * telefone na direita ele ocupa 115 e nunca corta; ao CNPJ sobram 75, que
+     * mostram a raiz de 8 dígitos — o pedaço que identifica.
+     */
+    expect(lista).toContain('className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground"')
+    expect(lista).toContain('className="num shrink-0 text-[12px] text-muted-foreground"')
+    expect(lista, 'o telefone voltou para o texto que corta').toContain('{f.telefone && (')
+    expect(lista, 'o CNPJ voltou para o slot fixo e come o telefone de novo')
+      .not.toContain('{f.cnpj && (')
+  })
+
+  it('★ nenhum comando se perdeu na virada de tabela para lista', () => {
+    // Editar e excluir continuam sendo os mesmos dois, chamando as mesmas
+    // funções da tabela do monitor. A forma mudou; o que a tela FAZ, não.
+    expect(lista).toContain('<MenuAcoes')
+    expect(lista).toContain('abrirEdicao(f)')
+    expect(lista).toContain('excluir(f.id, f.nome)')
+  })
+
+  it('★ quem não é dono não vê um gatilho que abre nada', () => {
+    /*
+     * No monitor a célula de ações fica vazia para o vendedor. Aqui as duas
+     * ações são do dono, então sem dono a lista de ações fica vazia — e um
+     * menu de três pontinhos que abre um painel vazio é pior do que menu nenhum.
+     */
+    expect(lista, 'as ações deixaram de depender do dono').toContain('ehDono')
+    expect(lista, 'o menu aparece mesmo sem ação nenhuma dentro')
+      .toContain('{acoes.length > 0 && (')
+  })
+
+  it('★ a bolinha é a MESMA de Clientes, e vem de um lugar só', () => {
+    /*
+     * O pedido foi, com estas palavras: "deixe parecido com a de clientes".
+     * As duas funções da bolinha subiram para `utils/avatarNome` justamente
+     * para que as duas telas não divirjam na primeira cor que alguém trocar.
+     *
+     * ⚠️ A cor sorteada por nome é escolha do dono, contra o §6 do roteiro.
+     * A pergunta já foi feita e respondida: não desfazer citando o roteiro.
+     */
+    const CLI = readFileSync(join(SRC, 'pages', 'Clientes.tsx'), 'utf8')
+    for (const [tela, fonte] of [['Fornecedores', FORN], ['Clientes', CLI]] as const) {
+      expect(fonte, `${tela}: a bolinha voltou a ser declarada na própria tela`)
+        .toContain("from '@/utils/avatarNome'")
+    }
+    expect(lista).toContain('corDoNome(f.nome)')
+    expect(lista).toContain('iniciaisDoNome(f.nome)')
+  })
+
+  it('★ o cabeçalho sai e o "+" fica, com 44px de alvo', () => {
+    /*
+     * O título de 24px mais o parágrafo de duas linhas gastavam meia tela antes
+     * do primeiro fornecedor aparecer; quem chegou aqui veio de
+     * "Mais › Fornecedores" e sabe onde está.
+     *
+     * O botão de texto dá lugar ao quadrado ao lado da busca — e continua
+     * escondido de quem não é dono, como o de texto sempre esteve.
+     */
+    expect(FORN).toContain('<div className="p-4 lg:p-8">')
+    expect(FORN).toContain('<div className="hidden lg:flex items-start justify-between gap-4 mb-6">')
+    expect(FORN).toContain('className="lg:hidden h-11 w-11 shrink-0 p-0"')
+    expect(FORN).toContain('aria-label="Novo fornecedor"')
+    const topo = FORN.slice(0, FORN.indexOf('{ehCelular ? ('))
+    expect(topo, 'o "+" do celular passou a aparecer para o vendedor')
+      .toMatch(/\{ehDono && \(\s*<Button\s+onClick=\{abrirNovo\}\s+className="lg:hidden/)
   })
 })
 

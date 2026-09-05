@@ -23,6 +23,7 @@ import { useSessao } from '@/App'
 import { useEhCelular } from '@/hooks/useEhCelular'
 import DicaRolante from '@/components/DicaRolante'
 import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
+import { corDoNome, iniciaisDoNome } from '@/utils/avatarNome'
 
 const ITENS_POR_PAGINA = 20
 
@@ -44,26 +45,6 @@ type Cliente = {
 
 const fmtMoeda = (valor: number) =>
   valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-
-// Iniciais para a "fotinha" do cliente: 1ª letra do primeiro nome + 1ª do
-// último (ou as 2 primeiras letras, se for um nome só).
-const iniciaisDoNome = (nome: string): string => {
-  const partes = nome.trim().split(/\s+/).filter(Boolean)
-  if (partes.length === 0) return '?'
-  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase()
-  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
-}
-
-// Cor estável por nome — o mesmo cliente cai sempre na mesma cor.
-const CORES_AVATAR = [
-  'bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-violet-500',
-  'bg-pink-500', 'bg-cyan-500', 'bg-orange-500', 'bg-teal-500', 'bg-indigo-500'
-]
-const corDoNome = (nome: string): string => {
-  let h = 0
-  for (let i = 0; i < nome.length; i++) h = (Math.imul(h, 31) + nome.charCodeAt(i)) | 0
-  return CORES_AVATAR[Math.abs(h) % CORES_AVATAR.length]
-}
 
 type FormCliente = {
   nome: string
