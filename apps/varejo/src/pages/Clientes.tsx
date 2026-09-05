@@ -356,7 +356,14 @@ const Clientes: FC = () => {
     new Date(iso).toLocaleDateString('pt-BR')
 
   return (
-    <div className="p-4 lg:p-8">
+    {/*
+      `entrada-escalonada`: os blocos sobem e aparecem um após o outro, a
+      mesma entrada do Painel. Foi pedido com estas palavras: "o fade dos
+      itens aparecendo só acontece no painel inicial e nas configurações,
+      consegue fazer isso também aparecer para a tela de produtos e
+      clientes?". Só no celular, e só para quem não pediu menos movimento.
+    */}
+    <div className="entrada-escalonada p-4 lg:p-8">
       {/*
         ⚠️ O cabeçalho sai no celular, como no Painel: a pílula acesa na ilha já
         diz que você está em Clientes, e o título de 24px mais o parágrafo de duas

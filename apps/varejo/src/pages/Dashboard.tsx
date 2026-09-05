@@ -300,7 +300,7 @@ const Dashboard: FC = () => {
   return (
     /* `entrada-escalonada`: os blocos sobem e aparecem um após o outro, uma
        vez só, na abertura. Ver §10 no index.css. */
-    <div className="entrada-escalonada p-4 lg:p-8">
+    <div className="entrada-escalonada ordem-painel p-4 lg:p-8">
       {/*
         ⭐ No celular este cabeçalho inteiro não existe: o título já sai (a pílula
         acesa na ilha diz onde você está) e o filtro de período foi morar dentro

@@ -261,7 +261,7 @@ describe('tela 2 — Clientes no celular (roteiro §6)', () => {
 
   it('★ o respiro da página encolhe no celular, e o do monitor fica', () => {
     // 32px de cada lado numa tela de 360 é 18% da largura em margem.
-    expect(CLIENTES).toContain('<div className="p-4 lg:p-8">')
+    expect(CLIENTES).toContain('<div className="entrada-escalonada p-4 lg:p-8">')
     // e o título que repete o nome da aba sai, como no Painel
     expect(CLIENTES).toContain('hidden lg:flex items-start justify-between')
     // o "novo cliente" vira botão de 44 ao lado da busca
@@ -341,7 +341,7 @@ describe('tela 3 — Produtos no celular (roteiro §6)', () => {
   })
 
   it('★ o respiro da página encolhe, e o cabeçalho grande sai', () => {
-    expect(PRODUTOS).toContain('<div className="p-4 lg:p-8">')
+    expect(PRODUTOS).toContain('<div className="entrada-escalonada p-4 lg:p-8">')
     expect(PRODUTOS).toContain('hidden lg:flex items-start justify-between')
   })
 })
@@ -749,7 +749,7 @@ describe('tela 7 — Fornecedores no celular (roteiro §6)', () => {
      * O botão de texto dá lugar ao quadrado ao lado da busca — e continua
      * escondido de quem não é dono, como o de texto sempre esteve.
      */
-    expect(FORN).toContain('<div className="p-4 lg:p-8">')
+    expect(FORN).toContain('<div className="entrada-escalonada p-4 lg:p-8">')
     expect(FORN).toContain('<div className="hidden lg:flex items-start justify-between gap-4 mb-6">')
     expect(FORN).toContain('className="lg:hidden h-11 w-11 shrink-0 p-0"')
     expect(FORN).toContain('aria-label="Novo fornecedor"')
@@ -757,6 +757,114 @@ describe('tela 7 — Fornecedores no celular (roteiro §6)', () => {
     expect(topo, 'o "+" do celular passou a aparecer para o vendedor')
       .toMatch(/\{ehDono && \(\s*<Button\s+onClick=\{abrirNovo\}\s+className="lg:hidden/)
   })
+})
+
+describe('a rolagem chega ao fim na primeira vez', () => {
+  it('★ a casca mede a altura que se VÊ, não 100vh', () => {
+    /*
+     * ⚠️ Ele reclamou DUAS vezes: "a primeira rolagem não vai até embaixo,
+     * preciso rolar de novo". Na segunda a reserva do rodapé já estava em 104px
+     * com 24 de folga MEDIDOS — ou seja, não era a reserva, e mexer nela de novo
+     * seria tempo perdido.
+     *
+     * A causa é a unidade: `h-screen` é `height: 100vh`, e no celular `100vh` não
+     * é o que se vê. É a altura da janela com a barra do navegador RECOLHIDA (o
+     * "large viewport"). Com a barra na tela, a casca fica mais alta que a área
+     * visível e o fim do `<main>` cai atrás dela: o primeiro deslizar recolhe a
+     * barra em vez de terminar a rolagem, e só o segundo mostra o resto.
+     *
+     * `100dvh` mede o visível de agora. O `100vh` fica ANTES, como reserva para
+     * navegador que não conheça a unidade — a ordem importa: invertida, o
+     * navegador moderno ficaria com o valor errado.
+     */
+    const movel = CSS.slice(CSS.indexOf('@media (max-width: 1023.98px)'))
+    expect(movel).toMatch(/\.casca-app \{\s*height: 100vh;\s*height: 100dvh;/)
+    expect(APP, 'a casca perdeu o nome pelo qual o CSS a alcança')
+      .toContain('className="casca-app flex h-screen bg-background"')
+  })
+})
+
+describe('o interruptor de liga/desliga', () => {
+  // Sem comentarios: o cabecalho do componente EXPLICA por que ele deixou de
+  // ser `rounded-full`, e a guarda casava com a palavra dentro da explicacao.
+  const INTERRUPTOR = semComentarios(
+    readFileSync(
+      join(SRC, '..', '..', '..', 'packages', 'core', 'src', 'ui', 'interruptor.tsx'),
+      'utf8'
+    )
+  )
+
+  it('★ deixou de ser uma cápsula com bolinha dentro', () => {
+    /*
+     * Pedido do dono, olhando a tela: "os botões switches de backup automático e
+     * backup a cada venda estão estranhos, muito redondos. (Não só na tela de
+     * configurações, mas praticamente todos os switches do site estão assim)".
+     *
+     * Com trilho e botão os dois em `rounded-full` o controle vira uma cápsula
+     * com uma bolinha dentro — a mesma forma do avatar do cliente e da pílula da
+     * ilha, que são outras coisas.
+     */
+    expect(INTERRUPTOR).toContain('rounded-md')
+    expect(INTERRUPTOR).toContain('rounded-[4px]')
+    expect(INTERRUPTOR, 'o interruptor voltou a ser redondo').not.toContain('rounded-full')
+  })
+
+  it('★ o dedo alcança 44px sem engordar a linha', () => {
+    /*
+     * O desenho tem 24px de altura e o §7 pede 44. Quem cresce é a ÁREA DE
+     * TOQUE, num pseudo-elemento: 24 + 10 acima + 10 abaixo. Aumentar o botão de
+     * verdade engordaria em 20px cada linha de configuração, por nada.
+     */
+    expect(INTERRUPTOR).toContain('after:-inset-y-2.5')
+    expect(INTERRUPTOR).toContain("after:content-['']")
+    expect(INTERRUPTOR).toContain('h-6 w-11')
+  })
+
+  it('★ nenhuma tela desenha o próprio interruptor à mão', () => {
+    /*
+     * Eram NOVE cópias das mesmas dez classes, espalhadas pelos dois nichos. É
+     * por isso que "muito redondos" era um defeito em nove lugares e não um.
+     *
+     * A varredura vale os dois apps de propósito: o controle é o mesmo código
+     * copiado, e consertar só um lado os faria divergir para sempre.
+     */
+    const raiz = join(SRC, '..', '..', '..')
+    const sobras: string[] = []
+    const varrer = (dir: string): void => {
+      for (const nome of readdirSync(dir)) {
+        if (nome === 'node_modules' || nome === 'dist' || nome.startsWith('.')) continue
+        const caminho = join(dir, nome)
+        if (statSync(caminho).isDirectory()) varrer(caminho)
+        else if (nome.endsWith('.tsx') && !nome.endsWith('interruptor.tsx')) {
+          if (readFileSync(caminho, 'utf8').includes('inline-flex h-6 w-11')) sobras.push(caminho)
+        }
+      }
+    }
+    for (const app of ['apps', 'packages']) varrer(join(raiz, app))
+    expect(sobras, 'interruptor desenhado à mão — use o do core').toEqual([])
+  })
+})
+
+describe('a entrada escalonada das telas de lista', () => {
+  it('★ as telas de lista entram escalonadas, como o Painel', () => {
+    /*
+     * Pedido dele: "o 'fade' dos itens aparecendo só acontece no painel inicial
+     * e nas configurações, consegue fazer isso também aparecer para a tela de
+     * produtos e clientes?".
+     *
+     * ⚠️ A classe leva SÓ a animação. O `display: flex` que o Painel usa para
+     * reordenar mudou-se para `.ordem-painel` justamente para não virar layout
+     * de coluna nestas telas, que não reordenam nada.
+     */
+    for (const tela of ['Clientes', 'Produtos', 'Fornecedores']) {
+      const fonte = semComentarios(readFileSync(join(SRC, 'pages', `${tela}.tsx`), 'utf8'))
+      expect(fonte, `${tela}: a página não entra escalonada`)
+        .toContain('<div className="entrada-escalonada p-4 lg:p-8">')
+      expect(fonte, `${tela}: levou junto a ordem do Painel, que não é dela`)
+        .not.toContain('ordem-painel')
+    }
+  })
+
 })
 
 describe('aba carregada sob demanda depois de um deploy', () => {
@@ -1181,8 +1289,19 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     const movel = CSS.slice(CSS.indexOf('@media (max-width: 1023.98px)'))
     expect(movel).toContain('.ordem-vencimentos { order: -2 }')
     expect(movel).toContain('.ordem-grafico { order: -1 }')
-    // sem o flex no Painel, `order` não vale nada
-    expect(movel).toMatch(/\.entrada-escalonada \{\s*display: flex;\s*flex-direction: column;/)
+    /*
+     * Sem o flex no Painel, `order` não vale nada.
+     *
+     * ⚠️ E ele mora numa classe PRÓPRIA, `.ordem-painel`, não mais em
+     * `.entrada-escalonada`. As duas coisas viajavam juntas e quem quisesse só
+     * a entrada levava junto um `display: flex` que não pediu — exatamente o
+     * caso de Produtos e Clientes, que ganharam a entrada e não reordenam nada.
+     */
+    expect(movel).toMatch(/\.ordem-painel \{\s*display: flex;\s*flex-direction: column;/)
+    expect(movel, 'o flex voltou para a classe da animação e vaza para outras telas')
+      .not.toMatch(/\.entrada-escalonada \{\s*display: flex/)
+    expect(PAINEL, 'o Painel perdeu a classe que faz o `order` valer')
+      .toContain('entrada-escalonada ordem-painel')
     // e sem o `display: contents` o Top 5 subiria junto
     expect(movel).toMatch(/\.par-grafico \{\s*display: contents;/)
   })

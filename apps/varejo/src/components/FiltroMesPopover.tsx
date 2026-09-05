@@ -1,6 +1,7 @@
 import { FC, useEffect, useRef, useState } from 'react'
 import { CalendarDays, RotateCcw } from 'lucide-react'
 import { Select } from '@fhvptech/core/ui/select'
+import { Interruptor } from '@fhvptech/core/ui/interruptor'
 
 const MESES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -136,21 +137,11 @@ const FiltroMesPopover: FC<Props> = ({
 
           <div className="flex items-center justify-between py-3 mt-3 border-t border-b">
             <span className="text-sm">Comparar com outro mês</span>
-            <button
-              type="button"
-              onClick={alternarComparar}
-              role="switch"
-              aria-checked={draftComparar}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                draftComparar ? 'bg-primary' : 'bg-muted-foreground/30'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  draftComparar ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            <Interruptor
+              ligado={draftComparar}
+              onAlternar={alternarComparar}
+              rotulo="Comparar com outro mês"
+            />
           </div>
 
           {draftComparar ? (

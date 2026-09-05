@@ -595,7 +595,7 @@ const App: FC = () => {
               {__ALVO__ === 'web' && (
                 <GuardaDoVoltar pdvAtivo={pdvAtivo} setPdvAtivo={setPdvAtivo} />
               )}
-              <div className="flex h-screen bg-background">
+              <div className="casca-app flex h-screen bg-background">
                 {!pdvAtivo && (
                   <Sidebar
                     diasRestantes={diasRestantes}

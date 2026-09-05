@@ -12,6 +12,7 @@ import ConfigImpressao from '@/components/ConfigImpressao'
 import ConfigMulticaixa from '@/components/ConfigMulticaixa'
 import CidadeSeletor from '@/components/CidadeSeletor'
 import SecaoConfig from '@/components/SecaoConfig'
+import { Interruptor } from '@fhvptech/core/ui/interruptor'
 import ConfigModulos from '@/components/ConfigModulos'
 import { useOnboarding, useNovidades, useTour, useLock, useModulos } from '@/App'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
@@ -457,19 +458,13 @@ const Configuracoes: FC = () => {
                     Mostra a logo no topo do cupom e do comprovante de devolução.
                   </p>
                 </div>
-                <button
-                  onClick={() => atualizarLoja('exibir_logo', !loja.exibir_logo)}
-                  disabled={!loja.logo}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ml-4 disabled:opacity-40 ${
-                    loja.exibir_logo ? 'bg-primary' : 'bg-muted-foreground/30'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      loja.exibir_logo ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
+                <Interruptor
+                  ligado={!!loja.exibir_logo}
+                  onAlternar={(v) => atualizarLoja('exibir_logo', v)}
+                  desabilitado={!loja.logo}
+                  rotulo="Exibir logo nos cupons"
+                  className="ml-4"
+                />
               </div>
 
               {/* Só faz sentido depois que a logo existe E está ligada — por
@@ -485,11 +480,7 @@ const Configuracoes: FC = () => {
                     não muda: lá o nome em texto é o que sempre sai legível.
                   </p>
                 </div>
-                <button
-                  onClick={() =>
-                    atualizarLoja('logo_no_lugar_do_nome', !loja.logo_no_lugar_do_nome)
-                  }
-                  disabled={!loja.logo || !loja.exibir_logo}
+                <span
                   title={
                     !loja.logo
                       ? 'Envie uma logo primeiro.'
@@ -497,16 +488,15 @@ const Configuracoes: FC = () => {
                         ? 'Ligue "Exibir logo" primeiro.'
                         : undefined
                   }
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ml-4 disabled:opacity-40 ${
-                    loja.logo_no_lugar_do_nome ? 'bg-primary' : 'bg-muted-foreground/30'
-                  }`}
+                  className="ml-4 inline-flex"
                 >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      loja.logo_no_lugar_do_nome ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                  <Interruptor
+                    ligado={!!loja.logo_no_lugar_do_nome}
+                    onAlternar={(v) => atualizarLoja('logo_no_lugar_do_nome', v)}
+                    desabilitado={!loja.logo || !loja.exibir_logo}
+                    rotulo="Usar a logo no lugar do nome"
                   />
-                </button>
+                </span>
               </div>
             </div>
 
@@ -713,18 +703,7 @@ const Configuracoes: FC = () => {
             <p className="font-medium text-sm">Backup automático</p>
             <p className="text-xs text-muted-foreground mt-0.5">Habilita backups periódicos e ao fechar o sistema</p>
           </div>
-          <button
-            onClick={() => setAtivo(!ativo)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              ativo ? 'bg-primary' : 'bg-muted-foreground/30'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                ativo ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
+          <Interruptor ligado={ativo} onAlternar={setAtivo} rotulo="Backup automático" />
         </div>
 
         {/* Frequência */}
@@ -753,18 +732,12 @@ const Configuracoes: FC = () => {
               Cria um backup em segundo plano após cada venda concluída. Mantém apenas os 30 mais recentes para não inchar o disco.
             </p>
           </div>
-          <button
-            onClick={() => setPorVenda(!porVenda)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0 ml-4 ${
-              porVenda ? 'bg-primary' : 'bg-muted-foreground/30'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                porVenda ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
+          <Interruptor
+            ligado={porVenda}
+            onAlternar={setPorVenda}
+            rotulo="Fazer backup também a cada venda"
+            className="ml-4"
+          />
         </div>
 
         {/* Ao fechar */}

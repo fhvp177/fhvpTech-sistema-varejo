@@ -13,6 +13,7 @@ import ConfigImpressao from '@/components/ConfigImpressao'
 import ConfigMulticaixa from '@/components/ConfigMulticaixa'
 import CidadeSeletor from '@/components/CidadeSeletor'
 import SecaoConfig from '@/components/SecaoConfig'
+import { Interruptor } from '@fhvptech/core/ui/interruptor'
 import { useOnboarding, useNovidades, useTour, useLock } from '@/App'
 import { obterDadosLoja, redimensionarLogo, type DadosLoja } from '@/utils/dadosLoja'
 import type { EstadoMulticaixa } from '@/types/multicaixa'
@@ -473,19 +474,13 @@ const Configuracoes: FC = () => {
                     Mostra a logo no topo do cupom e do comprovante de devolução.
                   </p>
                 </div>
-                <button
-                  onClick={() => atualizarLoja('exibir_logo', !loja.exibir_logo)}
-                  disabled={!loja.logo}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ml-4 disabled:opacity-40 ${
-                    loja.exibir_logo ? 'bg-primary' : 'bg-muted-foreground/30'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      loja.exibir_logo ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
+                <Interruptor
+                  ligado={!!loja.exibir_logo}
+                  onAlternar={(v) => atualizarLoja('exibir_logo', v)}
+                  desabilitado={!loja.logo}
+                  rotulo="Exibir logo nos cupons"
+                  className="ml-4"
+                />
               </div>
             </div>
 
@@ -678,22 +673,14 @@ const Configuracoes: FC = () => {
             <p className="font-medium text-sm">Backup automático</p>
             <p className="text-xs text-muted-foreground mt-0.5">Habilita backups periódicos e ao fechar o sistema</p>
           </div>
-          <button
-            onClick={() => {
-              const novo = !ativo
+          <Interruptor
+            ligado={ativo}
+            onAlternar={(novo) => {
               setAtivo(novo)
               gravarPreferencia('backup_ativo', novo ? '1' : '0', () => setAtivo(ativo))
             }}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              ativo ? 'bg-primary' : 'bg-muted-foreground/30'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                ativo ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
+            rotulo="Backup automático"
+          />
         </div>
 
         {/* Frequência */}
@@ -726,22 +713,15 @@ const Configuracoes: FC = () => {
               Cria um backup em segundo plano após cada venda concluída. Mantém apenas os 30 mais recentes para não inchar o disco.
             </p>
           </div>
-          <button
-            onClick={() => {
-              const novo = !porVenda
+          <Interruptor
+            ligado={porVenda}
+            onAlternar={(novo) => {
               setPorVenda(novo)
               gravarPreferencia('backup_por_venda', novo ? '1' : '0', () => setPorVenda(porVenda))
             }}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0 ml-4 ${
-              porVenda ? 'bg-primary' : 'bg-muted-foreground/30'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                porVenda ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
+            rotulo="Fazer backup também a cada venda"
+            className="ml-4"
+          />
         </div>
 
         {/* Ao fechar */}

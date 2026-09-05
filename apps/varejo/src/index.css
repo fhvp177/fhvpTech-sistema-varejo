@@ -500,6 +500,29 @@
     [data-alvo='web'] .entrada-escalonada > *:nth-child(n + 6) { animation-delay: 0.24s }
   }
 
+  /* ---------- a altura que de fato se vê (§3.3) ----------
+     ⚠️ Ele reclamou DUAS vezes de "a primeira rolagem não vai até embaixo,
+     preciso rolar de novo", a segunda já com a reserva do rodapé em 104px e 24
+     de folga medidos. Então não era a reserva.
+
+     A causa mora aqui: `h-screen` é `height: 100vh`, e no celular `100vh` não
+     é o que se vê — é a altura da janela COM A BARRA DO NAVEGADOR RECOLHIDA
+     (o "large viewport"). Com a barra na tela, a casca fica mais alta que a
+     área visível e o fim do `<main>` cai atrás dela. O primeiro deslizar
+     recolhe a barra em vez de terminar a rolagem; o segundo mostra o que
+     faltava. Era exatamente o que ele descrevia.
+
+     `100dvh` é a mesma medida, só que do que está visível AGORA: a casca
+     encolhe e cresce junto com a barra, e o fim da lista nunca fica atrás dela.
+     O `100vh` fica antes como reserva para navegador que não conheça a unidade.
+
+     ⚠️ Só na web: no Electron a janela não tem barra que recolhe, e `dvh` ali
+     seria uma unidade a mais para nada. */
+  [data-alvo='web'] .casca-app {
+    height: 100vh;
+    height: 100dvh;
+  }
+
   /* ---------- o respiro de quem rola (§3.3-d) ----------
      104px = os 80 que a ilha ocupa do fundo (14 de afastamento + 66 de altura)
      mais 24 de folga. Sem isto ela cobre o fim da lista para sempre, e o
@@ -650,8 +673,14 @@
      um SVG vazio e reclama.
 
      Só três blocos precisam de número. Todo o resto fica em `order: 0`, que no
-     flex vem depois de qualquer negativo, na ordem do arquivo. */
-  [data-alvo='web'] .entrada-escalonada {
+     flex vem depois de qualquer negativo, na ordem do arquivo.
+
+     ⚠️ Esta parte é do PAINEL, e por isso tem classe própria. Ela já morou em
+     `.entrada-escalonada`, e ali as duas coisas viajavam juntas: quem quisesse
+     só a entrada escalonada levava junto um `display: flex` que não pediu. Foi
+     o que apareceu quando o dono quis a mesma entrada em Produtos e Clientes,
+     que não reordenam nada. */
+  [data-alvo='web'] .ordem-painel {
     display: flex;
     flex-direction: column;
   }
