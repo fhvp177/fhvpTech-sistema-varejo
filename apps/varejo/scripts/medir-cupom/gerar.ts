@@ -3,6 +3,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { gerarHtmlCupomVenda } from '../../src/utils/cupomVenda'
 import { gerarHtmlComprovanteDevolucao } from '../../src/utils/comprovanteDevolucao'
+import { gerarHtmlComprovanteEntrega } from '../../src/utils/relatorioFinanceiro'
 import { LOJA_PADRAO } from '../../src/utils/dadosLoja'
 
 // Sem argumento, escreve na temp do sistema — o `npm run medir:cupom` conta
@@ -89,5 +90,33 @@ writeFileSync(join(dir, 'devolucao-extremo.html'), gerarHtmlComprovanteDevolucao
   saldo_credito_novo: 1234567890.12, vendedor_nome: M,
   itens: [{ produto_nome: M, quantidade: 0.755, valor_unitario: 1234567.89 }]
 }, lojaAbsurda), 'utf-8')
+
+/*
+ * O papel que vai com o entregador.
+ *
+ * ⚠️ Entrou na régua depois de sair praticamente em branco e deslocado numa
+ * impressão de verdade: eu tinha escrito a folha do zero, com Arial e 80mm,
+ * em vez de partir da receita do cupom de venda. Medir aqui é mais barato que
+ * gastar bobina para descobrir.
+ */
+writeFileSync(join(dir, 'entrega-extremo.html'), gerarHtmlComprovanteEntrega(
+  {
+    id: 999999,
+    cliente_nome: M,
+    cliente_telefone: M,
+    vendedor_nome: M,
+    para_entrega: 1,
+    endereco_entrega: M,
+    observacao: M,
+    total: 1234567890.12,
+    criado_em: '2026-09-06 16:06:00',
+    dias_parado: 99
+  },
+  [
+    { nome: M, tamanho: M, quantidade: 999, preco_unitario: 1234567.89 },
+    { nome: 'ANEL CURTO', tamanho: null, quantidade: 1, preco_unitario: 10 }
+  ],
+  M
+), 'utf-8')
 
 console.log('gerados em', dir)

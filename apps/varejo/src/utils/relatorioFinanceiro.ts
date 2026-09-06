@@ -367,22 +367,70 @@ export function gerarHtmlComprovanteEntrega(
   <title>Pedido ${pedido.id} — entrega</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    @page { size: 80mm auto; margin: 0; }
-    body { width: 72mm; margin: 0 auto; font-family: Arial, sans-serif; font-size: 11px; color: #000; }
+
+    /*
+      ⚠️ As regras desta folha são as MESMAS do cupom de venda, e não por
+      preguiça: a primeira versão deste papel foi escrita do zero, com Arial e
+      80mm, e saiu praticamente em branco e deslocada para a direita, com meio
+      centímetro aparecendo. As duas causas estão explicadas em cupomVenda.ts, e
+      valem para qualquer papel que saia nesta impressora.
+
+      2mm, não 4: a cabeça térmica alcança 72,07mm a partir da borda esquerda do
+      papel, e o corpo tem 68mm. Com 4mm de cada lado terminaria em 72,00 — sem
+      folga nenhuma.
+
+      ⚠️ E NADA de declarar o tamanho da página (a propriedade size do @page).
+      O Chromium ignora o papel do driver de qualquer jeito, e declarar o
+      tamanho aqui só faz a página ser diagramada num formato que a impressora
+      depois desloca por conta própria.
+      (sem crase neste comentário: ele mora dentro de um template literal)
+    */
+    @page { margin: 2mm; }
+
+    /*
+      ⚠️ Courier em NEGRITO, sempre. A 203dpi a cabeça térmica só sabe "queima
+      ou não queima" — não existe cinza. O traço fino do Arial cai no meio do
+      caminho e vira ponto solto: é a folha em branco que apareceu no teste. O
+      traço do negrito é grosso o bastante para queimar inteiro, e como a fonte
+      é monoespaçada ele tem exatamente a mesma largura.
+    */
+    html, body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      font-weight: bold;
+      color: #000;
+      background: #fff;
+    }
+
+    /* 68mm, e não os 80mm da bobina: é até onde a cabeça alcança. Passar disso
+       não dá erro — o texto simplesmente não sai no papel. */
+    body {
+      width: 68mm;
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 2mm 1mm;
+      line-height: 1.35;
+      /* Endereço comprido e nome de cliente emendado não podem empurrar o papel
+         para fora da bobina. */
+      overflow-wrap: anywhere;
+    }
+
     .c { text-align: center; }
-    .loja { font-size: 14px; font-weight: bold; }
-    hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
-    table { width: 100%; border-collapse: collapse; }
-    td { padding: 2px 0; vertical-align: top; }
-    .q { width: 26px; }
-    .v { text-align: right; white-space: nowrap; }
-    .cobrar { border: 2px solid #000; padding: 6px; text-align: center; margin: 8px 0; }
-    .cobrar .rot { font-size: 10px; letter-spacing: .06em; }
-    .cobrar .val { font-size: 18px; font-weight: bold; }
-    .bloco { margin-top: 6px; }
-    .rot { font-size: 10px; color: #333; }
-    .assin { margin-top: 22px; border-top: 1px solid #000; padding-top: 3px; font-size: 10px; text-align: center; }
-    .aviso { font-size: 9px; text-align: center; margin-top: 8px; }
+    .loja { font-size: 13px; }
+    /* Tracejada, nunca dupla: a dupla não sobrevive a 203dpi — o vão do meio
+       some no arredondamento e ela sai como tarja preta. */
+    hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    td { padding: 1px 2px; vertical-align: top; }
+    .q { width: 8mm; }
+    .v { text-align: right; white-space: nowrap; padding-left: 8px; }
+    .cobrar { border: 1px solid #000; padding: 4px; text-align: center; margin: 5px 0; }
+    .cobrar .rot { font-size: 10px; }
+    .cobrar .val { font-size: 15px; }
+    .bloco { margin-top: 5px; }
+    .rot { font-size: 10px; }
+    .assin { margin-top: 18px; border-top: 1px dashed #000; padding-top: 3px; font-size: 10px; text-align: center; }
+    .aviso { font-size: 9.5px; text-align: center; margin-top: 6px; }
   </style>
 </head>
 <body>
