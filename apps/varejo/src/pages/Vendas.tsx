@@ -153,6 +153,9 @@ type Cliente = {
   cpf?: string | null
   cnpj?: string | null
   razao_social?: string | null
+  // Usado para pre-preencher a entrega ao separar um pedido: quem vai receber
+  // em casa quase sempre recebe no endereco do proprio cadastro.
+  endereco?: string | null
 }
 
 const validarCNPJ = (cnpj: string): boolean => {
@@ -1530,6 +1533,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const [dataVencimento, setDataVencimento] = useState('')
   const [numParcelas, setNumParcelas] = useState(2)
   const [entradaInput, setEntradaInput] = useState('')
+  const [separarAberto, setSepararAberto] = useState(false)
+  const [separarEntrega, setSepararEntrega] = useState(false)
+  const [separarEndereco, setSepararEndereco] = useState('')
+  const [separarObs, setSepararObs] = useState('')
+  const [separando, setSeparando] = useState(false)
   const [descontoTipo, setDescontoTipo] = useState<'R$' | '%'>('R$')
   const [descontoEntrada, setDescontoEntrada] = useState('')
   const [codigoScan, setCodigoScan] = useState('')
@@ -1821,6 +1829,50 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     } else {
       setErro(resp.error)
       setSalvando(false)
+    }
+  }
+
+  /*
+   * Separar em vez de vender.
+   *
+   * ⚠️ A forma de pagamento NÃO é perguntada aqui, e é esse o ponto: o cliente
+   * decide na porta se paga em dinheiro, PIX ou cartão. Perguntar agora
+   * obrigaria a adivinhar, e adivinhar vira relatório errado.
+   *
+   * O que sai daqui é mercadoria apartada e preço congelado. Faturamento,
+   * comissão e nota só acontecem quando alguém paga.
+   */
+  const separarPedido = async () => {
+    if (carrinho.length === 0) { setErro('Adicione pelo menos um produto.'); return }
+    if (separarEntrega && !separarEndereco.trim()) {
+      setErro('Para entregar é preciso informar o endereço.')
+      return
+    }
+    setSeparando(true)
+    setErro('')
+    const resp = await window.api.pedidos.criar({
+      cliente_id: clienteId ? Number(clienteId) : null,
+      para_entrega: separarEntrega,
+      endereco_entrega: separarEndereco.trim() || null,
+      observacao: separarObs.trim() || null,
+      desconto: descontoValor,
+      itens: carrinho.map((i) => ({
+        produto_id: i.produto_id,
+        variacao_id: i.variacao_id ?? null,
+        quantidade: i.quantidade,
+        preco_unitario: i.preco_unitario
+      }))
+    })
+    setSeparando(false)
+    if (resp.success) {
+      setSepararAberto(false)
+      showToast({
+        message: 'Pedido separado. Ele aparece em Pedidos separados até ser pago.',
+        variant: 'success'
+      })
+      onSair()
+    } else {
+      setErro(resp.error)
     }
   }
 
@@ -2749,11 +2801,107 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   ? `Finalizar — entrada ${fmt(entradaValor)}`
                   : 'Finalizar venda'}
           </Button>
+          {/*
+            ⚠️ "Separar" fica ao lado de "Finalizar" e não escondido num menu:
+            nesta loja boa parte das vendas acaba assim, com a joia saindo para a
+            casa do cliente antes do pagamento. Esconder faria o lojista voltar a
+            registrar venda que ainda não aconteceu.
+          */}
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              setSepararEntrega(false)
+              setSepararEndereco(
+                clientes.find((c) => String(c.id) === clienteId)?.endereco ?? ''
+              )
+              setSepararObs('')
+              setErro('')
+              setSepararAberto(true)
+            }}
+            disabled={separando || carrinho.length === 0}
+          >
+            Separar pedido — receber depois
+          </Button>
           <Button variant="outline" className="w-full" onClick={onSair}>
             Cancelar
           </Button>
         </div>
       </div>
+
+      {/* ── Dialog: separar pedido ── */}
+      <Dialog open={separarAberto} onOpenChange={setSepararAberto}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Separar pedido</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
+            <div className="rounded-lg bg-muted/50 px-3 py-2">
+              <p className="text-[12.5px] text-muted-foreground">Total combinado</p>
+              <p className="num text-xl font-bold">{fmt(total)}</p>
+            </div>
+
+            {/*
+              ⚠️ Nenhuma pergunta sobre COMO o cliente vai pagar. Ele decide na
+              porta, e é exatamente isso que este recurso existe para permitir.
+            */}
+            <p className="text-[12.5px] text-muted-foreground">
+              As peças ficam apartadas com este preço e saem do estoque disponível. Nada entra
+              no faturamento até o cliente pagar.
+            </p>
+
+            <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm">
+              <input
+                type="checkbox"
+                className="accent-blue-600 h-4 w-4"
+                checked={separarEntrega}
+                onChange={(e) => setSepararEntrega(e.target.checked)}
+              />
+              Vai ser entregue no cliente
+            </label>
+
+            {separarEntrega && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="separar-endereco">
+                  Endereço da entrega <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="separar-endereco"
+                  value={separarEndereco}
+                  onChange={(e) => setSepararEndereco(e.target.value)}
+                  placeholder="Rua, nº, bairro"
+                />
+                <p className="text-[11.5px] text-muted-foreground">
+                  Vem do cadastro do cliente quando existe, e pode ser trocado aqui sem mexer
+                  no cadastro.
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="separar-obs">Observação</Label>
+              <Input
+                id="separar-obs"
+                value={separarObs}
+                onChange={(e) => setSepararObs(e.target.value)}
+                placeholder="Combinado com o cliente, referência…"
+              />
+            </div>
+
+            {erro && (
+              <p className="rounded bg-destructive/10 px-3 py-2 text-sm text-destructive">{erro}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSepararAberto(false)}>
+              Voltar
+            </Button>
+            <Button onClick={separarPedido} disabled={separando}>
+              {separando ? 'Separando…' : 'Separar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog: cadastro rápido de cliente ── */}
       <Dialog open={modalClienteAberto} onOpenChange={setModalClienteAberto}>

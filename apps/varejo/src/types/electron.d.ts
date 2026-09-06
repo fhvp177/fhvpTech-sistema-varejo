@@ -241,6 +241,101 @@ type MetricasDashboard = {
   }>
 }
 
+type ContaFinanceira = {
+  id: number
+  nome: string
+  tipo: 'caixa' | 'banco' | 'a_receber'
+  banco: string | null
+  agencia: string | null
+  conta: string | null
+  saldo_inicial: number
+  ativa: number
+  padrao_recebimento: number
+  padrao_pagamento: number
+  forma_padrao: string | null
+  criada_em: string
+  saldo: number
+}
+
+type MovimentoFinanceiro = {
+  id: number
+  conta_id: number
+  conta_nome: string
+  data: string
+  valor: number
+  tipo: string
+  descricao: string | null
+  forma_pagamento: string | null
+  origem_tipo: string | null
+  origem_id: number | null
+  turno_id: number | null
+  vendedor_id: number | null
+  saldo_corrente: number
+}
+
+type TurnoCaixa = {
+  id: number
+  conta_id: number
+  conta_nome: string
+  aberto_por: number
+  aberto_por_nome: string | null
+  aberto_em: string
+  fundo_troco: number
+  fechado_por: number | null
+  fechado_por_nome: string | null
+  fechado_em: string | null
+  confirmado_por: number | null
+  confirmado_por_nome: string | null
+  confirmado_em: string | null
+  justificativa: string | null
+  fora_de_hora: number
+}
+
+type ContagemTurno = {
+  forma: string
+  valor_contado: number
+  valor_esperado: number
+  diferenca: number
+}
+
+type TurnoFechado = {
+  turno: TurnoCaixa
+  contagens: ContagemTurno[]
+  diferenca_dinheiro: number
+}
+
+type ItemPedido = {
+  id: number
+  produto_id: number
+  variacao_id: number | null
+  quantidade: number
+  preco_unitario: number
+  nome: string
+  tamanho: string | null
+}
+
+type PedidoSeparado = {
+  id: number
+  cliente_id: number | null
+  cliente_nome: string | null
+  cliente_telefone: string | null
+  vendedor_id: number
+  vendedor_nome: string | null
+  situacao: 'separado' | 'concluido' | 'cancelado'
+  criado_em: string
+  para_entrega: number
+  endereco_entrega: string | null
+  observacao: string | null
+  desconto: number
+  total: number
+  venda_id: number | null
+  concluido_em: string | null
+  cancelado_em: string | null
+  motivo_cancelamento: string | null
+  dias_parado: number
+  itens?: ItemPedido[]
+}
+
 type ContaPagar = {
   id: number
   descricao: string
@@ -344,6 +439,47 @@ interface Window {
       deletar: (id: number) => Promise<RespostaIPC>
       registrarPagamento: (id: number, valor: number) => Promise<RespostaIPC>
       estornarPagamento: (id: number) => Promise<RespostaIPC>
+    }
+    financeiro: {
+      listarContas: (incluirInativas?: boolean) => Promise<RespostaIPC<ContaFinanceira[]>>
+      criarConta: (dados: unknown) => Promise<RespostaIPC<{ id: number }>>
+      atualizarConta: (id: number, dados: unknown) => Promise<RespostaIPC>
+      desativarConta: (id: number) => Promise<RespostaIPC>
+      reativarConta: (id: number) => Promise<RespostaIPC>
+      extrato: (filtro?: {
+        conta_id?: number | null
+        de?: string | null
+        ate?: string | null
+        limite?: number
+      }) => Promise<RespostaIPC<MovimentoFinanceiro[]>>
+      saldoConsolidado: () => Promise<RespostaIPC<number>>
+      lancar: (
+        contaId: number,
+        valor: number,
+        tipo: string,
+        descricao: string
+      ) => Promise<RespostaIPC>
+    }
+    caixa: {
+      turnoAberto: () => Promise<RespostaIPC<TurnoCaixa | null>>
+      abrirTurno: (contaId: number, fundoTroco: number) => Promise<RespostaIPC<{ id: number }>>
+      fecharTurno: (
+        turnoId: number,
+        contagens: Array<{ forma: string; valor_contado: number }>
+      ) => Promise<RespostaIPC<TurnoFechado>>
+      confirmarTurno: (turnoId: number, justificativa?: string) => Promise<RespostaIPC>
+      listarTurnos: (limite?: number) => Promise<RespostaIPC<TurnoCaixa[]>>
+      contagens: (turnoId: number) => Promise<RespostaIPC<ContagemTurno[]>>
+      sangria: (contaId: number, valor: number, descricao: string) => Promise<RespostaIPC>
+      suprimento: (contaId: number, valor: number, descricao: string) => Promise<RespostaIPC>
+    }
+    pedidos: {
+      criar: (dados: unknown) => Promise<RespostaIPC<{ id: number }>>
+      concluir: (pedidoId: number, pagamento: unknown) => Promise<RespostaIPC>
+      cancelar: (pedidoId: number, motivo?: string) => Promise<RespostaIPC>
+      listar: (situacao?: string) => Promise<RespostaIPC<PedidoSeparado[]>>
+      detalhe: (pedidoId: number) => Promise<RespostaIPC<PedidoSeparado | null>>
+      totalSeparados: () => Promise<RespostaIPC<number>>
     }
     comissoes: {
       configurado: () => Promise<RespostaIPC<boolean>>

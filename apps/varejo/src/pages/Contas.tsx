@@ -1,0 +1,597 @@
+import { FC, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Landmark,
+  Plus,
+  Wallet,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Pencil,
+  Power,
+  ScrollText
+} from 'lucide-react'
+import { Button } from '@fhvptech/core/ui/button'
+import { Input } from '@fhvptech/core/ui/input'
+import { Label } from '@fhvptech/core/ui/label'
+import { Select } from '@fhvptech/core/ui/select'
+import { useConfirm } from '@fhvptech/core/ui/confirm'
+import { useToast } from '@fhvptech/core/ui/toast'
+import EstadoVazio from '@fhvptech/core/ui/EstadoVazio'
+import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from '@fhvptech/core/ui/dialog'
+import { useEhCelular } from '@/hooks/useEhCelular'
+
+/**
+ * Contas do dinheiro, e o extrato de cada uma.
+ *
+ * ── O pedido ────────────────────────────────────────────────────────────────
+ * "Uma aba de contas bancárias no financeiro, onde eu cadastro os bancos em que
+ * recebo e tiro dinheiro, e toda movimentação diz de qual conta saiu ou entrou."
+ *
+ * ── ⚠️ O saldo aqui não é digitado, é somado ────────────────────────────────
+ * O que se cadastra é o saldo INICIAL: quanto havia na conta no dia em que o
+ * sistema começou a contar. Dali em diante o saldo é a soma dos movimentos, e é
+ * por isso que ele não pode ser "corrigido" na mão — corrigir o saldo
+ * esconderia o lançamento que está faltando, que é justamente o que se quer
+ * enxergar. Para acertar, lança-se um ajuste, e ele aparece no extrato.
+ */
+
+const fmt = (v: number) =>
+  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+const fmtDataHora = (iso: string) => {
+  const d = new Date(iso.replace(' ', 'T'))
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+const FORMAS = [
+  { valor: '', rotulo: 'Nenhuma em especial' },
+  { valor: 'dinheiro', rotulo: 'Dinheiro' },
+  { valor: 'pix', rotulo: 'PIX' },
+  { valor: 'debito', rotulo: 'Cartão de débito' },
+  { valor: 'credito', rotulo: 'Cartão de crédito' }
+]
+
+const TIPOS = [
+  { valor: 'caixa', rotulo: 'Caixa (dinheiro na loja)' },
+  { valor: 'banco', rotulo: 'Banco' }
+]
+
+const FORM_VAZIO = {
+  nome: '',
+  tipo: 'banco',
+  banco: '',
+  agencia: '',
+  conta: '',
+  saldo_inicial: '',
+  forma_padrao: '',
+  padrao_recebimento: false,
+  padrao_pagamento: false
+}
+
+const Contas: FC = () => {
+  const [contas, setContas] = useState<ContaFinanceira[]>([])
+  const [selecionada, setSelecionada] = useState<number | null>(null)
+  const [movimentos, setMovimentos] = useState<MovimentoFinanceiro[]>([])
+  const [carregando, setCarregando] = useState(true)
+
+  const [dialogAberto, setDialogAberto] = useState(false)
+  const [editando, setEditando] = useState<ContaFinanceira | null>(null)
+  const [form, setForm] = useState(FORM_VAZIO)
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const [lancamentoAberto, setLancamentoAberto] = useState(false)
+  const [lancValor, setLancValor] = useState('')
+  const [lancDescricao, setLancDescricao] = useState('')
+  const [lancSaida, setLancSaida] = useState(false)
+
+  const confirmar = useConfirm()
+  const { showToast } = useToast()
+  const ehCelular = useEhCelular()
+
+  const carregar = useCallback(async () => {
+    const r = await window.api.financeiro.listarContas(true)
+    if (r.success) {
+      const lista = r.data as ContaFinanceira[]
+      setContas(lista)
+      setSelecionada((atual) => atual ?? lista.find((c) => c.ativa === 1)?.id ?? null)
+    }
+    setCarregando(false)
+  }, [])
+
+  useEffect(() => {
+    void carregar()
+  }, [carregar])
+
+  const carregarExtrato = useCallback(async (contaId: number | null) => {
+    if (!contaId) {
+      setMovimentos([])
+      return
+    }
+    const r = await window.api.financeiro.extrato({ conta_id: contaId, limite: 200 })
+    if (r.success) setMovimentos(r.data as MovimentoFinanceiro[])
+  }, [])
+
+  useEffect(() => {
+    void carregarExtrato(selecionada)
+  }, [selecionada, carregarExtrato])
+
+  const total = useMemo(
+    () => contas.filter((c) => c.ativa === 1).reduce((s, c) => s + c.saldo, 0),
+    [contas]
+  )
+
+  const abrirNova = () => {
+    setEditando(null)
+    setForm(FORM_VAZIO)
+    setErro('')
+    setDialogAberto(true)
+  }
+
+  const abrirEdicao = (c: ContaFinanceira) => {
+    setEditando(c)
+    setForm({
+      nome: c.nome,
+      tipo: c.tipo === 'a_receber' ? 'banco' : c.tipo,
+      banco: c.banco ?? '',
+      agencia: c.agencia ?? '',
+      conta: c.conta ?? '',
+      saldo_inicial: String(c.saldo_inicial ?? 0).replace('.', ','),
+      forma_padrao: c.forma_padrao ?? '',
+      padrao_recebimento: c.padrao_recebimento === 1,
+      padrao_pagamento: c.padrao_pagamento === 1
+    })
+    setErro('')
+    setDialogAberto(true)
+  }
+
+  const salvar = async () => {
+    if (!form.nome.trim()) {
+      setErro('Dê um nome à conta.')
+      return
+    }
+    setSalvando(true)
+    const dados = {
+      ...form,
+      saldo_inicial: parseFloat(form.saldo_inicial.replace(/\./g, '').replace(',', '.')) || 0
+    }
+    const r = editando
+      ? await window.api.financeiro.atualizarConta(editando.id, dados)
+      : await window.api.financeiro.criarConta(dados)
+    if (r.success) {
+      await carregar()
+      setDialogAberto(false)
+    } else {
+      setErro(r.error)
+    }
+    setSalvando(false)
+  }
+
+  const alternarAtiva = async (c: ContaFinanceira) => {
+    if (c.ativa === 1) {
+      const ok = await confirmar({
+        titulo: 'Desativar conta',
+        mensagem:
+          `"${c.nome}" some das escolhas novas, mas continua no histórico — o extrato ` +
+          'dos meses passados não muda. Confirma?'
+      })
+      if (!ok) return
+      const r = await window.api.financeiro.desativarConta(c.id)
+      if (!r.success) {
+        showToast({ message: r.error, variant: 'destructive' })
+        return
+      }
+    } else {
+      await window.api.financeiro.reativarConta(c.id)
+    }
+    await carregar()
+  }
+
+  const lancar = async () => {
+    if (!selecionada) return
+    const valor = parseFloat(lancValor.replace(/\./g, '').replace(',', '.')) || 0
+    if (valor <= 0) {
+      showToast({ message: 'Informe um valor maior que zero.', variant: 'destructive' })
+      return
+    }
+    const r = await window.api.financeiro.lancar(
+      selecionada,
+      lancSaida ? -valor : valor,
+      'ajuste',
+      lancDescricao
+    )
+    if (r.success) {
+      setLancamentoAberto(false)
+      setLancValor('')
+      setLancDescricao('')
+      await carregar()
+      await carregarExtrato(selecionada)
+    } else {
+      showToast({ message: r.error, variant: 'destructive' })
+    }
+  }
+
+  const contaAtual = contas.find((c) => c.id === selecionada) ?? null
+
+  return (
+    <div className="entrada-escalonada p-4 lg:p-8">
+      <div className="hidden lg:flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Landmark className="w-6 h-6 text-primary" />
+            Contas
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Onde o dinheiro da loja fica. Toda venda recebida e toda conta paga entra ou sai
+            de uma destas.
+          </p>
+        </div>
+        <Button onClick={abrirNova}>
+          <Plus className="w-4 h-4 mr-2" />
+          Nova conta
+        </Button>
+      </div>
+
+      {/* Total consolidado */}
+      <div className="mb-3 lg:mb-4 flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">Saldo somado das contas ativas</p>
+          <p className="num text-xl lg:text-2xl font-bold">{fmt(total)}</p>
+        </div>
+        <Button onClick={abrirNova} className="lg:hidden h-11 w-11 shrink-0 p-0" aria-label="Nova conta">
+          <Plus className="w-5 h-5" />
+        </Button>
+      </div>
+
+      {/* Contas */}
+      {carregando ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Carregando…</p>
+      ) : contas.length === 0 ? (
+        <div className="rounded-xl border bg-card">
+          <EstadoVazio icone={<Landmark className="w-9 h-9" />} dica="Cadastre o caixa da loja e os bancos onde você recebe.">
+            Nenhuma conta cadastrada.
+          </EstadoVazio>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {contas.map((c) => {
+            const acoes: AcaoMenu[] = [
+              { rotulo: 'Editar', icone: <Pencil className="w-4 h-4" />, onSelecionar: () => abrirEdicao(c) },
+              {
+                rotulo: c.ativa === 1 ? 'Desativar' : 'Reativar',
+                icone: <Power className="w-4 h-4" />,
+                destrutiva: c.ativa === 1,
+                onSelecionar: () => void alternarAtiva(c)
+              }
+            ]
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelecionada(c.id)}
+                className={`rounded-xl border bg-card p-3 text-left transition-colors ${
+                  selecionada === c.id ? 'border-primary ring-1 ring-primary/30' : 'hover:bg-muted/30'
+                } ${c.ativa === 0 ? 'opacity-55' : ''}`}
+              >
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-1.5 truncate text-[14.5px] font-semibold">
+                      {c.tipo === 'caixa' ? (
+                        <Wallet className="w-4 h-4 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <Landmark className="w-4 h-4 shrink-0 text-muted-foreground" />
+                      )}
+                      {c.nome}
+                    </p>
+                    <p className="num mt-0.5 text-lg font-bold">{fmt(c.saldo)}</p>
+                    <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
+                      {[
+                        c.ativa === 0 ? 'desativada' : null,
+                        c.forma_padrao ? `recebe ${c.forma_padrao}` : null,
+                        c.padrao_recebimento === 1 ? 'padrão de entrada' : null,
+                        c.padrao_pagamento === 1 ? 'padrão de saída' : null
+                      ]
+                        .filter(Boolean)
+                        .join(' · ') || 'sem padrão definido'}
+                    </p>
+                  </div>
+                  <span className="flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
+                    <MenuAcoes rotulo={`Ações de ${c.nome}`} acoes={acoes} />
+                  </span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Extrato */}
+      {contaAtual && (
+        <div className="mt-5 lg:mt-6">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-2 text-base lg:text-lg font-semibold">
+              <ScrollText className="w-4 h-4 text-muted-foreground" />
+              Extrato de {contaAtual.nome}
+            </h3>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-11 lg:h-9"
+              onClick={() => {
+                setLancSaida(false)
+                setLancValor('')
+                setLancDescricao('')
+                setLancamentoAberto(true)
+              }}
+            >
+              Lançar ajuste
+            </Button>
+          </div>
+
+          {movimentos.length === 0 ? (
+            <div className="rounded-xl border bg-card">
+              <EstadoVazio
+                icone={<ScrollText className="w-9 h-9" />}
+                dica="O livro começa a contar a partir de agora — vendas e contas pagas aparecem aqui."
+              >
+                Nenhum movimento nesta conta ainda.
+              </EstadoVazio>
+            </div>
+          ) : (
+            /*
+              ⚠️ A lista vem do mais antigo para o mais novo, e não ao contrário:
+              o saldo corrente só faz sentido lido de cima para baixo. Invertida,
+              cada linha mostraria um saldo que não bate com a de cima.
+            */
+            <ul className="rounded-xl border bg-card divide-y">
+              {movimentos.map((m) => (
+                <li key={m.id} className="px-3 py-2.5">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3">
+                    <span
+                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                        m.valor >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                      }`}
+                      aria-hidden
+                    >
+                      {m.valor >= 0 ? (
+                        <ArrowDownLeft className="h-4 w-4" />
+                      ) : (
+                        <ArrowUpRight className="h-4 w-4" />
+                      )}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-[14px] font-medium leading-tight">
+                        {m.descricao || m.tipo}
+                      </p>
+                      <p className="num mt-0.5 truncate text-[12px] text-muted-foreground">
+                        {fmtDataHora(m.data)}
+                        {m.forma_pagamento ? ` · ${m.forma_pagamento}` : ''}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={`num text-[14px] font-semibold ${
+                          m.valor >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {m.valor >= 0 ? '+' : '−'} {fmt(Math.abs(m.valor))}
+                      </p>
+                      {!ehCelular && (
+                        <p className="num text-[11.5px] text-muted-foreground">
+                          saldo {fmt(m.saldo_corrente)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* ── Diálogo: conta ── */}
+      <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
+        <DialogContent className="max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>{editando ? 'Editar conta' : 'Nova conta'}</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
+            <div className="grid gap-1.5">
+              <Label htmlFor="conta-nome">
+                Nome <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="conta-nome"
+                value={form.nome}
+                onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                placeholder="Caixa da loja, Banco do Brasil…"
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&>*]:min-w-0 [&>*>*]:min-w-0">
+              <div className="grid gap-1.5">
+                <Label>Tipo</Label>
+                <Select
+                  value={form.tipo}
+                  onChange={(v) => setForm({ ...form, tipo: v })}
+                  opcoes={TIPOS}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="conta-saldo">Saldo inicial</Label>
+                <Input
+                  id="conta-saldo"
+                  className="num"
+                  value={form.saldo_inicial}
+                  onChange={(e) => setForm({ ...form, saldo_inicial: e.target.value })}
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+
+            {/*
+              ⚠️ O saldo inicial é quanto havia na conta no dia em que o sistema
+              começou a contar. Ele não é o saldo de hoje e não deve ser mexido
+              para "acertar" o número: corrigir aqui esconde o lançamento que
+              está faltando. Para acertar, lance um ajuste — ele aparece no
+              extrato e explica a diferença.
+            */}
+            <p className="-mt-1 text-[11.5px] text-muted-foreground">
+              Quanto havia nesta conta quando o sistema começou a contar. Dali em diante o saldo
+              é somado sozinho. Para acertar depois, lance um ajuste no extrato.
+            </p>
+
+            <div className="grid gap-1.5">
+              <Label>Recebe qual forma de pagamento?</Label>
+              <Select
+                value={form.forma_padrao}
+                onChange={(v) => setForm({ ...form, forma_padrao: v })}
+                opcoes={FORMAS}
+              />
+              <p className="text-[11.5px] text-muted-foreground">
+                Venda paga nesta forma cai aqui sozinha. É o que evita escolher a conta a cada
+                venda.
+              </p>
+            </div>
+
+            {form.tipo === 'banco' && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 [&>*]:min-w-0 [&>*>*]:min-w-0">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="conta-banco">Banco</Label>
+                  <Input
+                    id="conta-banco"
+                    value={form.banco}
+                    onChange={(e) => setForm({ ...form, banco: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="conta-ag">Agência</Label>
+                  <Input
+                    id="conta-ag"
+                    className="num"
+                    value={form.agencia}
+                    onChange={(e) => setForm({ ...form, agencia: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="conta-num">Conta</Label>
+                  <Input
+                    id="conta-num"
+                    className="num"
+                    value={form.conta}
+                    onChange={(e) => setForm({ ...form, conta: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2 rounded-lg border p-3">
+              {(
+                [
+                  ['padrao_recebimento', 'Conta padrão para o que ENTRA'],
+                  ['padrao_pagamento', 'Conta padrão para o que SAI']
+                ] as const
+              ).map(([campo, rotulo]) => (
+                <label
+                  key={campo}
+                  className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm lg:min-h-0"
+                >
+                  <input
+                    type="checkbox"
+                    className="accent-blue-600 h-4 w-4"
+                    checked={form[campo]}
+                    onChange={(e) => setForm({ ...form, [campo]: e.target.checked })}
+                  />
+                  {rotulo}
+                </label>
+              ))}
+            </div>
+
+            {erro && (
+              <p className="rounded bg-destructive/10 px-3 py-2 text-sm text-destructive">{erro}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogAberto(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={salvar} disabled={salvando}>
+              {salvando ? 'Salvando…' : editando ? 'Salvar' : 'Cadastrar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Diálogo: ajuste ── */}
+      <Dialog open={lancamentoAberto} onOpenChange={setLancamentoAberto}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Lançar ajuste em {contaAtual?.nome}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  [false, 'Entrou'],
+                  [true, 'Saiu']
+                ] as const
+              ).map(([saida, rotulo]) => (
+                <button
+                  key={rotulo}
+                  type="button"
+                  onClick={() => setLancSaida(saida)}
+                  className={`min-h-[44px] rounded-lg border text-sm font-medium transition-colors ${
+                    lancSaida === saida
+                      ? saida
+                        ? 'border-rose-500 bg-rose-50 text-rose-700'
+                        : 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                      : 'hover:bg-muted/30'
+                  }`}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="lanc-valor">Valor</Label>
+              <Input
+                id="lanc-valor"
+                className="num"
+                value={lancValor}
+                onChange={(e) => setLancValor(e.target.value)}
+                placeholder="0,00"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="lanc-desc">Motivo</Label>
+              <Input
+                id="lanc-desc"
+                value={lancDescricao}
+                onChange={(e) => setLancDescricao(e.target.value)}
+                placeholder="Aporte do dono, acerto de conferência…"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLancamentoAberto(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={lancar}>Lançar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+export default Contas

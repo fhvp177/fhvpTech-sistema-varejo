@@ -65,6 +65,8 @@ import { registrarHandlersChat } from '../electron/ipc/chat'
 import { registrarHandlersClientes } from '../electron/ipc/clientes'
 import { registrarHandlersComissoes } from '../electron/ipc/comissoes'
 import { registrarHandlersContasPagar } from '../electron/ipc/contasPagar'
+import { registrarHandlersFinanceiro } from '../electron/ipc/financeiro'
+import { registrarHandlersPedidos } from '../electron/ipc/pedidos'
 import { registrarHandlersDashboard } from '../electron/ipc/dashboard'
 import { registrarHandlersDevolucoes } from '../electron/ipc/devolucoes'
 import { registrarHandlersEtiquetas } from '../electron/ipc/etiquetas'
@@ -299,6 +301,8 @@ function registrarHandlers(): void {
   registrarHandlersClientes()
   registrarHandlersComissoes()
   registrarHandlersContasPagar()
+  registrarHandlersFinanceiro()
+  registrarHandlersPedidos()
   registrarHandlersDashboard()
   registrarHandlersDevolucoes()
   registrarHandlersEtiquetas()

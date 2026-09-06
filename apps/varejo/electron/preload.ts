@@ -59,6 +59,61 @@ const api = {
       ipcRenderer.invoke('contasPagar:estornarPagamento', id)
   },
 
+  // Contas do dinheiro e o livro de movimentos.
+  financeiro: {
+    listarContas: (incluirInativas?: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:listarContas', incluirInativas),
+    criarConta: (dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:criarConta', dados),
+    atualizarConta: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:atualizarConta', id, dados),
+    desativarConta: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:desativarConta', id),
+    reativarConta: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:reativarConta', id),
+    extrato: (filtro?: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:extrato', filtro),
+    saldoConsolidado: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:saldoConsolidado'),
+    lancar: (contaId: number, valor: number, tipo: string, descricao: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:lancar', contaId, valor, tipo, descricao)
+  },
+
+  // Turno de caixa. ⚠️ NÃO existe canal que devolva o esperado de um turno
+  // ABERTO: o fechamento é às cegas, e o esperado só volta em `fecharTurno`,
+  // depois de a contagem ter sido enviada.
+  caixa: {
+    turnoAberto: (): Promise<RespostaIPC> => ipcRenderer.invoke('caixa:turnoAberto'),
+    abrirTurno: (contaId: number, fundoTroco: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:abrirTurno', contaId, fundoTroco),
+    fecharTurno: (turnoId: number, contagens: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:fecharTurno', turnoId, contagens),
+    confirmarTurno: (turnoId: number, justificativa?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:confirmarTurno', turnoId, justificativa),
+    listarTurnos: (limite?: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:listarTurnos', limite),
+    contagens: (turnoId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:contagens', turnoId),
+    sangria: (contaId: number, valor: number, descricao: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:sangria', contaId, valor, descricao),
+    suprimento: (contaId: number, valor: number, descricao: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:suprimento', contaId, valor, descricao)
+  },
+
+  // Pedidos separados: mercadoria apartada, dinheiro ainda não recebido.
+  pedidos: {
+    criar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('pedidos:criar', dados),
+    concluir: (pedidoId: number, pagamento: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('pedidos:concluir', pedidoId, pagamento),
+    cancelar: (pedidoId: number, motivo?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('pedidos:cancelar', pedidoId, motivo),
+    listar: (situacao?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('pedidos:listar', situacao),
+    detalhe: (pedidoId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('pedidos:detalhe', pedidoId),
+    totalSeparados: (): Promise<RespostaIPC> => ipcRenderer.invoke('pedidos:totalSeparados')
+  },
+
   // Comissão de vendedores. Todo canal exige gerente do outro lado.
   comissoes: {
     configurado: (): Promise<RespostaIPC> => ipcRenderer.invoke('comissoes:configurado'),

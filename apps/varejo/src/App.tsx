@@ -31,6 +31,8 @@ import {
   QrCode,
   Crown,
   BadgePercent,
+  Landmark,
+  PackageCheck,
   Calculator,
   ChevronDown,
   LogOut,
@@ -40,6 +42,9 @@ import {
 import Fornecedores from './pages/Fornecedores'
 import ContasPagar from './pages/ContasPagar'
 import Comissoes from './pages/Comissoes'
+import Contas from './pages/Contas'
+import Caixa from './pages/Caixa'
+import Pedidos from './pages/Pedidos'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Vendas from './pages/Vendas'
@@ -774,6 +779,22 @@ const App: FC = () => {
                         }
                       />
                       <Route
+                        path="/contas"
+                        element={
+                          <RotaSomenteDono titulo="Contas">
+                            <Contas />
+                          </RotaSomenteDono>
+                        }
+                      />
+                      {/*
+                        ⚠️ O caixa NÃO é só do dono: quem opera é quem conta a
+                        gaveta, e é esse o ponto do fechamento às cegas. Quem só
+                        o dono pode fazer é ACEITAR a diferença, e isso o próprio
+                        canal cobra.
+                      */}
+                      <Route path="/caixa" element={<Caixa />} />
+                      <Route path="/pedidos" element={<Pedidos />} />
+                      <Route
                         path="/comissoes"
                         element={
                           <RotaSomenteDono titulo="Comissões">
@@ -964,6 +985,8 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
     titulo: 'Operação',
     itens: [
       { to: '/vendas', label: 'Vendas', icon: ShoppingCart },
+      { to: '/pedidos', label: 'Pedidos separados', icon: PackageCheck },
+      { to: '/caixa', label: 'Caixa', icon: Lock },
       ...(__FEAT_ETIQUETAS__
         ? [{ to: '/etiquetas', label: 'Etiquetas A4', icon: Tags }]
         : [])
@@ -972,6 +995,7 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Financeiro',
     itens: [
+      { to: '/contas', label: 'Contas', icon: Landmark, somenteDono: true },
       { to: '/contas-pagar', label: 'Contas a Pagar', icon: Receipt, somenteDono: true },
       {
         to: '/comissoes',

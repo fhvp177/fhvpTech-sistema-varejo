@@ -65,6 +65,26 @@ export const CANAIS_LOCAIS = [
   'comissoes:obterPadrao',
   'comissoes:registrarPagamento',
   'comissoes:resumo',
+  // Gestão do dinheiro — fica local pelo mesmo motivo das comissões: o notebook
+  // do multi-caixa pode estar fora da loja, e o livro completo mostra quanto a
+  // loja tem em cada banco. O segundo caixa vende; quem administra conta é quem
+  // está no PC.
+  'financeiro:atualizarConta',
+  'financeiro:criarConta',
+  'financeiro:desativarConta',
+  'financeiro:extrato',
+  // ⚠️ `lancar` é a única porta por onde entra dinheiro sem origem em venda ou
+  // conta. Remoto, ela viraria o jeito de encobrir uma quebra de caixa à
+  // distância — basta lançar um "ajuste" do tamanho da falta.
+  'financeiro:lancar',
+  'financeiro:reativarConta',
+  'financeiro:saldoConsolidado',
+  // ⚠️ Aceitar a diferença do caixa acontece ONDE ESTÁ O DINHEIRO. Confirmar de
+  // longe seria assinar embaixo de uma contagem que ninguém viu — e o histórico
+  // de fechamentos é dado de auditoria, como o de comissões.
+  'caixa:confirmarTurno',
+  'caixa:contagens',
+  'caixa:listarTurnos',
   // Abre diálogo de pasta no PC.
   'fiscal:salvarXmls',
   'notasEntrada:exportarXmls',
@@ -109,6 +129,26 @@ export const CANAIS_LOCAIS = [
 
 /** Atendem o segundo caixa. São os dados da loja: um banco, duas telas. */
 export const CANAIS_REDE = [
+  // Contas: só a LISTA, e só porque abrir o turno pede escolher qual caixa. O
+  // resto da família `financeiro:` fica local.
+  'financeiro:listarContas',
+  // A gaveta. ⚠️ Limitação conhecida e aceita: o modelo tem UM turno aberto por
+  // vez na loja inteira, então o segundo caixa opera o mesmo turno do PC, e não
+  // uma gaveta própria. Duas gavetas de verdade pediriam um turno por conta, e
+  // isso ainda não existe — quem tentar abrir o segundo turno recebe recusa
+  // explicando, em vez de duas contagens brigando pelo mesmo dinheiro.
+  'caixa:abrirTurno',
+  'caixa:fecharTurno',
+  'caixa:sangria',
+  'caixa:suprimento',
+  'caixa:turnoAberto',
+  // Pedidos separados: é venda, e vender é exatamente o que o segundo caixa faz.
+  'pedidos:cancelar',
+  'pedidos:concluir',
+  'pedidos:criar',
+  'pedidos:detalhe',
+  'pedidos:listar',
+  'pedidos:totalSeparados',
   'auth:alterarPinVendedor',
   'auth:cadastrarPinPrimeiroUso',
   'auth:elevar',
