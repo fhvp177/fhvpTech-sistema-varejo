@@ -69,25 +69,53 @@ const SELECT_TURNO = `
     LEFT JOIN vendedores vf ON vf.id = t.fechado_por
     LEFT JOIN vendedores vc ON vc.id = t.confirmado_por`
 
-/** O turno aberto agora, se houver. Um por vez em toda a loja. */
-export function turnoAberto(): Turno | null {
+/**
+ * O turno aberto de um caixa. Sem `caixaId`, o primeiro aberto que aparecer —
+ * útil só para telas de visão geral, nunca para decidir onde uma venda entra.
+ */
+export function turnoAberto(caixaId?: number): Turno | null {
   const db = obterBancoDeDados()
-  return (db.prepare(`${SELECT_TURNO} WHERE t.fechado_em IS NULL LIMIT 1`).get() as Turno) ?? null
+  const sql = caixaId
+    ? `${SELECT_TURNO} WHERE t.fechado_em IS NULL AND t.conta_id = ? LIMIT 1`
+    : `${SELECT_TURNO} WHERE t.fechado_em IS NULL LIMIT 1`
+  const args = caixaId ? [caixaId] : []
+  return (db.prepare(sql).get(...args) as Turno) ?? null
+}
+
+/** Os caixas da loja, cada um com o turno aberto dele (ou null). */
+export function caixasComTurno(): Array<{
+  id: number
+  nome: string
+  turno: Turno | null
+}> {
+  const db = obterBancoDeDados()
+  const caixas = db
+    .prepare("SELECT id, nome FROM contas_financeiras WHERE tipo = 'caixa' AND ativa = 1 ORDER BY nome")
+    .all() as Array<{ id: number; nome: string }>
+  return caixas.map((c) => ({ ...c, turno: turnoAberto(c.id) }))
 }
 
 export function abrirTurno(contaId: number, vendedorId: number, fundoTroco: number): { id: number } {
   const db = obterBancoDeDados()
   return db.transaction(() => {
     /*
-     * ⚠️ Um turno por vez. Com dois abertos, `lancarMovimento` escolheria um
-     * pela ordem da consulta e metade das vendas cairia no turno errado — e o
-     * erro só apareceria no fechamento, sem pista de onde veio.
+     * ⚠️ Um turno por vez POR CAIXA — e não um na loja inteira. A loja pode ter
+     * Caixa 1 e Caixa 2 operando ao mesmo tempo; o que não pode é a mesma gaveta
+     * com dois turnos, porque aí duas contagens brigariam pelo mesmo dinheiro.
      */
     const jaAberto = db
-      .prepare('SELECT id FROM turnos_caixa WHERE fechado_em IS NULL LIMIT 1')
-      .get() as { id: number } | undefined
+      .prepare('SELECT id FROM turnos_caixa WHERE conta_id = ? AND fechado_em IS NULL LIMIT 1')
+      .get(contaId) as { id: number } | undefined
     if (jaAberto) {
-      throw new Error('Já existe um caixa aberto. Feche o turno atual antes de abrir outro.')
+      throw new Error('Este caixa já está aberto. Feche o turno atual antes de abrir outro.')
+    }
+
+    const caixa = db
+      .prepare("SELECT tipo FROM contas_financeiras WHERE id = ? AND ativa = 1")
+      .get(contaId) as { tipo: string } | undefined
+    if (!caixa) throw new Error('Caixa não encontrado.')
+    if (caixa.tipo !== 'caixa') {
+      throw new Error('Só se abre turno num caixa, não numa conta bancária.')
     }
 
     const r = db

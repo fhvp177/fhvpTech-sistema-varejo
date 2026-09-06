@@ -140,6 +140,7 @@ export const CANAIS_REDE = [
   // isso ainda não existe — quem tentar abrir o segundo turno recebe recusa
   // explicando, em vez de duas contagens brigando pelo mesmo dinheiro.
   'caixa:abrirTurno',
+  'caixa:caixasComTurno',
   'caixa:fecharTurno',
   'caixa:sangria',
   'caixa:suprimento',

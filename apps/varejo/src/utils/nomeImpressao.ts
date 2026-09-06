@@ -24,5 +24,7 @@ export const nomeImpressao = {
   relatorioVendas: (mes: string): string => `Relatorio-Vendas-${mes}`,
   relatorioEntradas: (mes: string): string => `Relatorio-Entradas-${mes}`,
   relatorioComissoes: (mes: string): string => `Relatorio-Comissoes-${mes}`,
+  // O papel que vai com o entregador. Nao e documento fiscal.
+  pedidoEntrega: (id: number): string => `Pedido-${id}-Entrega`,
   etiquetas: (d: Date = new Date()): string => `Etiquetas-${dataHoraSlug(d)}`
 }

@@ -447,7 +447,11 @@ interface Window {
       criar: (dados: unknown) => Promise<RespostaIPC<ContaPagar>>
       atualizar: (id: number, dados: unknown) => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>
-      registrarPagamento: (id: number, valor: number) => Promise<RespostaIPC>
+      registrarPagamento: (
+        id: number,
+        valor: number,
+        contaFinanceiraId?: number
+      ) => Promise<RespostaIPC>
       estornarPagamento: (id: number) => Promise<RespostaIPC>
     }
     financeiro: {
@@ -471,7 +475,10 @@ interface Window {
       ) => Promise<RespostaIPC>
     }
     caixa: {
-      turnoAberto: () => Promise<RespostaIPC<TurnoCaixa | null>>
+      turnoAberto: (caixaId?: number) => Promise<RespostaIPC<TurnoCaixa | null>>
+      caixasComTurno: () => Promise<
+        RespostaIPC<Array<{ id: number; nome: string; turno: TurnoCaixa | null }>>
+      >
       abrirTurno: (contaId: number, fundoTroco: number) => Promise<RespostaIPC<{ id: number }>>
       fecharTurno: (
         turnoId: number,

@@ -7,12 +7,13 @@ import {
   ShieldCheck,
   History,
   AlertTriangle,
-  CheckCircle2
+  CheckCircle2,
+  MonitorSmartphone
 } from 'lucide-react'
+import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
-import { Select } from '@fhvptech/core/ui/select'
 import { useToast } from '@fhvptech/core/ui/toast'
 import EstadoVazio from '@fhvptech/core/ui/EstadoVazio'
 import {
@@ -23,27 +24,29 @@ import {
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
 import { useSessao } from '@/App'
+import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
+import { CLASSE_DINHEIRO, paraNumero } from '@/utils/mascaras'
 
 /**
- * Turno de caixa, com fechamento às cegas.
+ * Caixas da loja, e o fechamento às cegas.
  *
- * ── ⚠️ O que esta tela NUNCA pode mostrar ───────────────────────────────────
- * O valor esperado, enquanto o turno está aberto. Não é escolha de layout: o
- * backend não tem canal que responda isso — o esperado só volta na resposta do
- * fechamento, depois de a contagem ter sido enviada.
+ * ── ⚠️ Só o DINHEIRO é contado ──────────────────────────────────────────────
+ * Decisão do dono em 06/09, e ele tem razão: pedir para o vendedor digitar
+ * quanto entrou de cartão e PIX é trabalho sem resultado. Esses valores o
+ * sistema já sabe — não há nada para conferir contra, porque não existe pilha
+ * de PIX na gaveta. Pior: um campo que sempre bate ensina a preencher qualquer
+ * número, e essa é a mesma mão que preenche o do dinheiro.
  *
- * O motivo é simples e vale repetir: quem vê o esperado antes não conta, confere.
- * O número bate sempre, a quebra nunca aparece, e o controle vira enfeite.
+ * Então a contagem tem UM campo. As outras formas aparecem depois, no
+ * resultado, como informação do que o sistema registrou no turno.
  *
- * ── O fluxo ─────────────────────────────────────────────────────────────────
- *   abrir (fundo de troco)
- *     → vender o dia todo, com sangrias e suprimentos
- *       → contar às cegas e enviar
- *         → o sistema revela a diferença
- *           → o GERENTE aceita com o PIN dele, e o turno vira pedra
+ * ── ⚠️ O que esta tela NUNCA pode mostrar antes de fechar ───────────────────
+ * O valor esperado. Não é disciplina de layout: o backend não tem canal que
+ * responda isso — o esperado só volta na resposta do fechamento.
  *
- * ⚠️ Aceitar não é "eu vi": é assumir a diferença. Se faltaram R$ 50, alguém
- * respondeu por eles.
+ * ── Um turno por CAIXA ──────────────────────────────────────────────────────
+ * A loja pode ter Caixa 1 e Caixa 2 abertos ao mesmo tempo. O que não pode é a
+ * mesma gaveta com dois turnos, senão duas contagens brigam pelo mesmo dinheiro.
  */
 
 const fmt = (v: number) =>
@@ -52,7 +55,9 @@ const fmt = (v: number) =>
 const fmtDataHora = (iso: string | null) => {
   if (!iso) return '—'
   const d = new Date(iso.replace(' ', 'T'))
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
 const ROTULO_FORMA: Record<string, string> = {
@@ -62,51 +67,36 @@ const ROTULO_FORMA: Record<string, string> = {
   credito: 'Cartão de crédito'
 }
 
-/*
- * ⚠️ Só o DINHEIRO é contado de verdade.
- *
- * Cartão e PIX não estão na gaveta: o que existe deles é o comprovante da
- * maquininha e o aplicativo do banco. Eles aparecem no fechamento para o
- * lojista conferir contra esses papéis, mas pedir para "contar" PIX seria
- * teatro — e teatro ensina o operador a preencher qualquer número.
- */
-const FORMAS_CONTAGEM = ['dinheiro', 'pix', 'debito', 'credito']
+type CaixaComTurno = { id: number; nome: string; turno: TurnoCaixa | null }
 
 const Caixa: FC = () => {
   const { ehDono } = useSessao()
   const { showToast } = useToast()
+  const { caixaId, escolher } = useCaixaDoAparelho()
 
-  const [contas, setContas] = useState<ContaFinanceira[]>([])
-  const [turno, setTurno] = useState<TurnoCaixa | null>(null)
+  const [caixas, setCaixas] = useState<CaixaComTurno[]>([])
   const [historico, setHistorico] = useState<TurnoCaixa[]>([])
   const [carregando, setCarregando] = useState(true)
 
-  const [abrirDialog, setAbrirDialog] = useState(false)
-  const [contaId, setContaId] = useState('')
+  const [abrindo, setAbrindo] = useState<CaixaComTurno | null>(null)
   const [fundo, setFundo] = useState('')
 
-  const [movDialog, setMovDialog] = useState<'sangria' | 'suprimento' | null>(null)
+  const [movDialog, setMovDialog] = useState<{ tipo: 'sangria' | 'suprimento'; caixa: CaixaComTurno } | null>(null)
   const [movValor, setMovValor] = useState('')
   const [movDescricao, setMovDescricao] = useState('')
 
-  const [fecharDialog, setFecharDialog] = useState(false)
-  const [contagem, setContagem] = useState<Record<string, string>>({})
+  const [fechando, setFechando] = useState<CaixaComTurno | null>(null)
+  const [contado, setContado] = useState('')
   const [resultado, setResultado] = useState<TurnoFechado | null>(null)
   const [justificativa, setJustificativa] = useState('')
   const [ocupado, setOcupado] = useState(false)
 
   const carregar = useCallback(async () => {
-    const [rContas, rTurno, rHist] = await Promise.all([
-      window.api.financeiro.listarContas(),
-      window.api.caixa.turnoAberto(),
+    const [rCaixas, rHist] = await Promise.all([
+      window.api.caixa.caixasComTurno(),
       ehDono ? window.api.caixa.listarTurnos(20) : Promise.resolve({ success: true, data: [] })
     ])
-    if (rContas.success) {
-      const lista = rContas.data as ContaFinanceira[]
-      setContas(lista)
-      setContaId((a) => a || String(lista.find((c) => c.tipo === 'caixa')?.id ?? lista[0]?.id ?? ''))
-    }
-    if (rTurno.success) setTurno(rTurno.data as TurnoCaixa | null)
+    if (rCaixas.success) setCaixas(rCaixas.data as CaixaComTurno[])
     if (rHist.success) setHistorico((rHist.data as TurnoCaixa[]) ?? [])
     setCarregando(false)
   }, [ehDono])
@@ -116,10 +106,13 @@ const Caixa: FC = () => {
   }, [carregar])
 
   const abrir = async () => {
-    const valor = parseFloat(fundo.replace(/\./g, '').replace(',', '.')) || 0
-    const r = await window.api.caixa.abrirTurno(Number(contaId), valor)
+    if (!abrindo) return
+    const r = await window.api.caixa.abrirTurno(abrindo.id, paraNumero(fundo))
     if (r.success) {
-      setAbrirDialog(false)
+      // Abrir um caixa é o gesto que diz "estou operando aqui": o aparelho
+      // passa a ser este caixa, e o PDV para de perguntar.
+      escolher(abrindo.id)
+      setAbrindo(null)
       setFundo('')
       await carregar()
     } else {
@@ -128,31 +121,35 @@ const Caixa: FC = () => {
   }
 
   const lancarMov = async () => {
-    if (!turno || !movDialog) return
-    const valor = parseFloat(movValor.replace(/\./g, '').replace(',', '.')) || 0
-    const fn = movDialog === 'sangria' ? window.api.caixa.sangria : window.api.caixa.suprimento
-    const r = await fn(turno.conta_id, valor, movDescricao)
+    if (!movDialog) return
+    const fn =
+      movDialog.tipo === 'sangria' ? window.api.caixa.sangria : window.api.caixa.suprimento
+    const r = await fn(movDialog.caixa.id, paraNumero(movValor), movDescricao)
     if (r.success) {
       setMovDialog(null)
       setMovValor('')
       setMovDescricao('')
-      showToast({ message: movDialog === 'sangria' ? 'Sangria registrada.' : 'Suprimento registrado.', variant: 'success' })
+      showToast({
+        message: movDialog.tipo === 'sangria' ? 'Sangria registrada.' : 'Suprimento registrado.',
+        variant: 'success'
+      })
+      await carregar()
     } else {
       showToast({ message: r.error, variant: 'destructive' })
     }
   }
 
   const fechar = async () => {
-    if (!turno) return
+    if (!fechando?.turno) return
     setOcupado(true)
-    const contagens = FORMAS_CONTAGEM.map((forma) => ({
-      forma,
-      valor_contado: parseFloat((contagem[forma] ?? '').replace(/\./g, '').replace(',', '.')) || 0
-    }))
-    const r = await window.api.caixa.fecharTurno(turno.id, contagens)
+    // ⚠️ UMA contagem só: dinheiro. Ver o cabeçalho.
+    const r = await window.api.caixa.fecharTurno(fechando.turno.id, [
+      { forma: 'dinheiro', valor_contado: paraNumero(contado) }
+    ])
     if (r.success) {
       setResultado(r.data as TurnoFechado)
-      setFecharDialog(false)
+      setFechando(null)
+      setContado('')
       await carregar()
     } else {
       showToast({ message: r.error, variant: 'destructive' })
@@ -167,7 +164,7 @@ const Caixa: FC = () => {
     if (r.success) {
       setResultado(null)
       setJustificativa('')
-      showToast({ message: 'Fechamento confirmado.', variant: 'success' })
+      showToast({ message: 'Fechamento conferido.', variant: 'success' })
       await carregar()
     } else {
       showToast({ message: r.error, variant: 'destructive' })
@@ -184,82 +181,123 @@ const Caixa: FC = () => {
       <div className="hidden lg:block mb-6">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Lock className="w-6 h-6 text-primary" />
-          Caixa
+          Caixas
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Abra o turno ao começar o dia e feche ao terminar, contando o que está na gaveta.
+          Abra o caixa ao começar e feche ao terminar, contando o dinheiro da gaveta.
         </p>
       </div>
 
-      {/* ── Turno aberto, ou o convite para abrir ── */}
-      {turno ? (
-        <div className="rounded-xl border bg-card p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="flex items-center gap-2 text-[15px] font-semibold">
-                <LockOpen className="w-4 h-4 text-emerald-600" />
-                Caixa aberto
-              </p>
-              <p className="num mt-1 text-[12.5px] text-muted-foreground">
-                {turno.conta_nome} · aberto por {turno.aberto_por_nome ?? '—'} em{' '}
-                {fmtDataHora(turno.aberto_em)}
-              </p>
-              <p className="num mt-0.5 text-[12.5px] text-muted-foreground">
-                Fundo de troco: {fmt(turno.fundo_troco)}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              className="h-11 flex-1 lg:flex-none"
-              onClick={() => {
-                setMovDialog('sangria')
-                setMovValor('')
-                setMovDescricao('')
-              }}
-            >
-              <ArrowUpFromLine className="w-4 h-4 mr-1.5" />
-              Sangria
-            </Button>
-            <Button
-              variant="outline"
-              className="h-11 flex-1 lg:flex-none"
-              onClick={() => {
-                setMovDialog('suprimento')
-                setMovValor('')
-                setMovDescricao('')
-              }}
-            >
-              <ArrowDownToLine className="w-4 h-4 mr-1.5" />
-              Suprimento
-            </Button>
-            <Button
-              className="h-11 w-full lg:w-auto"
-              onClick={() => {
-                setContagem({})
-                setFecharDialog(true)
-              }}
-            >
-              <Lock className="w-4 h-4 mr-1.5" />
-              Fechar caixa
-            </Button>
-          </div>
+      {caixas.length === 0 ? (
+        <div className="rounded-xl border bg-card">
+          <EstadoVazio
+            icone={<Lock className="w-9 h-9" />}
+            dica="Cadastre um caixa em Financeiro › Contas, escolhendo o tipo “Caixa”."
+          >
+            Nenhum caixa cadastrado.
+          </EstadoVazio>
         </div>
       ) : (
-        <div className="rounded-xl border bg-card p-4">
-          <p className="flex items-center gap-2 text-[15px] font-semibold">
-            <Lock className="w-4 h-4 text-muted-foreground" />
-            Nenhum caixa aberto
-          </p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            Abra o turno para que as vendas do dia entrem na conferência.
-          </p>
-          <Button className="mt-3 h-11 w-full lg:w-auto" onClick={() => setAbrirDialog(true)}>
-            <LockOpen className="w-4 h-4 mr-1.5" />
-            Abrir caixa
-          </Button>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {caixas.map((c) => {
+            const aberto = c.turno !== null
+            const esteAparelho = caixaId === c.id
+            return (
+              <div
+                key={c.id}
+                className={`rounded-xl border bg-card p-4 ${
+                  esteAparelho ? 'border-primary ring-1 ring-primary/25' : ''
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 text-[15px] font-semibold">
+                      {aberto ? (
+                        <LockOpen className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Lock className="w-4 h-4 text-muted-foreground" />
+                      )}
+                      {c.nome}
+                    </p>
+                    {aberto ? (
+                      <>
+                        <p className="num mt-1 text-[12.5px] text-muted-foreground">
+                          Aberto por {c.turno!.aberto_por_nome ?? '—'} em{' '}
+                          {fmtDataHora(c.turno!.aberto_em)}
+                        </p>
+                        <p className="num mt-0.5 text-[12.5px] text-muted-foreground">
+                          Fundo de troco: {fmt(c.turno!.fundo_troco)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-[12.5px] text-muted-foreground">Fechado</p>
+                    )}
+                  </div>
+                  {esteAparelho && (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      <MonitorSmartphone className="w-3 h-3" /> este aparelho
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {aberto ? (
+                    <>
+                      {/*
+                        ⚠️ Cores próprias, e não o cinza de sempre. Sangria e
+                        suprimento movem dinheiro de verdade: pintados como
+                        qualquer botão secundário, eles somem no meio da tela e o
+                        vendedor não encontra na hora em que precisa.
+                      */}
+                      <Button
+                        className="h-11 flex-1 bg-amber-500 text-white hover:bg-amber-600 lg:flex-none"
+                        onClick={() => {
+                          setMovDialog({ tipo: 'sangria', caixa: c })
+                          setMovValor('')
+                          setMovDescricao('')
+                        }}
+                      >
+                        <ArrowUpFromLine className="w-4 h-4 mr-1.5" />
+                        Sangria
+                      </Button>
+                      <Button
+                        className="h-11 flex-1 bg-sky-600 text-white hover:bg-sky-700 lg:flex-none"
+                        onClick={() => {
+                          setMovDialog({ tipo: 'suprimento', caixa: c })
+                          setMovValor('')
+                          setMovDescricao('')
+                        }}
+                      >
+                        <ArrowDownToLine className="w-4 h-4 mr-1.5" />
+                        Suprimento
+                      </Button>
+                      <Button
+                        className="h-11 w-full bg-slate-800 text-white hover:bg-slate-900 lg:w-auto"
+                        onClick={() => {
+                          setContado('')
+                          setFechando(c)
+                        }}
+                      >
+                        <Lock className="w-4 h-4 mr-1.5" />
+                        Fechar caixa
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      className="h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700 lg:w-auto"
+                      onClick={() => {
+                        setFundo('')
+                        setAbrindo(c)
+                      }}
+                    >
+                      <LockOpen className="w-4 h-4 mr-1.5" />
+                      Abrir caixa
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -285,10 +323,10 @@ const Caixa: FC = () => {
                     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-[14px] font-medium leading-tight">
-                          {fmtDataHora(t.aberto_em)} → {fmtDataHora(t.fechado_em)}
+                          {t.conta_nome} · {fmtDataHora(t.aberto_em)} → {fmtDataHora(t.fechado_em)}
                         </p>
                         <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-                          {t.conta_nome} · fechou {t.fechado_por_nome ?? '—'}
+                          fechou {t.fechado_por_nome ?? '—'}
                           {t.fora_de_hora === 1 ? ' · fora de hora' : ''}
                         </p>
                         {t.justificativa && (
@@ -317,40 +355,37 @@ const Caixa: FC = () => {
       )}
 
       {/* ── Abrir ── */}
-      <Dialog open={abrirDialog} onOpenChange={setAbrirDialog}>
+      <Dialog open={abrindo !== null} onOpenChange={(o) => !o && setAbrindo(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Abrir caixa</DialogTitle>
+            <DialogTitle>Abrir {abrindo?.nome}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
             <div className="grid gap-1.5">
-              <Label>Caixa</Label>
-              <Select
-                value={contaId}
-                onChange={setContaId}
-                opcoes={contas.map((c) => ({ valor: String(c.id), rotulo: c.nome }))}
-              />
-            </div>
-            <div className="grid gap-1.5">
               <Label htmlFor="fundo">Fundo de troco</Label>
-              <Input
+              <IMaskInput
                 id="fundo"
-                className="num"
+                {...CLASSE_DINHEIRO}
                 value={fundo}
-                onChange={(e) => setFundo(e.target.value)}
-                placeholder="0,00"
+                onAccept={(v: string) => setFundo(v)}
                 autoFocus
               />
               <p className="text-[11.5px] text-muted-foreground">
-                Quanto já está na gaveta agora. Ele entra na conferência do fim do dia.
+                Quanto já está na gaveta agora. Entra na conferência do fim do dia.
               </p>
             </div>
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-[11.5px] text-muted-foreground">
+              Este aparelho passa a operar em <strong>{abrindo?.nome}</strong>. As vendas feitas
+              aqui entram neste caixa.
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAbrirDialog(false)}>
+            <Button variant="outline" onClick={() => setAbrindo(null)}>
               Cancelar
             </Button>
-            <Button onClick={abrir}>Abrir</Button>
+            <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={abrir}>
+              Abrir
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -359,34 +394,35 @@ const Caixa: FC = () => {
       <Dialog open={movDialog !== null} onOpenChange={(o) => !o && setMovDialog(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{movDialog === 'sangria' ? 'Sangria' : 'Suprimento'}</DialogTitle>
+            <DialogTitle>
+              {movDialog?.tipo === 'sangria' ? 'Sangria' : 'Suprimento'} — {movDialog?.caixa.nome}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
             <p className="text-[12.5px] text-muted-foreground">
-              {movDialog === 'sangria'
+              {movDialog?.tipo === 'sangria'
                 ? 'Dinheiro saindo da gaveta (depósito, pagamento em espécie).'
                 : 'Dinheiro entrando na gaveta fora de uma venda (troco, aporte).'}
             </p>
             <div className="grid gap-1.5">
               <Label htmlFor="mov-valor">Valor</Label>
-              <Input
+              <IMaskInput
                 id="mov-valor"
-                className="num"
+                {...CLASSE_DINHEIRO}
                 value={movValor}
-                onChange={(e) => setMovValor(e.target.value)}
-                placeholder="0,00"
+                onAccept={(v: string) => setMovValor(v)}
                 autoFocus
               />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="mov-desc">
-                {movDialog === 'sangria' ? 'Para onde foi' : 'De onde veio'}
+                {movDialog?.tipo === 'sangria' ? 'Para onde foi' : 'De onde veio'}
               </Label>
               <Input
                 id="mov-desc"
                 value={movDescricao}
                 onChange={(e) => setMovDescricao(e.target.value)}
-                placeholder={movDialog === 'sangria' ? 'Depósito no banco' : 'Troco do dono'}
+                placeholder={movDialog?.tipo === 'sangria' ? 'Depósito no banco' : 'Troco do dono'}
               />
             </div>
           </div>
@@ -394,54 +430,59 @@ const Caixa: FC = () => {
             <Button variant="outline" onClick={() => setMovDialog(null)}>
               Cancelar
             </Button>
-            <Button onClick={lancarMov}>Registrar</Button>
+            <Button
+              className={
+                movDialog?.tipo === 'sangria'
+                  ? 'bg-amber-500 text-white hover:bg-amber-600'
+                  : 'bg-sky-600 text-white hover:bg-sky-700'
+              }
+              onClick={lancarMov}
+            >
+              Registrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Contagem às cegas ── */}
-      <Dialog open={fecharDialog} onOpenChange={setFecharDialog}>
-        <DialogContent className="max-w-[460px]">
+      {/* ── Contagem às cegas: UM campo ── */}
+      <Dialog open={fechando !== null} onOpenChange={(o) => !o && setFechando(null)}>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Contar o caixa</DialogTitle>
+            <DialogTitle>Contar {fechando?.nome}</DialogTitle>
           </DialogHeader>
           {/*
-            ⚠️ Nenhum número esperado aparece aqui. É o ponto inteiro do
-            fechamento às cegas — e não é só a tela que se cala: o backend não
-            tem como responder essa pergunta antes de a contagem chegar.
+            ⚠️ Nenhum número esperado aparece aqui, e há UM campo só.
+
+            Cartão e PIX não estão na gaveta: não há o que contar, e um campo que
+            sempre bate ensina a preencher qualquer número — inclusive o do
+            dinheiro, que é o único que importa.
           */}
           <div className="grid gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
             <p className="rounded-lg bg-muted/50 px-3 py-2 text-[12.5px] text-muted-foreground">
-              Conte a gaveta e digite o que <strong>encontrou</strong>. A diferença só aparece
-              depois de enviar — é assim que a conferência vale alguma coisa.
+              Conte as cédulas e moedas da gaveta e digite o que <strong>encontrou</strong>. O
+              sistema compara sozinho com o que registrou, e mostra o resultado depois.
             </p>
-            {FORMAS_CONTAGEM.map((forma) => (
-              <div key={forma} className="grid gap-1.5">
-                <Label htmlFor={`cont-${forma}`}>
-                  {ROTULO_FORMA[forma]}
-                  {forma !== 'dinheiro' && (
-                    <span className="ml-1 font-normal text-muted-foreground">
-                      (do comprovante, se quiser conferir)
-                    </span>
-                  )}
-                </Label>
-                <Input
-                  id={`cont-${forma}`}
-                  className="num"
-                  value={contagem[forma] ?? ''}
-                  onChange={(e) => setContagem({ ...contagem, [forma]: e.target.value })}
-                  placeholder="0,00"
-                  autoFocus={forma === 'dinheiro'}
-                />
-              </div>
-            ))}
+            <div className="grid gap-1.5">
+              <Label htmlFor="contado">Dinheiro na gaveta</Label>
+              <IMaskInput
+                id="contado"
+                {...CLASSE_DINHEIRO}
+                value={contado}
+                onAccept={(v: string) => setContado(v)}
+                autoFocus
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFecharDialog(false)}>
+            <Button variant="outline" onClick={() => setFechando(null)}>
               Cancelar
             </Button>
-            <Button onClick={fechar} disabled={ocupado}>
-              {ocupado ? 'Fechando…' : 'Fechar e ver a diferença'}
+            <Button
+              className="bg-slate-800 text-white hover:bg-slate-900"
+              onClick={fechar}
+              disabled={ocupado}
+            >
+              {ocupado ? 'Fechando…' : 'Fechar caixa'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -475,17 +516,31 @@ const Caixa: FC = () => {
               <ul className="rounded-lg border divide-y text-sm">
                 {resultado.contagens.map((c) => (
                   <li key={c.forma} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <span className="min-w-0 truncate">{ROTULO_FORMA[c.forma] ?? c.forma}</span>
+                    <span className="min-w-0 truncate">
+                      {ROTULO_FORMA[c.forma] ?? c.forma}
+                      {c.forma !== 'dinheiro' && (
+                        <span className="ml-1 text-[11px] text-muted-foreground">
+                          (registrado, não contado)
+                        </span>
+                      )}
+                    </span>
                     <span className="num shrink-0 text-right text-[12.5px]">
-                      <span className="text-muted-foreground">esperado {fmt(c.valor_esperado)}</span>
-                      {' · '}
-                      contado {fmt(c.valor_contado)}
-                      {c.diferenca !== 0 && (
-                        <strong className={c.diferenca > 0 ? ' text-emerald-700' : ' text-rose-700'}>
-                          {' '}
-                          ({c.diferenca > 0 ? '+' : '−'}
-                          {fmt(Math.abs(c.diferenca))})
-                        </strong>
+                      {c.forma === 'dinheiro' ? (
+                        <>
+                          <span className="text-muted-foreground">
+                            esperado {fmt(c.valor_esperado)}
+                          </span>
+                          {' · '}contado {fmt(c.valor_contado)}
+                          {c.diferenca !== 0 && (
+                            <strong className={c.diferenca > 0 ? ' text-emerald-700' : ' text-rose-700'}>
+                              {' '}
+                              ({c.diferenca > 0 ? '+' : '−'}
+                              {fmt(Math.abs(c.diferenca))})
+                            </strong>
+                          )}
+                        </>
+                      ) : (
+                        fmt(c.valor_esperado)
                       )}
                     </span>
                   </li>
@@ -508,12 +563,8 @@ const Caixa: FC = () => {
                       placeholder="O que explica a diferença?"
                     />
                   </div>
-                  {/*
-                    ⚠️ Confirmar não é "eu vi": é ASSUMIR a diferença. Por isso o
-                    texto do botão diz aceitar, e por isso só o gerente pode.
-                  */}
                   <p className="text-[11.5px] text-muted-foreground">
-                    Ao confirmar, o turno é fechado em definitivo e não pode mais ser alterado.
+                    Ao aceitar, o turno é fechado em definitivo e não pode mais ser alterado.
                     Correção depois disso é lançamento novo, no extrato.
                   </p>
                 </>
@@ -532,8 +583,7 @@ const Caixa: FC = () => {
               <Button
                 onClick={confirmar}
                 disabled={
-                  ocupado ||
-                  (resultado?.diferenca_dinheiro !== 0 && justificativa.trim() === '')
+                  ocupado || (resultado?.diferenca_dinheiro !== 0 && justificativa.trim() === '')
                 }
               >
                 <CheckCircle2 className="w-4 h-4 mr-1.5" />

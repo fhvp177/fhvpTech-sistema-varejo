@@ -69,9 +69,19 @@ describe('o esperado só existe depois da contagem', () => {
      * ali um "esperado: R$ X" para "ajudar", este teste fica vermelho — e a
      * ajuda é exatamente o que destrói o recurso.
      */
-    const inicio = TELA.indexOf('Contar o caixa')
+    const inicio = TELA.indexOf('Contar {fechando?.nome}')
     const fim = TELA.indexOf('Fechamento do caixa')
     expect(inicio, 'o diálogo de contagem sumiu').toBeGreaterThan(-1)
+    /*
+     * ⚠️ E ele tem UM campo só: dinheiro.
+     *
+     * Decisão do dono em 06/09, e ele tem razão: pedir para o vendedor digitar
+     * quanto entrou de cartão e PIX é trabalho sem resultado — não existe pilha
+     * de PIX na gaveta para conferir. Pior, um campo que sempre bate ensina a
+     * preencher qualquer número, e é a mesma mão que preenche o do dinheiro.
+     */
+    expect(TELA, 'a contagem voltou a pedir cartão e PIX')
+      .not.toContain('FORMAS_CONTAGEM')
     expect(fim, 'o diálogo de resultado sumiu').toBeGreaterThan(inicio)
 
     /*

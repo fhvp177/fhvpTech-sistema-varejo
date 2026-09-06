@@ -15,6 +15,7 @@ import {
 } from '../db/queries/financeiro'
 import {
   turnoAberto,
+  caixasComTurno,
   abrirTurno,
   fecharTurno,
   confirmarTurno,
@@ -173,9 +174,17 @@ export function registrarHandlersFinanceiro(): void {
   )
 
   // ── Turno de caixa ────────────────────────────────────────────────────────
-  registrarCanal('caixa:turnoAberto', () => {
+  registrarCanal('caixa:caixasComTurno', () => {
     try {
-      return { success: true, data: turnoAberto() }
+      return { success: true, data: caixasComTurno() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('caixa:turnoAberto', (caixaId?: number) => {
+    try {
+      return { success: true, data: turnoAberto(caixaId ? Number(caixaId) : undefined) }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

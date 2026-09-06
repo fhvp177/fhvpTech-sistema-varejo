@@ -53,8 +53,12 @@ const api = {
       ipcRenderer.invoke('contasPagar:atualizar', id, dados),
     deletar: (id: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('contasPagar:deletar', id),
-    registrarPagamento: (id: number, valor: number): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('contasPagar:registrarPagamento', id, valor),
+    registrarPagamento: (
+      id: number,
+      valor: number,
+      contaFinanceiraId?: number
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('contasPagar:registrarPagamento', id, valor, contaFinanceiraId),
     estornarPagamento: (id: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('contasPagar:estornarPagamento', id)
   },
@@ -83,7 +87,9 @@ const api = {
   // ABERTO: o fechamento é às cegas, e o esperado só volta em `fecharTurno`,
   // depois de a contagem ter sido enviada.
   caixa: {
-    turnoAberto: (): Promise<RespostaIPC> => ipcRenderer.invoke('caixa:turnoAberto'),
+    turnoAberto: (caixaId?: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:turnoAberto', caixaId),
+    caixasComTurno: (): Promise<RespostaIPC> => ipcRenderer.invoke('caixa:caixasComTurno'),
     abrirTurno: (contaId: number, fundoTroco: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('caixa:abrirTurno', contaId, fundoTroco),
     fecharTurno: (turnoId: number, contagens: unknown): Promise<RespostaIPC> =>

@@ -78,8 +78,10 @@ export function registrarHandlersPedidos(): void {
     try {
       const sessao = requerSessao()
       const p = (pagamento ?? {}) as Record<string, unknown>
+      if (!p.caixa_id) throw new Error('CAIXA_FECHADO')
       const venda = concluirPedido(Number(pedidoId), {
         vendedor_id: sessao.id,
+        caixa_id: Number(p.caixa_id),
         status_pagamento: (p.status_pagamento as 'pago') ?? 'pago',
         data_vencimento: (p.data_vencimento as string | null) ?? null,
         num_parcelas: p.num_parcelas == null ? null : Number(p.num_parcelas),

@@ -409,12 +409,27 @@ describe('fechamento de caixa às cegas', () => {
     expect(() => confirmarTurno(id, 2, null)).toThrow(/ainda não foi fechado/i)
   })
 
-  seTiverSqlite('★ um caixa aberto por vez', () => {
-    // Com dois abertos, o lançamento escolheria um pela ordem da consulta e
-    // metade das vendas cairia no turno errado — erro que só apareceria no
-    // fechamento, sem pista de onde veio.
+  seTiverSqlite('★ a MESMA gaveta não abre dois turnos', () => {
+    // Duas contagens brigando pelo mesmo dinheiro nunca fecham: uma sobra
+    // exatamente o que a outra falta, e não há como saber qual estava certa.
     abrirTurno(1, 1, 0)
-    expect(() => abrirTurno(1, 1, 0)).toThrow(/já existe um caixa aberto/i)
+    expect(() => abrirTurno(1, 1, 0)).toThrow(/este caixa já está aberto/i)
+  })
+
+  seTiverSqlite('★ mas DOIS caixas podem estar abertos ao mesmo tempo', () => {
+    /*
+     * Decisão do dono em 06/09: a loja pode ter mais de um caixa físico. Caixa 1
+     * e Caixa 2 operam juntos, cada um com a própria gaveta e a própria contagem.
+     */
+    db!.exec("INSERT INTO contas_financeiras (id, nome, tipo) VALUES (3, 'Caixa 2', 'caixa')")
+    abrirTurno(1, 1, 0)
+    expect(() => abrirTurno(3, 1, 0)).not.toThrow()
+  })
+
+  seTiverSqlite('★ não se abre turno numa conta bancária', () => {
+    // Banco não tem gaveta para contar. Deixar abrir criaria um turno que nunca
+    // fecha certo e não significa nada.
+    expect(() => abrirTurno(2, 1, 0)).toThrow(/não numa conta bancária/i)
   })
 })
 

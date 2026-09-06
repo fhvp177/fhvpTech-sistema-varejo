@@ -31,6 +31,8 @@ import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 import { useSessao } from '@/App'
 import { useEhCelular } from '@/hooks/useEhCelular'
 import DicaRolante from '@/components/DicaRolante'
+import { IMaskInput } from 'react-imask'
+import { CLASSE_DINHEIRO, paraNumero } from '@/utils/mascaras'
 
 const ITENS_POR_PAGINA = 20
 
@@ -125,6 +127,8 @@ const ContasPagar: FC = () => {
   // Dialog de pagamento
   const [pagando, setPagando] = useState<ContaPagar | null>(null)
   const [valorPag, setValorPag] = useState('')
+  const [contasFin, setContasFin] = useState<ContaFinanceira[]>([])
+  const [contaPagamento, setContaPagamento] = useState('')
   const [erroPag, setErroPag] = useState('')
   const [salvandoPag, setSalvandoPag] = useState(false)
 
@@ -257,14 +261,18 @@ const ContasPagar: FC = () => {
 
   const registrarPagamento = async () => {
     if (!pagando) return
-    const valor = parseFloat(valorPag.replace(',', '.'))
+    const valor = paraNumero(valorPag)
     if (isNaN(valor) || valor <= 0) {
       setErroPag('Informe um valor válido maior que zero.')
       return
     }
     setSalvandoPag(true)
     setErroPag('')
-    const resp = await window.api.contasPagar.registrarPagamento(pagando.id, valor)
+    const resp = await window.api.contasPagar.registrarPagamento(
+      pagando.id,
+      valor,
+      contaPagamento ? Number(contaPagamento) : undefined
+    )
     if (resp.success) {
       await carregar()
       setPagando(null)
@@ -299,6 +307,20 @@ const ContasPagar: FC = () => {
     setForm((f) => ({ ...f, [campo]: valor }))
 
   const ehCelular = useEhCelular()
+
+  useEffect(() => {
+    void window.api.financeiro.listarContas().then((r) => {
+      if (r.success) {
+        const lista = r.data as ContaFinanceira[]
+        setContasFin(lista)
+        // Começa na conta marcada como padrão de saída, que é o palpite certo
+        // na maioria das vezes — mas continua trocavel, que é o ponto.
+        setContaPagamento((a) =>
+          a || String(lista.find((c) => c.padrao_pagamento === 1)?.id ?? lista[0]?.id ?? '')
+        )
+      }
+    })
+  }, [])
 
   const restantePagando = pagando
     ? Math.max(0, +(pagando.valor_total - pagando.valor_pago).toFixed(2))
@@ -811,20 +833,34 @@ const ContasPagar: FC = () => {
 
               {restantePagando > 0 ? (
                 <div className="space-y-2">
+                  {/*
+                    ⚠️ DE ONDE sai o dinheiro é pergunta, não palpite. Antes a
+                    despesa era sempre debitada da conta padrão: quem pagasse o
+                    aluguel pelo banco via o saldo do CAIXA cair, e o banco não
+                    mexer — e aí parecia que nada tinha sido descontado.
+                  */}
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs">Sai de qual conta?</Label>
+                    <Select
+                      value={contaPagamento}
+                      onChange={setContaPagamento}
+                      opcoes={contasFin.map((c) => ({
+                        valor: String(c.id),
+                        rotulo: `${c.nome} — ${fmt(c.saldo)}`
+                      }))}
+                    />
+                  </div>
                   <div className="flex gap-2">
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
+                    <IMaskInput
+                      {...CLASSE_DINHEIRO}
                       value={valorPag}
-                      onChange={(e) => {
-                        setValorPag(e.target.value)
+                      onAccept={(v: string) => {
+                        setValorPag(v)
                         setErroPag('')
                       }}
-                      placeholder="Valor pago"
-                      className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className={`${CLASSE_DINHEIRO.className} flex-1`}
                     />
-                    <Button size="sm" onClick={registrarPagamento} disabled={salvandoPag}>
+                    <Button size="sm" className="h-10 shrink-0" onClick={registrarPagamento} disabled={salvandoPag}>
                       {salvandoPag ? 'Salvando...' : 'Registrar'}
                     </Button>
                   </div>

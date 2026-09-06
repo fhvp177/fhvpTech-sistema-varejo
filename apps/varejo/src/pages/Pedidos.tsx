@@ -4,6 +4,7 @@ import {
   Truck,
   Store,
   MessageCircle,
+  Printer,
   CheckCircle2,
   XCircle,
   Clock
@@ -25,6 +26,10 @@ import {
 import { FORMAS_A_VISTA } from '@/utils/formaPagamento'
 import { linkWhatsApp, mensagemPedidoSeparado } from '@/utils/whatsapp'
 import { obterDadosLoja } from '@/utils/dadosLoja'
+import { gerarHtmlComprovanteEntrega } from '@/utils/relatorioFinanceiro'
+import { useImprimir } from '@/components/ImpressaoProvider'
+import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
+import { nomeImpressao } from '@/utils/nomeImpressao'
 
 /**
  * Pedidos separados: a mercadoria já saiu da prateleira, o dinheiro ainda não.
@@ -52,6 +57,8 @@ const Pedidos: FC = () => {
 
   const { showToast } = useToast()
   const confirmar = useConfirm()
+  const imprimirDoc = useImprimir()
+  const { caixaId } = useCaixaDoAparelho()
 
   const carregar = useCallback(async () => {
     const r = await window.api.pedidos.listar('separado')
@@ -69,16 +76,47 @@ const Pedidos: FC = () => {
     setOcupado(true)
     const r = await window.api.pedidos.concluir(receber.id, {
       status_pagamento: 'pago',
-      forma_pagamento: forma
+      forma_pagamento: forma,
+      // ⚠️ Receber é uma venda: cai no caixa deste aparelho e exige turno aberto,
+      // como qualquer outra. Sem isso o dinheiro entraria fora da conferência.
+      caixa_id: caixaId
     })
     if (r.success) {
       showToast({ message: `Pedido #${receber.id} virou venda.`, variant: 'success' })
       setReceber(null)
       await carregar()
     } else {
-      showToast({ message: r.error, variant: 'destructive' })
+      showToast({
+        message:
+          r.error === 'CAIXA_FECHADO'
+            ? 'Abra o caixa antes de receber — senão este dinheiro fica fora da conferência.'
+            : r.error,
+        variant: 'destructive'
+      })
     }
     setOcupado(false)
+  }
+
+  /*
+   * O papel que vai com o entregador.
+   *
+   * Ideia dele, e é boa: quem sai com a joia precisa de algo na mão. Sem papel,
+   * o entregador depende da memória para saber quanto cobrar, e o cliente não
+   * tem como conferir se o que chegou é o que pediu.
+   */
+  const imprimirParaEntregador = async (p: PedidoSeparado) => {
+    const r = await window.api.pedidos.detalhe(p.id)
+    if (!r.success || !r.data) {
+      showToast({ message: 'Não consegui ler os itens do pedido.', variant: 'destructive' })
+      return
+    }
+    const detalhe = r.data as PedidoSeparado
+    const html = gerarHtmlComprovanteEntrega(
+      { ...p, observacao: p.observacao },
+      detalhe.itens ?? [],
+      nomeLoja
+    )
+    await imprimirDoc(html, nomeImpressao.pedidoEntrega(p.id), 'cupom')
   }
 
   const cancelar = async (p: PedidoSeparado) => {
@@ -163,6 +201,11 @@ const Pedidos: FC = () => {
                 rotulo: 'Chamar no WhatsApp',
                 icone: <MessageCircle className="w-4 h-4" />,
                 onSelecionar: () => chamarNoWhats(p)
+              },
+              {
+                rotulo: 'Imprimir para o entregador',
+                icone: <Printer className="w-4 h-4" />,
+                onSelecionar: () => void imprimirParaEntregador(p)
               },
               {
                 rotulo: 'Cancelar pedido',

@@ -24,7 +24,9 @@ import {
   DialogTitle,
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
+import { IMaskInput } from 'react-imask'
 import { useEhCelular } from '@/hooks/useEhCelular'
+import { CLASSE_AGENCIA, CLASSE_CONTA, CLASSE_DINHEIRO, paraMascara, paraNumero } from '@/utils/mascaras'
 
 /**
  * Contas do dinheiro, e o extrato de cada uma.
@@ -142,7 +144,7 @@ const Contas: FC = () => {
       banco: c.banco ?? '',
       agencia: c.agencia ?? '',
       conta: c.conta ?? '',
-      saldo_inicial: String(c.saldo_inicial ?? 0).replace('.', ','),
+      saldo_inicial: paraMascara(c.saldo_inicial),
       forma_padrao: c.forma_padrao ?? '',
       padrao_recebimento: c.padrao_recebimento === 1,
       padrao_pagamento: c.padrao_pagamento === 1
@@ -157,10 +159,7 @@ const Contas: FC = () => {
       return
     }
     setSalvando(true)
-    const dados = {
-      ...form,
-      saldo_inicial: parseFloat(form.saldo_inicial.replace(/\./g, '').replace(',', '.')) || 0
-    }
+    const dados = { ...form, saldo_inicial: paraNumero(form.saldo_inicial) }
     const r = editando
       ? await window.api.financeiro.atualizarConta(editando.id, dados)
       : await window.api.financeiro.criarConta(dados)
@@ -195,7 +194,7 @@ const Contas: FC = () => {
 
   const lancar = async () => {
     if (!selecionada) return
-    const valor = parseFloat(lancValor.replace(/\./g, '').replace(',', '.')) || 0
+    const valor = paraNumero(lancValor)
     if (valor <= 0) {
       showToast({ message: 'Informe um valor maior que zero.', variant: 'destructive' })
       return
@@ -259,8 +258,33 @@ const Contas: FC = () => {
           </EstadoVazio>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {contas.map((c) => {
+        <div className="space-y-5">
+          {/*
+            ⚠️ Duas seções, e não uma lista só. Pedido dele: "o caixa da loja não
+            deve ser uma conta, deve ser algo à parte".
+
+            Por dentro ele CONTINUA sendo uma conta, e precisa ser — o livro tem
+            uma tabela de movimentos só, e todo dinheiro cai nela. Inventar um
+            segundo lugar para a gaveta daria duas verdades sobre quanto a loja
+            tem. O que muda é o que se vê: onde o dinheiro MORA (banco) e por
+            onde ele PASSA (gaveta) são coisas diferentes para quem opera.
+          */}
+          {([
+            ['caixa', 'Caixas da loja', 'Gavetas de dinheiro. Abrem e fecham turno.'],
+            ['banco', 'Contas bancárias', 'Onde o dinheiro fica guardado.']
+          ] as const).map(([grupo, titulo, ajuda]) => {
+            const doGrupo = contas.filter((c) =>
+              grupo === 'caixa' ? c.tipo === 'caixa' : c.tipo !== 'caixa'
+            )
+            if (doGrupo.length === 0) return null
+            return (
+              <section key={grupo}>
+                <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-[0.10em] text-muted-foreground">
+                  {titulo}
+                </h3>
+                <p className="mb-2 text-[11.5px] text-muted-foreground">{ajuda}</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {doGrupo.map((c) => {
             const acoes: AcaoMenu[] = [
               { rotulo: 'Editar', icone: <Pencil className="w-4 h-4" />, onSelecionar: () => abrirEdicao(c) },
               {
@@ -306,6 +330,10 @@ const Contas: FC = () => {
                   </span>
                 </div>
               </button>
+            )
+          })}
+                </div>
+              </section>
             )
           })}
         </div>
@@ -428,12 +456,11 @@ const Contas: FC = () => {
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="conta-saldo">Saldo inicial</Label>
-                <Input
+                <IMaskInput
                   id="conta-saldo"
-                  className="num"
+                  {...CLASSE_DINHEIRO}
                   value={form.saldo_inicial}
-                  onChange={(e) => setForm({ ...form, saldo_inicial: e.target.value })}
-                  placeholder="0,00"
+                  onAccept={(v: string) => setForm({ ...form, saldo_inicial: v })}
                 />
               </div>
             </div>
@@ -475,30 +502,46 @@ const Contas: FC = () => {
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="conta-ag">Agência</Label>
-                  <Input
+                  <IMaskInput
                     id="conta-ag"
-                    className="num"
+                    {...CLASSE_AGENCIA}
                     value={form.agencia}
-                    onChange={(e) => setForm({ ...form, agencia: e.target.value })}
+                    onAccept={(v: string) => setForm({ ...form, agencia: v })}
                   />
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="conta-num">Conta</Label>
-                  <Input
+                  <IMaskInput
                     id="conta-num"
-                    className="num"
+                    {...CLASSE_CONTA}
                     value={form.conta}
-                    onChange={(e) => setForm({ ...form, conta: e.target.value })}
+                    onAccept={(v: string) => setForm({ ...form, conta: v })}
                   />
                 </div>
               </div>
             )}
 
+            {/*
+              ⚠️ Os rótulos antigos ("conta padrão para o que ENTRA") eram jargão e
+              ele disse que não entendia. O que eles significam é uma coisa só:
+              PARA ONDE VAI o dinheiro quando o sistema não tem como saber.
+
+              Isso é raro de propósito. Venda já vai pela forma de pagamento
+              (dinheiro na gaveta, PIX no banco) e despesa passa a perguntar. Sobra
+              o caso sem pista: receber uma dívida antiga cuja forma ninguém
+              registrou. Sem um destino combinado, esse dinheiro não teria onde
+              cair — e ficar de fora do livro é o único desfecho inaceitável.
+            */}
             <div className="space-y-2 rounded-lg border p-3">
+              <p className="text-[12px] font-medium">Quando o sistema não souber a conta</p>
+              <p className="text-[11.5px] text-muted-foreground">
+                Acontece pouco: venda já vai pela forma de pagamento e despesa pergunta. Sobra
+                o recebimento antigo, sem forma registrada.
+              </p>
               {(
                 [
-                  ['padrao_recebimento', 'Conta padrão para o que ENTRA'],
-                  ['padrao_pagamento', 'Conta padrão para o que SAI']
+                  ['padrao_recebimento', 'Usar esta conta para dinheiro que ENTRA'],
+                  ['padrao_pagamento', 'Usar esta conta para dinheiro que SAI']
                 ] as const
               ).map(([campo, rotulo]) => (
                 <label
@@ -564,12 +607,11 @@ const Contas: FC = () => {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="lanc-valor">Valor</Label>
-              <Input
+              <IMaskInput
                 id="lanc-valor"
-                className="num"
+                {...CLASSE_DINHEIRO}
                 value={lancValor}
-                onChange={(e) => setLancValor(e.target.value)}
-                placeholder="0,00"
+                onAccept={(v: string) => setLancValor(v)}
               />
             </div>
             <div className="grid gap-1.5">

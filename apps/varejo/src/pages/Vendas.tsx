@@ -1,5 +1,6 @@
-import { FC, Suspense, lazy, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowLeftRight, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2 } from 'lucide-react'
+import { FC, Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, ArrowLeftRight, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2, Lock as IconeCadeado, LockOpen as IconeCadeadoAberto } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
 import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { IMaskInput } from 'react-imask'
@@ -38,6 +39,8 @@ import ModalDevolucao from '@/components/ModalDevolucao'
 import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancelarVenda'
 import { useEhCelular } from '@/hooks/useEhCelular'
 import DicaRolante from '@/components/DicaRolante'
+import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
+import { CLASSE_DINHEIRO, paraNumero } from '@/utils/mascaras'
 import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 
 // Nota fiscal só existe no plano Pro. Com a flag falsa, o `lazy` vira null e o
@@ -1511,6 +1514,33 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { setAtivo: setPdvAtivo } = usePdvMode()
   const ehCelularPdv = useEhCelular()
+
+  const navegar = useNavigate()
+  const { caixaId, escolher } = useCaixaDoAparelho()
+  const [caixas, setCaixas] = useState<Array<{ id: number; nome: string; turno: TurnoCaixa | null }>>([])
+  const [carregandoCaixas, setCarregandoCaixas] = useState(true)
+
+  /*
+   * ⚠️ Recarrega sempre que a tela volta ao foco: o caixa pode ter sido
+   * aberto noutra aba, ou fechado pelo gerente enquanto o vendedor estava
+   * aqui. Sem isso o PDV insistiria em barrar uma venda que já pode acontecer.
+   */
+  const recarregarCaixas = useCallback(async () => {
+    const r = await window.api.caixa.caixasComTurno()
+    if (r.success) setCaixas(r.data as Array<{ id: number; nome: string; turno: TurnoCaixa | null }>)
+    setCarregandoCaixas(false)
+  }, [])
+
+  useEffect(() => {
+    void recarregarCaixas()
+    const aoFocar = () => void recarregarCaixas()
+    window.addEventListener('focus', aoFocar)
+    return () => window.removeEventListener('focus', aoFocar)
+  }, [recarregarCaixas])
+
+  const caixaAtual = caixas.find((c) => c.id === caixaId) ?? null
+  const caixaAberto = caixaAtual?.turno != null
+  void caixaAtual
   const { aberta: calculadoraAberta } = useCalculadora()
   const { ehDono, vendedor } = useSessao()
   const { bloquear } = useLock()
@@ -1798,6 +1828,9 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       num_parcelas: statusPagamento === 'parcelado' ? numParcelas : null,
       desconto: descontoValor,
       entrada: entradaValor,
+      // ⚠️ Em qual gaveta esta venda entrou. Sem isto o backend recusa — e
+      // recusa de propósito: venda fora de turno não entra em conferência nenhuma.
+      caixa_id: caixaId,
       valor_credito_usado: creditoAplicado,
       // Só vai quando houve escolha. Nos outros casos o backend deriva
       // ('crediario' a prazo, 'credito_loja' quando o saldo cobre tudo).
@@ -2132,7 +2165,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const persistirProduto = async (pinDono?: string) => {
     setSalvandoProduto(true)
     setErroProduto('')
-    const preco = parseFloat(precoProdutoRapido.replace(',', '.'))
+    const preco = paraNumero(precoProdutoRapido)
     const estoque = Math.max(0, parseInt(estoqueProdutoRapido) || 0)
     const dados = {
       codigo_barras: codigoProdutoRapido.trim() || null,
@@ -2163,7 +2196,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const salvarProdutoRapido = () => {
     setErroProduto('')
     if (!nomeProdutoRapido.trim()) { setErroProduto('Informe o nome do produto.'); return }
-    const preco = parseFloat(precoProdutoRapido.replace(',', '.'))
+    const preco = paraNumero(precoProdutoRapido)
     if (isNaN(preco) || preco <= 0) { setErroProduto('Informe um preço de venda válido.'); return }
 
     // Gerente cadastra direto; vendedor precisa do PIN de um gerente (validado no backend).
@@ -2191,6 +2224,68 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       const exato = (p: Produto) => ((p.referencia ?? '').toLowerCase() === termoBuscaLimpo ? 1 : 0)
       return exato(b) - exato(a)
     })
+
+  /*
+   * ⚠️ Sem caixa aberto, o PDV não vende — e diz o que fazer.
+   *
+   * Barrar sem oferecer saída seria um beco: o vendedor com cliente na frente
+   * não vai adivinhar que precisa passar por outra tela. Aqui ele escolhe o
+   * caixa e abre no mesmo lugar.
+   *
+   * A trava de verdade está no banco, que recusa a venda sem turno. Esta tela é
+   * a explicação, não a fechadura — e por isso ela pode ser generosa.
+   */
+  if (!carregandoCaixas && !caixaAberto) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="w-full max-w-sm rounded-xl border bg-card p-6 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <IconeCadeado className="h-6 w-6" />
+          </div>
+          <h2 className="text-lg font-semibold">
+            {caixas.length === 0 ? 'Nenhum caixa cadastrado' : 'Nenhum caixa aberto'}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {caixas.length === 0
+              ? 'Cadastre um caixa em Financeiro › Contas, escolhendo o tipo “Caixa”.'
+              : 'Abra o caixa para registrar as vendas do dia. Sem isso o dinheiro não entra na conferência.'}
+          </p>
+
+          {caixas.length > 1 && (
+            <div className="mt-4 space-y-2">
+              <p className="text-[11.5px] text-muted-foreground">Em qual caixa você está?</p>
+              {caixas.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => escolher(c.id)}
+                  className={`flex min-h-[52px] w-full items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm transition-colors ${
+                    caixaId === c.id ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'
+                  }`}
+                >
+                  <span className="min-w-0 truncate font-medium">{c.nome}</span>
+                  <span className="shrink-0 text-[11.5px] text-muted-foreground">
+                    {c.turno ? 'aberto' : 'fechado'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <Button
+            className="mt-4 h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+            onClick={() => navegar('/caixa')}
+          >
+            <IconeCadeadoAberto className="mr-1.5 h-4 w-4" />
+            {caixas.length === 0 ? 'Ir para Contas' : 'Abrir caixa agora'}
+          </Button>
+          <Button variant="outline" className="mt-2 h-11 w-full" onClick={onSair}>
+            Voltar
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     /*
@@ -2808,8 +2903,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             registrar venda que ainda não aconteceu.
           */}
           <Button
-            variant="outline"
-            className="w-full"
+            className="w-full bg-violet-600 text-white hover:bg-violet-700"
             onClick={() => {
               setSepararEntrega(false)
               setSepararEndereco(
@@ -3104,16 +3198,20 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
                     R$
                   </span>
-                  <Input
+                  {/*
+                    ⚠️ Mascarado, e não `type="number"`: o campo numérico do
+                    navegador aceita ponto ou vírgula conforme o idioma da
+                    máquina, e no celular abre um teclado sem vírgula. Aqui é
+                    seguro trocar porque este formulário nasce vazio — nunca
+                    carrega preço do banco.
+                  */}
+                  <IMaskInput
                     id="preco-produto-rapido"
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    {...CLASSE_DINHEIRO}
                     value={precoProdutoRapido}
-                    onChange={(e) => setPrecoProdutoRapido(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') salvarProdutoRapido() }}
-                    placeholder="0,00"
-                    className="pl-9"
+                    onAccept={(v: string) => setPrecoProdutoRapido(v)}
+                    onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') salvarProdutoRapido() }}
+                    className={`${CLASSE_DINHEIRO.className} pl-9`}
                   />
                 </div>
               </div>

@@ -60,9 +60,17 @@ export function registrarHandlersVendas(): void {
 
   // A venda é sempre atribuída ao vendedor logado. Ignora qualquer vendedor_id
   // que venha do renderer — a sessão é fonte da verdade pra rastreabilidade.
+  /*
+   * ⚠️ O `caixa_id` vem do renderer e é OBRIGATÓRIO aqui, na fronteira: é esta
+   * a única porta por onde uma venda de balcão nasce. Deixar passar sem caixa
+   * seria abrir por fora a trava que `criarVenda` põe por dentro.
+   */
   registrarCanal('vendas:criar', (dados: DadosNovaVenda) => {
     try {
       const sessao = requerSessao()
+      if (!dados.caixa_id) {
+        throw new Error('CAIXA_FECHADO')
+      }
       const resultado = criarVenda({ ...dados, vendedor_id: sessao.id })
       obterBackupManager().marcarAlteracao()
       dispararBackupPorVendaSeAtivo()

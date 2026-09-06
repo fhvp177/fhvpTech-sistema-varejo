@@ -131,7 +131,11 @@ export function deletarContaPagar(id: number): void {
 // Registra um pagamento (parcial ou total), espelhando registrarPagamentoParcial
 // das vendas: credita em valor_pago, sem nunca ultrapassar o total, e carimba o
 // pago_em quando a conta é quitada por inteiro.
-export function registrarPagamentoConta(id: number, valor: number): void {
+export function registrarPagamentoConta(
+  id: number,
+  valor: number,
+  contaFinanceiraId?: number | null
+): void {
   const db = obterBancoDeDados()
   db.transaction(() => {
     const conta = db
@@ -162,7 +166,16 @@ export function registrarPagamentoConta(id: number, valor: number): void {
      * Dentro da transação de propósito: uma conta que falha ao ser baixada não
      * pode deixar a saída registrada no livro.
      */
-    const contaFin = contaSugerida(db, 'pagamento', null)
+    /*
+     * ⚠️ De ONDE o dinheiro saiu é escolha de quem paga, não palpite do
+     * sistema. Ele reparou nisso: a despesa era debitada sempre da conta padrão,
+     * então quem pagasse o aluguel pelo banco via o saldo do CAIXA cair — e o
+     * banco, que é de onde o dinheiro saiu de verdade, não mexia.
+     *
+     * A queda para a conta padrão continua, para a baixa feita por outro caminho
+     * (importação, script) não ficar sem lançamento nenhum.
+     */
+    const contaFin = contaFinanceiraId ?? contaSugerida(db, 'pagamento', null)
     if (contaFin) {
       lancarMovimento(db, {
         conta_id: contaFin,

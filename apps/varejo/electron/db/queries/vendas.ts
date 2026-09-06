@@ -66,6 +66,18 @@ export type VendaDetalhada = Venda & { itens: ItemVenda[]; parcelas: Parcela[] }
 export type DadosNovaVenda = {
   cliente_id: number | null
   vendedor_id: number
+  /**
+   * Em qual caixa físico esta venda aconteceu.
+   *
+   * ⚠️ Obrigatório, e a venda é recusada se o caixa não estiver aberto. Venda
+   * fora de turno é dinheiro que não entra em conferência nenhuma — some do
+   * fechamento sem ninguém notar, que é o oposto do que o controle existe para
+   * fazer.
+   *
+   * Ausente só em venda que nasce de outro fluxo sem caixa (entrega de OS na
+   * assistência), e aí o movimento fica sem turno de propósito.
+   */
+  caixa_id?: number | null
   status_pagamento: StatusPagamento
   data_vencimento: string | null
   num_parcelas?: number | null
@@ -400,6 +412,33 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
 
   const formaPagamento = formaDaVenda(dados, total, creditoUsado)
 
+  /*
+   * ⚠️ Sem caixa aberto não se vende.
+   *
+   * A regra parece dura e é o que faz a conferência valer: venda fora de turno
+   * não entra em fechamento nenhum, e o dinheiro dela some do controle sem
+   * ninguém notar. O PDV oferece "abrir caixa" na mesma tela, então o custo para
+   * quem opera é de dois cliques.
+   *
+   * A trava mora AQUI, no banco, e não só na tela: o segundo caixa fala pelo
+   * mesmo canal, e uma regra que vive na interface é uma regra que o outro
+   * aparelho não tem.
+   */
+  let turnoId: number | null = null
+  if (dados.caixa_id) {
+    const turno = db
+      .prepare(
+        `SELECT id FROM turnos_caixa
+          WHERE conta_id = ? AND fechado_em IS NULL
+          ORDER BY id DESC LIMIT 1`
+      )
+      .get(dados.caixa_id) as { id: number } | undefined
+    if (!turno) {
+      throw new Error('CAIXA_FECHADO')
+    }
+    turnoId = turno.id
+  }
+
   const inserirVenda = db.prepare(
     `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento, comissao_pct)
      VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @comissao_pct)`
@@ -493,7 +532,20 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       (dados.status_pagamento === 'pago' ? total : entrada) - creditoUsado
     ).toFixed(2)
     if (recebidoAgora > 0) {
-      const conta = contaSugerida(db, 'recebimento', formaPagamento)
+      /*
+       * ⚠️ Dinheiro em espécie cai NO CAIXA DO OPERADOR, sempre.
+       *
+       * Com um caixa só, perguntar "qual conta recebe dinheiro?" dava no mesmo.
+       * Com dois, a nota de R$ 50 que entrou no Caixa 2 iria parar na gaveta do
+       * Caixa 1 — e as duas contagens fechariam erradas, uma sobrando e a outra
+       * faltando exatamente o mesmo valor.
+       *
+       * Cartão e PIX seguem a conta da forma: eles não passam por gaveta nenhuma.
+       */
+      const conta =
+        formaPagamento === 'dinheiro' && dados.caixa_id
+          ? dados.caixa_id
+          : contaSugerida(db, 'recebimento', formaPagamento)
       if (conta) {
         lancarMovimento(db, {
           conta_id: conta,
@@ -503,7 +555,9 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
           forma_pagamento: formaPagamento,
           origem_tipo: 'venda',
           origem_id: vendaId,
-          vendedor_id: dados.vendedor_id
+          vendedor_id: dados.vendedor_id,
+          // O turno é o do CAIXA, mesmo quando o dinheiro cai no banco.
+          turno_id: turnoId
         })
       }
     }

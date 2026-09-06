@@ -315,3 +315,113 @@ export function gerarHtmlPedidosSeparados(pedidos: PedidoRelatorio[]): string {
     corpo
   )
 }
+
+// ─── 5. Comprovante do entregador ────────────────────────────────────────────
+
+export type ItemPedidoRelatorio = {
+  nome: string
+  tamanho: string | null
+  quantidade: number
+  preco_unitario: number
+}
+
+/**
+ * O papel que vai com o entregador.
+ *
+ * Ideia dele, e é boa: quem sai com a joia precisa de algo na mão. Sem papel, o
+ * entregador depende da memória para saber quanto cobrar — e o cliente não tem
+ * como conferir se o que chegou é o que ele pediu.
+ *
+ * ── ⚠️ O que este papel NÃO é ───────────────────────────────────────────────
+ * Não é cupom fiscal e não é comprovante de pagamento: no momento em que ele é
+ * impresso, ninguém pagou nada. Por isso ele diz "A RECEBER" em vez de "total",
+ * e traz o campo de assinatura de quem RECEBEU A MERCADORIA — que é o único
+ * fato que ele pode registrar.
+ *
+ * A nota fiscal, quando houver, sai depois, na conclusão, quando a forma de
+ * pagamento finalmente se sabe.
+ *
+ * ── Formato ─────────────────────────────────────────────────────────────────
+ * 80mm, como o cupom de venda: sai na mesma impressora do balcão, sem trocar
+ * papel. Ver o cabeçalho de cupomVenda.ts para a largura real de impressão.
+ */
+export function gerarHtmlComprovanteEntrega(
+  pedido: PedidoRelatorio & { observacao?: string | null },
+  itens: ItemPedidoRelatorio[],
+  loja: string
+): string {
+  const linhas = itens
+    .map(
+      (i) => `<tr>
+        <td class="q">${i.quantidade}x</td>
+        <td>${i.nome}${i.tamanho ? ` (${i.tamanho})` : ''}</td>
+        <td class="v">${dinheiro(i.quantidade * i.preco_unitario)}</td>
+      </tr>`
+    )
+    .join('')
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Pedido ${pedido.id} — entrega</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    @page { size: 80mm auto; margin: 0; }
+    body { width: 72mm; margin: 0 auto; font-family: Arial, sans-serif; font-size: 11px; color: #000; }
+    .c { text-align: center; }
+    .loja { font-size: 14px; font-weight: bold; }
+    hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 2px 0; vertical-align: top; }
+    .q { width: 26px; }
+    .v { text-align: right; white-space: nowrap; }
+    .cobrar { border: 2px solid #000; padding: 6px; text-align: center; margin: 8px 0; }
+    .cobrar .rot { font-size: 10px; letter-spacing: .06em; }
+    .cobrar .val { font-size: 18px; font-weight: bold; }
+    .bloco { margin-top: 6px; }
+    .rot { font-size: 10px; color: #333; }
+    .assin { margin-top: 22px; border-top: 1px solid #000; padding-top: 3px; font-size: 10px; text-align: center; }
+    .aviso { font-size: 9px; text-align: center; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="c loja">${loja}</div>
+  <div class="c">COMPROVANTE DE ENTREGA</div>
+  <div class="c">Pedido #${pedido.id} · ${dataHora(pedido.criado_em)}</div>
+  <hr>
+
+  <div class="bloco">
+    <div class="rot">CLIENTE</div>
+    <div><strong>${pedido.cliente_nome ?? '—'}</strong></div>
+    ${pedido.cliente_telefone ? `<div>${pedido.cliente_telefone}</div>` : ''}
+    ${pedido.endereco_entrega ? `<div>${pedido.endereco_entrega}</div>` : ''}
+  </div>
+
+  ${pedido.observacao ? `<div class="bloco"><div class="rot">OBSERVAÇÃO</div><div>${pedido.observacao}</div></div>` : ''}
+
+  <hr>
+  <table>${linhas}</table>
+  <hr>
+
+  <!--
+    ⚠️ "A RECEBER", e não "total": no momento em que este papel é impresso
+    ninguém pagou nada. Escrever "total" faria o cliente achar que já está pago,
+    e o entregador voltaria sem o dinheiro.
+  -->
+  <div class="cobrar">
+    <div class="rot">A RECEBER NA ENTREGA</div>
+    <div class="val">${dinheiro(pedido.total)}</div>
+  </div>
+
+  <div class="rot">FORMA DE PAGAMENTO (marque)</div>
+  <div>( ) Dinheiro &nbsp; ( ) PIX &nbsp; ( ) Débito &nbsp; ( ) Crédito</div>
+
+  <div class="assin">Assinatura de quem recebeu a mercadoria</div>
+  <div class="aviso">
+    Este papel não é documento fiscal. A nota, quando houver, é emitida na loja
+    após o pagamento.
+  </div>
+</body>
+</html>`
+}

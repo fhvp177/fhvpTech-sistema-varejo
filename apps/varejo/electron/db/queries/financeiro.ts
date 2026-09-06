@@ -74,6 +74,18 @@ export type NovoMovimento = {
   vendedor_id?: number | null
   /** Sobrescreve a data; ausente usa agora, no horário local. */
   data?: string
+  /**
+   * A que turno este dinheiro pertence.
+   *
+   * ⚠️ Quem chama PRECISA passar isto quando o dinheiro nasce de uma venda: a
+   * venda no PIX cai no BANCO, mas pertence ao turno do CAIXA onde ela foi
+   * feita. Sem passar, com dois caixas abertos metade das vendas cairia no
+   * turno errado — e o erro só apareceria no fechamento, sem pista de onde veio.
+   *
+   * Omitido, cai na regra de sempre: o turno aberto DESTA conta, que é o certo
+   * para sangria, suprimento e conta paga em espécie.
+   */
+  turno_id?: number | null
 }
 
 const arred = (v: number): number => +v.toFixed(2)
@@ -242,18 +254,25 @@ export function contaSugerida(
  */
 export function lancarMovimento(db: Database.Database, mov: NovoMovimento): number {
   /*
-   * ⚠️ O turno é a SESSÃO DE TRABALHO, não a conta. Uma venda no PIX durante o
-   * expediente pertence ao turno mesmo caindo no banco, e é por isso que a
-   * busca não filtra por `conta_id`.
+   * ⚠️ O turno vem de QUEM CHAMA quando o dinheiro nasce de uma venda: a venda
+   * no PIX cai no banco, mas pertence ao turno do CAIXA onde foi feita.
    *
-   * Contar a gaveta continua sendo só sobre dinheiro — mas o fechamento também
-   * mostra quanto entrou por cartão e PIX, e sem isto esses valores ficariam
-   * fora do turno e o lojista não teria contra o que conferir o comprovante da
-   * maquininha.
+   * A queda — o turno aberto DESTA conta — só serve para o que é da própria
+   * gaveta: sangria, suprimento, conta paga em espécie. Nesses casos a conta JÁ
+   * é o caixa, então não há o que adivinhar.
    */
-  const turno = db
-    .prepare('SELECT id FROM turnos_caixa WHERE fechado_em IS NULL ORDER BY id DESC LIMIT 1')
-    .get() as { id: number } | undefined
+  const turnoId =
+    mov.turno_id ??
+    (
+      db
+        .prepare(
+          `SELECT id FROM turnos_caixa
+            WHERE conta_id = ? AND fechado_em IS NULL
+            ORDER BY id DESC LIMIT 1`
+        )
+        .get(mov.conta_id) as { id: number } | undefined
+    )?.id ??
+    null
 
   const r = db
     .prepare(
@@ -271,7 +290,7 @@ export function lancarMovimento(db: Database.Database, mov: NovoMovimento): numb
       mov.forma_pagamento ?? null,
       mov.origem_tipo ?? null,
       mov.origem_id ?? null,
-      turno?.id ?? null,
+      turnoId,
       mov.vendedor_id ?? null
     )
   return Number(r.lastInsertRowid)
