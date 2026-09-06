@@ -203,6 +203,24 @@ const LABEL_CONDICAO_PAGAMENTO: Record<StatusPagamento, string> = {
   parcelado: 'Parcelado'
 }
 
+/*
+ * O que cada condição FAZ, numa linha, embaixo do rótulo.
+ *
+ * ⚠️ Isto não é enfeite, é conserto de um defeito real de descoberta. O campo
+ * de sinal existe há meses e o lojista nunca o achou: ele só aparece depois de
+ * sair do "À vista", e nada na tela dizia que dava para receber só uma parte.
+ * Ele chegou a inventar um contorno — venda parcelada, marcar a 1ª parcela como
+ * paga, baixar a 2ª depois — para fazer o que um campo já fazia.
+ *
+ * A palavra "sinal" aparece aqui de propósito: é a que ELE usa, e é no momento
+ * da escolha que ela precisa ser lida, não depois.
+ */
+const AJUDA_CONDICAO_PAGAMENTO: Partial<Record<StatusPagamento, string>> = {
+  pago: 'Recebe tudo agora',
+  pendente: 'Recebe depois — com ou sem sinal na hora',
+  parcelado: 'Sinal na hora (opcional) + parcelas'
+}
+
 const CORES_PARCELA: Record<string, string> = {
   pago: 'bg-green-100 text-green-700',
   pendente: 'bg-amber-100 text-amber-700',
@@ -1075,7 +1093,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                 ) : null}
                 {vendaDetalhada.entrada > 0 && (
                   <div>
-                    <span className="font-medium text-foreground">Entrada: </span>
+                    <span className="font-medium text-foreground">Sinal pago: </span>
                     {fmt(vendaDetalhada.entrada)}
                   </div>
                 )}
@@ -1536,6 +1554,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const [telefoneClienteRapido, setTelefoneClienteRapido] = useState('')
   const [cnpjClienteRapido, setCnpjClienteRapido] = useState('')
   const [razaoSocialRapido, setRazaoSocialRapido] = useState('')
+  const [enderecoClienteRapido, setEnderecoClienteRapido] = useState('')
+  const [observacaoClienteRapido, setObservacaoClienteRapido] = useState('')
   const [erroCliente, setErroCliente] = useState('')
   const [salvandoCliente, setSalvandoCliente] = useState(false)
 
@@ -1991,6 +2011,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     setTelefoneClienteRapido('')
     setCnpjClienteRapido('')
     setRazaoSocialRapido('')
+    setEnderecoClienteRapido('')
+    setObservacaoClienteRapido('')
     setErroCliente('')
     setModalClienteAberto(true)
   }
@@ -2021,13 +2043,15 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     const resp = await window.api.clientes.criar({
       nome: nomeClienteRapido.trim(),
       telefone: telefoneClienteRapido,
-      endereco: null,
+      // Vazio grava NULL, e não string vazia: quem lê depois pergunta "tem
+      // endereço?", e `''` responderia que sim.
+      endereco: enderecoClienteRapido.trim() || null,
       cpf: null,
       data_nascimento: null,
       tipo_pessoa: tipoPessoaRapido,
       cnpj: ehPj ? cnpjClienteRapido : null,
       razao_social: ehPj ? (razaoSocialRapido.trim() || null) : null,
-      observacao: null,
+      observacao: observacaoClienteRapido.trim() || null,
     })
     if (resp.success) {
       const novoCliente = resp.data as Cliente
@@ -2583,7 +2607,18 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                     statusPagamento === s ? 'bg-current border-current' : 'border-muted-foreground'
                   }`}
                 />
-                {LABEL_CONDICAO_PAGAMENTO[s]}
+                <span className="min-w-0">
+                  <span className="block leading-tight">{LABEL_CONDICAO_PAGAMENTO[s]}</span>
+                  {AJUDA_CONDICAO_PAGAMENTO[s] && (
+                    <span
+                      className={`block text-[11px] leading-tight ${
+                        statusPagamento === s ? 'opacity-70' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {AJUDA_CONDICAO_PAGAMENTO[s]}
+                    </span>
+                  )}
+                </span>
               </label>
             ))}
           </div>
@@ -2625,12 +2660,16 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </div>
         )}
 
-        {/* Entrada — paga no ato, abate do valor financiado (parcelado) ou
-            devido (a prazo). Não aparece no à vista. */}
+        {/* Sinal (entrada) — pago no ato, abate do valor financiado (parcelado)
+            ou devido (a prazo). Não aparece no à vista, onde não há o que abater.
+
+            ⚠️ "Sinal" é a palavra do lojista e vem primeiro; "entrada" fica junto
+            porque é a do comércio e a que sai impressa no cupom. Renomear só para
+            "Sinal" faria a tela e o papel discordarem. */}
         {statusPagamento !== 'pago' && (
           <div>
             <Label htmlFor="entrada" className="text-xs mb-1 block">
-              Entrada <span className="text-muted-foreground">(opcional)</span>
+              Sinal <span className="text-muted-foreground">(entrada, opcional)</span>
             </Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
@@ -2650,8 +2689,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             </div>
             <p className="text-[11px] mt-1 text-muted-foreground">
               {statusPagamento === 'parcelado'
-                ? 'Pago agora; o restante é dividido nas parcelas.'
-                : 'Pago agora; o restante fica devido no vencimento.'}
+                ? 'O cliente pagou isto agora; o restante é dividido nas parcelas.'
+                : 'O cliente pagou isto agora; o restante fica devido no vencimento.'}
             </p>
           </div>
         )}
@@ -2723,8 +2762,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             <DialogTitle>Cadastro Rápido de Cliente</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground -mt-2">
-            O cliente será cadastrado e já ficará selecionado na venda.
-            Dados adicionais podem ser completados depois em <strong>Clientes</strong>.
+            O cliente será cadastrado e já ficará selecionado na venda. O resto
+            (CPF, nascimento) pode ser completado depois em <strong>Clientes</strong>.
           </p>
           <div className="grid gap-3 py-1">
             {/* Toggle PF/PJ */}
@@ -2808,6 +2847,42 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>
+
+            {/*
+              ⚠️ Endereço e observação ficam à VISTA, e não atrás de um "mais
+              dados". O cadastro rápido existe para ser rápido, e dois campos a
+              mais custam alguma coisa — mas esconder custa mais: o campo
+              "Entrada" desta mesma tela existe há meses e o lojista nunca o viu,
+              porque só aparece depois de trocar a condição de pagamento. Campo
+              escondido é campo que não existe para quem usa.
+
+              E o endereço não é enfeite: sem ele não há entrega, que é como boa
+              parte das vendas desta loja acontece.
+            */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="endereco-cliente-rapido">
+                Endereço <span className="text-muted-foreground font-normal">(opcional)</span>
+              </Label>
+              <Input
+                id="endereco-cliente-rapido"
+                value={enderecoClienteRapido}
+                onChange={(e) => setEnderecoClienteRapido(e.target.value)}
+                placeholder="Rua, nº, bairro — para entrega"
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="observacao-cliente-rapido">
+                Observação <span className="text-muted-foreground font-normal">(opcional)</span>
+              </Label>
+              <Input
+                id="observacao-cliente-rapido"
+                value={observacaoClienteRapido}
+                onChange={(e) => setObservacaoClienteRapido(e.target.value)}
+                placeholder="Ponto de referência, preferência, combinado..."
+              />
+            </div>
+
             {erroCliente && (
               <p className="text-destructive text-sm bg-destructive/10 rounded px-3 py-2">
                 {erroCliente}

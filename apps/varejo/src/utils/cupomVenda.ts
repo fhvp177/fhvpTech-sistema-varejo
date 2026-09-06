@@ -418,7 +418,7 @@ ${CSS_PIX}
   </div>
   ${entrada > 0 ? `
   <div class="total-linha" style="font-size: 11px;">
-    <span>Entrada (paga):</span>
+    <span>Sinal pago:</span>
     <span>- ${fmt(entrada)}</span>
   </div>
   <div class="total-linha" style="font-size: 11px;">
