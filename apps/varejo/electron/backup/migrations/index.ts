@@ -37,6 +37,9 @@ import { aplicar035NotaModelo } from './035_nota_modelo'
 import { aplicar036PinTamanho } from './036_pin_tamanho'
 import { aplicar037SenhaRestauracao } from './037_senha_restauracao'
 import { aplicar038Comissoes } from './038_comissoes'
+import { aplicar039ContasFinanceiras } from './039_contas_financeiras'
+import { aplicar040TurnosCaixa } from './040_turnos_caixa'
+import { aplicar041PedidosSeparados } from './041_pedidos_separados'
 
 // Lista de migrations do varejo, na ordem de aplicação. O runner genérico
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
@@ -80,4 +83,7 @@ export const MIGRATIONS: Migration[] = [
   { nome: '036_pin_tamanho', aplicar: aplicar036PinTamanho },
   { nome: '037_senha_restauracao', aplicar: aplicar037SenhaRestauracao },
   { nome: '038_comissoes', aplicar: aplicar038Comissoes },
+  { nome: '039_contas_financeiras', aplicar: aplicar039ContasFinanceiras },
+  { nome: '040_turnos_caixa', aplicar: aplicar040TurnosCaixa },
+  { nome: '041_pedidos_separados', aplicar: aplicar041PedidosSeparados },
 ]

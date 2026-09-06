@@ -98,14 +98,20 @@ const SCHEMA = `
     nome TEXT NOT NULL,
     preco REAL NOT NULL,
     custo REAL NOT NULL DEFAULT 0,
-    estoque INTEGER DEFAULT 0
+    estoque INTEGER DEFAULT 0,
+    -- Unidades apartadas para pedidos separados. A trava de estoque compara
+    -- contra estoque menos reservado, entao a coluna precisa existir aqui: este
+    -- schema e um espelho ESCRITO A MAO do real, e ja ficou para tras uma vez.
+    -- (sem crase neste comentario: ele mora dentro de um template literal)
+    reservado INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE produto_variacoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     produto_id INTEGER NOT NULL,
     tamanho TEXT NOT NULL,
     codigo_barras TEXT UNIQUE NOT NULL,
-    estoque INTEGER NOT NULL DEFAULT 0
+    estoque INTEGER NOT NULL DEFAULT 0,
+    reservado INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE vendas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,6 +159,49 @@ const SCHEMA = `
     venda_id INTEGER,
     data_expiracao DATE
   );
+
+  -- O livro-caixa. A venda lanca aqui DENTRO da propria transacao dela, entao
+  -- sem estas tabelas nenhuma venda passa.
+  --
+  -- Isso e proposital e vale dizer: venda cujo dinheiro nao e registrado e pior
+  -- que venda que nao acontece. Se o lancamento falha, a venda inteira volta
+  -- atras em vez de gravar mercadoria saindo sem dinheiro entrando.
+  CREATE TABLE contas_financeiras (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    tipo TEXT NOT NULL DEFAULT 'banco',
+    banco TEXT, agencia TEXT, conta TEXT,
+    saldo_inicial REAL NOT NULL DEFAULT 0,
+    ativa INTEGER NOT NULL DEFAULT 1,
+    padrao_recebimento INTEGER NOT NULL DEFAULT 0,
+    padrao_pagamento INTEGER NOT NULL DEFAULT 0,
+    forma_padrao TEXT,
+    criada_em TEXT
+  );
+  CREATE TABLE movimentos_financeiros (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conta_id INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    valor REAL NOT NULL,
+    tipo TEXT NOT NULL,
+    descricao TEXT, forma_pagamento TEXT,
+    origem_tipo TEXT, origem_id INTEGER,
+    turno_id INTEGER, vendedor_id INTEGER,
+    criado_em TEXT
+  );
+  CREATE TABLE turnos_caixa (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conta_id INTEGER NOT NULL,
+    aberto_por INTEGER NOT NULL,
+    aberto_em TEXT NOT NULL,
+    fundo_troco REAL NOT NULL DEFAULT 0,
+    fechado_por INTEGER, fechado_em TEXT,
+    confirmado_por INTEGER, confirmado_em TEXT,
+    justificativa TEXT,
+    fora_de_hora INTEGER NOT NULL DEFAULT 0
+  );
+  INSERT INTO contas_financeiras (nome, tipo, padrao_recebimento, padrao_pagamento, forma_padrao)
+    VALUES ('Caixa da loja', 'caixa', 1, 1, 'dinheiro');
 `
 
 // Estoque começa em 1: a última unidade da loja, que é o caso que importa.

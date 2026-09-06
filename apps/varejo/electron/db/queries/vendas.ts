@@ -1,4 +1,5 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { contaSugerida, lancarMovimento } from './financeiro'
 import { obterComissaoPadrao } from './comissoes'
 
 export type StatusPagamento = 'pago' | 'pendente' | 'inadimplente' | 'parcelado'
@@ -311,11 +312,24 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   // alguém é promovido depois — ver migration 038.
   const comissaoPct = vendedor.comissao_pct ?? obterComissaoPadrao()
 
+  /*
+   * ⚠️ A trava de estoque desconta o RESERVADO.
+   *
+   * É esta comparação que impede vender a mesma peça duas vezes, e ela funciona
+   * por o banco ser síncrono — uma operação por vez, sem vão entre ler e gravar.
+   * Com pedidos separados, uma peça apartada para um cliente continua no
+   * `estoque` (ela ainda é da loja até alguém pagar) mas não está mais
+   * disponível para vender.
+   *
+   * A mudança é AQUI, e não numa segunda checagem em outro lugar: duas travas
+   * em pontos diferentes deixam um vão entre elas, e o vão é exatamente onde a
+   * última unidade some duas vezes.
+   */
   for (const item of dados.itens) {
     if (item.variacao_id != null) {
       const v = db
         .prepare(
-          `SELECT pv.estoque AS estoque, pv.tamanho AS tamanho, p.nome AS nome
+          `SELECT pv.estoque - pv.reservado AS estoque, pv.tamanho AS tamanho, p.nome AS nome
            FROM produto_variacoes pv JOIN produtos p ON p.id = pv.produto_id
            WHERE pv.id = ?`
         )
@@ -329,7 +343,7 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       }
     } else {
       const produto = db
-        .prepare('SELECT nome, estoque FROM produtos WHERE id = ?')
+        .prepare('SELECT nome, estoque - reservado AS estoque FROM produtos WHERE id = ?')
         .get(item.produto_id) as { nome: string; estoque: number } | undefined
 
       if (!produto) throw new Error(`Produto #${item.produto_id} não encontrado.`)
@@ -462,6 +476,37 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
          VALUES (?, 'uso', ?, ?)`
       ).run(dados.cliente_id, -creditoUsado, vendaId)
     }
+
+    /*
+     * O dinheiro que de fato entrou vai para o livro-caixa.
+     *
+     * ⚠️ CRÉDITO DA LOJA NÃO É DINHEIRO. Numa venda de 100 paga com 30 de
+     * crédito e 70 em espécie, `valor_pago` fica 100 (a venda está quitada) mas
+     * só 70 entraram na gaveta. Lançar 100 faria o fechamento acusar falta de 30
+     * sempre que alguém usasse crédito — e um controle que acusa falta sem
+     * motivo é desligado na primeira semana.
+     *
+     * O lançamento acontece DENTRO desta transação: se a venda falhar no meio,
+     * o dinheiro não pode ficar registrado.
+     */
+    const recebidoAgora = +(
+      (dados.status_pagamento === 'pago' ? total : entrada) - creditoUsado
+    ).toFixed(2)
+    if (recebidoAgora > 0) {
+      const conta = contaSugerida(db, 'recebimento', formaPagamento)
+      if (conta) {
+        lancarMovimento(db, {
+          conta_id: conta,
+          valor: recebidoAgora,
+          tipo: 'venda',
+          descricao: `Venda #${vendaId}`,
+          forma_pagamento: formaPagamento,
+          origem_tipo: 'venda',
+          origem_id: vendaId,
+          vendedor_id: dados.vendedor_id
+        })
+      }
+    }
   })()
 
   return buscarVendaPorId(vendaId)!
@@ -533,6 +578,20 @@ export function registrarPagamentoParcial(id: number, valor: number): void {
       db.prepare('UPDATE vendas SET valor_pago = ? WHERE id = ?')
         .run(novoValorPago, id)
     }
+
+    // Recebimento de dívida: dinheiro de verdade entrando, e por isso vai ao
+    // livro. Sem forma conhecida, cai na conta padrão de recebimento.
+    const conta = contaSugerida(db, 'recebimento', null)
+    if (conta) {
+      lancarMovimento(db, {
+        conta_id: conta,
+        valor: valorEfetivo,
+        tipo: 'recebimento',
+        descricao: `Recebimento da venda #${id}`,
+        origem_tipo: 'venda',
+        origem_id: id
+      })
+    }
   })()
 }
 
@@ -554,6 +613,21 @@ export function pagarParcela(parcelaId: number): void {
     if (!jaPaga) {
       db.prepare('UPDATE vendas SET valor_pago = ROUND(valor_pago + ?, 2) WHERE id = ?')
         .run(parcela.valor, parcela.venda_id)
+
+      // ⚠️ Só lança se a parcela ainda NÃO estava paga. Sem esta guarda, um
+      // clique duplo lançaria o dinheiro duas vezes no livro — e aí o
+      // fechamento acusaria uma sobra que ninguém conseguiria explicar.
+      const conta = contaSugerida(db, 'recebimento', null)
+      if (conta) {
+        lancarMovimento(db, {
+          conta_id: conta,
+          valor: parcela.valor,
+          tipo: 'recebimento',
+          descricao: `Parcela da venda #${parcela.venda_id}`,
+          origem_tipo: 'parcela',
+          origem_id: parcelaId
+        })
+      }
     }
 
     const { total, pagas } = db
