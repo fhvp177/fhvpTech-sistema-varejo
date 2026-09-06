@@ -94,6 +94,10 @@ const api = {
       ipcRenderer.invoke('caixa:listarTurnos', limite),
     contagens: (turnoId: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('caixa:contagens', turnoId),
+    diferencasPorOperador: (de: string, ate: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:diferencasPorOperador', de, ate),
+    turnoParaRelatorio: (turnoId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:turnoParaRelatorio', turnoId),
     sangria: (contaId: number, valor: number, descricao: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('caixa:sangria', contaId, valor, descricao),
     suprimento: (contaId: number, valor: number, descricao: string): Promise<RespostaIPC> =>

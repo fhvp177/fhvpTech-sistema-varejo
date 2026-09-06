@@ -21,7 +21,9 @@ import {
   listarTurnos,
   contagensDoTurno,
   sangria,
-  suprimento
+  suprimento,
+  diferencasPorOperador,
+  turnoParaRelatorio
 } from '../db/queries/turnos'
 
 const TIPOS: TipoConta[] = ['caixa', 'banco', 'a_receber']
@@ -254,6 +256,29 @@ export function registrarHandlersFinanceiro(): void {
     try {
       requerDono()
       return { success: true, data: contagensDoTurno(Number(turnoId)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  /*
+   * ★ O relatório que faz o fechamento às cegas valer a pena: a QUEBRA POR
+   * OPERADOR ao longo do tempo. Uma diferença isolada é erro humano; o que diz
+   * alguma coisa é o padrão, e ele não aparece em nenhum outro lugar.
+   */
+  registrarCanal('caixa:diferencasPorOperador', (de: string, ate: string) => {
+    try {
+      requerDono()
+      return { success: true, data: diferencasPorOperador(String(de), String(ate)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('caixa:turnoParaRelatorio', (turnoId: number) => {
+    try {
+      requerDono()
+      return { success: true, data: turnoParaRelatorio(Number(turnoId)) }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

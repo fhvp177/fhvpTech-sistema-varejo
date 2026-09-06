@@ -248,3 +248,63 @@ export function suprimento(contaId: number, vendedorId: number, valor: number, d
     })
   })()
 }
+
+// ─── Relatórios ──────────────────────────────────────────────────────────────
+
+export type DiferencaOperador = {
+  vendedor_id: number | null
+  vendedor_nome: string | null
+  turnos: number
+  quebras: number
+  sobras: number
+  total_diferenca: number
+  pior: number
+}
+
+/**
+ * Quebra de caixa por operador, num período.
+ *
+ * ★ É ESTE o relatório que faz o fechamento às cegas valer a pena.
+ *
+ * Uma diferença isolada é erro humano e não diz nada. O que diz é o padrão: a
+ * mesma pessoa fechando com falta mês após mês, enquanto as outras fecham
+ * certo. Isso não aparece em nenhum outro lugar do sistema — cada fechamento,
+ * olhado sozinho, parece um dia ruim.
+ *
+ * ⚠️ Conta apenas o DINHEIRO. Diferença em cartão ou PIX não é quebra de
+ * gaveta: é divergência contra o comprovante da maquininha, que se resolve com
+ * a adquirente e não com o operador.
+ *
+ * ⚠️ E só entram turnos JÁ CONFIRMADOS. Turno fechado e ainda não conferido
+ * pode ter contagem errada esperando correção; contá-lo acusaria alguém por um
+ * número que o gerente nem viu.
+ */
+export function diferencasPorOperador(de: string, ate: string): DiferencaOperador[] {
+  return obterBancoDeDados()
+    .prepare(
+      `SELECT t.fechado_por AS vendedor_id,
+              v.nome AS vendedor_nome,
+              COUNT(*) AS turnos,
+              SUM(CASE WHEN c.valor_contado - c.valor_esperado < -0.005 THEN 1 ELSE 0 END) AS quebras,
+              SUM(CASE WHEN c.valor_contado - c.valor_esperado >  0.005 THEN 1 ELSE 0 END) AS sobras,
+              ROUND(SUM(c.valor_contado - c.valor_esperado), 2) AS total_diferenca,
+              ROUND(MIN(c.valor_contado - c.valor_esperado), 2) AS pior
+         FROM turnos_caixa t
+         JOIN contagens_turno c ON c.turno_id = t.id AND c.forma = 'dinheiro'
+         LEFT JOIN vendedores v ON v.id = t.fechado_por
+        WHERE t.confirmado_em IS NOT NULL
+          AND date(t.fechado_em) BETWEEN date(?) AND date(?)
+        GROUP BY t.fechado_por, v.nome
+        ORDER BY total_diferenca ASC`
+    )
+    .all(de, ate) as DiferencaOperador[]
+}
+
+/** Um turno com a contagem dele, para o comprovante de fechamento. */
+export function turnoParaRelatorio(turnoId: number): { turno: Turno; contagens: Contagem[] } | null {
+  const turno = obterBancoDeDados()
+    .prepare(`${SELECT_TURNO} WHERE t.id = ?`)
+    .get(turnoId) as Turno | undefined
+  if (!turno) return null
+  return { turno, contagens: contagensDoTurno(turnoId) }
+}

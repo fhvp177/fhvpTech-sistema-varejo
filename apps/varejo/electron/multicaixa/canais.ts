@@ -84,7 +84,9 @@ export const CANAIS_LOCAIS = [
   // de fechamentos é dado de auditoria, como o de comissões.
   'caixa:confirmarTurno',
   'caixa:contagens',
+  'caixa:diferencasPorOperador',
   'caixa:listarTurnos',
+  'caixa:turnoParaRelatorio',
   // Abre diálogo de pasta no PC.
   'fiscal:salvarXmls',
   'notasEntrada:exportarXmls',

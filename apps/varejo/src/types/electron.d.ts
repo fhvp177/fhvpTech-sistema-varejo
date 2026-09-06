@@ -291,6 +291,16 @@ type TurnoCaixa = {
   fora_de_hora: number
 }
 
+type DiferencaOperador = {
+  vendedor_id: number | null
+  vendedor_nome: string | null
+  turnos: number
+  quebras: number
+  sobras: number
+  total_diferenca: number
+  pior: number
+}
+
 type ContagemTurno = {
   forma: string
   valor_contado: number
@@ -470,6 +480,13 @@ interface Window {
       confirmarTurno: (turnoId: number, justificativa?: string) => Promise<RespostaIPC>
       listarTurnos: (limite?: number) => Promise<RespostaIPC<TurnoCaixa[]>>
       contagens: (turnoId: number) => Promise<RespostaIPC<ContagemTurno[]>>
+      diferencasPorOperador: (
+        de: string,
+        ate: string
+      ) => Promise<RespostaIPC<DiferencaOperador[]>>
+      turnoParaRelatorio: (
+        turnoId: number
+      ) => Promise<RespostaIPC<{ turno: TurnoCaixa; contagens: ContagemTurno[] } | null>>
       sangria: (contaId: number, valor: number, descricao: string) => Promise<RespostaIPC>
       suprimento: (contaId: number, valor: number, descricao: string) => Promise<RespostaIPC>
     }

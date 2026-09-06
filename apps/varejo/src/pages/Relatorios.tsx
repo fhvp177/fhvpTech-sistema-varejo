@@ -1,5 +1,5 @@
 import { FC, ReactNode, Suspense, lazy, useEffect, useState } from 'react'
-import { BarChart3, FileDown, Printer, FolderDown, ShoppingCart, Package, BookOpen, FileText, Receipt } from 'lucide-react'
+import { BarChart3, FileDown, Printer, FolderDown, ShoppingCart, Package, BookOpen, FileText, Receipt, Landmark, Scale, PackageCheck } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Select } from '@fhvptech/core/ui/select'
 import { Label } from '@fhvptech/core/ui/label'
@@ -22,6 +22,11 @@ import {
   rotuloMesEntradas,
   type NotaEntradaRelatorio
 } from '@/utils/relatorioEntradas'
+import {
+  gerarHtmlDiferencasCaixa,
+  gerarHtmlExtratoConta,
+  gerarHtmlPedidosSeparados
+} from '@/utils/relatorioFinanceiro'
 
 // Central de relatórios: reúne num lugar só tudo o que o sistema imprime/salva
 // em PDF. Cada card também continua acessível na tela de origem (Vendas,
@@ -94,6 +99,36 @@ const BotoesGerar: FC<{
 const Relatorios: FC = () => {
   const imprimirDoc = useImprimir()
   const [gerando, setGerando] = useState(false)
+
+  // Os relatorios financeiros trabalham com INTERVALO, nao com mes: uma quebra
+  // de caixa que atravessa a virada do mes nao pode sumir do relatorio so por
+  // causa do calendario.
+  const primeiroDoMes = new Date()
+  primeiroDoMes.setDate(1)
+  const iso = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+  const [caixaDe, setCaixaDe] = useState(iso(primeiroDoMes))
+  const [caixaAte, setCaixaAte] = useState(iso(new Date()))
+  const [erroCaixa, setErroCaixa] = useState('')
+
+  const [contas, setContas] = useState<ContaFinanceira[]>([])
+  const [contaExtrato, setContaExtrato] = useState('')
+  const [extratoDe, setExtratoDe] = useState(iso(primeiroDoMes))
+  const [extratoAte, setExtratoAte] = useState(iso(new Date()))
+  const [erroExtrato, setErroExtrato] = useState('')
+
+  const [erroPedidos, setErroPedidos] = useState('')
+
+  useEffect(() => {
+    void window.api.financeiro.listarContas().then((r) => {
+      if (r.success) {
+        const lista = r.data as ContaFinanceira[]
+        setContas(lista)
+        setContaExtrato((a) => a || String(lista[0]?.id ?? ''))
+      }
+    })
+  }, [])
   const [notasFiscaisAberto, setNotasFiscaisAberto] = useState(false)
 
   // ── Vendas do mês ──
@@ -164,6 +199,83 @@ const Relatorios: FC = () => {
     }
     const r = await window.api.impressao.salvarPdf(html, nome)
     return r.success ? '' : r.error
+  }
+
+  /*
+   * ★ Quebra de caixa por operador.
+   *
+   * É o relatório que faz o fechamento às cegas valer a pena: uma diferença
+   * isolada é erro humano, mas a mesma pessoa fechando com falta mês após mês
+   * é outra coisa — e isso não aparece em nenhum outro lugar do sistema.
+   */
+  const gerarDiferencas = async (acao: Acao) => {
+    setGerando(true)
+    setErroCaixa('')
+    try {
+      const r = await window.api.caixa.diferencasPorOperador(caixaDe, caixaAte)
+      if (!r.success) {
+        setErroCaixa(r.error)
+        return
+      }
+      const erro = await entregar(
+        gerarHtmlDiferencasCaixa(caixaDe, caixaAte, r.data as DiferencaOperador[]),
+        `Diferencas de caixa ${caixaDe} a ${caixaAte}`,
+        acao
+      )
+      if (erro) setErroCaixa(erro)
+    } finally {
+      setGerando(false)
+    }
+  }
+
+  const gerarExtrato = async (acao: Acao) => {
+    setGerando(true)
+    setErroExtrato('')
+    try {
+      const conta = contas.find((c) => String(c.id) === contaExtrato)
+      if (!conta) {
+        setErroExtrato('Escolha uma conta.')
+        return
+      }
+      const r = await window.api.financeiro.extrato({
+        conta_id: conta.id,
+        de: extratoDe,
+        ate: extratoAte,
+        limite: 1000
+      })
+      if (!r.success) {
+        setErroExtrato(r.error)
+        return
+      }
+      const erro = await entregar(
+        gerarHtmlExtratoConta(conta.nome, extratoDe, extratoAte, r.data as MovimentoFinanceiro[]),
+        `Extrato ${conta.nome} ${extratoDe} a ${extratoAte}`,
+        acao
+      )
+      if (erro) setErroExtrato(erro)
+    } finally {
+      setGerando(false)
+    }
+  }
+
+  const gerarPedidos = async (acao: Acao) => {
+    setGerando(true)
+    setErroPedidos('')
+    try {
+      const r = await window.api.pedidos.listar('separado')
+      if (!r.success) {
+        setErroPedidos(r.error)
+        return
+      }
+      const erro = await entregar(
+        gerarHtmlPedidosSeparados(r.data as PedidoSeparado[]),
+        'Pedidos separados',
+        acao
+      )
+      if (erro) setErroPedidos(erro)
+    } finally {
+      setGerando(false)
+    }
   }
 
   const gerarVendas = async (acao: Acao) => {
@@ -369,6 +481,101 @@ const Relatorios: FC = () => {
             gerando={gerando}
           />
           {erroProdutos && <p className="text-destructive text-xs">{erroProdutos}</p>}
+        </CardRelatorio>
+
+        {/*
+          ★ O relatório que faz o fechamento às cegas valer a pena.
+
+          Uma diferença isolada é erro humano e não prova nada. O que prova é o
+          padrão: a mesma pessoa fechando com falta mês após mês enquanto as
+          outras fecham certo. Olhado um a um, cada fechamento parece só um dia
+          ruim — e é por isso que este relatório existe.
+        */}
+        <CardRelatorio
+          icone={<Scale className="w-5 h-5" />}
+          titulo="Diferenças de caixa por operador"
+          descricao="Quem fecha o caixa faltando, e quanto, ao longo do tempo. Só turnos já conferidos, e só dinheiro."
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Label htmlFor="caixa-de" className="text-xs shrink-0">
+              De
+            </Label>
+            <input
+              id="caixa-de"
+              type="date"
+              value={caixaDe}
+              onChange={(e) => setCaixaDe(e.target.value)}
+              className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+            />
+            <Label htmlFor="caixa-ate" className="text-xs shrink-0">
+              até
+            </Label>
+            <input
+              id="caixa-ate"
+              type="date"
+              value={caixaAte}
+              onChange={(e) => setCaixaAte(e.target.value)}
+              className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+            />
+          </div>
+          <BotoesGerar onGerar={gerarDiferencas} desabilitado={!caixaDe || !caixaAte} gerando={gerando} />
+          {erroCaixa && <p className="text-destructive text-xs">{erroCaixa}</p>}
+        </CardRelatorio>
+
+        <CardRelatorio
+          icone={<Landmark className="w-5 h-5" />}
+          titulo="Extrato de uma conta"
+          descricao="Tudo o que entrou e saiu de um banco ou do caixa, com saldo corrente. Responde “quanto entrou no Banco X”."
+        >
+          <div className="flex items-center gap-2">
+            <Label className="text-xs shrink-0">Conta</Label>
+            <Select
+              value={contaExtrato}
+              onChange={setContaExtrato}
+              classNameContainer="flex-1"
+              opcoes={contas.map((c) => ({ valor: String(c.id), rotulo: c.nome }))}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Label htmlFor="ext-de" className="text-xs shrink-0">
+              De
+            </Label>
+            <input
+              id="ext-de"
+              type="date"
+              value={extratoDe}
+              onChange={(e) => setExtratoDe(e.target.value)}
+              className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+            />
+            <Label htmlFor="ext-ate" className="text-xs shrink-0">
+              até
+            </Label>
+            <input
+              id="ext-ate"
+              type="date"
+              value={extratoAte}
+              onChange={(e) => setExtratoAte(e.target.value)}
+              className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+            />
+          </div>
+          <BotoesGerar
+            onGerar={gerarExtrato}
+            desabilitado={!contaExtrato || !extratoDe || !extratoAte}
+            gerando={gerando}
+          />
+          {erroExtrato && <p className="text-destructive text-xs">{erroExtrato}</p>}
+        </CardRelatorio>
+
+        <CardRelatorio
+          icone={<PackageCheck className="w-5 h-5" />}
+          titulo="Pedidos separados"
+          descricao="O que está fora da loja agora, com quem, e há quantos dias. Dinheiro parado que ainda não virou venda."
+        >
+          <span className="text-xs text-muted-foreground">
+            Sempre a situação de agora — não tem período a escolher.
+          </span>
+          <BotoesGerar onGerar={gerarPedidos} desabilitado={false} gerando={gerando} />
+          {erroPedidos && <p className="text-destructive text-xs">{erroPedidos}</p>}
         </CardRelatorio>
 
         {/* Notas fiscais emitidas — e os XMLs que o contador pede todo mês. */}
