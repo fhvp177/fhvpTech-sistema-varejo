@@ -1164,26 +1164,48 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                 </div>
               )}
 
-              {/* Itens da venda */}
+              {/*
+                Itens da venda.
+
+                ⚠️ As larguras têm par `lg:` porque no celular a soma das fixas
+                era a largura inteira do diálogo.
+
+                Medido em 360px: sobram ~280px de conteúdo, e as colunas pediam
+                56 + 112 + 112 = 280. Restava ZERO para "Produto" — e como
+                `table-fixed` só distribui o que sobra, o cabeçalho saiu
+                desenhado por cima do "Qtd" e o nome do item quebrou letra a
+                letra.
+
+                Aqui o celular usa texto menor, metade do respiro lateral e
+                colunas numéricas apertadas ao que o valor realmente ocupa
+                ("R$ 250,00" cabe em 76px a 12px). Sobram ~80px para o nome, que
+                passa a QUEBRAR em vez de truncar: no monitor a reticência é boa
+                porque o nome inteiro está a um `title` de distância, mas no
+                celular não existe passar o mouse.
+              */}
               <div className="border rounded-lg overflow-x-auto">
-                <table className="w-full table-fixed text-sm">
+                <table className="w-full table-fixed text-xs lg:text-sm">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produto</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground w-14">Qtd</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Unitário</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">Subtotal</th>
+                      <th className="text-left px-2 lg:px-3 py-2 font-medium text-muted-foreground">Produto</th>
+                      <th className="text-right px-2 lg:px-3 py-2 font-medium text-muted-foreground w-10 lg:w-14">Qtd</th>
+                      <th className="text-right px-2 lg:px-3 py-2 font-medium text-muted-foreground w-[76px] lg:w-28">Unitário</th>
+                      <th className="text-right px-2 lg:px-3 py-2 font-medium text-muted-foreground w-[84px] lg:w-28">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
                     {vendaDetalhada.itens.map((item, i) => (
                       <tr key={i} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
-                        <td className="px-3 py-2">
-                          <div className="truncate" title={item.produto_nome}>{item.produto_nome}</div>
+                        <td className="px-2 lg:px-3 py-2">
+                          <div className="break-words lg:truncate" title={item.produto_nome}>
+                            {item.produto_nome}
+                          </div>
                         </td>
-                        <td className="px-3 py-2 text-right">{item.quantidade}</td>
-                        <td className="px-3 py-2 text-right">{fmt(item.preco_unitario)}</td>
-                        <td className="px-3 py-2 text-right font-medium">
+                        <td className="px-2 lg:px-3 py-2 text-right">{item.quantidade}</td>
+                        <td className="px-2 lg:px-3 py-2 text-right whitespace-nowrap">
+                          {fmt(item.preco_unitario)}
+                        </td>
+                        <td className="px-2 lg:px-3 py-2 text-right font-medium whitespace-nowrap">
                           {fmt(item.quantidade * item.preco_unitario)}
                         </td>
                       </tr>
@@ -1193,14 +1215,14 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     {vendaDetalhada.desconto > 0 && (
                       <>
                         <tr className="font-normal text-muted-foreground">
-                          <td colSpan={3} className="px-3 py-1 text-right">Subtotal</td>
-                          <td className="px-3 py-1 text-right">
+                          <td colSpan={3} className="px-2 lg:px-3 py-1 text-right">Subtotal</td>
+                          <td className="px-2 lg:px-3 py-1 text-right">
                             {fmt(vendaDetalhada.total + vendaDetalhada.desconto)}
                           </td>
                         </tr>
                         <tr className="font-normal text-emerald-700">
-                          <td colSpan={3} className="px-3 py-1 text-right">Desconto</td>
-                          <td className="px-3 py-1 text-right">− {fmt(vendaDetalhada.desconto)}</td>
+                          <td colSpan={3} className="px-2 lg:px-3 py-1 text-right">Desconto</td>
+                          <td className="px-2 lg:px-3 py-1 text-right">− {fmt(vendaDetalhada.desconto)}</td>
                         </tr>
                       </>
                     )}

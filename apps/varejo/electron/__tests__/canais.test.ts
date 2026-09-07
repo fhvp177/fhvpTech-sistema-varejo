@@ -82,6 +82,62 @@ function coletarCanais(): string[] {
 describe('inventário de canais IPC', () => {
   // Sem esta guarda, um caminho errado faria a varredura devolver zero canal e
   // as comparações passariam por vacuidade — o pior tipo de teste verde.
+  /*
+   * ⚠️⚠️ O APLICATIVO E A LOJA HOSPEDADA TÊM LISTAS SEPARADAS ────────────────
+   *
+   * `electron/main.ts` liga os handlers do aplicativo instalado.
+   * `servidor/index.ts` liga os da loja que roda no navegador.
+   *
+   * São dois arquivos, e registrar em um NÃO registra no outro. Aconteceu duas
+   * vezes: primeiro com impressão e multicaixa, depois com origens e
+   * comprovantes — este segundo já publicado na loja do cliente antes de
+   * alguém notar.
+   *
+   * ── Por que ninguém nota ────────────────────────────────────────────────
+   * Não dá erro. O canal não existe, o `invoke` rejeita, o `await` estoura
+   * dentro do componente React e a tela simplesmente **não desenha o bloco**.
+   * No aplicativo instalado tudo funciona, então testar no Electron não revela
+   * nada. Só aparece abrindo a loja hospedada — e como o que falta é um pedaço
+   * de tela, o sintoma é "sumiu", não "quebrou".
+   *
+   * Esta guarda compara as duas listas e obriga uma decisão explícita.
+   */
+  it('★ o servidor web registra os mesmos handlers que o aplicativo', () => {
+    const registrados = (fonte: string): Set<string> =>
+      new Set([...fonte.matchAll(/registrarHandlers(\w+)\(/g)].map((m) => m[1]))
+
+    const noApp = registrados(readFileSync(join(ELECTRON_VAREJO, 'main.ts'), 'utf-8'))
+    const noServidor = registrados(
+      readFileSync(join(ELECTRON_VAREJO, '..', 'servidor', 'index.ts'), 'utf-8')
+    )
+
+    /*
+     * Os únicos que ficam de fora, e o motivo de cada um:
+     *
+     * - **Impressao**: fala com a impressora daquela máquina. Na loja hospedada
+     *   quem imprime é o navegador do lojista, por outro caminho.
+     * - **Multicaixa**: é o servidor que ATENDE o segundo caixa. A loja
+     *   hospedada já é servidor; hospedar outro dentro dela não faz sentido.
+     *
+     * Acrescentar algo aqui é uma decisão, não um conserto: significa dizer que
+     * a loja hospedada não precisa daquele recurso.
+     */
+    const SO_NO_APLICATIVO = new Set(['Impressao', 'Multicaixa'])
+
+    const faltando = [...noApp].filter((h) => !noServidor.has(h) && !SO_NO_APLICATIVO.has(h))
+    expect(
+      faltando.sort(),
+      'estes handlers existem no aplicativo e NÃO na loja hospedada — a tela que ' +
+        'os chama some sem dar erro. Registre em servidor/index.ts, ou declare ' +
+        'em SO_NO_APLICATIVO por que a loja hospedada não precisa deles'
+    ).toEqual([])
+
+    // A lista de exceções também não pode envelhecer: quem sair do main precisa
+    // sair daqui, senão ela vira lixo que ninguém confere.
+    const sobrando = [...SO_NO_APLICATIVO].filter((h) => !noApp.has(h))
+    expect(sobrando.sort(), 'exceção declarada para handler que não existe mais').toEqual([])
+  })
+
   it('encontra os arquivos que registram canais', () => {
     expect(existsSync(ELECTRON_VAREJO)).toBe(true)
     for (const modulo of MODULOS_CORE) {

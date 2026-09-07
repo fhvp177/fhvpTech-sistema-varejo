@@ -63,6 +63,7 @@ import { registrarHandlersBackup } from '../electron/ipc/backup'
 import { registrarHandlersCategorias } from '../electron/ipc/categorias'
 import { registrarHandlersChat } from '../electron/ipc/chat'
 import { registrarHandlersClientes } from '../electron/ipc/clientes'
+import { registrarHandlersComprovantes } from '../electron/ipc/comprovantes'
 import { registrarHandlersComissoes } from '../electron/ipc/comissoes'
 import { registrarHandlersContasPagar } from '../electron/ipc/contasPagar'
 import { registrarHandlersFinanceiro } from '../electron/ipc/financeiro'
@@ -72,6 +73,7 @@ import { registrarHandlersDevolucoes } from '../electron/ipc/devolucoes'
 import { registrarHandlersEtiquetas } from '../electron/ipc/etiquetas'
 import { registrarHandlersFiscal } from '../electron/ipc/fiscal'
 import { registrarHandlersFornecedores } from '../electron/ipc/fornecedores'
+import { registrarHandlersOrigens } from '../electron/ipc/origens'
 import { registrarHandlersLoja } from '../electron/ipc/loja'
 import { registrarHandlersNotasEntrada } from '../electron/ipc/notasEntrada'
 import { registrarHandlersNotificacoes } from '../electron/ipc/notificacoes'
@@ -297,6 +299,8 @@ function registrarHandlers(): void {
   // lojista tem a pasta dele e o pendrive.
   registrarHandlersNuvem()
   registrarHandlersCategorias()
+  registrarHandlersOrigens()
+  registrarHandlersComprovantes()
   registrarHandlersChat()
   registrarHandlersClientes()
   registrarHandlersComissoes()
