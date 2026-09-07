@@ -7,6 +7,65 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.41.0',
+    itens: [
+      {
+        emoji: '🔐',
+        titulo: 'Controle de caixa',
+        descricao:
+          'O caixa passa a ser aberto e fechado por turno, com contagem do dinheiro e ' +
+          'conferência da diferença pelo gerente.'
+      },
+      {
+        emoji: '🏦',
+        titulo: 'Contas da loja',
+        descricao:
+          'As vendas e as contas a pagar passam a movimentar as contas cadastradas, ' +
+          'com saldo e extrato por período.'
+      },
+      {
+        emoji: '📦',
+        titulo: 'Pedidos separados',
+        descricao:
+          'A mercadoria que sai antes do pagamento fica reservada, com cupom próprio ' +
+          'para a entrega.'
+      },
+      {
+        emoji: '📎',
+        titulo: 'Comprovante de pagamento',
+        descricao:
+          'Cada venda passa a aceitar o comprovante anexado, em imagem ou PDF.'
+      },
+      {
+        emoji: '👥',
+        titulo: 'Situação e origem do cliente',
+        descricao:
+          'A ficha do cliente passa a indicar por onde ele chegou e como ele compra, ' +
+          'com filtros na listagem.'
+      },
+      {
+        emoji: '📈',
+        titulo: 'Lucro no Painel',
+        descricao:
+          'O Painel passa a exibir o custo das mercadorias vendidas e o lucro bruto ' +
+          'do período.'
+      },
+      {
+        emoji: '💰',
+        titulo: 'Comissão de vendedores',
+        descricao:
+          'O sistema passa a calcular a comissão por vendedor, com fechamento e ' +
+          'registro do pagamento.'
+      },
+      {
+        emoji: '📱',
+        titulo: 'Uso pelo celular',
+        descricao:
+          'As telas foram adaptadas para telas pequenas.'
+      }
+    ]
+  },
+  {
     versao: '1.40.0',
     itens: [
       {
