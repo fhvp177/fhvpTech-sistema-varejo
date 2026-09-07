@@ -19,6 +19,41 @@ import { useCallback, useEffect, useState } from 'react'
 
 const CHAVE = 'fhvp_caixa_do_aparelho'
 
+/**
+ * Qual caixa este aparelho deve adotar sozinho, ou `null` para perguntar.
+ *
+ * ── O beco que isto fecha ───────────────────────────────────────────────────
+ * A escolha do caixa é do APARELHO, e mora no navegador. Quando o caixa é
+ * aberto num aparelho e a venda é tentada em outro — o cliente abre no
+ * computador dele, o lojista vende pelo celular —, o segundo não tem escolha
+ * gravada. O PDV lia "nenhum caixa" e barrava a venda, com o caixa aberto o
+ * tempo todo e sem nada na tela que permitisse escolher.
+ *
+ * ── ⚠️ Só adota quando não há dúvida sobre qual gaveta é ────────────────────
+ * A escolha errada não dá erro: ela faz o dinheiro entrar numa gaveta e ser
+ * contado na outra, e as DUAS contagens fecham erradas no fim do dia, uma
+ * sobrando e a outra faltando. Por isso a regra é conservadora:
+ *
+ *   • um único caixa ABERTO      → adota; não existe outra gaveta para confundir
+ *   • um único caixa cadastrado  → adota; idem, aberto ou fechado
+ *   • dois ou mais abertos       → NÃO adota, e a tela pergunta
+ *
+ * `jaEscolhido` sempre vence: aparelho que já sabe onde está não muda de gaveta
+ * sozinho, nem quando o outro caixa abre.
+ */
+export function caixaParaAdotar(
+  caixas: Array<{ id: number; turno: unknown | null }>,
+  jaEscolhido: number | null
+): number | null {
+  if (jaEscolhido != null) return null
+  if (caixas.length === 0) return null
+
+  const abertos = caixas.filter((c) => c.turno != null)
+  if (abertos.length === 1) return abertos[0].id
+  if (caixas.length === 1) return caixas[0].id
+  return null
+}
+
 function ler(): number | null {
   try {
     const bruto = localStorage.getItem(CHAVE)

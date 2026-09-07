@@ -43,7 +43,7 @@ import ModalDevolucao from '@/components/ModalDevolucao'
 import ModalCancelarVenda, { type VendaCancelar } from '@/components/ModalCancelarVenda'
 import { useEhCelular } from '@/hooks/useEhCelular'
 import DicaRolante from '@/components/DicaRolante'
-import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
+import { caixaParaAdotar, useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 import { CLASSE_DINHEIRO, paraNumero } from '@/utils/mascaras'
 import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 
@@ -1620,6 +1620,28 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
 
   const caixaAtual = caixas.find((c) => c.id === caixaId) ?? null
   const caixaAberto = caixaAtual?.turno != null
+
+  /*
+   * ⚠️ Aparelho que ainda não escolheu caixa ADOTA o único que existe.
+   *
+   * Sem isto o sistema criava um beco sem saída: o caixa é aberto num aparelho
+   * e a venda é tentada em outro (o cliente abre no computador dele, o lojista
+   * vende pelo celular). O segundo aparelho não tem escolha gravada, o PDV lê
+   * "nenhum caixa" e barra a venda — com o caixa aberto o tempo todo.
+   *
+   * A regra é adotar SÓ quando não há dúvida sobre qual gaveta é:
+   *   • exatamente um caixa aberto  → é aquele, não existe outro para confundir;
+   *   • exatamente um caixa na loja → idem, aberto ou fechado.
+   *
+   * Com dois caixas abertos ele NÃO adota, e a tela pergunta. Aí a escolha
+   * importa de verdade: é a diferença entre o dinheiro cair numa gaveta ou na
+   * outra, e chutar faria as duas contagens fecharem erradas no fim do dia.
+   */
+  useEffect(() => {
+    if (carregandoCaixas) return
+    const adotar = caixaParaAdotar(caixas, caixaId)
+    if (adotar != null) escolher(adotar)
+  }, [caixaId, carregandoCaixas, caixas, escolher])
   void caixaAtual
   const { aberta: calculadoraAberta } = useCalculadora()
   const { ehDono, vendedor } = useSessao()
@@ -2340,18 +2362,35 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
             <IconeCadeado className="h-6 w-6" />
           </div>
+          {/*
+            ⚠️ Três situações diferentes, e antes as três diziam "Nenhum caixa
+            aberto" — inclusive quando havia um aberto e este aparelho é que não
+            tinha escolhido. Mandar abrir um caixa que já está aberto é o
+            caminho para o Caixa recusar com "este caixa já está aberto", e daí
+            não há mais o que tentar.
+          */}
           <h2 className="text-lg font-semibold">
-            {caixas.length === 0 ? 'Nenhum caixa cadastrado' : 'Nenhum caixa aberto'}
+            {caixas.length === 0
+              ? 'Nenhum caixa cadastrado'
+              : caixas.some((c) => c.turno != null)
+                ? 'Em qual caixa você está?'
+                : 'Nenhum caixa aberto'}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {caixas.length === 0
               ? 'Cadastre um caixa em Financeiro › Contas, escolhendo o tipo “Caixa”.'
-              : 'Abra o caixa para registrar as vendas do dia. Sem isso o dinheiro não entra na conferência.'}
+              : caixas.some((c) => c.turno != null)
+                ? 'Há caixa aberto na loja. Escolha em qual gaveta as vendas deste aparelho entram.'
+                : 'Abra o caixa para registrar as vendas do dia. Sem isso o dinheiro não entra na conferência.'}
           </p>
 
-          {caixas.length > 1 && (
+          {/*
+            ⚠️ O seletor aparece sempre que há caixa cadastrado, e não só com
+            mais de um. Era essa condição que fechava o beco: numa loja com UM
+            caixa não havia nada para clicar.
+          */}
+          {caixas.length > 0 && (
             <div className="mt-4 space-y-2">
-              <p className="text-[11.5px] text-muted-foreground">Em qual caixa você está?</p>
               {caixas.map((c) => (
                 <button
                   key={c.id}
@@ -2375,7 +2414,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             onClick={() => navegar('/caixa')}
           >
             <IconeCadeadoAberto className="mr-1.5 h-4 w-4" />
-            {caixas.length === 0 ? 'Ir para Contas' : 'Abrir caixa agora'}
+            {caixas.length === 0
+              ? 'Ir para Contas'
+              : caixas.some((c) => c.turno != null)
+                ? 'Ver os caixas'
+                : 'Abrir caixa agora'}
           </Button>
           <Button variant="outline" className="mt-2 h-11 w-full" onClick={onSair}>
             Voltar
