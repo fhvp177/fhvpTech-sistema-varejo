@@ -6,7 +6,6 @@
     "module": "ESNext",
     "strict": true,
     "outDir": "out",
-    "baseUrl": ".",
     "skipLibCheck": true,
     "types": ["node"]
   },

@@ -6,9 +6,8 @@
     "module": "ESNext",
     "jsx": "react-jsx",
     "strict": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
     "skipLibCheck": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"]

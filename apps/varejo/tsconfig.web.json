@@ -7,9 +7,8 @@
     "jsx": "react-jsx",
     "resolveJsonModule": true,
     "strict": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
     "skipLibCheck": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
