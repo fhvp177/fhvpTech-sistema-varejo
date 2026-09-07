@@ -184,7 +184,8 @@ const Caixa: FC = () => {
           Caixas
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Abra o caixa ao começar e feche ao terminar, contando o dinheiro da gaveta.
+          Abra o caixa no início do expediente e feche ao encerrar, conferindo o dinheiro
+          da gaveta.
         </p>
       </div>
 
@@ -326,8 +327,8 @@ const Caixa: FC = () => {
                           {t.conta_nome} · {fmtDataHora(t.aberto_em)} → {fmtDataHora(t.fechado_em)}
                         </p>
                         <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-                          fechou {t.fechado_por_nome ?? '—'}
-                          {t.fora_de_hora === 1 ? ' · fora de hora' : ''}
+                          Fechado por {t.fechado_por_nome ?? '—'}
+                          {t.fora_de_hora === 1 ? ' · fora do horário' : ''}
                         </p>
                         {t.justificativa && (
                           <p className="mt-0.5 truncate text-[11.5px] italic text-muted-foreground">
@@ -422,7 +423,7 @@ const Caixa: FC = () => {
                 id="mov-desc"
                 value={movDescricao}
                 onChange={(e) => setMovDescricao(e.target.value)}
-                placeholder={movDialog?.tipo === 'sangria' ? 'Depósito no banco' : 'Troco do dono'}
+                placeholder={movDialog?.tipo === 'sangria' ? 'Depósito no banco' : 'Reposição de troco'}
               />
             </div>
           </div>
@@ -448,7 +449,7 @@ const Caixa: FC = () => {
       <Dialog open={fechando !== null} onOpenChange={(o) => !o && setFechando(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Contar {fechando?.nome}</DialogTitle>
+            <DialogTitle>Conferir {fechando?.nome}</DialogTitle>
           </DialogHeader>
           {/*
             ⚠️ Nenhum número esperado aparece aqui, e há UM campo só.
@@ -459,8 +460,8 @@ const Caixa: FC = () => {
           */}
           <div className="grid gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
             <p className="rounded-lg bg-muted/50 px-3 py-2 text-[12.5px] text-muted-foreground">
-              Conte as cédulas e moedas da gaveta e digite o que <strong>encontrou</strong>. O
-              sistema compara sozinho com o que registrou, e mostra o resultado depois.
+              Confira as cédulas e moedas da gaveta e informe o total <strong>apurado</strong>.
+              O sistema compara com o valor registrado e apresenta o resultado em seguida.
             </p>
             <div className="grid gap-1.5">
               <Label htmlFor="contado">Dinheiro na gaveta</Label>
@@ -506,8 +507,8 @@ const Caixa: FC = () => {
                 <p className="text-[12.5px]">Diferença no dinheiro</p>
                 <p className="num text-2xl font-bold">
                   {resultado.diferenca_dinheiro === 0
-                    ? 'Bateu certinho'
-                    : `${resultado.diferenca_dinheiro > 0 ? 'Sobrou ' : 'Faltou '}${fmt(
+                    ? 'Sem diferença'
+                    : `${resultado.diferenca_dinheiro > 0 ? 'Sobra de ' : 'Falta de '}${fmt(
                         Math.abs(resultado.diferenca_dinheiro)
                       )}`}
                 </p>
@@ -560,17 +561,19 @@ const Caixa: FC = () => {
                       id="justif"
                       value={justificativa}
                       onChange={(e) => setJustificativa(e.target.value)}
-                      placeholder="O que explica a diferença?"
+                      placeholder="Motivo da diferença"
                     />
                   </div>
                   <p className="text-[11.5px] text-muted-foreground">
-                    Ao aceitar, o turno é fechado em definitivo e não pode mais ser alterado.
-                    Correção depois disso é lançamento novo, no extrato.
+                    Ao aceitar, o turno é encerrado em definitivo e não pode mais ser
+                    alterado. Qualquer correção posterior exige um novo lançamento no
+                    extrato.
                   </p>
                 </>
               ) : (
                 <p className="rounded-lg bg-muted/50 px-3 py-2 text-[12.5px] text-muted-foreground">
-                  A contagem foi registrada. Um gerente precisa conferir e aceitar a diferença.
+                  A contagem foi registrada. O fechamento aguarda a conferência de um
+                  gerente, que responde pela diferença apurada.
                 </p>
               )}
             </div>

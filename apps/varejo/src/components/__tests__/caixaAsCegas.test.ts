@@ -69,7 +69,7 @@ describe('o esperado só existe depois da contagem', () => {
      * ali um "esperado: R$ X" para "ajudar", este teste fica vermelho — e a
      * ajuda é exatamente o que destrói o recurso.
      */
-    const inicio = TELA.indexOf('Contar {fechando?.nome}')
+    const inicio = TELA.indexOf('Conferir {fechando?.nome}')
     const fim = TELA.indexOf('Fechamento do caixa')
     expect(inicio, 'o diálogo de contagem sumiu').toBeGreaterThan(-1)
     /*

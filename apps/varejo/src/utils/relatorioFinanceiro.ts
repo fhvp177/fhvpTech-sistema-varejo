@@ -130,7 +130,7 @@ export function gerarHtmlFechamentoCaixa(
     `
     <div class="caixa">
       <div>Aberto por: <strong>${turno.aberto_por_nome ?? '—'}</strong> · Fundo de troco: <strong>${dinheiro(turno.fundo_troco)}</strong></div>
-      <div>Fechado por: <strong>${turno.fechado_por_nome ?? '—'}</strong>${turno.fora_de_hora ? ' (fora de hora)' : ''}</div>
+      <div>Fechado por: <strong>${turno.fechado_por_nome ?? '—'}</strong>${turno.fora_de_hora ? ' (fora do horário)' : ''}</div>
       <div>Conferido por: <strong>${turno.confirmado_por_nome ?? 'ainda não conferido'}</strong>${
         turno.confirmado_em ? ` em ${dataHora(turno.confirmado_em)}` : ''
       }</div>
@@ -145,8 +145,8 @@ export function gerarHtmlFechamentoCaixa(
       <strong>Dinheiro na gaveta:</strong>
       ${
         dif === 0
-          ? 'conferiu certinho.'
-          : `<span class="${dif < 0 ? 'falta' : 'sobra'}">${dif < 0 ? 'faltaram' : 'sobraram'} ${dinheiro(Math.abs(dif))}</span>.`
+          ? 'sem diferença apurada.'
+          : `<span class="${dif < 0 ? 'falta' : 'sobra'}">${dif < 0 ? 'falta de' : 'sobra de'} ${dinheiro(Math.abs(dif))}</span>.`
       }
       ${turno.justificativa ? `<br>Observação: ${turno.justificativa}` : ''}
     </div>
