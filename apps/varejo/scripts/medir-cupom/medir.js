@@ -46,6 +46,10 @@ const MEDIR = `(() => {
     })
   }
   return {
+    // ⚠️ Onde o corpo COMECA, medido da borda esquerda da pagina. Em bobina
+    // isso tem que ser ~0: nao existe centro de folha para centralizar, e um
+    // corpo centralizado numa pagina larga sai todo fora do papel.
+    inicioCorpo_mm: +(r.left / PX_MM).toFixed(2),
     larguraCorpo_mm: +(body.clientWidth / PX_MM).toFixed(2),
     rolagem_mm: +(body.scrollWidth / PX_MM).toFixed(2),
     altura_mm: +(body.scrollHeight / PX_MM).toFixed(1),
@@ -64,8 +68,33 @@ app.whenReady().then(async () => {
       await win.loadFile(path.join(dir, arquivo))
       await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { media: 'print' })
       const r = await win.webContents.executeJavaScript(MEDIR)
+      // Onde este arquivo pegou o placar: o "OK" so sai se nada tiver reprovado
+      // no caminho. Ja aconteceu de a regua reprovar e dizer OK na linha
+      // seguinte, e relatorio que se contradiz nao decide nada.
+      const placarAntes = falhou
       console.log(`\n===== ${arquivo}`)
-      console.log(`  corpo ${r.larguraCorpo_mm}mm | rolagem ${r.rolagem_mm}mm | altura ${r.altura_mm}mm`)
+      console.log(
+        `  corpo ${r.larguraCorpo_mm}mm | comeca em ${r.inicioCorpo_mm}mm | ` +
+          `rolagem ${r.rolagem_mm}mm | altura ${r.altura_mm}mm`
+      )
+
+      /*
+       * ⚠️ A medicao que de fato pega o defeito que foi ao papel.
+       *
+       * O comprovante de entrega tinha 68mm e cabia inteiro — e mesmo assim saiu
+       * praticamente em branco, porque comecava aos 71mm da borda: `margin: 0
+       * auto` centraliza na pagina que o Chromium monta (larga), e nao na bobina.
+       *
+       * O conserto e um bloco @media print encostando o corpo a esquerda. Esta
+       * checagem e o que cobra que ele exista.
+       */
+      if (r.inicioCorpo_mm > 3) {
+        console.log(
+          `  COMECA LONGE DEMAIS DA BORDA: ${r.inicioCorpo_mm}mm.` +
+            ' Em bobina o papel encosta na esquerda — falta um @media print com margin: 0.'
+        )
+        falhou = true
+      }
       // O scrollWidth é o critério que manda. O laço por elemento só aponta o
       // culpado quando dá — ele compara CAIXAS, e texto que vaza de um bloco de
       // 68mm não alarga o bloco, então sozinho ele deixa passar vazamento real.
@@ -97,7 +126,7 @@ app.whenReady().then(async () => {
       }
 
       const transbordou = r.rolagem_mm > r.larguraCorpo_mm + 0.1
-      if (!transbordou && r.larguraCorpo_mm <= LARGURA_MAXIMA_MM + 0.1) {
+      if (!transbordou && falhou === placarAntes) {
         console.log('  OK — cabe inteiro na bobina')
       } else if (transbordou) {
         console.log(`  VAZOU ${(r.rolagem_mm - r.larguraCorpo_mm).toFixed(1)}mm além do papel`)

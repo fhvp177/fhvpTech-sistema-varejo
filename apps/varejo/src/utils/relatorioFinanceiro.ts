@@ -431,6 +431,26 @@ export function gerarHtmlComprovanteEntrega(
     .rot { font-size: 10px; }
     .assin { margin-top: 18px; border-top: 1px dashed #000; padding-top: 3px; font-size: 10px; text-align: center; }
     .aviso { font-size: 9.5px; text-align: center; margin-top: 6px; }
+
+    /*
+      ⚠️ ENCOSTADO À ESQUERDA na impressão, e esta é a regra que decide se sai
+      alguma coisa no papel.
+
+      O driver da bobina informa direitinho o papel que tem. Quem ignora isso é o
+      Chromium: na impressão ele monta a página no tamanho padrão dele. Aí a
+      centralização da tela (margin auto) centraliza o corpo NESSA página larga
+      — um corpo de 68mm centralizado em 210 começa aos 71mm, e o papel tem 80.
+      (sem crase neste comentário: ele mora dentro de um template literal)
+
+      Foi exatamente o que aconteceu: o comprovante saiu com uma tira de meio
+      centímetro no canto direito e o resto impresso no vazio. Em bobina não
+      existe "centro da folha" para centralizar.
+
+      O padding de baixo é o respiro antes do corte da guilhotina.
+    */
+    @media print {
+      body { margin: 0; padding: 0 0 4mm; }
+    }
   </style>
 </head>
 <body>
