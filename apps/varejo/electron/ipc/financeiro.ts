@@ -24,7 +24,9 @@ import {
   sangria,
   suprimento,
   diferencasPorOperador,
-  turnoParaRelatorio
+  turnoParaRelatorio,
+  vendasDoTurno,
+  resumoVendasDoTurno
 } from '../db/queries/turnos'
 
 const TIPOS: TipoConta[] = ['caixa', 'banco', 'a_receber']
@@ -279,6 +281,21 @@ export function registrarHandlersFinanceiro(): void {
     try {
       requerDono()
       return { success: true, data: diferencasPorOperador(String(de), String(ate)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // O que foi vendido num turno — a resposta de "de onde veio a diferença?".
+  registrarCanal('caixa:vendasDoTurno', (turnoId: number) => {
+    try {
+      return {
+        success: true,
+        data: {
+          vendas: vendasDoTurno(Number(turnoId)),
+          resumo: resumoVendasDoTurno(Number(turnoId))
+        }
+      }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

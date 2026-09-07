@@ -87,6 +87,7 @@ export const CANAIS_LOCAIS = [
   'caixa:diferencasPorOperador',
   'caixa:listarTurnos',
   'caixa:turnoParaRelatorio',
+  'caixa:vendasDoTurno',
   // Abre diálogo de pasta no PC.
   'fiscal:salvarXmls',
   'notasEntrada:exportarXmls',

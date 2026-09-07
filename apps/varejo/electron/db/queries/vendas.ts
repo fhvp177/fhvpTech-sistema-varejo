@@ -29,6 +29,9 @@ export type Venda = {
   // o percentual de alguém não pode reescrever o mês que já foi pago — o porquê
   // está inteiro na migration 038. NULL nas vendas anteriores a ela.
   comissao_pct: number | null
+  // Em qual turno de caixa esta venda entrou. NULL nas anteriores à migration
+  // 047 e nas que nascem fora de caixa (entrega de OS na assistência).
+  turno_id: number | null
   // Bilhete desta compra, escrito no PDV e impresso no cupom: "troca até 15/09",
   // "presente, não mandar preço". É da VENDA, não do cliente — o porquê está na
   // migration 042.
@@ -466,8 +469,8 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
      * fora — trocá-lo exigiria reconstruir a tabela, e ela é referenciada por
      * itens, parcelas, devoluções, créditos e pedidos.
      */
-    `INSERT INTO vendas (cliente_id, vendedor_id, data, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento, comissao_pct, observacao)
-     VALUES (@cliente_id, @vendedor_id, datetime('now','localtime'), @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @comissao_pct, @observacao)`
+    `INSERT INTO vendas (cliente_id, vendedor_id, data, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento, comissao_pct, observacao, turno_id)
+     VALUES (@cliente_id, @vendedor_id, datetime('now','localtime'), @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @comissao_pct, @observacao, @turno_id)`
   )
   const inserirItem = db.prepare(
     `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario, custo_unitario)
@@ -516,7 +519,16 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       comissao_pct: comissaoPct,
       // Texto vazio vira NULL: "" e "não escreveu nada" são a mesma coisa, e o
       // cupom só desenha o bloco quando há o que dizer.
-      observacao: dados.observacao?.trim() || null
+      observacao: dados.observacao?.trim() || null,
+      /*
+       * ⚠️ O turno vai na VENDA, e não só no movimento do livro-caixa.
+       *
+       * O movimento só nasce quando entra dinheiro. Venda a prazo sem entrada,
+       * ou paga inteira com crédito da loja, não gera nenhum — e sumiria da
+       * lista do turno, que é justamente onde alguém vai procurar de onde veio
+       * uma diferença. Ver a migration 047.
+       */
+      turno_id: turnoId
     })
     vendaId = result.lastInsertRowid as number
 

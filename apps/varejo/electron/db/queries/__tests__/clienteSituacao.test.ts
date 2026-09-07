@@ -99,7 +99,9 @@ const SCHEMA = `
     entrada REAL NOT NULL DEFAULT 0, valor_pago REAL NOT NULL DEFAULT 0,
     status_pagamento TEXT DEFAULT 'pendente', data_vencimento DATE,
     num_parcelas INTEGER, forma_pagamento TEXT,
-    cancelada INTEGER NOT NULL DEFAULT 0, comissao_pct REAL, observacao TEXT
+    cancelada INTEGER NOT NULL DEFAULT 0, comissao_pct REAL, observacao TEXT,
+    turno_id INTEGER,
+    cancelada_em TEXT, cancelada_por_id INTEGER, cancelamento_motivo TEXT
   );
   CREATE TABLE itens_venda (
     id INTEGER PRIMARY KEY AUTOINCREMENT, venda_id INTEGER NOT NULL,

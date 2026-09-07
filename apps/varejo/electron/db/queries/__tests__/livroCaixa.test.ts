@@ -99,7 +99,11 @@ const SCHEMA = `
     forma_pagamento TEXT,
     cancelada INTEGER NOT NULL DEFAULT 0,
     comissao_pct REAL,
-    observacao TEXT
+    observacao TEXT,
+    turno_id INTEGER,
+    cancelada_em TEXT,
+    cancelada_por_id INTEGER,
+    cancelamento_motivo TEXT
   );
   CREATE TABLE itens_venda (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

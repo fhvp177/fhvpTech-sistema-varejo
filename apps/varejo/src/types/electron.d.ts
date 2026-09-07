@@ -495,6 +495,8 @@ interface Window {
       turnoParaRelatorio: (
         turnoId: number
       ) => Promise<RespostaIPC<{ turno: TurnoCaixa; contagens: ContagemTurno[] } | null>>
+      // O que foi vendido num turno, com o resumo por forma de pagamento.
+      vendasDoTurno: (turnoId: number) => Promise<RespostaIPC>
       sangria: (contaId: number, valor: number, descricao: string) => Promise<RespostaIPC>
       suprimento: (contaId: number, valor: number, descricao: string) => Promise<RespostaIPC>
     }

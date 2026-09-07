@@ -26,6 +26,7 @@ import {
 import { useSessao } from '@/App'
 import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 import { CLASSE_DINHEIRO, paraNumero } from '@/utils/mascaras'
+import DetalheTurno from '@/components/DetalheTurno'
 
 /**
  * Caixas da loja, e o fechamento às cegas.
@@ -76,6 +77,8 @@ const Caixa: FC = () => {
 
   const [caixas, setCaixas] = useState<CaixaComTurno[]>([])
   const [historico, setHistorico] = useState<TurnoCaixa[]>([])
+  // Qual turno fechado está aberto para consulta.
+  const [verTurno, setVerTurno] = useState<TurnoCaixa | null>(null)
   const [carregando, setCarregando] = useState(true)
 
   const [abrindo, setAbrindo] = useState<CaixaComTurno | null>(null)
@@ -320,7 +323,18 @@ const Caixa: FC = () => {
               {historico
                 .filter((t) => t.fechado_em)
                 .map((t) => (
-                  <li key={t.id} className="px-3 py-2.5">
+                  <li key={t.id}>
+                    {/*
+                      ⚠️ A linha inteira é o botão, e não um ícone de lupa no
+                      canto. Quem procura de onde veio uma diferença clica no
+                      turno; um alvo de 44px escondido na ponta direita seria
+                      mais um lugar para não encontrar.
+                    */}
+                    <button
+                      type="button"
+                      onClick={() => setVerTurno(t)}
+                      className="w-full px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
+                    >
                     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-[14px] font-medium leading-tight">
@@ -348,12 +362,15 @@ const Caixa: FC = () => {
                         )}
                       </span>
                     </div>
+                    </button>
                   </li>
                 ))}
             </ul>
           )}
         </div>
       )}
+
+      <DetalheTurno turno={verTurno} onFechar={() => setVerTurno(null)} />
 
       {/* ── Abrir ── */}
       <Dialog open={abrindo !== null} onOpenChange={(o) => !o && setAbrindo(null)}>

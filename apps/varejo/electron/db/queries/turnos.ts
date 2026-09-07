@@ -329,6 +329,101 @@ export function diferencasPorOperador(de: string, ate: string): DiferencaOperado
 }
 
 /** Um turno com a contagem dele, para o comprovante de fechamento. */
+export type VendaDoTurno = {
+  id: number
+  data: string
+  total: number
+  valor_pago: number
+  status_pagamento: string
+  forma_pagamento: string | null
+  cliente_nome: string | null
+  vendedor_nome: string | null
+  cancelada: number
+}
+
+/**
+ * As vendas que entraram num turno, da mais recente para a mais antiga.
+ *
+ * ── Para que serve ──────────────────────────────────────────────────────────
+ * É a resposta de "de onde veio essa diferença?". Fechado o caixa com R$ 40 a
+ * menos, o lojista precisa poder abrir o turno e percorrer o que foi vendido —
+ * hoje ele via o número da diferença e mais nada.
+ *
+ * ── ⚠️ A venda CANCELADA aparece, e marcada ────────────────────────────────
+ * Ela não conta no total, e é por isso mesmo que precisa aparecer: uma venda
+ * cancelada durante o turno é uma das explicações mais comuns para o dinheiro
+ * não bater, e escondê-la deixaria o lojista procurando o que já está na tela.
+ *
+ * Quem separa as duas coisas é o resumo abaixo, que soma só o que valeu.
+ */
+export function vendasDoTurno(turnoId: number): VendaDoTurno[] {
+  const db = obterBancoDeDados()
+  return db
+    .prepare(
+      `SELECT v.id, v.data, v.total, v.valor_pago, v.status_pagamento,
+              v.forma_pagamento, v.cancelada,
+              c.nome AS cliente_nome,
+              vd.nome AS vendedor_nome
+         FROM vendas v
+         LEFT JOIN clientes c ON c.id = v.cliente_id
+         LEFT JOIN vendedores vd ON vd.id = v.vendedor_id
+        WHERE v.turno_id = ?
+        ORDER BY v.id DESC`
+    )
+    .all(turnoId) as VendaDoTurno[]
+}
+
+export type ResumoVendasTurno = {
+  num_vendas: number
+  total: number
+  recebido: number
+  a_prazo: number
+  canceladas: number
+  por_forma: Array<{ forma: string; num: number; total: number }>
+}
+
+/**
+ * O resumo do que foi vendido no turno.
+ *
+ * ⚠️ `recebido` e `total` são coisas diferentes, e a distinção é o ponto.
+ * O total é o que saiu da prateleira; o recebido é o dinheiro que entrou. Uma
+ * venda a prazo soma no primeiro e não no segundo — e é o segundo que tem
+ * chance de bater com a contagem da gaveta.
+ *
+ * Cancelada não entra em nenhum dos dois: entra na própria contagem, para
+ * explicar a ausência.
+ */
+export function resumoVendasDoTurno(turnoId: number): ResumoVendasTurno {
+  const db = obterBancoDeDados()
+  const geral = db
+    .prepare(
+      `SELECT COUNT(*) AS num_vendas,
+              COALESCE(SUM(total), 0) AS total,
+              COALESCE(SUM(valor_pago), 0) AS recebido,
+              COALESCE(SUM(total - valor_pago), 0) AS a_prazo
+         FROM vendas WHERE turno_id = ? AND cancelada = 0`
+    )
+    .get(turnoId) as Omit<ResumoVendasTurno, 'canceladas' | 'por_forma'>
+
+  const canceladas = db
+    .prepare('SELECT COUNT(*) AS n FROM vendas WHERE turno_id = ? AND cancelada = 1')
+    .get(turnoId) as { n: number }
+
+  const porForma = db
+    .prepare(
+      `SELECT COALESCE(forma_pagamento, 'não informado') AS forma,
+              COUNT(*) AS num,
+              COALESCE(SUM(valor_pago), 0) AS total
+         FROM vendas
+        WHERE turno_id = ? AND cancelada = 0
+        GROUP BY COALESCE(forma_pagamento, 'não informado')
+        ORDER BY total DESC`
+    )
+    .all(turnoId) as Array<{ forma: string; num: number; total: number }>
+
+  return { ...geral, canceladas: canceladas.n, por_forma: porForma }
+}
+
 export function turnoParaRelatorio(turnoId: number): { turno: Turno; contagens: Contagem[] } | null {
   const turno = obterBancoDeDados()
     .prepare(`${SELECT_TURNO} WHERE t.id = ?`)
