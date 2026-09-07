@@ -27,6 +27,7 @@ import { useSessao } from '@/App'
 import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 import { CLASSE_DINHEIRO, paraNumero } from '@/utils/mascaras'
 import DetalheTurno from '@/components/DetalheTurno'
+import { Interruptor } from '@fhvptech/core/ui/interruptor'
 
 /**
  * Caixas da loja, e o fechamento às cegas.
@@ -79,6 +80,7 @@ const Caixa: FC = () => {
   const [historico, setHistorico] = useState<TurnoCaixa[]>([])
   // Qual turno fechado está aberto para consulta.
   const [verTurno, setVerTurno] = useState<TurnoCaixa | null>(null)
+  const [exigirCaixa, setExigirCaixa] = useState(true)
   const [carregando, setCarregando] = useState(true)
 
   const [abrindo, setAbrindo] = useState<CaixaComTurno | null>(null)
@@ -107,6 +109,27 @@ const Caixa: FC = () => {
   useEffect(() => {
     void carregar()
   }, [carregar])
+
+  useEffect(() => {
+    void window.api.caixa.exigencia().then((r) => {
+      if (r.success) setExigirCaixa(r.data !== false)
+    })
+  }, [])
+
+  const alternarExigencia = async (valor: boolean) => {
+    const r = await window.api.caixa.definirExigencia(valor)
+    if (r.success) {
+      setExigirCaixa(valor)
+      showToast({
+        message: valor
+          ? 'A partir de agora, o caixa precisa estar aberto para vender.'
+          : 'As vendas voltam a ser aceitas sem caixa aberto.',
+        variant: 'success'
+      })
+    } else {
+      showToast({ message: r.error, variant: 'destructive' })
+    }
+  }
 
   const abrir = async () => {
     if (!abrindo) return
@@ -302,6 +325,35 @@ const Caixa: FC = () => {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/*
+        ⚠️ O interruptor fica AQUI, e não em Configurações, porque é aqui que a
+        pergunta nasce: quem abre esta tela pela primeira vez está decidindo se
+        a loja vai passar a trabalhar com caixa.
+
+        Só o dono vê. É trava de controle de dinheiro, e quem opera a gaveta não
+        pode desligar a conferência de si mesmo.
+      */}
+      {ehDono && (
+        <div className="mt-5 rounded-xl border bg-card p-4 lg:mt-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[15px] font-semibold">Exigir caixa aberto para vender</p>
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                Ligado, o PDV recusa a venda enquanto o caixa não for aberto — e é o
+                que faz a conferência do fim do dia valer, porque venda fora de turno
+                não entra em fechamento nenhum. Desligado, a loja vende como antes e
+                o caixa fica opcional.
+              </p>
+            </div>
+            <Interruptor
+              ligado={exigirCaixa}
+              onAlternar={alternarExigencia}
+              rotulo="Exigir caixa aberto para vender"
+            />
+          </div>
         </div>
       )}
 

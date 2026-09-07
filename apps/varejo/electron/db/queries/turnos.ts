@@ -73,6 +73,33 @@ const SELECT_TURNO = `
  * O turno aberto de um caixa. Sem `caixaId`, o primeiro aberto que aparecer —
  * útil só para telas de visão geral, nunca para decidir onde uma venda entra.
  */
+/**
+ * Esta loja exige caixa aberto para vender?
+ *
+ * ⚠️ Lido do banco a cada chamada, e não guardado em memória: o segundo caixa
+ * fala com este mesmo processo, e o dono pode virar o interruptor na tela de
+ * Configurações enquanto alguém está vendendo. Um valor em cache faria a regra
+ * valer para um aparelho e não para o outro.
+ *
+ * O padrão de quem nunca respondeu é LIGADO. Só a migration 048 desliga, e só
+ * para a loja que já vendia sem caixa antes de o recurso existir — para
+ * qualquer outro caminho (banco novo, config apagada), a proteção é o padrão.
+ */
+export function exigeCaixaAberto(): boolean {
+  const db = obterBancoDeDados()
+  const r = db
+    .prepare("SELECT valor FROM config WHERE chave = 'exigir_caixa_aberto'")
+    .get() as { valor: string } | undefined
+  return r?.valor !== '0'
+}
+
+export function definirExigenciaCaixa(exigir: boolean): void {
+  const db = obterBancoDeDados()
+  db.prepare(
+    "INSERT OR REPLACE INTO config (chave, valor) VALUES ('exigir_caixa_aberto', ?)"
+  ).run(exigir ? '1' : '0')
+}
+
 export function turnoAberto(caixaId?: number): Turno | null {
   const db = obterBancoDeDados()
   const sql = caixaId

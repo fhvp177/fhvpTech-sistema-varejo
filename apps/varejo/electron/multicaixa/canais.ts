@@ -86,6 +86,7 @@ export const CANAIS_LOCAIS = [
   'caixa:contagens',
   'caixa:diferencasPorOperador',
   'caixa:listarTurnos',
+  'caixa:definirExigencia',
   'caixa:turnoParaRelatorio',
   'caixa:vendasDoTurno',
   // Abre diálogo de pasta no PC.
@@ -142,6 +143,7 @@ export const CANAIS_REDE = [
   // explicando, em vez de duas contagens brigando pelo mesmo dinheiro.
   'caixa:abrirTurno',
   'caixa:caixasComTurno',
+  'caixa:exigencia',
   'caixa:fecharTurno',
   'caixa:sangria',
   'caixa:suprimento',
@@ -305,6 +307,7 @@ export const CANAIS_REPETIVEIS = [
   'clientes:listar',
   'clientes:listarInadimplentes',
   'clientes:listarVencendoHoje',
+  'caixa:exigencia',
   'clientes:resumoCaptacao',
   'comprovantes:obter',
   'comprovantes:quaisTem',

@@ -1,5 +1,6 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { contaSugerida, lancarMovimento } from './financeiro'
+import { exigeCaixaAberto } from './turnos'
 import { obterComissaoPadrao } from './comissoes'
 
 export type StatusPagamento = 'pago' | 'pendente' | 'inadimplente' | 'parcelado'
@@ -449,6 +450,18 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       throw new Error('CAIXA_FECHADO')
     }
     turnoId = turno.id
+  } else if (exigeCaixaAberto()) {
+    /*
+     * ⚠️ Sem `caixa_id` NENHUM, com a exigência ligada, também é recusa.
+     *
+     * Antes o guarda só existia quando a tela mandava o caixa — ou seja, a
+     * regra dependia de a interface se comportar. Bastava um aparelho com
+     * versão antiga, ou o segundo caixa chamando o canal direto, para a venda
+     * passar sem turno e o dinheiro ficar fora de toda conferência.
+     *
+     * Agora quem decide é o banco, que é onde a regra tem que morar.
+     */
+    throw new Error('CAIXA_FECHADO')
   }
 
   const inserirVenda = db.prepare(

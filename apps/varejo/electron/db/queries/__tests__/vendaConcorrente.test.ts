@@ -212,6 +212,13 @@ const SCHEMA = `
 
 // Estoque começa em 1: a última unidade da loja, que é o caso que importa.
 const SEED = `
+  -- ⚠️ Esta loja de teste NÃO exige caixa aberto para vender.
+  --
+  -- Os testes daqui são sobre outra coisa (roteamento do livro-caixa, corrida
+  -- por estoque), e exigir turno obrigaria cada um a abrir caixa antes de
+  -- chegar ao que interessa. Fica declarado no fonte em vez de depender do
+  -- padrão — que é LIGADO, e muda de significado se alguém mexer nele.
+  INSERT INTO config (chave, valor) VALUES ('exigir_caixa_aberto', '0');
   INSERT INTO vendedores (id, nome) VALUES (1, 'Ana');
   INSERT INTO produtos (id, nome, codigo_barras, preco, estoque)
     VALUES (1, 'Ventilador', '7891111111111', 100, 1);

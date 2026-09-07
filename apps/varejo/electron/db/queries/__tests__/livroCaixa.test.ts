@@ -198,6 +198,13 @@ const SCHEMA = `
 `
 
 const SEED = `
+  -- ⚠️ Esta loja de teste NÃO exige caixa aberto para vender.
+  --
+  -- Os testes daqui são sobre outra coisa (roteamento do livro-caixa, corrida
+  -- por estoque), e exigir turno obrigaria cada um a abrir caixa antes de
+  -- chegar ao que interessa. Fica declarado no fonte em vez de depender do
+  -- padrão — que é LIGADO, e muda de significado se alguém mexer nele.
+  INSERT INTO config (chave, valor) VALUES ('exigir_caixa_aberto', '0');
   INSERT INTO vendedores (id, nome) VALUES (1, 'Ana'), (2, 'Gerente');
   INSERT INTO clientes (id, nome, telefone) VALUES (1, 'Maria', '(88) 9.9999-9999');
   INSERT INTO produtos (id, nome, preco, estoque) VALUES (1, 'Anel de ouro', 1000, 3);
@@ -262,6 +269,42 @@ const vendaAVista = (forma: string, extras: Record<string, unknown> = {}) =>
     ...extras
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any)
+
+describe('a exigência de caixa aberto', () => {
+  /*
+   * ⚠️ A regra vale no BANCO, e não só na tela.
+   *
+   * O segundo caixa fala pelo mesmo canal, e um renderer de versão anterior não
+   * sabe do interruptor. Antes, o guarda só existia quando a tela mandava o
+   * caixa — bastava não mandar para a venda passar sem turno e o dinheiro ficar
+   * fora de toda conferência.
+   */
+  const ligarExigencia = () =>
+    db!
+      .prepare("INSERT OR REPLACE INTO config (chave, valor) VALUES ('exigir_caixa_aberto', '1')")
+      .run()
+
+  seTiverSqlite('★ ligada, recusa venda que não informa o caixa', () => {
+    ligarExigencia()
+    expect(() => vendaAVista('dinheiro')).toThrow('CAIXA_FECHADO')
+  })
+
+  seTiverSqlite('★ ligada, recusa venda em caixa sem turno aberto', () => {
+    ligarExigencia()
+    expect(() => vendaAVista('dinheiro', { caixa_id: 1 })).toThrow('CAIXA_FECHADO')
+  })
+
+  seTiverSqlite('ligada, aceita quando o turno está aberto', () => {
+    ligarExigencia()
+    abrirTurno(1, 1, 0)
+    expect(() => vendaAVista('dinheiro', { caixa_id: 1 })).not.toThrow()
+  })
+
+  seTiverSqlite('★ desligada, a venda sem caixa passa', () => {
+    // O caso do cliente que já operava sem caixa antes de o recurso existir.
+    expect(() => vendaAVista('dinheiro')).not.toThrow()
+  })
+})
 
 describe('o dinheiro da venda chega ao livro', () => {
   seTiverSqlite('venda à vista lança o valor cheio, na conta da FORMA', () => {

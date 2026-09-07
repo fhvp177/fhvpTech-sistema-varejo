@@ -26,7 +26,9 @@ import {
   diferencasPorOperador,
   turnoParaRelatorio,
   vendasDoTurno,
-  resumoVendasDoTurno
+  resumoVendasDoTurno,
+  exigeCaixaAberto,
+  definirExigenciaCaixa
 } from '../db/queries/turnos'
 
 const TIPOS: TipoConta[] = ['caixa', 'banco', 'a_receber']
@@ -281,6 +283,35 @@ export function registrarHandlersFinanceiro(): void {
     try {
       requerDono()
       return { success: true, data: diferencasPorOperador(String(de), String(ate)) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  /*
+   * O interruptor "não vende sem caixa aberto".
+   *
+   * ⚠️ LER é livre, e precisa ser: o PDV consulta a cada abertura para saber se
+   * mostra a tela de bloqueio. Negar a leitura ao vendedor faria o PDV cair no
+   * padrão e barrar a venda numa loja que não usa caixa.
+   *
+   * GRAVAR é do dono. É uma trava de controle de dinheiro; quem opera o caixa
+   * não pode desligar a conferência de si mesmo.
+   */
+  registrarCanal('caixa:exigencia', () => {
+    try {
+      return { success: true, data: exigeCaixaAberto() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('caixa:definirExigencia', (exigir: boolean) => {
+    try {
+      requerDono()
+      definirExigenciaCaixa(!!exigir)
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: null }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

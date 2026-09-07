@@ -107,6 +107,10 @@ const api = {
       ipcRenderer.invoke('caixa:turnoParaRelatorio', turnoId),
     vendasDoTurno: (turnoId: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('caixa:vendasDoTurno', turnoId),
+    // "Não vende sem caixa aberto": interruptor por loja.
+    exigencia: (): Promise<RespostaIPC> => ipcRenderer.invoke('caixa:exigencia'),
+    definirExigencia: (exigir: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:definirExigencia', exigir),
     sangria: (contaId: number, valor: number, descricao: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('caixa:sangria', contaId, valor, descricao),
     suprimento: (contaId: number, valor: number, descricao: string): Promise<RespostaIPC> =>

@@ -1599,6 +1599,17 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { caixaId, escolher } = useCaixaDoAparelho()
   const [caixas, setCaixas] = useState<Array<{ id: number; nome: string; turno: TurnoCaixa | null }>>([])
   const [carregandoCaixas, setCarregandoCaixas] = useState(true)
+  /*
+   * Esta loja exige caixa aberto para vender?
+   *
+   * ⚠️ Começa `true`, e não `false`. Enquanto a resposta não chega, o valor
+   * seguro é o que PROTEGE: numa loja que exige caixa, começar em `false`
+   * abriria uma janela — curta, mas real — em que a venda passa sem turno.
+   * O contrário só atrasa a tela por um instante.
+   *
+   * Quem de fato barra é o banco; isto aqui decide o que a tela mostra.
+   */
+  const [exigirCaixa, setExigirCaixa] = useState(true)
 
   /*
    * ⚠️ Recarrega sempre que a tela volta ao foco: o caixa pode ter sido
@@ -1608,6 +1619,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const recarregarCaixas = useCallback(async () => {
     const r = await window.api.caixa.caixasComTurno()
     if (r.success) setCaixas(r.data as Array<{ id: number; nome: string; turno: TurnoCaixa | null }>)
+    const rEx = await window.api.caixa.exigencia()
+    if (rEx.success) setExigirCaixa(rEx.data !== false)
     setCarregandoCaixas(false)
   }, [])
 
@@ -1946,9 +1959,17 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       num_parcelas: statusPagamento === 'parcelado' ? numParcelas : null,
       desconto: descontoValor,
       entrada: entradaValor,
-      // ⚠️ Em qual gaveta esta venda entrou. Sem isto o backend recusa — e
-      // recusa de propósito: venda fora de turno não entra em conferência nenhuma.
-      caixa_id: caixaId,
+      /*
+       * ⚠️ Em qual gaveta esta venda entrou.
+       *
+       * Com a exigência LIGADA vai sempre, e o backend recusa se o turno não
+       * estiver aberto — a regra mora lá, não aqui.
+       *
+       * DESLIGADA, vai só quando há turno aberto de verdade. Assim a loja que
+       * não usa caixa vende normalmente, e a que usa de vez em quando continua
+       * tendo o dinheiro caindo na gaveta certa quando o caixa está aberto.
+       */
+      caixa_id: exigirCaixa ? caixaId : caixaAberto ? caixaId : null,
       valor_credito_usado: creditoAplicado,
       // Só vai quando houve escolha. Nos outros casos o backend deriva
       // ('crediario' a prazo, 'credito_loja' quando o saldo cobre tudo).
@@ -2355,7 +2376,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
    * A trava de verdade está no banco, que recusa a venda sem turno. Esta tela é
    * a explicação, não a fechadura — e por isso ela pode ser generosa.
    */
-  if (!carregandoCaixas && !caixaAberto) {
+  if (!carregandoCaixas && exigirCaixa && !caixaAberto) {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="w-full max-w-sm rounded-xl border bg-card p-6 text-center">
