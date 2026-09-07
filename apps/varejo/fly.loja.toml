@@ -90,3 +90,19 @@ primary_region = "gru" # São Paulo — o dado do cliente não sai do Brasil (LG
   FHVP_WEB = "/app/dist-web"
   PORT = "8080"
   NODE_ENV = "production"
+  # ⚠️ O FUSO DA LOJA. Sem isto o contêiner roda em UTC, e a loja inteira fica
+  # três horas adiante do relógio do balcão: venda das 21h entra como do dia
+  # seguinte, turno aberto às 8h aparece como 11h, e o "hoje" do Painel vira
+  # amanhã à noite.
+  #
+  # Passou despercebido porque no aplicativo instalado o fuso vem do Windows do
+  # lojista e está certo; só a loja hospedada, que roda em servidor, nasce sem.
+  #
+  # A imagem `node:22-slim` já traz a base de fusos (conferido dentro do
+  # contêiner), então basta a variável.
+  #
+  # ⚠️ É o fuso da LOJA, não do servidor. Cliente fora do horário de Brasília
+  # (Acre, Amazonas, Fernando de Noronha) precisa do seu próprio valor aqui —
+  # e como este arquivo é compartilhado por todas as lojas, aí a variável tem
+  # que ir por `fly secrets` na loja daquele cliente, sobrescrevendo esta.
+  TZ = "America/Sao_Paulo"

@@ -280,8 +280,10 @@ export function criarCliente(dados: DadosCliente): Cliente {
   const comPadroes = { ...dados, origem_id: dados.origem_id ?? null }
   const result = db
     .prepare(
-      `INSERT INTO clientes (nome, telefone, endereco, cpf, data_nascimento, tipo_pessoa, cnpj, razao_social, observacao, origem_id)
-       VALUES (@nome, @telefone, @endereco, @cpf, @data_nascimento, @tipo_pessoa, @cnpj, @razao_social, @observacao, @origem_id)`
+      // Hora da loja, e não UTC — ver o comentário em criarVenda. Aqui alimenta
+      // "clientes novos" do Painel: cadastrado às 22h virava cadastro de amanhã.
+      `INSERT INTO clientes (nome, telefone, endereco, cpf, data_nascimento, tipo_pessoa, cnpj, razao_social, observacao, origem_id, data_cadastro)
+       VALUES (@nome, @telefone, @endereco, @cpf, @data_nascimento, @tipo_pessoa, @cnpj, @razao_social, @observacao, @origem_id, datetime('now','localtime'))`
     )
     .run(comPadroes)
   // Cliente recém-criado não comprou nada ainda, e é isso que os derivados

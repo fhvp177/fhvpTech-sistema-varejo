@@ -449,8 +449,25 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   }
 
   const inserirVenda = db.prepare(
-    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento, comissao_pct, observacao)
-     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @comissao_pct, @observacao)`
+    /*
+     * ⚠️ `data` vai EXPLÍCITA, em hora da loja.
+     *
+     * O default da coluna é `CURRENT_TIMESTAMP`, que no SQLite é UTC — sempre,
+     * em qualquer fuso da máquina; não é configuração, é a definição. No Brasil
+     * isso gravava a venda três horas adiante do relógio do balcão, e a partir
+     * das 21h no DIA SEGUINTE.
+     *
+     * O estrago não era só a data na tela. As tabelas do livro-caixa gravam em
+     * hora local, então a mesma venda entrava como 22:42 no movimento e 01:42
+     * do dia seguinte em `vendas`: o faturamento do dia e o dinheiro do caixa
+     * deixavam de bater, sem nada que explicasse a diferença.
+     *
+     * O default fica onde está de propósito, como rede para quem inserir por
+     * fora — trocá-lo exigiria reconstruir a tabela, e ela é referenciada por
+     * itens, parcelas, devoluções, créditos e pedidos.
+     */
+    `INSERT INTO vendas (cliente_id, vendedor_id, data, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento, comissao_pct, observacao)
+     VALUES (@cliente_id, @vendedor_id, datetime('now','localtime'), @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @comissao_pct, @observacao)`
   )
   const inserirItem = db.prepare(
     `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario, custo_unitario)
