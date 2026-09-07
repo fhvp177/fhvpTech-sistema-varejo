@@ -246,6 +246,31 @@ const Dashboard: FC = () => {
     : { pct: 0, valido: false }
 
   /*
+   * Custo e lucro do período.
+   *
+   * ⚠️ `semCusto` decide se os dois cartões mostram número ou convite. Sem
+   * preço de compra cadastrado o custo é zero, e um lucro igual ao faturamento
+   * apareceria como notícia excelente — é o número errado mais convincente que
+   * este Painel poderia exibir.
+   */
+  const custoAtual = metricas?.custo_vendas_atual ?? 0
+  const semCustoCadastrado = !metricas || custoAtual <= 0
+  const lucroBruto = metricas ? metricas.faturamento_atual - custoAtual : 0
+  const lucroBrutoAnterior = metricas
+    ? metricas.faturamento_anterior - metricas.custo_vendas_anterior
+    : 0
+  const margemBruta =
+    metricas && metricas.faturamento_atual > 0
+      ? (lucroBruto / metricas.faturamento_atual) * 100
+      : 0
+  const deltaCusto = metricas
+    ? calcularDelta(custoAtual, metricas.custo_vendas_anterior)
+    : { pct: 0, valido: false }
+  const deltaLucro = metricas
+    ? calcularDelta(lucroBruto, lucroBrutoAnterior)
+    : { pct: 0, valido: false }
+
+  /*
    * Quanto o gráfico soma no período.
    *
    * Não é número novo: é o mesmo faturamento que já está no cartão de cima,
@@ -412,8 +437,15 @@ const Dashboard: FC = () => {
         </div>
       </div>
 
-      {/* ── KPIs do período ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3 lg:gap-4 lg:mb-6">
+      {/*
+        ── KPIs do período ──
+
+        `lg:grid-cols-3` e não 4: com os cartões de custo e lucro são seis, e em
+        quatro colunas os dois últimos ficariam sozinhos numa segunda fileira
+        meio vazia. Três por linha fecha duas fileiras cheias. No celular
+        continuam duas colunas.
+      */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-3 lg:gap-4 lg:mb-6">
         <CardKPI
           icone={<TrendingUp className="w-5 h-5 text-primary" />}
           corIcone="bg-primary-soft"
@@ -460,6 +492,52 @@ const Dashboard: FC = () => {
           deltaNovos={deltaClientesNovos}
           mostrarComparativo={mostrarComparativo}
           rotuloComparativo={rotuloComparativo}
+        />
+        <CardKPI
+          icone={<Package className="w-5 h-5 text-primary" />}
+          corIcone="bg-primary-soft"
+          titulo="Custo dos produtos"
+          valor={!metricas ? '...' : semCustoCadastrado ? '—' : fmt(custoAtual)}
+          delta={deltaCusto}
+          deltaNeutro
+          valorAnterior={metricas ? fmt(metricas.custo_vendas_anterior) : '—'}
+          rotuloComparativo={rotuloComparativo}
+          mostrarComparativo={mostrarComparativo && !semCustoCadastrado}
+          subtexto={
+            metricas && semCustoCadastrado ? (
+              <p className="text-xs text-muted-foreground mt-1">
+                Cadastre o preço de compra em Produtos.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                O que as peças vendidas custaram.
+              </p>
+            )
+          }
+        />
+        <CardKPI
+          icone={<PiggyBank className="w-5 h-5 text-primary" />}
+          corIcone="bg-primary-soft"
+          titulo="Lucro bruto"
+          valor={!metricas ? '...' : semCustoCadastrado ? '—' : fmt(lucroBruto)}
+          delta={deltaLucro}
+          valorAnterior={metricas ? fmt(lucroBrutoAnterior) : '—'}
+          rotuloComparativo={rotuloComparativo}
+          mostrarComparativo={mostrarComparativo && !semCustoCadastrado}
+          subtexto={
+            metricas && semCustoCadastrado ? (
+              <p className="text-xs text-muted-foreground mt-1">
+                Depende do preço de compra.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                Faturamento menos custo · margem{' '}
+                <span className="font-medium">
+                  {margemBruta.toFixed(1).replace('.', ',')}%
+                </span>
+              </p>
+            )
+          }
         />
       </div>
 
@@ -1104,6 +1182,15 @@ type CardKPIProps = {
   rotuloComparativo: string
   mostrarComparativo: boolean
   subtexto?: React.ReactNode
+  /*
+   * Pinta a variação de cinza em vez de verde/vermelho.
+   *
+   * ⚠️ Existe para o custo. Custo que sobe não é notícia ruim: quase sempre
+   * subiu porque se vendeu mais. Pintar de vermelho faria o lojista procurar um
+   * problema que não existe, e pintar de verde seria pior ainda. Quando a
+   * direção não tem significado, a cor honesta é nenhuma.
+   */
+  deltaNeutro?: boolean
 }
 
 /**
@@ -1126,10 +1213,11 @@ const tamanhoDoValor = (valor: string): string =>
   : 'text-[22px]'
 
 const CardKPI: FC<CardKPIProps> = ({
-  icone, corIcone, titulo, valor, delta, valorAnterior, rotuloComparativo, mostrarComparativo, subtexto
+  icone, corIcone, titulo, valor, delta, valorAnterior, rotuloComparativo, mostrarComparativo,
+  subtexto, deltaNeutro = false
 }) => {
   const corDelta =
-    !delta.valido ? 'text-muted-foreground'
+    !delta.valido || deltaNeutro ? 'text-muted-foreground'
     : delta.pct > 0 ? 'text-positive'
     : delta.pct < 0 ? 'text-critical'
     : 'text-muted-foreground'

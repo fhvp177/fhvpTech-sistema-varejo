@@ -213,7 +213,13 @@ export function concluirPedido(pedidoId: number, pagamento: PagamentoDoPedido): 
   const db = obterBancoDeDados()
   return db.transaction(() => {
     const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId) as
-      | { id: number; situacao: SituacaoPedido; cliente_id: number | null; desconto: number }
+      | {
+          id: number
+          situacao: SituacaoPedido
+          cliente_id: number | null
+          desconto: number
+          observacao: string | null
+        }
       | undefined
     if (!pedido) throw new Error('Pedido não encontrado.')
     if (pedido.situacao !== 'separado') {
@@ -237,6 +243,10 @@ export function concluirPedido(pedidoId: number, pagamento: PagamentoDoPedido): 
       ...pagamento,
       cliente_id: pedido.cliente_id,
       desconto: pedido.desconto,
+      // O bilhete do pedido segue para a venda, e daí para o cupom. Foi escrito
+      // sobre esta mercadoria, e some justamente na hora em que o cliente
+      // recebe o papel se não for junto.
+      observacao: pedido.observacao,
       itens
     })
 

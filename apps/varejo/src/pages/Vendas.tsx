@@ -6,6 +6,7 @@ import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
+import { Select } from '@fhvptech/core/ui/select'
 import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
@@ -1594,6 +1595,15 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const [razaoSocialRapido, setRazaoSocialRapido] = useState('')
   const [enderecoClienteRapido, setEnderecoClienteRapido] = useState('')
   const [observacaoClienteRapido, setObservacaoClienteRapido] = useState('')
+  /*
+   * De onde veio o cliente. ⚠️ Aqui é o melhor lugar do sistema para
+   * perguntar isso: ele está na frente do vendedor. Preenchido depois, no
+   * cadastro completo, vira chute.
+   */
+  const [origemClienteRapido, setOrigemClienteRapido] = useState('')
+  const [origensCliente, setOrigensCliente] = useState<Array<{ id: number; nome: string }>>([])
+  // Bilhete desta venda, impresso no cupom. Some junto com o carrinho.
+  const [observacaoVenda, setObservacaoVenda] = useState('')
   const [erroCliente, setErroCliente] = useState('')
   const [salvandoCliente, setSalvandoCliente] = useState(false)
 
@@ -1613,8 +1623,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     Promise.all([
       window.api.clientes.listar(),
       window.api.produtos.listar(),
-      window.api.auth.lerTetoDesconto()
-    ]).then(([rClientes, rProdutos, rTeto]) => {
+      window.api.auth.lerTetoDesconto(),
+      window.api.origens.listar()
+    ]).then(([rClientes, rProdutos, rTeto, rOrigens]) => {
+      if (rOrigens.success) {
+        setOrigensCliente(rOrigens.data as Array<{ id: number; nome: string }>)
+      }
       if (rClientes.success) setClientes(rClientes.data as Cliente[])
       if (rProdutos.success) setProdutos(rProdutos.data as Produto[])
       if (rTeto.success) setTetoDesconto(rTeto.data)
@@ -1800,6 +1814,9 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     setEntradaInput('')
     setDescontoTipo('R$')
     setDescontoEntrada('')
+    // ⚠️ Some com a venda. Bilhete que sobra na tela é o tipo de erro que só
+    // aparece no papel do cliente seguinte, quando já não dá para desfazer.
+    setObservacaoVenda('')
     setCodigoScan('')
     setErro('')
     setFeedbackScan(null)
@@ -1835,6 +1852,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       // Só vai quando houve escolha. Nos outros casos o backend deriva
       // ('crediario' a prazo, 'credito_loja' quando o saldo cobre tudo).
       forma_pagamento: precisaEscolherForma ? formaPagamento : null,
+      observacao: observacaoVenda.trim() || null,
       itens: carrinho.map((item) => ({
         produto_id: item.produto_id,
         variacao_id: item.variacao_id,
@@ -2137,6 +2155,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       cnpj: ehPj ? cnpjClienteRapido : null,
       razao_social: ehPj ? (razaoSocialRapido.trim() || null) : null,
       observacao: observacaoClienteRapido.trim() || null,
+      origem_id: origemClienteRapido ? Number(origemClienteRapido) : null,
     })
     if (resp.success) {
       const novoCliente = resp.data as Cliente
@@ -2878,6 +2897,27 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </div>
         )}
 
+        {/*
+          Observação da venda: o bilhete que hoje é escrito à mão no verso do
+          cupom. "Troca até 15/09", "presente, não mandar preço".
+
+          Fica por último de propósito. É opcional e raro, e todo campo posto
+          acima dos que decidem o pagamento cobra atenção de quem só quer
+          fechar a venda — 300 vezes por dia.
+        */}
+        <div>
+          <Label htmlFor="obs-venda" className="text-xs mb-1 block">
+            Observação <span className="text-muted-foreground font-normal">(sai no cupom)</span>
+          </Label>
+          <Input
+            id="obs-venda"
+            value={observacaoVenda}
+            onChange={(e) => setObservacaoVenda(e.target.value)}
+            placeholder="Ex.: troca até 15/09"
+            maxLength={120}
+          />
+        </div>
+
         {erro && (
           <p className="text-destructive text-xs bg-destructive/10 rounded px-2 py-1.5">{erro}</p>
         )}
@@ -3101,6 +3141,37 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
               E o endereço não é enfeite: sem ele não há entrega, que é como boa
               parte das vendas desta loja acontece.
             */}
+            {/*
+              ⚠️ A origem é perguntada AQUI, e não só no cadastro completo.
+
+              Este é o único momento em que o cliente está na frente do vendedor:
+              dá para perguntar "como você chegou até nós?" e ouvir a resposta.
+              Preenchida depois, na tela de Clientes, ela vira chute — e um
+              relatório de captação alimentado por chute é pior que não ter
+              relatório nenhum, porque parece dado.
+
+              Some quando não há origem cadastrada: um seletor vazio no meio do
+              caminho é só um campo a mais para pular.
+            */}
+            {origensCliente.length > 0 && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="origem-cliente-rapido">
+                  Como chegou até nós{' '}
+                  <span className="text-muted-foreground font-normal">(opcional)</span>
+                </Label>
+                <Select
+                  id="origem-cliente-rapido"
+                  value={origemClienteRapido}
+                  onChange={setOrigemClienteRapido}
+                  placeholder="— Não informado —"
+                  opcoes={[
+                    { valor: '', rotulo: '— Não informado —' },
+                    ...origensCliente.map((o) => ({ valor: String(o.id), rotulo: o.nome }))
+                  ]}
+                />
+              </div>
+            )}
+
             <div className="grid gap-1.5">
               <Label htmlFor="endereco-cliente-rapido">
                 Endereço <span className="text-muted-foreground font-normal">(opcional)</span>

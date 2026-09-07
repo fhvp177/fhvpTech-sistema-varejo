@@ -15,6 +15,8 @@ import {
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
 import Paginacao from '@fhvptech/core/ui/paginacao'
+import { Select } from '@fhvptech/core/ui/select'
+import ModalOrigens from '@/components/ModalOrigens'
 import DividasClienteDialog, {
   calcularDividasPorCliente,
   type VendaDivida
@@ -29,6 +31,16 @@ const ITENS_POR_PAGINA = 20
 
 type TipoPessoa = 'fisica' | 'juridica'
 
+/*
+ * ⚠️ A situação NÃO é um campo do cadastro: vem calculada da história de
+ * compras a cada consulta. O porquê está inteiro em electron/db/queries/
+ * clientes.ts — em resumo, etiqueta gravada envelhece em silêncio e faz a loja
+ * mandar promoção de fidelidade para quem sumiu há seis meses.
+ */
+type SituacaoCliente = 'sem_compras' | 'novo' | 'recorrente' | 'reativado' | 'inativo'
+
+type OrigemCliente = { id: number; nome: string; clientes_count: number }
+
 type Cliente = {
   id: number
   nome: string
@@ -40,8 +52,34 @@ type Cliente = {
   cnpj: string | null
   razao_social: string | null
   observacao: string | null
+  origem_id: number | null
   data_cadastro: string
+  origem_nome: string | null
+  situacao: SituacaoCliente
+  num_compras: number
+  total_comprado: number
+  ultima_compra: string | null
 }
+
+/*
+ * Como cada situação aparece. A cor carrega o recado sem obrigar a ler:
+ * âmbar e cinza são os dois que pedem ação do lojista.
+ */
+const SITUACAO: Record<SituacaoCliente, { rotulo: string; classe: string }> = {
+  sem_compras: { rotulo: 'Sem compras', classe: 'bg-muted text-muted-foreground' },
+  novo: { rotulo: 'Novo', classe: 'bg-sky-100 text-sky-700' },
+  recorrente: { rotulo: 'Recorrente', classe: 'bg-emerald-100 text-emerald-700' },
+  reativado: { rotulo: 'Reativado', classe: 'bg-violet-100 text-violet-700' },
+  inativo: { rotulo: 'Inativo', classe: 'bg-amber-100 text-amber-800' }
+}
+
+const ORDEM_SITUACAO: SituacaoCliente[] = [
+  'novo',
+  'recorrente',
+  'reativado',
+  'inativo',
+  'sem_compras'
+]
 
 const fmtMoeda = (valor: number) =>
   valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -56,6 +94,8 @@ type FormCliente = {
   cnpj: string
   razao_social: string
   observacao: string
+  // String porque vem de um seletor; vira número (ou null) na hora de gravar.
+  origem_id: string
 }
 
 // Dados fiscais do cliente (destinatário da NF-e) — só no plano Pro; no
@@ -81,7 +121,7 @@ const FISCAL_VAZIO: FiscalCliente = {
 
 const FORM_VAZIO: FormCliente = {
   nome: '', telefone: '', endereco: '', cpf: '', data_nascimento: '',
-  tipo_pessoa: 'fisica', cnpj: '', razao_social: '', observacao: ''
+  tipo_pessoa: 'fisica', cnpj: '', razao_social: '', observacao: '', origem_id: ''
 }
 
 // YYYY-MM-DD → DD/MM/YYYY
@@ -146,6 +186,11 @@ const Clientes: FC = () => {
   const [lista, setLista] = useState<Cliente[]>([])
   const [vendas, setVendas] = useState<VendaDivida[]>([])
   const [busca, setBusca] = useState('')
+  const [origens, setOrigens] = useState<OrigemCliente[]>([])
+  // Filtros das etiquetas. `null` em cada um significa "não filtra por isso".
+  const [filtroSituacao, setFiltroSituacao] = useState<SituacaoCliente | null>(null)
+  const [filtroOrigem, setFiltroOrigem] = useState<number | null>(null)
+  const [modalOrigens, setModalOrigens] = useState(false)
   const [dialogAberto, setDialogAberto] = useState(false)
   const [editando, setEditando] = useState<Cliente | null>(null)
   const [form, setForm] = useState<FormCliente>(FORM_VAZIO)
@@ -171,15 +216,26 @@ const Clientes: FC = () => {
     if (resp.success) setVendas(resp.data as VendaDivida[])
   }
 
+  const carregarOrigens = async () => {
+    const resp = await window.api.origens.listar()
+    if (resp.success) setOrigens(resp.data as OrigemCliente[])
+  }
+
   useEffect(() => {
     carregarClientes()
     carregarVendas()
+    carregarOrigens()
   }, [])
 
   // Agrupa as dívidas em aberto por cliente (qualquer venda não-paga com saldo restante > 0)
   const dividasPorCliente = useMemo(() => calcularDividasPorCliente(vendas), [vendas])
 
   const listaFiltrada = lista.filter((c) => {
+    // As etiquetas cortam ANTES da busca por texto: são as duas perguntas
+    // separadas ("quais clientes?" e "qual deles?"), e nesta ordem.
+    if (filtroSituacao && c.situacao !== filtroSituacao) return false
+    if (filtroOrigem !== null && c.origem_id !== filtroOrigem) return false
+
     const t = busca.toLowerCase()
     return (
       c.nome.toLowerCase().includes(t) ||
@@ -195,7 +251,7 @@ const Clientes: FC = () => {
   // Reseta para a primeira página quando o filtro muda
   useEffect(() => {
     setPaginaAtual(1)
-  }, [busca])
+  }, [busca, filtroSituacao, filtroOrigem])
 
   // Carrega uma vez a localização da loja para sugerir no cadastro fiscal de
   // clientes novos. Só no Pro — o Básico não tem nota fiscal.
@@ -241,6 +297,7 @@ const Clientes: FC = () => {
       cnpj: c.cnpj ?? '',
       razao_social: c.razao_social ?? '',
       observacao: c.observacao ?? '',
+      origem_id: c.origem_id ? String(c.origem_id) : '',
     })
     setErro('')
     setDialogAberto(true)
@@ -310,6 +367,7 @@ const Clientes: FC = () => {
       cnpj: ehPj ? form.cnpj : null,
       razao_social: ehPj ? (form.razao_social.trim() || null) : null,
       observacao: form.observacao.trim() || null,
+      origem_id: form.origem_id ? Number(form.origem_id) : null,
     }
 
     const resp = editando
@@ -420,6 +478,79 @@ const Clientes: FC = () => {
       </div>
 
       {/*
+        ── Etiquetas de filtro ──
+
+        Situação e origem na mesma faixa, separadas por um traço vertical:
+        respondem perguntas diferentes ("como esse cliente se comporta" e "de
+        onde ele veio") mas combinam entre si — "quem veio pelo Instagram e
+        nunca comprou" é uma pergunta só, e é a que vale dinheiro.
+
+        Cada grupo é excludente por dentro: clicar na etiqueta ligada desliga.
+        Multiescolha dentro do mesmo grupo daria "novos OU inativos", que não é
+        pergunta que alguém faz.
+
+        A contagem vem ao lado do número, e não do rótulo: sem ela o lojista
+        clica em cada uma para descobrir se tem alguém ali.
+      */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-3 lg:mb-4">
+        {ORDEM_SITUACAO.map((s) => {
+          const quantos = lista.filter((c) => c.situacao === s).length
+          const ligada = filtroSituacao === s
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setFiltroSituacao(ligada ? null : s)}
+              aria-pressed={ligada}
+              className={`rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${
+                ligada
+                  ? 'bg-primary text-primary-foreground'
+                  : `${SITUACAO[s].classe} hover:opacity-80`
+              }`}
+            >
+              {SITUACAO[s].rotulo}
+              <span className="ml-1 opacity-70">{quantos}</span>
+            </button>
+          )
+        })}
+
+        {origens.length > 0 && (
+          <>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+            {origens.map((o) => {
+              const ligada = filtroOrigem === o.id
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setFiltroOrigem(ligada ? null : o.id)}
+                  aria-pressed={ligada}
+                  className={`rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${
+                    ligada
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:opacity-80'
+                  }`}
+                >
+                  {o.nome}
+                  <span className="ml-1 opacity-70">{o.clientes_count}</span>
+                </button>
+              )
+            })}
+          </>
+        )}
+
+        {(filtroSituacao || filtroOrigem !== null) && (
+          <button
+            type="button"
+            onClick={() => { setFiltroSituacao(null); setFiltroOrigem(null) }}
+            className="rounded-full px-2.5 py-1 text-[12px] text-muted-foreground underline underline-offset-2"
+          >
+            limpar
+          </button>
+        )}
+      </div>
+
+      {/*
         ⭐ No celular a tabela vira LISTA (roteiro §6).
 
         Sete colunas não cabem em 360px, e as três saídas comuns são todas ruins:
@@ -506,7 +637,19 @@ const Clientes: FC = () => {
                       */}
                       <div className="mt-0.5 flex items-baseline gap-2">
                         <p className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
-                          {[c.telefone, `desde ${formatarData(c.data_cadastro)}`, c.observacao]
+                          {/*
+                            ⚠️ Texto, e não a etiqueta colorida do monitor.
+                            Medido em 360px, esta linha já divide espaço com o
+                            valor devido; uma pílula aqui empurraria o telefone
+                            para fora, e o telefone é o que se procura correndo
+                            os olhos.
+                          */}
+                          {[
+                            SITUACAO[c.situacao].rotulo,
+                            c.telefone,
+                            `desde ${formatarData(c.data_cadastro)}`,
+                            c.observacao
+                          ]
                             .filter(Boolean)
                             .join(' · ')}
                         </p>
@@ -569,6 +712,7 @@ const Clientes: FC = () => {
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">CPF / CNPJ</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Telefone</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Endereço</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Situação</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cadastro</th>
                 <th className="w-32 px-4 py-3" />
               </tr>
@@ -576,7 +720,7 @@ const Clientes: FC = () => {
             <tbody>
               {listaFiltrada.length === 0 && (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <EstadoVazio
                       icone={<User className="w-9 h-9" />}
                       dica={busca ? 'Tente outro nome, telefone ou documento.' : 'Use o botão "Novo cliente" para começar.'}
@@ -637,6 +781,18 @@ const Clientes: FC = () => {
                     {c.endereco
                       ? <div className="truncate max-w-[130px] 2xl:max-w-[220px]" title={c.endereco}>{c.endereco}</div>
                       : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11.5px] font-medium ${SITUACAO[c.situacao].classe}`}
+                    >
+                      {SITUACAO[c.situacao].rotulo}
+                    </span>
+                    {c.origem_nome && (
+                      <div className="mt-0.5 truncate text-[11px] text-muted-foreground" title={c.origem_nome}>
+                        via {c.origem_nome}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{formatarData(c.data_cadastro)}</td>
                   <td className="px-4 py-3">
@@ -835,6 +991,46 @@ const Clientes: FC = () => {
               />
             </div>
 
+            {/*
+              Como o cliente chegou. Fica ANTES da observação porque é escolha
+              de um clique, e a observação é o único campo do formulário que
+              pede alguém parar para escrever — campo de digitar no meio empurra
+              o resto para depois de uma pausa.
+            */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="origem">Como chegou até nós (opcional)</Label>
+              {/*
+                O botão de editar a lista fica GRUDADO no seletor, como em
+                Produtos › categoria: quem descobre que falta "Indicação" é
+                justamente quem está cadastrando um indicado, e mandá-lo a
+                outra tela significa largar o formulário pela metade.
+              */}
+              <div className="flex gap-2">
+                <Select
+                  id="origem"
+                  value={form.origem_id}
+                  onChange={(v) => setForm((f) => ({ ...f, origem_id: v }))}
+                  placeholder="— Não informado —"
+                  classNameContainer="flex-1"
+                  opcoes={[
+                    { valor: '', rotulo: '— Não informado —' },
+                    ...origens.map((o) => ({ valor: String(o.id), rotulo: o.nome }))
+                  ]}
+                />
+                {ehDono && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setModalOrigens(true)}
+                    title="Gerenciar as origens"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
             <div className="grid gap-1.5">
               <Label htmlFor="observacao">Observação (opcional)</Label>
               <textarea
@@ -862,6 +1058,12 @@ const Clientes: FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ModalOrigens
+        aberto={modalOrigens}
+        onFechar={() => setModalOrigens(false)}
+        onMudancas={carregarOrigens}
+      />
 
       <DividasClienteDialog
         clienteNome={clienteDividas?.nome ?? null}

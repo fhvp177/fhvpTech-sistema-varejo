@@ -1,5 +1,5 @@
 import { FC, ReactNode, Suspense, lazy, useEffect, useState } from 'react'
-import { BarChart3, FileDown, Printer, FolderDown, ShoppingCart, Package, BookOpen, FileText, Receipt, Landmark, Scale, PackageCheck } from 'lucide-react'
+import { BarChart3, FileDown, Printer, FolderDown, ShoppingCart, Package, BookOpen, FileText, Receipt, Landmark, Scale, PackageCheck, Users } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Select } from '@fhvptech/core/ui/select'
 import { Label } from '@fhvptech/core/ui/label'
@@ -23,9 +23,11 @@ import {
   type NotaEntradaRelatorio
 } from '@/utils/relatorioEntradas'
 import {
+  gerarHtmlCaptacaoClientes,
   gerarHtmlDiferencasCaixa,
   gerarHtmlExtratoConta,
-  gerarHtmlPedidosSeparados
+  gerarHtmlPedidosSeparados,
+  type LinhaCaptacaoRelatorio
 } from '@/utils/relatorioFinanceiro'
 
 // Central de relatórios: reúne num lugar só tudo o que o sistema imprime/salva
@@ -119,6 +121,7 @@ const Relatorios: FC = () => {
   const [erroExtrato, setErroExtrato] = useState('')
 
   const [erroPedidos, setErroPedidos] = useState('')
+  const [erroCaptacao, setErroCaptacao] = useState('')
 
   useEffect(() => {
     void window.api.financeiro.listarContas().then((r) => {
@@ -273,6 +276,26 @@ const Relatorios: FC = () => {
         acao
       )
       if (erro) setErroPedidos(erro)
+    } finally {
+      setGerando(false)
+    }
+  }
+
+  const gerarCaptacao = async (acao: Acao) => {
+    setGerando(true)
+    setErroCaptacao('')
+    try {
+      const r = await window.api.clientes.resumoCaptacao()
+      if (!r.success) {
+        setErroCaptacao(r.error)
+        return
+      }
+      const erro = await entregar(
+        gerarHtmlCaptacaoClientes(r.data as LinhaCaptacaoRelatorio[]),
+        'Captacao de clientes',
+        acao
+      )
+      if (erro) setErroCaptacao(erro)
     } finally {
       setGerando(false)
     }
@@ -576,6 +599,18 @@ const Relatorios: FC = () => {
           </span>
           <BotoesGerar onGerar={gerarPedidos} desabilitado={false} gerando={gerando} />
           {erroPedidos && <p className="text-destructive text-xs">{erroPedidos}</p>}
+        </CardRelatorio>
+
+        <CardRelatorio
+          icone={<Users className="w-5 h-5" />}
+          titulo="Captação de clientes"
+          descricao="De onde vieram os clientes e o que cada canal rendeu — cadastros, quantos compraram e quanto faturaram."
+        >
+          <span className="text-xs text-muted-foreground">
+            Sempre a situação de agora — não tem período a escolher.
+          </span>
+          <BotoesGerar onGerar={gerarCaptacao} desabilitado={false} gerando={gerando} />
+          {erroCaptacao && <p className="text-destructive text-xs">{erroCaptacao}</p>}
         </CardRelatorio>
 
         {/* Notas fiscais emitidas — e os XMLs que o contador pede todo mês. */}

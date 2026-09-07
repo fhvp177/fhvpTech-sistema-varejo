@@ -22,6 +22,7 @@ const api = {
   // Clientes
   clientes: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('clientes:listar'),
+    resumoCaptacao: (): Promise<RespostaIPC> => ipcRenderer.invoke('clientes:resumoCaptacao'),
     criar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('clientes:criar', dados),
     atualizar: (id: number, dados: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('clientes:atualizar', id, dados),
@@ -168,6 +169,15 @@ const api = {
     deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('categorias:deletar', id),
     definirTamanhos: (id: number, usa: boolean): Promise<RespostaIPC> =>
       ipcRenderer.invoke('categorias:definir-tamanhos', id, usa)
+  },
+
+  // Origens de captação do cliente (Instagram, WhatsApp, presencial...).
+  origens: {
+    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('origens:listar'),
+    criar: (nome: string): Promise<RespostaIPC> => ipcRenderer.invoke('origens:criar', nome),
+    atualizar: (id: number, nome: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('origens:atualizar', id, nome),
+    deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('origens:deletar', id)
   },
 
   // Vendedores

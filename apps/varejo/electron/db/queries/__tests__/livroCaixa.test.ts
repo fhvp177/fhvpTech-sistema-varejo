@@ -98,7 +98,8 @@ const SCHEMA = `
     num_parcelas INTEGER,
     forma_pagamento TEXT,
     cancelada INTEGER NOT NULL DEFAULT 0,
-    comissao_pct REAL
+    comissao_pct REAL,
+    observacao TEXT
   );
   CREATE TABLE itens_venda (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,7 +107,8 @@ const SCHEMA = `
     produto_id INTEGER NOT NULL,
     variacao_id INTEGER,
     quantidade INTEGER NOT NULL,
-    preco_unitario REAL NOT NULL
+    preco_unitario REAL NOT NULL,
+    custo_unitario REAL
   );
   CREATE TABLE parcelas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

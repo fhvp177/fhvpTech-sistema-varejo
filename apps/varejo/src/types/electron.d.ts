@@ -434,6 +434,7 @@ interface Window {
       deletar: (id: number) => Promise<RespostaIPC>
       listarInadimplentes: () => Promise<RespostaIPC>
       listarVencendoHoje: () => Promise<RespostaIPC>
+      resumoCaptacao: () => Promise<RespostaIPC>
     }
     fornecedores: {
       listar: () => Promise<RespostaIPC>
@@ -538,6 +539,13 @@ interface Window {
       atualizar: (id: number, nome: string) => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>
       definirTamanhos: (id: number, usa: boolean) => Promise<RespostaIPC>
+    }
+    // Origens de captação do cliente: Instagram, WhatsApp, presencial...
+    origens: {
+      listar: () => Promise<RespostaIPC<Array<{ id: number; nome: string; clientes_count: number }>>>
+      criar: (nome: string) => Promise<RespostaIPC<{ id: number; nome: string }>>
+      atualizar: (id: number, nome: string) => Promise<RespostaIPC>
+      deletar: (id: number) => Promise<RespostaIPC>
     }
     vendedores: {
       listar: () => Promise<RespostaIPC<Array<{

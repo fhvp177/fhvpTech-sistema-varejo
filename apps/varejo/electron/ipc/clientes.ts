@@ -6,6 +6,7 @@ import {
   deletarCliente,
   listarInadimplentes,
   listarVencendoHoje,
+  resumoCaptacao,
   type DadosCliente
 } from '../db/queries/clientes'
 import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
@@ -15,6 +16,17 @@ export function registrarHandlersClientes(): void {
   registrarCanal('clientes:listar', () => {
     try {
       return { success: true, data: listarClientes() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Quanto cada canal de captação trouxe. Só o dono: é leitura de faturamento
+  // por grupo de cliente, do mesmo naipe dos outros relatórios gerenciais.
+  registrarCanal('clientes:resumoCaptacao', () => {
+    try {
+      requerDono()
+      return { success: true, data: resumoCaptacao() }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

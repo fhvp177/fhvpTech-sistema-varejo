@@ -156,7 +156,10 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
     }
     setSalvandoNovo(true)
     setErroNovo('')
+    // origem_id vai explícito: o INSERT usa parâmetros nomeados, e cliente
+    // criado aqui nasce sem origem mesmo (ninguém perguntou).
     const resp = await window.api.clientes.criar({
+      origem_id: null,
       nome: novoNome.trim(),
       telefone: novoTel,
       endereco: null,

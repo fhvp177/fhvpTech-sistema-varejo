@@ -155,7 +155,126 @@ export function gerarHtmlFechamentoCaixa(
   )
 }
 
-// ─── 2. ★ Quebra por operador ────────────────────────────────────────────────
+// ─── 1.5. ★ Captação de clientes ─────────────────────────────────────────────
+
+export type LinhaCaptacaoRelatorio = {
+  origem_id: number | null
+  origem_nome: string
+  clientes: number
+  compradores: number
+  num_compras: number
+  total_comprado: number
+  ticket_medio: number
+  novos: number
+  recorrentes: number
+  reativados: number
+  inativos: number
+  sem_compras: number
+}
+
+/**
+ * De onde vieram os clientes, e o que cada canal rendeu.
+ *
+ * ── ⚠️ A coluna que faz o relatório valer é "Compraram" ─────────────────────
+ * Contagem de cadastros sozinha engana: um canal que traz cinquenta pessoas que
+ * nunca voltam parece o melhor da loja. Ao lado do número de compradores e do
+ * faturamento, ele aparece como o que é — e a decisão de onde anunciar deixa de
+ * ser palpite.
+ *
+ * Por isso o cabeçalho separa "Cadastros" de "Compraram", e o percentual de
+ * conversão vem impresso: é a razão entre os dois, e é ela que se compara entre
+ * canais de tamanhos diferentes.
+ */
+export function gerarHtmlCaptacaoClientes(linhas: LinhaCaptacaoRelatorio[]): string {
+  const totalClientes = linhas.reduce((s, l) => s + l.clientes, 0)
+  const totalCompradores = linhas.reduce((s, l) => s + l.compradores, 0)
+  const totalFaturado = linhas.reduce((s, l) => s + l.total_comprado, 0)
+
+  const corpo = linhas.length
+    ? `
+    <table>
+      <thead>
+        <tr>
+          <th>Origem</th>
+          <th class="num">Cadastros</th>
+          <th class="num">Compraram</th>
+          <th class="num">Conversão</th>
+          <th class="num">Compras</th>
+          <th class="valor">Faturamento</th>
+          <th class="valor">Ticket médio</th>
+          <th>Situação dos clientes</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${linhas
+          .map((l) => {
+            const conversao = l.clientes > 0 ? (l.compradores / l.clientes) * 100 : 0
+            /*
+              Só as situações com gente aparecem. Uma coluna com "0 novos ·
+              0 reativados · 0 inativos" em toda linha ocuparia o dobro do
+              espaço para não dizer nada.
+            */
+            const situacoes = [
+              l.novos ? `${l.novos} novo${l.novos !== 1 ? 's' : ''}` : '',
+              l.recorrentes ? `${l.recorrentes} recorrente${l.recorrentes !== 1 ? 's' : ''}` : '',
+              l.reativados ? `${l.reativados} reativado${l.reativados !== 1 ? 's' : ''}` : '',
+              l.inativos ? `${l.inativos} inativo${l.inativos !== 1 ? 's' : ''}` : '',
+              l.sem_compras ? `${l.sem_compras} sem compras` : ''
+            ]
+              .filter(Boolean)
+              .join(' · ')
+            return `<tr>
+          <td>${l.origem_nome}</td>
+          <td class="num">${l.clientes}</td>
+          <td class="num">${l.compradores}</td>
+          <td class="num">${conversao.toFixed(0)}%</td>
+          <td class="num">${l.num_compras}</td>
+          <td class="valor">${dinheiro(l.total_comprado)}</td>
+          <td class="valor">${l.ticket_medio > 0 ? dinheiro(l.ticket_medio) : '—'}</td>
+          <td style="font-size: 10px; color: #555;">${situacoes || '—'}</td>
+        </tr>`
+          })
+          .join('\n        ')}
+      </tbody>
+      <tfoot>
+        <tr style="font-weight: bold; background: #f2f2f2;">
+          <td>Total</td>
+          <td class="num">${totalClientes}</td>
+          <td class="num">${totalCompradores}</td>
+          <td class="num">${
+            totalClientes > 0 ? ((totalCompradores / totalClientes) * 100).toFixed(0) : 0
+          }%</td>
+          <td class="num">${linhas.reduce((s, l) => s + l.num_compras, 0)}</td>
+          <td class="valor">${dinheiro(totalFaturado)}</td>
+          <td class="valor"></td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="caixa">
+      <strong>Como ler as situações:</strong>
+      <div style="margin-top: 4px; font-size: 10px; color: #444;">
+        <strong>Novo</strong>: comprou pouco e ainda está no prazo ·
+        <strong>Recorrente</strong>: três compras ou mais ·
+        <strong>Reativado</strong>: ficou meses sem comprar e voltou ·
+        <strong>Inativo</strong>: não compra há mais de seis meses ·
+        <strong>Sem compras</strong>: cadastrado e nunca comprou.
+      </div>
+      <div style="margin-top: 4px; font-size: 10px; color: #444;">
+        As situações são calculadas do histórico a cada consulta, e mudam sozinhas.
+      </div>
+    </div>`
+    : '<div class="vazio">Nenhum cliente cadastrado.</div>'
+
+  return pagina(
+    'Captação de clientes',
+    'De onde vieram, quantos compraram e quanto renderam',
+    corpo
+  )
+}
+
+// ─── 2. ★ Quebra por operador ──────────────────────────────────────────────────────────────
 
 export type DiferencaOperadorRelatorio = {
   vendedor_nome: string | null

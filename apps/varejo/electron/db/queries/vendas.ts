@@ -29,6 +29,10 @@ export type Venda = {
   // o percentual de alguém não pode reescrever o mês que já foi pago — o porquê
   // está inteiro na migration 038. NULL nas vendas anteriores a ela.
   comissao_pct: number | null
+  // Bilhete desta compra, escrito no PDV e impresso no cupom: "troca até 15/09",
+  // "presente, não mandar preço". É da VENDA, não do cliente — o porquê está na
+  // migration 042.
+  observacao: string | null
   valor_inadimplente: number
   valor_devolvido: number
   cliente_nome?: string | null
@@ -56,6 +60,9 @@ export type ItemVenda = {
   variacao_id: number | null
   quantidade: number
   preco_unitario: number
+  // Quanto a peça CUSTOU no dia em que foi vendida. NULL nas vendas anteriores
+  // à migration 043, e quem lê cai no custo atual do produto — ver lá.
+  custo_unitario: number | null
   produto_nome?: string
   codigo_barras?: string
   tamanho?: string | null
@@ -92,6 +99,8 @@ export type DadosNovaVenda = {
   // à vista: a prazo é crediário por definição e é DERIVADO aqui, não perguntado.
   // Ausente grava NULL ("não sabemos"), que é o caso da venda vinda de uma OS.
   forma_pagamento?: string | null
+  // Bilhete opcional impresso no cupom não fiscal.
+  observacao?: string | null
   itens: Array<{
     produto_id: number
     // Tamanho vendido, quando o produto é de grade. null/ausente = produto simples
@@ -440,13 +449,26 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   }
 
   const inserirVenda = db.prepare(
-    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento, comissao_pct)
-     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @comissao_pct)`
+    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento, comissao_pct, observacao)
+     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @comissao_pct, @observacao)`
   )
   const inserirItem = db.prepare(
-    `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario)
-     VALUES (@venda_id, @produto_id, @variacao_id, @quantidade, @preco_unitario)`
+    `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario, custo_unitario)
+     VALUES (@venda_id, @produto_id, @variacao_id, @quantidade, @preco_unitario, @custo_unitario)`
   )
+  /*
+   * ⚠️ O custo é lido AGORA e guardado junto, como já acontece com o preço e o
+   * percentual de comissão.
+   *
+   * Sem isto o lucro do Painel lia o custo de hoje para uma venda de meses
+   * atrás: bastava o fornecedor reajustar e o lojista atualizar o preço de
+   * compra para TODO o lucro do passado encolher de uma vez, sem que nenhuma
+   * venda tivesse mudado. Ver a migration 043.
+   *
+   * O custo é do PRODUTO mesmo em grade — na modelagem, preço e custo nunca
+   * moram na variação.
+   */
+  const custoDoProduto = db.prepare('SELECT custo FROM produtos WHERE id = ?')
   const decrementarEstoqueProduto = db.prepare(
     'UPDATE produtos SET estoque = estoque - ? WHERE id = ?'
   )
@@ -474,17 +496,22 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       data_vencimento: dados.data_vencimento,
       num_parcelas: dados.num_parcelas ?? null,
       forma_pagamento: formaPagamento,
-      comissao_pct: comissaoPct
+      comissao_pct: comissaoPct,
+      // Texto vazio vira NULL: "" e "não escreveu nada" são a mesma coisa, e o
+      // cupom só desenha o bloco quando há o que dizer.
+      observacao: dados.observacao?.trim() || null
     })
     vendaId = result.lastInsertRowid as number
 
     for (const item of dados.itens) {
+      const custo = custoDoProduto.get(item.produto_id) as { custo: number } | undefined
       inserirItem.run({
         venda_id: vendaId,
         produto_id: item.produto_id,
         variacao_id: item.variacao_id ?? null,
         quantidade: item.quantidade,
-        preco_unitario: item.preco_unitario
+        preco_unitario: item.preco_unitario,
+        custo_unitario: custo?.custo ?? null
       })
       if (item.variacao_id != null) {
         decrementarEstoqueVariacao.run(item.quantidade, item.variacao_id)
