@@ -3156,7 +3156,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             {origensCliente.length > 0 && (
               <div className="grid gap-1.5">
                 <Label htmlFor="origem-cliente-rapido">
-                  Como chegou até nós{' '}
+                  Forma de captação{' '}
                   <span className="text-muted-foreground font-normal">(opcional)</span>
                 </Label>
                 <Select

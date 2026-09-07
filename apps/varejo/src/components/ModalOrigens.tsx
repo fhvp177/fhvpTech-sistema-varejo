@@ -14,7 +14,7 @@ type Props = {
 }
 
 /**
- * Gerencia as origens de captação, no mesmo molde do modal de categorias.
+ * Gerencia as formas de captação, no mesmo molde do modal de categorias.
  *
  * ── Por que aqui, e não em Configurações ────────────────────────────────────
  * Abre por um botão ao lado do próprio seletor, no cadastro do cliente. É onde
@@ -83,25 +83,25 @@ const ModalOrigens: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
 
   const excluir = async (o: Origem) => {
     /*
-     * ⚠️ Diz quantos clientes perdem a origem ANTES de perguntar.
+     * ⚠️ Diz quantos clientes perdem a marcação ANTES de perguntar.
      *
      * Apagar aqui não apaga cliente nenhum, mas apaga a resposta de "de onde
      * veio essa gente" — e essa resposta não tem como ser reconstruída depois.
      * O número no aviso é o que faz a diferença entre apagar um rótulo de teste
      * e apagar meio ano de captação.
      */
-    let mensagem = `Excluir a origem "${o.nome}"?`
+    let mensagem = `Excluir a forma de captação "${o.nome}"?`
     if (o.clientes_count > 0) {
       mensagem =
         `${o.clientes_count} cliente${o.clientes_count !== 1 ? 's' : ''} ` +
         `${o.clientes_count !== 1 ? 'vieram' : 'veio'} por "${o.nome}".\n\n` +
-        `Eles continuam cadastrados, mas passam a ficar sem origem — e o ` +
-        `relatório de captação deixa de contá-los neste canal.\n\n` +
+        `Eles continuam cadastrados, mas passam a ficar sem forma de ` +
+        `captação, e o relatório deixa de contá-los aqui.\n\n` +
         `Deseja continuar?`
     }
     if (
       !(await confirmar({
-        titulo: 'Excluir origem',
+        titulo: 'Excluir forma de captação',
         mensagem,
         variante: 'destructive'
       }))
@@ -117,7 +117,7 @@ const ModalOrigens: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
     <Dialog open={aberto} onOpenChange={(o) => !o && onFechar()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Como o cliente chegou</DialogTitle>
+          <DialogTitle>Formas de captação</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -142,7 +142,7 @@ const ModalOrigens: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
           <div className="border rounded-lg max-h-80 overflow-y-auto">
             {origens.length === 0 ? (
               <p className="text-center py-8 text-sm text-muted-foreground">
-                Nenhuma origem cadastrada.
+                Nenhuma forma de captação cadastrada.
               </p>
             ) : (
               <ul className="divide-y">
@@ -204,8 +204,8 @@ const ModalOrigens: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Renomear uma origem não altera nenhum cliente: eles continuam ligados a ela.
-            O relatório de captação, em Relatórios, cruza estas origens com o que cada
+            Renomear não altera nenhum cliente: eles continuam ligados à mesma forma.
+            O relatório de captação, em Relatórios, cruza estas formas com o que cada
             grupo comprou.
           </p>
         </div>

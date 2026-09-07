@@ -992,13 +992,13 @@ const Clientes: FC = () => {
             </div>
 
             {/*
-              Como o cliente chegou. Fica ANTES da observação porque é escolha
+              Por onde o cliente chegou. Fica ANTES da observação porque é escolha
               de um clique, e a observação é o único campo do formulário que
               pede alguém parar para escrever — campo de digitar no meio empurra
               o resto para depois de uma pausa.
             */}
             <div className="grid gap-1.5">
-              <Label htmlFor="origem">Como chegou até nós (opcional)</Label>
+              <Label htmlFor="origem">Forma de captação (opcional)</Label>
               {/*
                 O botão de editar a lista fica GRUDADO no seletor, como em
                 Produtos › categoria: quem descobre que falta "Indicação" é
@@ -1023,7 +1023,7 @@ const Clientes: FC = () => {
                     variant="outline"
                     size="icon"
                     onClick={() => setModalOrigens(true)}
-                    title="Gerenciar as origens"
+                    title="Gerenciar as formas de captação"
                   >
                     <Pencil className="w-4 h-4" />
                   </Button>

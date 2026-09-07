@@ -95,16 +95,16 @@ sai da impressora, o que aparece na tela, e o comportamento com vendedor logado.
 
 ---
 
-## 3. Origem de captação e as tags de cliente
+## 3. Forma de captação e as tags de cliente
 
-### 3.1 A lista de origens
+### 3.1 A lista de formas de captação
 
-1. **Clientes → Novo cliente**. ✅ Existe o campo **Como chegou até nós
+1. **Clientes → Novo cliente**. ✅ Existe o campo **Forma de captação
    (opcional)**, entre Endereço e Observação, com um botão de lápis ao lado.
 2. Abrir a lista. ✅ Já vêm **Instagram, WhatsApp, Presencial, Indicação**.
-3. Clicar no lápis. ✅ Abre **Como o cliente chegou**, com criar, renomear e
+3. Clicar no lápis. ✅ Abre **Formas de captação**, com criar, renomear e
    excluir — igual ao de categorias.
-4. Criar uma origem nova (ex.: `Feira`). ✅ Aparece na lista e no seletor sem
+4. Criar uma forma nova (ex.: `Feira`). ✅ Aparece na lista e no seletor sem
    fechar o formulário.
 5. Tentar criar `instagram` (minúsculo). ✅ Recusado, com mensagem em português
    dizendo que já existe.
@@ -113,25 +113,25 @@ sai da impressora, o que aparece na tela, e o comportamento com vendedor logado.
 
 ### 3.2 Renomear não toca em cliente nenhum
 
-7. Cadastrar um cliente com origem **Instagram**.
+7. Cadastrar um cliente com a forma **Instagram**.
 8. No gerenciador, renomear **Instagram** para **Insta**.
-9. ✅ O cliente continua ligado à origem, agora escrita **Insta**. Nenhum
+9. ✅ O cliente continua ligado à mesma forma, agora escrita **Insta**. Nenhum
    cadastro precisou ser reaberto.
 
-### 3.3 Excluir avisa quantos clientes perdem a origem
+### 3.3 Excluir avisa quantos clientes perdem a marcação
 
-10. Tentar excluir uma origem que tem clientes.
+10. Tentar excluir uma forma que tem clientes.
 11. ✅ O aviso diz **quantos** clientes vieram por ela e o que acontece com eles.
-12. Confirmar. ✅ Os clientes continuam cadastrados, agora sem origem.
+12. Confirmar. ✅ Os clientes continuam cadastrados, agora sem forma de captação.
 
-### 3.4 A origem no cadastro rápido do PDV
+### 3.4 A forma de captação no cadastro rápido do PDV
 
 13. **PDV → cadastrar cliente na hora** (o botão ao lado do seletor de cliente).
-14. ✅ O campo **Como chegou até nós** aparece ali também, antes do endereço.
-15. Cadastrar um cliente por ali escolhendo uma origem.
-16. **Clientes** ✅ Ele aparece com essa origem.
+14. ✅ O campo **Forma de captação** aparece ali também, antes do endereço.
+15. Cadastrar um cliente por ali escolhendo uma forma.
+16. **Clientes** ✅ Ele aparece com essa forma de captação.
 
-> ⚠️ Conferir também o caminho sem origem: cadastrar pelo PDV **sem** escolher
+> ⚠️ Conferir também o caminho em branco: cadastrar pelo PDV **sem** escolher
 > nada. Tem que gravar normalmente. (Era aqui que o cadastro quebrava antes do
 > conserto, e nenhum teste automatizado consegue pegar isso — os dois drivers de
 > banco discordam.)
@@ -140,9 +140,10 @@ sai da impressora, o que aparece na tela, e o comportamento com vendedor logado.
 
 17. **Clientes** ✅ Acima da lista há uma faixa de etiquetas: **Novo,
     Recorrente, Reativado, Inativo, Sem compras**, cada uma com a contagem, e
-    depois de um traço vertical as **origens**, também com contagem.
+    depois de um traço vertical as **formas de captação**, também com
+    contagem.
 18. ✅ No monitor, cada linha tem a coluna **Situação** com a etiqueta colorida
-    e, embaixo, *via <origem>*.
+    e, embaixo, *via <forma>*.
 19. ✅ No celular, a situação aparece como primeiro item da linha cinza.
 20. Clicar em **Sem compras**. ✅ Só sobram clientes que nunca compraram, e a
     etiqueta fica destacada.
@@ -165,7 +166,7 @@ sai da impressora, o que aparece na tela, e o comportamento com vendedor logado.
 
 27. **Relatórios** ✅ Existe o card **Captação de clientes**.
 28. Gerar em PDF.
-29. ✅ Uma linha por origem, com Cadastros, **Compraram**, Conversão, Compras,
+29. ✅ Uma linha por forma de captação, com Cadastros, **Compraram**, Conversão, Compras,
     Faturamento, Ticket médio e a quebra por situação.
 30. ✅ **Não informado** aparece como linha e fica no **fim** da tabela, mesmo
     que seja a que mais faturou.
@@ -181,6 +182,6 @@ sai da impressora, o que aparece na tela, e o comportamento com vendedor logado.
 - **Lucro mudando com o reajuste**: sinal de que `itens_venda.custo_unitario`
   não está sendo gravado, ou de que o Painel voltou a ler só `produtos.custo`.
   Há teste automatizado para os dois lados.
-- **Cadastro de cliente falhando** com "missing named parameter": alguma tela
-  novo caminho monta o objeto sem `origem_id` e a normalização na consulta foi
-  removida.
+- **Cadastro de cliente falhando** com "missing named parameter":
+  algum caminho novo monta o objeto sem `origem_id`, ou a normalização na consulta
+  foi removida.

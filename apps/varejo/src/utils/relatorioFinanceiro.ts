@@ -195,7 +195,7 @@ export function gerarHtmlCaptacaoClientes(linhas: LinhaCaptacaoRelatorio[]): str
     <table>
       <thead>
         <tr>
-          <th>Origem</th>
+          <th>Forma de captação</th>
           <th class="num">Cadastros</th>
           <th class="num">Compraram</th>
           <th class="num">Conversão</th>
