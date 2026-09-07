@@ -43,6 +43,7 @@ import { aplicar041PedidosSeparados } from './041_pedidos_separados'
 import { aplicar042VendaObservacao } from './042_venda_observacao'
 import { aplicar043CustoCongelado } from './043_custo_congelado'
 import { aplicar044ClienteOrigem } from './044_cliente_origem'
+import { aplicar045ComprovanteVenda } from './045_comprovante_venda'
 
 // Lista de migrations do varejo, na ordem de aplicação. O runner genérico
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
@@ -92,4 +93,5 @@ export const MIGRATIONS: Migration[] = [
   { nome: '042_venda_observacao', aplicar: aplicar042VendaObservacao },
   { nome: '043_custo_congelado', aplicar: aplicar043CustoCongelado },
   { nome: '044_cliente_origem', aplicar: aplicar044ClienteOrigem },
+  { nome: '045_comprovante_venda', aplicar: aplicar045ComprovanteVenda },
 ]

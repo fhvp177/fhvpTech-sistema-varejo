@@ -24,6 +24,7 @@ import { registrarHandlersPedidos } from './ipc/pedidos'
 import { registrarHandlersComissoes } from './ipc/comissoes'
 import { registrarHandlersCategorias } from './ipc/categorias'
 import { registrarHandlersOrigens } from './ipc/origens'
+import { registrarHandlersComprovantes } from './ipc/comprovantes'
 import { registrarHandlersClientes } from './ipc/clientes'
 import { registrarHandlersProdutos } from './ipc/produtos'
 import { registrarHandlersVendas } from './ipc/vendas'
@@ -221,6 +222,7 @@ app.whenReady().then(() => {
   registrarHandlersComissoes()
   registrarHandlersCategorias()
   registrarHandlersOrigens()
+  registrarHandlersComprovantes()
   registrarHandlersClientes()
   registrarHandlersProdutos()
   registrarHandlersVendas()

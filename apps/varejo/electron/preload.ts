@@ -171,6 +171,22 @@ const api = {
       ipcRenderer.invoke('categorias:definir-tamanhos', id, usa)
   },
 
+  // Comprovante de pagamento anexado a uma venda (a foto do PIX).
+  comprovantes: {
+    anexar: (
+      vendaId: number,
+      arquivo: { mime: string; dados: string; nome_arquivo?: string | null }
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('comprovantes:anexar', vendaId, arquivo),
+    obter: (vendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comprovantes:obter', vendaId),
+    resumo: (vendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comprovantes:resumo', vendaId),
+    quaisTem: (ids: number[]): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comprovantes:quaisTem', ids),
+    remover: (vendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comprovantes:remover', vendaId)
+  },
+
   // Origens de captação do cliente (Instagram, WhatsApp, presencial...).
   origens: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('origens:listar'),

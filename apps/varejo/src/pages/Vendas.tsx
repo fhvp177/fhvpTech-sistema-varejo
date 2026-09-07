@@ -7,6 +7,9 @@ import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Select } from '@fhvptech/core/ui/select'
+import { MonitorSmartphone } from 'lucide-react'
+import ComprovanteVenda from '@/components/ComprovanteVenda'
+import { Paperclip } from 'lucide-react'
 import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
@@ -418,6 +421,33 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const inicioPagina = (paginaAtual - 1) * ITENS_POR_PAGINA
   const listaPaginada = listaFiltrada.slice(inicioPagina, inicioPagina + ITENS_POR_PAGINA)
 
+  /*
+   * Quais vendas DESTA PÁGINA têm comprovante anexado.
+   *
+   * ⚠️ Uma pergunta só, com os vinte ids de uma vez, e sem trazer imagem
+   * nenhuma. Perguntar venda por venda seriam vinte idas ao banco para desenhar
+   * vinte clipes, na tela mais aberta do sistema; e trazer o anexo junto da
+   * lista carregaria alguns megabytes para mostrar um ícone.
+   */
+  const [comComprovante, setComComprovante] = useState<Set<number>>(new Set())
+  const idsDaPagina = listaPaginada.map((v) => v.id).join(',')
+  useEffect(() => {
+    const ids = idsDaPagina ? idsDaPagina.split(',').map(Number) : []
+    if (ids.length === 0) {
+      setComComprovante(new Set())
+      return
+    }
+    let vivo = true
+    void window.api.comprovantes.quaisTem(ids).then((r) => {
+      // `vivo`: a pessoa pode virar de página antes da resposta chegar, e um
+      // resultado atrasado pintaria clipes nas vendas erradas.
+      if (vivo && r.success) setComComprovante(new Set(r.data as number[]))
+    })
+    return () => {
+      vivo = false
+    }
+  }, [idsDaPagina])
+
   // Vendas do mês do relatório — buscadas direto no banco (não da lista capada em
   // 300), independente do filtro da lista, pra o relatório nunca subcontar.
   useEffect(() => {
@@ -796,6 +826,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     ? `${v.num_parcelas}x — 1ª ${v.data_vencimento ? fmtDataCurta(v.data_vencimento) : '—'}`
                     : v.data_vencimento ? `vence ${fmtDataCurta(v.data_vencimento)}` : null,
                 emAtraso ? 'em atraso' : restante ? 'restante' : null,
+                comComprovante.has(v.id) ? 'com comprovante' : null,
                 selo ? selo.label.toLowerCase() : null
               ]
                 .filter(Boolean)
@@ -923,7 +954,17 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                     i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
                   }`}
                 >
-                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{v.id}</td>
+                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      {v.id}
+                      {comComprovante.has(v.id) && (
+                        <Paperclip
+                          className="h-3 w-3 shrink-0 text-primary"
+                          aria-label="Tem comprovante anexado"
+                        />
+                      )}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{fmtData(v.data)}</td>
                   <td className="px-4 py-3 font-medium">
                     <div className="truncate max-w-[240px]" title={v.cliente_nome || 'Venda avulsa'}>
@@ -1278,6 +1319,22 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   </div>
                 </div>
               )}
+
+              {/*
+                ⚠️ O comprovante fica com a INFORMAÇÃO da venda, acima dos
+                botões de ação. Encostado em "Cancelar venda" ele viraria mais
+                um botão numa fileira de coisas perigosas, e anexar um arquivo
+                não é perigoso — é o oposto, é o que protege a loja depois.
+
+                A venda cancelada continua mostrando o que já foi anexado, e não
+                aceita anexo novo: o comprovante de um pagamento que foi
+                desfeito ainda é o registro do que aconteceu.
+              */}
+              <ComprovanteVenda
+                vendaId={vendaDetalhada.id}
+                ehDono={ehDono}
+                somenteLeitura={!!vendaDetalhada.cancelada}
+              />
 
               {vendaDetalhada.status_pagamento === 'pago' && !vendaDetalhada.cancelada && (
                 <Button
@@ -2321,7 +2378,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     <div className="flex flex-col lg:flex-row flex-1 min-h-0">
       {/* ── Painel esquerdo: scanner + carrinho ── */}
       <div className="flex-1 flex flex-col p-4 lg:p-6 lg:overflow-hidden">
-        <div className="flex items-center gap-2 lg:gap-3 mb-3 lg:mb-4">
+        {/*
+          `flex-wrap`: com o selo do caixa a linha passa a ter quatro coisas, e
+          em 360px elas não cabem. Envolvendo, o selo e o botão descem juntos
+          para a segunda linha; no monitor sobra espaço e nada muda.
+        */}
+        <div className="flex flex-wrap items-center gap-2 lg:gap-3 mb-3 lg:mb-4">
           <Button variant="ghost" size="icon" onClick={onSair} aria-label="Sair do caixa">
             <ArrowLeft className="w-5 h-5" />
           </Button>
@@ -2338,9 +2400,35 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             no caixa — que é a informação, não o rótulo. O `aria-label` e o
             `title` continuam dizendo o que o botão faz.
           */}
+          {/*
+            ── Em qual gaveta esta venda vai entrar ──
+
+            ⚠️ Informação, não controle: o vendedor não escolhe o caixa aqui.
+            A escolha é do APARELHO e vale para todas as vendas feitas nele —
+            trocá-la no meio do expediente, com carrinho montado, é como o
+            dinheiro acaba na conferência errada.
+
+            E é justamente por não dar para trocar que precisa estar visível: com
+            dois caixas na loja, uma venda que entra na gaveta errada faz as duas
+            contagens fecharem erradas no fim do dia, uma sobrando e a outra
+            faltando, sem nada na tela que explique.
+
+            Aparece MESMO com um caixa só. Ali ele confirma que a venda tem
+            para onde ir — e é a diferença entre "está tudo certo" e "será que
+            está?" na hora em que a conferência do dia não bate.
+          */}
+          {caixaAtual && (
+            <span
+              className="ml-auto inline-flex min-w-0 shrink items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[12px] font-medium text-primary"
+              title={`Esta venda entra em ${caixaAtual.nome}. A escolha é deste aparelho e muda em Financeiro › Caixas.`}
+            >
+              <MonitorSmartphone className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="min-w-0 truncate">{caixaAtual.nome}</span>
+            </span>
+          )}
           <Button
             variant="outline"
-            className="ml-auto min-w-0 shrink"
+            className={`min-w-0 shrink ${caixaAtual ? '' : 'ml-auto'}`}
             onClick={() => void trocarDeConta()}
             title="Entrar com outra conta sem sair do caixa (F7)"
             aria-label="Trocar de conta"

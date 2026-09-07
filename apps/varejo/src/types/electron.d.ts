@@ -541,6 +541,17 @@ interface Window {
       definirTamanhos: (id: number, usa: boolean) => Promise<RespostaIPC>
     }
     // Origens de captação do cliente: Instagram, WhatsApp, presencial...
+    // Comprovante de pagamento anexado a uma venda (a foto do PIX).
+    comprovantes: {
+      anexar: (
+        vendaId: number,
+        arquivo: { mime: string; dados: string; nome_arquivo?: string | null }
+      ) => Promise<RespostaIPC>
+      obter: (vendaId: number) => Promise<RespostaIPC>
+      resumo: (vendaId: number) => Promise<RespostaIPC>
+      quaisTem: (ids: number[]) => Promise<RespostaIPC<number[]>>
+      remover: (vendaId: number) => Promise<RespostaIPC>
+    }
     origens: {
       listar: () => Promise<RespostaIPC<Array<{ id: number; nome: string; clientes_count: number }>>>
       criar: (nome: string) => Promise<RespostaIPC<{ id: number; nome: string }>>
