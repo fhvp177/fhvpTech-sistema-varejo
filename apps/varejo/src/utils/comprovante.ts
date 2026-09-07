@@ -35,6 +35,20 @@ const LADO_MAXIMO = 1600
  */
 const QUALIDADE = 0.82
 
+/**
+ * Teto do PDF, em bytes.
+ *
+ * ⚠️ PDF não passa pelo canvas: não dá para reduzir sem uma biblioteca inteira
+ * de leitura e reescrita do formato, que pesaria mais no aplicativo do que
+ * economizaria no banco.
+ *
+ * Na prática não é problema. Comprovante de banco em PDF é texto, não imagem, e
+ * fica entre 30 e 150 KB — bem MENOS que a foto reduzida. O teto existe para o
+ * caso raro do PDF com página digitalizada em alta, e principalmente para
+ * impedir que alguém anexe um extrato de 40 páginas achando que é comprovante.
+ */
+const PDF_MAXIMO = 2 * 1024 * 1024
+
 export type ComprovantePreparado = {
   mime: string
   /** Base64 puro, sem o prefixo `data:...;base64,` — é o que o banco guarda. */
@@ -46,8 +60,48 @@ export type ComprovantePreparado = {
 
 export function prepararComprovante(arquivo: File): Promise<ComprovantePreparado> {
   return new Promise((resolve, reject) => {
-    if (!arquivo.type.startsWith('image/')) {
-      reject(new Error('Selecione uma imagem: foto ou print do comprovante.'))
+    const ehPdf = arquivo.type === 'application/pdf'
+
+    if (!arquivo.type.startsWith('image/') && !ehPdf) {
+      reject(new Error('Selecione uma imagem ou um PDF do comprovante.'))
+      return
+    }
+
+    /*
+     * ── O caminho do PDF: passa direto ─────────────────────────────────────
+     *
+     * É o formato que os bancos brasileiros geram no "salvar comprovante", e o
+     * que chega por e-mail. Vai como veio, porque não há como reduzi-lo aqui —
+     * e não precisa: ele já nasce menor que a foto.
+     *
+     * ⚠️ O tamanho é conferido ANTES de ler o arquivo inteiro. `arquivo.size`
+     * vem do disco sem custo; esperar o FileReader terminar para só então
+     * recusar faria o celular carregar 40 MB na memória para nada.
+     */
+    if (ehPdf) {
+      if (arquivo.size > PDF_MAXIMO) {
+        reject(
+          new Error(
+            `O PDF tem ${tamanhoLegivel(arquivo.size)} e o limite é 2 MB. ` +
+              'Comprovante de banco costuma ter menos de 200 KB — confira se ' +
+              'não é um extrato inteiro.'
+          )
+        )
+        return
+      }
+      const leitorPdf = new FileReader()
+      leitorPdf.onerror = () => reject(new Error('Não foi possível ler o arquivo.'))
+      leitorPdf.onload = () => {
+        const txt = String(leitorPdf.result)
+        const base64 = txt.slice(txt.indexOf(',') + 1)
+        resolve({
+          mime: 'application/pdf',
+          dados: base64,
+          nome_arquivo: arquivo.name,
+          bytes: Math.floor((base64.length * 3) / 4)
+        })
+      }
+      leitorPdf.readAsDataURL(arquivo)
       return
     }
 

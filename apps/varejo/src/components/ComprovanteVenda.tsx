@@ -1,5 +1,5 @@
 import { FC, useCallback, useEffect, useRef, useState } from 'react'
-import { Paperclip, Eye, Trash2, Upload, Loader2 } from 'lucide-react'
+import { Paperclip, Eye, Trash2, Upload, Loader2, Download } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@fhvptech/core/ui/dialog'
@@ -44,15 +44,26 @@ const fmtQuando = (iso: string): string => {
  * mandou pelo WhatsApp, já salvo na galeria. Com `capture`, esse print fica
  * inalcançável — o celular abre a câmera e não oferece mais nada.
  *
- * Só `accept="image/*"` deixa o próprio celular perguntar "câmera ou galeria?",
- * que atende os dois casos.
+ * O `accept` sem `capture` deixa o próprio celular perguntar de onde vem o
+ * arquivo, e atende os três caminhos: câmera, galeria e arquivos.
+ *
+ * ── ⚠️ Por que o PDF é mostrado EMBUTIDO, e não em outra aba ────────────────
+ * No aplicativo instalado, abrir aba nova é desviado para o navegador do
+ * sistema (`shell.openExternal`), e um endereço `blob:` só existe dentro da
+ * página que o criou — a travessia o mataria, em silêncio. Embutido funciona
+ * nos dois, porque quem desenha é o mesmo Chromium.
+ *
+ * O botão de baixar existe para o celular, onde o PDF embutido é irregular
+ * (parte dos navegadores mostra em branco em vez de abrir o leitor).
  */
 const ComprovanteVenda: FC<Props> = ({ vendaId, ehDono, somenteLeitura = false }) => {
   const [resumo, setResumo] = useState<ResumoComprovante | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
-  const [vendo, setVendo] = useState<string | null>(null)
+  const [vendo, setVendo] = useState<{ url: string; ehPdf: boolean; nome: string } | null>(
+    null
+  )
   const inputRef = useRef<HTMLInputElement>(null)
   const confirmar = useConfirm()
 
@@ -112,8 +123,36 @@ const ComprovanteVenda: FC<Props> = ({ vendaId, ehDono, somenteLeitura = false }
      * que garante que um banco restaurado de um backup antigo — ou mexido por
      * fora — não consiga fazer a tela montar um data URI de outro tipo.
      */
-    const mime = /^image\/(jpeg|png|webp)$/.test(c.mime) ? c.mime : 'image/jpeg'
-    setVendo(`data:${mime};base64,${c.dados}`)
+    const ehPdf = c.mime === 'application/pdf'
+    const mime = ehPdf
+      ? 'application/pdf'
+      : /^image\/(jpeg|png|webp)$/.test(c.mime)
+        ? c.mime
+        : 'image/jpeg'
+
+    /*
+     * ⚠️ PDF vira `blob:`, imagem continua `data:`.
+     *
+     * O Chromium recusa desenhar `data:application/pdf` dentro de um iframe —
+     * é uma proteção antiga contra páginas que se disfarçam de documento. Com
+     * `blob:` ele abre normalmente, no leitor embutido.
+     *
+     * Para imagem o `data:` continua sendo o caminho mais simples, e uma <img>
+     * não sofre dessa restrição.
+     */
+    if (ehPdf) {
+      const bin = atob(c.dados)
+      const bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      const url = URL.createObjectURL(new Blob([bytes], { type: mime }))
+      setVendo({ url, ehPdf: true, nome: resumo?.nome_arquivo || `comprovante-${vendaId}.pdf` })
+      return
+    }
+    setVendo({
+      url: `data:${mime};base64,${c.dados}`,
+      ehPdf: false,
+      nome: resumo?.nome_arquivo || `comprovante-${vendaId}.jpg`
+    })
   }
 
   const remover = async () => {
@@ -148,7 +187,9 @@ const ComprovanteVenda: FC<Props> = ({ vendaId, ehDono, somenteLeitura = false }
           </span>
         ) : (
           <span className="text-[12px] text-muted-foreground">
-            {somenteLeitura ? 'Nenhum anexado.' : 'Anexe o print do PIX ou a foto do recibo.'}
+            {somenteLeitura
+              ? 'Nenhum anexado.'
+              : 'Anexe o print, a foto ou o PDF do comprovante.'}
           </span>
         )}
       </div>
@@ -166,7 +207,7 @@ const ComprovanteVenda: FC<Props> = ({ vendaId, ehDono, somenteLeitura = false }
             <input
               ref={inputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf"
               className="hidden"
               onChange={escolher}
             />
@@ -205,20 +246,49 @@ const ComprovanteVenda: FC<Props> = ({ vendaId, ehDono, somenteLeitura = false }
         </p>
       )}
 
-      <Dialog open={vendo !== null} onOpenChange={(o) => !o && setVendo(null)}>
+      <Dialog
+        open={vendo !== null}
+        onOpenChange={(o) => {
+          if (o) return
+          // ⚠️ Devolve o `blob:` ao fechar. Sem isto cada abertura de PDF deixa
+          // uma cópia na memória da aba até a página ser recarregada.
+          if (vendo?.ehPdf) URL.revokeObjectURL(vendo.url)
+          setVendo(null)
+        }}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Comprovante da venda #{vendaId}</DialogTitle>
           </DialogHeader>
           {vendo && (
-            /*
-              `max-h` com rolagem: comprovante de banco é uma imagem alta e
-              estreita, e sem teto ela empurraria o diálogo para fora da tela no
-              celular — exatamente onde este recurso mais vai ser usado.
-            */
-            <div className="max-h-[70vh] overflow-auto rounded-lg border bg-muted/30 p-2">
-              <img src={vendo} alt="Comprovante de pagamento" className="mx-auto block" />
-            </div>
+            <>
+              {vendo.ehPdf && (
+                <a
+                  href={vendo.url}
+                  download={vendo.nome}
+                  className="inline-flex items-center gap-1.5 self-start rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Baixar o PDF
+                </a>
+              )}
+              {/*
+                `max-h` com rolagem: comprovante de banco é alto e estreito, e
+                sem teto empurraria o diálogo para fora da tela no celular —
+                exatamente onde este recurso mais vai ser usado.
+              */}
+              <div className="max-h-[70vh] overflow-auto rounded-lg border bg-muted/30 p-2">
+                {vendo.ehPdf ? (
+                  <iframe
+                    src={vendo.url}
+                    title="Comprovante de pagamento"
+                    className="h-[65vh] w-full rounded"
+                  />
+                ) : (
+                  <img src={vendo.url} alt="Comprovante de pagamento" className="mx-auto block" />
+                )}
+              </div>
+            </>
           )}
         </DialogContent>
       </Dialog>

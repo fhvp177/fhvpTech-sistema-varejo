@@ -119,6 +119,14 @@ const seTiverSqlite = temSqlite ? it : it.skip
 /** Base64 válido de N caracteres — conteúdo não importa, formato sim. */
 const base64De = (chars: number): string => 'A'.repeat(chars)
 
+/**
+ * Base64 que COMEÇA com a assinatura de um PDF (`%PDF-` = `JVBERi0`).
+ *
+ * O resto é enchimento: a validação olha só o começo, que é onde a assinatura
+ * mora em qualquer PDF de verdade.
+ */
+const pdfDe = (chars: number): string => 'JVBERi0' + 'A'.repeat(Math.max(0, chars - 7))
+
 const anexar = (vendaId = 1, extras: Record<string, unknown> = {}) =>
   anexarComprovante({
     venda_id: vendaId,
@@ -190,14 +198,21 @@ describe('anexar e recuperar', () => {
 })
 
 describe('o que NÃO entra', () => {
-  seTiverSqlite('★ recusa o que não é imagem', () => {
+  seTiverSqlite('★ recusa tipo que não é imagem nem PDF', () => {
     /*
-     * O que sai daqui vira `src` de uma <img> na tela. Aceitar qualquer tipo
-     * transformaria a tela de vendas no lugar onde um conteúdo arbitrário é
-     * interpretado — o pior lugar possível para descobrir o problema.
+     * O que sai daqui volta para ser desenhado na tela — numa <img> ou no
+     * leitor de PDF do navegador. Aceitar qualquer tipo transformaria a tela de
+     * vendas no lugar onde um conteúdo arbitrário é interpretado, que é o pior
+     * lugar possível para descobrir o problema.
+     *
+     * ⚠️ `application/pdf` NÃO entra nesta lista: ele é aceito desde que a
+     * assinatura do arquivo confira — a checagem dele está no bloco do PDF,
+     * mais abaixo. Este teste já usou PDF como exemplo de tipo recusado, e a
+     * lembrança fica aqui para ninguém reintroduzi-lo por engano.
      */
-    expect(() => anexar(1, { mime: 'application/pdf' })).toThrow(/imagem/i)
     expect(() => anexar(1, { mime: 'text/html' })).toThrow(/imagem/i)
+    expect(() => anexar(1, { mime: 'application/octet-stream' })).toThrow(/imagem/i)
+    expect(() => anexar(1, { mime: 'image/svg+xml' })).toThrow(/imagem/i)
     expect(obterComprovante(1)).toBeNull()
   })
 
@@ -226,6 +241,56 @@ describe('o que NÃO entra', () => {
     // Sem esta checagem ficaria um comprovante órfão, invisível em qualquer
     // tela e contando espaço no backup para sempre.
     expect(() => anexar(999)).toThrow(/não encontrada/i)
+  })
+})
+
+describe('comprovante em PDF', () => {
+  /*
+   * ── Por que PDF entrou ──────────────────────────────────────────────────
+   * É como os bancos brasileiros geram o comprovante no botão "salvar", e como
+   * ele chega por e-mail. Recusá-lo obrigaria o lojista a tirar print do PDF
+   * para poder anexar — trabalho manual num recurso que existe para poupar
+   * exatamente esse tipo de coisa.
+   *
+   * Ele não passa pela redução do navegador (não há como reduzir PDF ali), mas
+   * também não precisa: sendo texto e não imagem, costuma pesar menos que a
+   * foto já reduzida.
+   */
+  seTiverSqlite('aceita e devolve o PDF inteiro', () => {
+    anexar(1, { mime: 'application/pdf', dados: pdfDe(400), nome_arquivo: 'pix.pdf' })
+    const c = obterComprovante(1)!
+    expect(c.mime).toBe('application/pdf')
+    expect(c.dados).toBe(pdfDe(400))
+  })
+
+  seTiverSqlite('★ recusa arquivo que se DIZ PDF e não é', () => {
+    /*
+     * ⚠️ O `mime` vem de quem chamou, e quem chama pode não ser a tela: o canal
+     * é IPC e o segundo caixa fala com ele pela rede.
+     *
+     * Sem conferir a assinatura do arquivo, para gravar qualquer coisa bastaria
+     * rotulá-la de PDF — e o que está guardado aqui volta depois para ser
+     * aberto no visualizador do navegador. A checagem é a diferença entre
+     * aceitar um arquivo e aceitar um rótulo.
+     */
+    expect(() => anexar(1, { mime: 'application/pdf', dados: base64De(400) }))
+      .toThrow(/não é um PDF válido/i)
+    expect(obterComprovante(1)).toBeNull()
+  })
+
+  seTiverSqlite('o teto vale para PDF também, com mensagem própria', () => {
+    // A orientação muda: em foto se pede outra menor, em PDF o problema quase
+    // sempre é ter anexado um extrato inteiro em vez do comprovante.
+    expect(() => anexar(1, { mime: 'application/pdf', dados: pdfDe(3 * 1024 * 1024) }))
+      .toThrow(/extrato inteiro/i)
+  })
+
+  seTiverSqlite('trocar imagem por PDF na mesma venda substitui', () => {
+    anexar(1)
+    anexar(1, { mime: 'application/pdf', dados: pdfDe(300), nome_arquivo: 'do-banco.pdf' })
+    const c = obterComprovante(1)!
+    expect(c.mime).toBe('application/pdf')
+    expect(c.nome_arquivo).toBe('do-banco.pdf')
   })
 })
 

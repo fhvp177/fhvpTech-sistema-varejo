@@ -34,8 +34,27 @@ export type Comprovante = {
  */
 const TAMANHO_MAXIMO = 2 * 1024 * 1024
 
-/** Só imagem, e só os formatos que o navegador produz no redimensionamento. */
-const MIMES_ACEITOS = new Set(['image/jpeg', 'image/png', 'image/webp'])
+/**
+ * Imagem (o que o navegador produz no redimensionamento) e PDF.
+ *
+ * PDF entrou porque é como os bancos brasileiros geram o comprovante no
+ * "salvar" e como ele chega por e-mail. Ele não passa por redimensionamento —
+ * não há como reduzi-lo aqui —, mas também não precisa: sendo texto e não
+ * imagem, costuma pesar menos que a foto já reduzida.
+ */
+const MIMES_ACEITOS = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
+
+/**
+ * Todo PDF começa com os bytes `%PDF-`, que em base64 viram `JVBERi0`.
+ *
+ * ⚠️ O `mime` vem de quem chamou, e quem chama pode não ser a tela: o canal é
+ * IPC e o segundo caixa fala com ele pela rede. Sem conferir a assinatura, para
+ * gravar qualquer coisa bastaria dizer que é PDF — e o que está guardado aqui
+ * volta depois para ser aberto no visualizador do navegador.
+ *
+ * Não é antivírus: é a diferença entre aceitar um arquivo e aceitar um rótulo.
+ */
+const ASSINATURA_PDF = 'JVBERi0'
 
 export type NovoComprovante = {
   venda_id: number
@@ -50,7 +69,11 @@ export function anexarComprovante(c: NovoComprovante): void {
   const db = obterBancoDeDados()
 
   if (!MIMES_ACEITOS.has(c.mime)) {
-    throw new Error('O comprovante precisa ser uma imagem (JPG ou PNG).')
+    throw new Error('O comprovante precisa ser uma imagem (JPG ou PNG) ou um PDF.')
+  }
+
+  if (c.mime === 'application/pdf' && !c.dados.startsWith(ASSINATURA_PDF)) {
+    throw new Error('O arquivo não é um PDF válido.')
   }
 
   /*
@@ -71,7 +94,9 @@ export function anexarComprovante(c: NovoComprovante): void {
   if (bytes > TAMANHO_MAXIMO) {
     throw new Error(
       `O comprovante tem ${(bytes / 1024 / 1024).toFixed(1)} MB e o limite é 2 MB. ` +
-        'Tire uma foto menor ou recorte a imagem.'
+        (c.mime === 'application/pdf'
+          ? 'Comprovante de banco costuma ter menos de 200 KB — confira se não é um extrato inteiro.'
+          : 'Tire uma foto menor ou recorte a imagem.')
     )
   }
 
