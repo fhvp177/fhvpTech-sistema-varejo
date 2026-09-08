@@ -81,7 +81,14 @@ export const ImpressaoProvider: FC<{ children: ReactNode }> = ({ children }) => 
       return window.api.impressao.imprimir(spec.html, spec.nome, deviceName)
     }
     if (spec.tipo === 'pdf') {
-      return window.api.impressao.imprimirPdf(spec.pdfBase64, spec.nome, deviceName)
+      // ⚠️ A categoria vai junto: é ela que diz se o papel é bobina de 80mm
+      // ou folha. Sem ela o DANFE da NFC-e sai numa tira deslocada.
+      return window.api.impressao.imprimirPdf(
+        spec.pdfBase64,
+        spec.nome,
+        deviceName,
+        spec.categoria
+      )
     }
     return window.api.impressao.imprimirJanela(deviceName)
   }, [])

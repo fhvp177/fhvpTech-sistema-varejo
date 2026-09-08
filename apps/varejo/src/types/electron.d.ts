@@ -854,7 +854,10 @@ interface Window {
       imprimirPdf: (
         pdfBase64: string,
         nomeArquivo?: string,
-        deviceName?: string
+        deviceName?: string,
+        // Decide o papel: 'cupom' imprime em 80mm, 'documento' deixa o
+        // driver escolher. Ver o comentário em electron/ipc/impressao.ts.
+        categoria?: 'cupom' | 'documento'
       ) => Promise<RespostaIPC>
       listarImpressoras: () => Promise<
         RespostaIPC<Array<{ name: string; displayName: string; isDefault: boolean }>>
@@ -975,6 +978,12 @@ interface Window {
       selecionarPasta: () => Promise<RespostaIPC>
       verificarSenha: (senha: string) => Promise<RespostaIPC>
       listarBackups: () => Promise<RespostaIPC>
+      listarNuvem: () => Promise<
+        RespostaIPC<
+          Array<{ chave: string; nome: string; tamanhoBytes: number; quando: string }>
+        >
+      >
+      baixarDaNuvem: (chaveObjeto: string) => Promise<RespostaIPC<string>>
       restaurar: (caminhoZip: string) => Promise<RespostaIPC>
       onNotificacao: (cb: (data: { tipo: string; sucesso: boolean }) => void) => () => void
       onCarregando: (cb: (visivel: boolean) => void) => () => void

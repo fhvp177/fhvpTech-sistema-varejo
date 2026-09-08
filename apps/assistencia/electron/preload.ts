@@ -116,6 +116,85 @@ const api = {
       ipcRenderer.invoke('categorias:definir-tamanhos', id, usa)
   },
 
+  // Livro-caixa: contas, movimentos e o turno de caixa.
+  financeiro: {
+    listarContas: (incluirInativas?: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:listarContas', incluirInativas),
+    criarConta: (dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:criarConta', dados),
+    atualizarConta: (id: number, dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:atualizarConta', id, dados),
+    desativarConta: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:desativarConta', id),
+    reativarConta: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:reativarConta', id),
+    extrato: (filtro?: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:extrato', filtro),
+    saldoConsolidado: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:saldoConsolidado'),
+    lancar: (contaId: number, valor: number, tipo: string, descricao: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:lancar', contaId, valor, tipo, descricao)
+  },
+
+  caixa: {
+    turnoAberto: (caixaId?: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:turnoAberto', caixaId),
+    caixasComTurno: (): Promise<RespostaIPC> => ipcRenderer.invoke('caixa:caixasComTurno'),
+    abrirTurno: (contaId: number, fundoTroco: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:abrirTurno', contaId, fundoTroco),
+    fecharTurno: (turnoId: number, contagens: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:fecharTurno', turnoId, contagens),
+    confirmarTurno: (turnoId: number, justificativa?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:confirmarTurno', turnoId, justificativa),
+    listarTurnos: (limite?: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:listarTurnos', limite),
+    contagens: (turnoId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:contagens', turnoId),
+    diferencasPorOperador: (de: string, ate: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:diferencasPorOperador', de, ate),
+    turnoParaRelatorio: (turnoId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:turnoParaRelatorio', turnoId),
+    vendasDoTurno: (turnoId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:vendasDoTurno', turnoId),
+    // "Não vende sem caixa aberto": interruptor por loja.
+    exigencia: (): Promise<RespostaIPC> => ipcRenderer.invoke('caixa:exigencia'),
+    definirExigencia: (exigir: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:definirExigencia', exigir),
+    sangria: (contaId: number, valor: number, descricao: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:sangria', contaId, valor, descricao),
+    suprimento: (contaId: number, valor: number, descricao: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('caixa:suprimento', contaId, valor, descricao)
+  },
+
+  pedidos: {
+    criar: (dados: unknown): Promise<RespostaIPC> => ipcRenderer.invoke('pedidos:criar', dados),
+    concluir: (pedidoId: number, pagamento: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('pedidos:concluir', pedidoId, pagamento),
+    cancelar: (pedidoId: number, motivo?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('pedidos:cancelar', pedidoId, motivo),
+    listar: (situacao?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('pedidos:listar', situacao),
+    detalhe: (pedidoId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('pedidos:detalhe', pedidoId),
+    totalSeparados: (): Promise<RespostaIPC> => ipcRenderer.invoke('pedidos:totalSeparados')
+  },
+
+  // Comprovante de pagamento anexado a uma venda (a foto do PIX).
+  comprovantes: {
+    anexar: (
+      vendaId: number,
+      arquivo: { mime: string; dados: string; nome_arquivo?: string | null }
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('comprovantes:anexar', vendaId, arquivo),
+    obter: (vendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comprovantes:obter', vendaId),
+    resumo: (vendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comprovantes:resumo', vendaId),
+    quaisTem: (ids: number[]): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comprovantes:quaisTem', ids),
+    remover: (vendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('comprovantes:remover', vendaId)
+  },
+
   // Vendedores
   vendedores: {
     listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('vendedores:listar'),
@@ -251,9 +330,18 @@ const api = {
     imprimirPdf: (
       pdfBase64: string,
       nomeArquivo?: string,
-      deviceName?: string
+      deviceName?: string,
+      categoria?: 'cupom' | 'documento'
     ): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('impressao:imprimirPdf', pdfBase64, nomeArquivo, deviceName),
+      ipcRenderer.invoke(
+        'impressao:imprimirPdf',
+        pdfBase64,
+        nomeArquivo,
+        deviceName,
+        // ⚠️ Sem isto o DANFE da NFC-e sai centralizado numa folha A4 e a
+        // bobina imprime só uma tira. É a categoria que diz o papel.
+        categoria
+      ),
     listarImpressoras: (): Promise<RespostaIPC> =>
       ipcRenderer.invoke('impressao:listarImpressoras'),
     imprimirJanela: (deviceName: string): Promise<RespostaIPC> =>
@@ -455,6 +543,10 @@ const api = {
     verificarSenha: (senha: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('backup:verificarSenha', senha),
     listarBackups: (): Promise<RespostaIPC> => ipcRenderer.invoke('backup:listarBackups'),
+    // Backup em nuvem: só o caminho de volta. O envio roda sozinho.
+    listarNuvem: (): Promise<RespostaIPC> => ipcRenderer.invoke('backup:listarNuvem'),
+    baixarDaNuvem: (chaveObjeto: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('backup:baixarDaNuvem', chaveObjeto),
     restaurar: (caminhoZip: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('backup:restaurar', caminhoZip),
     onNotificacao: (cb: (data: { tipo: string; sucesso: boolean }) => void): (() => void) => {

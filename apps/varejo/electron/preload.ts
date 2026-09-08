@@ -301,9 +301,18 @@ const api = {
     imprimirPdf: (
       pdfBase64: string,
       nomeArquivo?: string,
-      deviceName?: string
+      deviceName?: string,
+      categoria?: 'cupom' | 'documento'
     ): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('impressao:imprimirPdf', pdfBase64, nomeArquivo, deviceName),
+      ipcRenderer.invoke(
+        'impressao:imprimirPdf',
+        pdfBase64,
+        nomeArquivo,
+        deviceName,
+        // ⚠️ Sem isto o DANFE da NFC-e sai centralizado numa folha A4 e a
+        // bobina imprime só uma tira. É a categoria que diz o papel.
+        categoria
+      ),
     listarImpressoras: (): Promise<RespostaIPC> =>
       ipcRenderer.invoke('impressao:listarImpressoras'),
     imprimirJanela: (deviceName: string): Promise<RespostaIPC> =>
@@ -482,6 +491,10 @@ const api = {
     verificarSenha: (senha: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('backup:verificarSenha', senha),
     listarBackups: (): Promise<RespostaIPC> => ipcRenderer.invoke('backup:listarBackups'),
+    // Backup em nuvem: só o caminho de volta. O envio roda sozinho.
+    listarNuvem: (): Promise<RespostaIPC> => ipcRenderer.invoke('backup:listarNuvem'),
+    baixarDaNuvem: (chaveObjeto: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('backup:baixarDaNuvem', chaveObjeto),
     restaurar: (caminhoZip: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('backup:restaurar', caminhoZip),
     onNotificacao: (cb: (data: { tipo: string; sucesso: boolean }) => void): (() => void) => {

@@ -158,22 +158,66 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
     }
   )
 
+  /*
+   * ⚠️ O tamanho da página na IMPRESSÃO de um PDF pronto, em MICRÔMETROS.
+   *
+   * Micrômetros, e não polegadas: `webContents.print()` usa uma unidade
+   * diferente do `printToPDF()` logo abaixo, que usa polegadas. Trocar as
+   * duas dá uma página microscópica ou gigante, sem erro nenhum.
+   *
+   * ── O defeito que isto conserta ────────────────────────────────
+   * O DANFE da NFC-e saía na bobina deslocado para a direita, com meio
+   * centímetro de papel escrito e o resto no vazio — o MESMO sintoma do
+   * comprovante de entrega, e por um motivo parecido, mas não igual.
+   *
+   * Lá a causa era CSS nosso (`margin: 0 auto` sem `@media print`). Aqui não
+   * há CSS nosso: o DANFE vem PRONTO do provedor fiscal, com 80mm de largura,
+   * e o layout dele é definido em lei. O que faltava era dizer ao Chromium em
+   * que papel imprimir: sem `pageSize`, ele monta a página no padrão dele
+   * (carta/A4) e encaixa os 80mm CENTRALIZADOS numa folha de 210mm. Começando
+   * aos 65mm da borda, e a bobina acabando aos 80, sobra exatamente aquela
+   * tira.
+   *
+   * 80000 µm = 80mm, a largura da bobina. A altura de 297mm é folgada: nota
+   * mais longa que isso quebra em duas páginas, o que na bobina é só
+   * continuar imprimindo.
+   *
+   * ⚠️ `documento` fica SEM tamanho de propósito. A NF-e (modelo 55) é A4 e
+   * vai para a impressora de documentos; forçar papel ali tiraria do driver
+   * uma escolha que é dele.
+   */
+  const PAPEL_DA_IMPRESSAO: Record<
+    CategoriaImpressao,
+    { width: number; height: number } | null
+  > = {
+    documento: null,
+    cupom: { width: 80_000, height: 297_000 }
+  }
+
   // Imprime um PDF já pronto (DANFE da nota fiscal). Mesmo comportamento do
   // handler de HTML: com deviceName imprime silencioso; sem, abre o diálogo.
   registrarCanal(
     'impressao:imprimirPdf',
     async (pdfBase64: string,
       nomeArquivo?: string,
-      deviceName?: string
+      deviceName?: string,
+      categoria: CategoriaImpressao = 'documento'
     ): Promise<RespostaIPC> => {
       let janela: BrowserWindow | null = null
       try {
         janela = await carregarPdfOculto(pdfBase64, nomeArquivo || 'documento')
         const alvo = janela
         await new Promise<void>((resolve, reject) => {
-          const opcoes = deviceName
-            ? { silent: true, deviceName, printBackground: true }
-            : { silent: false, printBackground: true }
+          const papel = PAPEL_DA_IMPRESSAO[categoria]
+          const opcoes = {
+            ...(deviceName ? { silent: true, deviceName } : { silent: false }),
+            printBackground: true,
+            // Em bobina não existe margem: o que sobrar de branco é papel
+            // gasto, e o conteúdo precisa começar encostado na esquerda.
+            ...(papel
+              ? { pageSize: papel, margins: { marginType: 'none' as const } }
+              : {})
+          }
           alvo.webContents.print(opcoes, (sucesso, motivo) => {
             alvo.close()
             if (deviceName && !sucesso) reject(new Error(motivo || 'Falha na impressão'))
