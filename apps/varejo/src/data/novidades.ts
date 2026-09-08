@@ -7,6 +7,30 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.42.0',
+    itens: [
+      {
+        emoji: '🧾',
+        titulo: 'Cupom fiscal na bobina',
+        descricao:
+          'O cupom da nota fiscal passa a ser impresso na largura correta da bobina.'
+      },
+      {
+        emoji: '☁️',
+        titulo: 'Backup em nuvem',
+        descricao:
+          'As lojas com o plano contratado passam a manter uma cópia do sistema fora do '
+          + 'computador, disponível na tela de Restauração.'
+      },
+      {
+        emoji: '🔓',
+        titulo: 'Exigência de caixa',
+        descricao:
+          'A obrigatoriedade de caixa aberto passa a valer somente nas lojas que a ativaram.'
+      }
+    ]
+  },
+  {
     versao: '1.41.0',
     itens: [
       {

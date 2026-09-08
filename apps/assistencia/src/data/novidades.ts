@@ -9,6 +9,62 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A primeira entrada é a da 1.0.0, a release que estreia o nicho.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.5.0',
+    itens: [
+      {
+        emoji: '🔐',
+        titulo: 'Controle de caixa',
+        descricao:
+          'O caixa passa a ser aberto e fechado por turno, com contagem do dinheiro e '
+          + 'conferência da diferença pelo responsável.'
+      },
+      {
+        emoji: '🏦',
+        titulo: 'Contas da oficina',
+        descricao:
+          'As vendas, as ordens entregues e as contas a pagar passam a movimentar as contas '
+          + 'cadastradas, com saldo e extrato por período.'
+      },
+      {
+        emoji: '📦',
+        titulo: 'Peças separadas',
+        descricao:
+          'A peça apartada para um cliente fica reservada no estoque até o pagamento.'
+      },
+      {
+        emoji: '📎',
+        titulo: 'Comprovante de pagamento',
+        descricao:
+          'Cada venda passa a aceitar o comprovante anexado, em imagem ou PDF.'
+      },
+      {
+        emoji: '📈',
+        titulo: 'Lucro no Painel',
+        descricao:
+          'O Painel passa a exibir o custo das peças vendidas e o lucro bruto do período.'
+      },
+      {
+        emoji: '👥',
+        titulo: 'Situação do cliente',
+        descricao:
+          'A listagem de clientes passa a indicar como cada um retorna à oficina, com filtros.'
+      },
+      {
+        emoji: '🕒',
+        titulo: 'Horário das vendas',
+        descricao:
+          'As vendas passam a ser registradas no horário local, inclusive as anteriores.'
+      },
+      {
+        emoji: '☁️',
+        titulo: 'Backup em nuvem',
+        descricao:
+          'As oficinas com o plano contratado passam a manter uma cópia do sistema fora do '
+          + 'computador, disponível na tela de Restauração.'
+      }
+    ]
+  },
+  {
     versao: '1.4.0',
     itens: [
       {
