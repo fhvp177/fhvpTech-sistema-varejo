@@ -18,6 +18,7 @@ import {
 } from '../db/queries/vendas'
 import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
+import { exigeCaixaAberto } from '../db/queries/turnos'
 import { requerSessao, ehDono } from '../sessao'
 import { verificarPinDono } from '../auth'
 
@@ -61,14 +62,22 @@ export function registrarHandlersVendas(): void {
   // A venda é sempre atribuída ao vendedor logado. Ignora qualquer vendedor_id
   // que venha do renderer — a sessão é fonte da verdade pra rastreabilidade.
   /*
-   * ⚠️ O `caixa_id` vem do renderer e é OBRIGATÓRIO aqui, na fronteira: é esta
-   * a única porta por onde uma venda de balcão nasce. Deixar passar sem caixa
-   * seria abrir por fora a trava que `criarVenda` põe por dentro.
+   * ⚠️ O `caixa_id` vem do renderer e é obrigatório aqui, na fronteira — mas
+   * SÓ NA LOJA QUE EXIGE CAIXA. Esta é a única porta por onde uma venda de
+   * balcão nasce, e deixar passar sem caixa abriria por fora a trava que
+   * `criarVenda` põe por dentro.
+   *
+   * ⚠️ A condição é a mesma do banco, e tem que ser. Recusar aqui sem
+   * consultar a exigência derrubava justamente a loja que o interruptor da
+   * migration 048 existe para proteger: sem caixa aberto e com a exigência
+   * desligada, o PDV manda `caixa_id: null` de propósito, e a venda morria
+   * aqui — sem aviso na tela, porque para essa loja o PDV nem desenha o
+   * bloqueio. O lojista só descobria no clique de "Finalizar".
    */
   registrarCanal('vendas:criar', (dados: DadosNovaVenda) => {
     try {
       const sessao = requerSessao()
-      if (!dados.caixa_id) {
+      if (!dados.caixa_id && exigeCaixaAberto()) {
         throw new Error('CAIXA_FECHADO')
       }
       const resultado = criarVenda({ ...dados, vendedor_id: sessao.id })

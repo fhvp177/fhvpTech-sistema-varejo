@@ -2000,7 +2000,19 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           : undefined
       })
     } else {
-      setErro(resp.error)
+      /*
+       * ⚠️ `CAIXA_FECHADO` é código, não frase. Ele vem do banco e do canal, que
+       * não falam com o lojista; sem esta tradução a tela mostrava a palavra
+       * crua no meio da venda, com o cliente na frente.
+       *
+       * Chega aqui quando o caixa fechou DEPOIS de a tela carregar — outro
+       * aparelho fechou o turno enquanto o carrinho era montado.
+       */
+      setErro(
+        resp.error === 'CAIXA_FECHADO'
+          ? 'O caixa foi fechado. Abra o caixa em Financeiro › Caixa para registrar esta venda.'
+          : resp.error
+      )
       setSalvando(false)
     }
   }
