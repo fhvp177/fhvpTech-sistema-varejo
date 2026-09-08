@@ -225,8 +225,10 @@ export function criarProduto(dados: DadosProduto): Produto {
   const criar = db.transaction(() => {
     const result = db
       .prepare(
-        `INSERT INTO produtos (codigo_barras, referencia, nome, tipo, categoria, preco, custo, estoque, fornecedor_id)
-         VALUES (@codigo_barras, @referencia, @nome, @tipo, @categoria, @preco, @custo, @estoque, @fornecedor_id)`
+        // Hora da loja — ver criarVenda. Aqui alimenta "produtos parados", que
+        // conta dias desde o cadastro.
+        `INSERT INTO produtos (codigo_barras, referencia, nome, tipo, categoria, preco, custo, estoque, fornecedor_id, data_cadastro)
+         VALUES (@codigo_barras, @referencia, @nome, @tipo, @categoria, @preco, @custo, @estoque, @fornecedor_id, datetime('now','localtime'))`
       )
       .run({
         codigo_barras: ehServico || temGrade ? null : dados.codigo_barras,

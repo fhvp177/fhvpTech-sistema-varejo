@@ -1,5 +1,9 @@
-import { FC, Suspense, lazy, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowLeftRight, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2 } from 'lucide-react'
+import { FC, Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, ArrowLeftRight, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2, Lock as IconeCadeado, LockOpen as IconeCadeadoAberto, MonitorSmartphone } from 'lucide-react'
+import { Paperclip } from 'lucide-react'
+import ComprovanteVenda from '@/components/ComprovanteVenda'
+import { caixaParaAdotar, useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 import MesPicker from '@/components/MesPicker'
 import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { IMaskInput } from 'react-imask'
@@ -152,6 +156,9 @@ type Cliente = {
   id: number
   nome: string
   telefone: string
+  // Sugerido como endereço de entrega ao separar um pedido, sem mexer no
+  // cadastro: a entrega de hoje pode ser noutro lugar.
+  endereco?: string | null
   tipo_pessoa?: 'fisica' | 'juridica'
   cpf?: string | null
   cnpj?: string | null
@@ -204,6 +211,27 @@ const LABEL_CONDICAO_PAGAMENTO: Record<StatusPagamento, string> = {
   pendente: 'Venda a prazo',
   inadimplente: 'Inadimplente',
   parcelado: 'Parcelado'
+}
+
+/*
+ * O que cada condição FAZ, numa linha, embaixo do rótulo.
+ *
+ * ⚠️ Isto não é enfeite, é conserto de um defeito real de descoberta. O campo
+ * de sinal existe há meses e o lojista nunca o achou: ele só aparece depois de
+ * sair do "À vista", e nada na tela dizia que dava para receber só uma parte.
+ * Ele chegou a inventar um contorno — venda parcelada, marcar a 1ª parcela como
+ * paga, baixar a 2ª depois — para fazer o que um campo já fazia.
+ *
+ * Numa assistência isso é o caso COMUM, e não o raro: o cliente deixa o
+ * aparelho, adianta parte para a peça ser comprada e paga o resto na retirada.
+ *
+ * A palavra "sinal" aparece aqui de propósito: é a que ELE usa, e é no momento
+ * da escolha que ela precisa ser lida, não depois.
+ */
+const AJUDA_CONDICAO_PAGAMENTO: Partial<Record<StatusPagamento, string>> = {
+  pago: 'Recebe tudo agora',
+  pendente: 'Recebe depois — com ou sem sinal na hora',
+  parcelado: 'Sinal na hora (opcional) + parcelas'
 }
 
 const CORES_PARCELA: Record<string, string> = {
@@ -402,6 +430,33 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 
   const inicioPagina = (paginaAtual - 1) * ITENS_POR_PAGINA
   const listaPaginada = listaFiltrada.slice(inicioPagina, inicioPagina + ITENS_POR_PAGINA)
+
+  /*
+   * Quais vendas DESTA PÁGINA têm comprovante anexado.
+   *
+   * ⚠️ Uma pergunta só, com os vinte ids de uma vez, e sem trazer imagem
+   * nenhuma. Perguntar venda por venda seriam vinte idas ao banco para desenhar
+   * vinte clipes; e trazer o anexo junto da lista carregaria alguns megabytes
+   * para mostrar um ícone.
+   */
+  const [comComprovante, setComComprovante] = useState<Set<number>>(new Set())
+  const idsDaPagina = listaPaginada.map((v) => v.id).join(',')
+  useEffect(() => {
+    const ids = idsDaPagina ? idsDaPagina.split(',').map(Number) : []
+    if (ids.length === 0) {
+      setComComprovante(new Set())
+      return
+    }
+    let vivo = true
+    void window.api.comprovantes.quaisTem(ids).then((r) => {
+      // `vivo`: a pessoa pode virar de página antes da resposta chegar, e um
+      // resultado atrasado pintaria clipes nas vendas erradas.
+      if (vivo && r.success) setComComprovante(new Set(r.data as number[]))
+    })
+    return () => {
+      vivo = false
+    }
+  }, [idsDaPagina])
 
   // Vendas do mês do relatório — buscadas direto no banco (não da lista capada em
   // 300), independente do filtro da lista, pra o relatório nunca subcontar.
@@ -705,7 +760,17 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   i % 2 === 0 ? 'bg-background' : 'bg-muted/20'
                 }`}
               >
-                <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{v.id}</td>
+                <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
+                  <span className="inline-flex items-center gap-1">
+                    {v.id}
+                    {comComprovante.has(v.id) && (
+                      <Paperclip
+                        className="h-3 w-3 shrink-0 text-primary"
+                        aria-label="Tem comprovante anexado"
+                      />
+                    )}
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{fmtData(v.data)}</td>
                 <td className="px-4 py-3 font-medium">
                   <div className="truncate max-w-[240px]" title={v.cliente_nome || 'Venda avulsa'}>
@@ -896,7 +961,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                 ) : null}
                 {vendaDetalhada.entrada > 0 && (
                   <div>
-                    <span className="font-medium text-foreground">Entrada: </span>
+                    <span className="font-medium text-foreground">Sinal pago: </span>
                     {fmt(vendaDetalhada.entrada)}
                   </div>
                 )}
@@ -1074,6 +1139,22 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   </div>
                 </div>
               )}
+
+              {/*
+                ⚠️ O comprovante fica com a INFORMAÇÃO da venda, acima dos
+                botões de ação. Encostado em "Cancelar venda" ele viraria mais
+                um botão numa fileira de coisas perigosas, e anexar um arquivo
+                não é perigoso — é o oposto, é o que protege a oficina depois.
+
+                A venda cancelada continua mostrando o que já foi anexado, e não
+                aceita anexo novo: o comprovante de um pagamento que foi
+                desfeito ainda é o registro do que aconteceu.
+              */}
+              <ComprovanteVenda
+                vendaId={vendaDetalhada.id}
+                ehDono={ehDono}
+                somenteLeitura={!!vendaDetalhada.cancelada}
+              />
 
               {vendaDetalhada.status_pagamento === 'pago' && !vendaDetalhada.cancelada && (
                 <Button
@@ -1311,6 +1392,66 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
 const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const { setAtivo: setPdvAtivo } = usePdvMode()
   const { aberta: calculadoraAberta } = useCalculadora()
+  const navegar = useNavigate()
+  const { caixaId, escolher } = useCaixaDoAparelho()
+  const [caixas, setCaixas] = useState<
+    Array<{ id: number; nome: string; turno: TurnoCaixa | null }>
+  >([])
+  const [carregandoCaixas, setCarregandoCaixas] = useState(true)
+  /*
+   * Esta oficina exige caixa aberto para vender?
+   *
+   * ⚠️ Começa `true`, e não `false`. Enquanto a resposta não chega, o valor
+   * seguro é o que PROTEGE: numa oficina que exige caixa, começar em `false`
+   * abriria uma janela — curta, mas real — em que a venda passa sem turno.
+   * O contrário só atrasa a tela por um instante.
+   *
+   * Quem de fato barra é o banco; isto aqui decide o que a tela mostra.
+   */
+  const [exigirCaixa, setExigirCaixa] = useState(true)
+
+  /*
+   * ⚠️ Recarrega sempre que a tela volta ao foco: o caixa pode ter sido aberto
+   * noutro aparelho, ou fechado pelo dono enquanto quem atende estava aqui. Sem
+   * isso o PDV insistiria em barrar uma venda que já pode acontecer.
+   */
+  const recarregarCaixas = useCallback(async () => {
+    const r = await window.api.caixa.caixasComTurno()
+    if (r.success) {
+      setCaixas(r.data as Array<{ id: number; nome: string; turno: TurnoCaixa | null }>)
+    }
+    const rEx = await window.api.caixa.exigencia()
+    if (rEx.success) setExigirCaixa(rEx.data !== false)
+    setCarregandoCaixas(false)
+  }, [])
+
+  useEffect(() => {
+    void recarregarCaixas()
+    const aoFocar = () => void recarregarCaixas()
+    window.addEventListener('focus', aoFocar)
+    return () => window.removeEventListener('focus', aoFocar)
+  }, [recarregarCaixas])
+
+  const caixaAtual = caixas.find((c) => c.id === caixaId) ?? null
+  const caixaAberto = caixaAtual?.turno != null
+
+  /*
+   * ⚠️ Aparelho que ainda não escolheu caixa ADOTA o único que existe.
+   *
+   * Sem isto o sistema cria um beco sem saída: o caixa é aberto num aparelho e a
+   * venda é tentada em outro. O segundo não tem escolha gravada, o PDV lê
+   * "nenhum caixa" e barra a venda — com o caixa aberto o tempo todo.
+   *
+   * A regra é adotar SÓ quando não há dúvida sobre qual gaveta é: um único
+   * aberto, ou um único cadastrado. Com dois abertos ele NÃO adota, e a tela
+   * pergunta — aí a escolha errada faz as duas contagens fecharem erradas.
+   */
+  useEffect(() => {
+    if (carregandoCaixas) return
+    const adotar = caixaParaAdotar(caixas, caixaId)
+    if (adotar != null) escolher(adotar)
+  }, [caixaId, carregandoCaixas, caixas, escolher])
+
   const { ehDono, vendedor } = useSessao()
   const { bloquear } = useLock()
   const confirmar = useConfirm()
@@ -1356,6 +1497,16 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const [telefoneClienteRapido, setTelefoneClienteRapido] = useState('')
   const [cnpjClienteRapido, setCnpjClienteRapido] = useState('')
   const [razaoSocialRapido, setRazaoSocialRapido] = useState('')
+  const [enderecoClienteRapido, setEnderecoClienteRapido] = useState('')
+  const [observacaoClienteRapido, setObservacaoClienteRapido] = useState('')
+  // Bilhete desta venda, impresso no cupom. Some junto com o carrinho.
+  const [observacaoVenda, setObservacaoVenda] = useState('')
+  // Separar em vez de vender: a peça fica apartada esperando o cliente pagar.
+  const [separarAberto, setSepararAberto] = useState(false)
+  const [separarEntrega, setSepararEntrega] = useState(false)
+  const [separarEndereco, setSepararEndereco] = useState('')
+  const [separarObs, setSepararObs] = useState('')
+  const [separando, setSeparando] = useState(false)
   const [erroCliente, setErroCliente] = useState('')
   const [salvandoCliente, setSalvandoCliente] = useState(false)
 
@@ -1565,6 +1716,9 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     setEntradaInput('')
     setDescontoTipo('R$')
     setDescontoEntrada('')
+    // ⚠️ Some com a venda. Bilhete que sobra na tela é o tipo de erro que só
+    // aparece no papel do cliente seguinte, quando já não dá para desfazer.
+    setObservacaoVenda('')
     setCodigoScan('')
     setErro('')
     setFeedbackScan(null)
@@ -1597,6 +1751,18 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       // Só vai quando houve escolha. Nos outros casos o backend deriva
       // ('crediario' a prazo, 'credito_loja' quando o saldo cobre tudo).
       forma_pagamento: precisaEscolherForma ? formaPagamento : null,
+      observacao: observacaoVenda.trim() || null,
+      /*
+       * ⚠️ Em qual gaveta esta venda entrou.
+       *
+       * Com a exigência LIGADA vai sempre, e o backend recusa se o turno não
+       * estiver aberto — a regra mora lá, não aqui.
+       *
+       * DESLIGADA, vai só quando há turno aberto de verdade. Assim a oficina que
+       * não usa caixa vende normalmente, e a que usa de vez em quando continua
+       * tendo o dinheiro caindo na gaveta certa quando o caixa está aberto.
+       */
+      caixa_id: exigirCaixa ? caixaId : caixaAberto ? caixaId : null,
       itens: carrinho.map((item) => ({
         produto_id: item.produto_id,
         variacao_id: item.variacao_id,
@@ -1622,8 +1788,65 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           : undefined
       })
     } else {
-      setErro(resp.error)
+      /*
+       * ⚠️ `CAIXA_FECHADO` é código, não frase. Ele vem do banco e do canal, que
+       * não falam com o lojista; sem esta tradução a tela mostrava a palavra
+       * crua no meio da venda, com o cliente na frente.
+       *
+       * Chega aqui quando o caixa fechou DEPOIS de a tela carregar — outro
+       * aparelho fechou o turno enquanto o carrinho era montado.
+       */
+      setErro(
+        resp.error === 'CAIXA_FECHADO'
+          ? 'O caixa foi fechado. Abra o caixa em Financeiro › Caixa para registrar esta venda.'
+          : resp.error
+      )
       setSalvando(false)
+    }
+  }
+
+  /*
+   * Separar em vez de vender.
+   *
+   * ⚠️ A forma de pagamento NÃO é perguntada aqui, e é esse o ponto: o cliente
+   * decide na hora de buscar se paga em dinheiro, PIX ou cartão. Perguntar
+   * agora obrigaria a adivinhar, e adivinhar vira relatório errado.
+   *
+   * O que sai daqui é peça apartada e preço congelado — a peça que chegou para
+   * um conserto e não pode ser vendida no balcão enquanto o aparelho espera.
+   * Faturamento e nota só acontecem quando alguém paga.
+   */
+  const separarPedido = async () => {
+    if (carrinho.length === 0) { setErro('Adicione pelo menos um produto.'); return }
+    if (separarEntrega && !separarEndereco.trim()) {
+      setErro('Para entregar é preciso informar o endereço.')
+      return
+    }
+    setSeparando(true)
+    setErro('')
+    const resp = await window.api.pedidos.criar({
+      cliente_id: clienteId ? Number(clienteId) : null,
+      para_entrega: separarEntrega,
+      endereco_entrega: separarEndereco.trim() || null,
+      observacao: separarObs.trim() || null,
+      desconto: descontoValor,
+      itens: carrinho.map((i) => ({
+        produto_id: i.produto_id,
+        variacao_id: i.variacao_id ?? null,
+        quantidade: i.quantidade,
+        preco_unitario: i.preco_unitario
+      }))
+    })
+    setSeparando(false)
+    if (resp.success) {
+      setSepararAberto(false)
+      showToast({
+        message: 'Pedido separado. Ele aparece em Pedidos separados até ser pago.',
+        variant: 'success'
+      })
+      onSair()
+    } else {
+      setErro(resp.error)
     }
   }
 
@@ -1817,6 +2040,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     setTelefoneClienteRapido('')
     setCnpjClienteRapido('')
     setRazaoSocialRapido('')
+    setEnderecoClienteRapido('')
+    setObservacaoClienteRapido('')
     setErroCliente('')
     setModalClienteAberto(true)
   }
@@ -1847,13 +2072,15 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     const resp = await window.api.clientes.criar({
       nome: nomeClienteRapido.trim(),
       telefone: telefoneClienteRapido,
-      endereco: null,
+      // Vazio grava NULL, e não string vazia: quem lê depois pergunta "tem
+      // endereço?", e `''` responderia que sim.
+      endereco: enderecoClienteRapido.trim() || null,
       cpf: null,
       data_nascimento: null,
       tipo_pessoa: tipoPessoaRapido,
       cnpj: ehPj ? cnpjClienteRapido : null,
       razao_social: ehPj ? (razaoSocialRapido.trim() || null) : null,
-      observacao: null,
+      observacao: observacaoClienteRapido.trim() || null,
     })
     if (resp.success) {
       const novoCliente = resp.data as Cliente
@@ -1942,6 +2169,90 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       return exato(b) - exato(a)
     })
 
+  /*
+   * ── Sem caixa aberto não se vende, e a tela EXPLICA ───────────────────
+   *
+   * Barrar sem oferecer saída seria um beco: quem está com o cliente na frente
+   * não vai adivinhar que precisa passar por outra tela. Aqui ele escolhe o
+   * caixa e abre no mesmo lugar.
+   *
+   * A trava de verdade está no banco, que recusa a venda sem turno. Esta tela é
+   * a explicação, não a fechadura — e por isso ela pode ser generosa.
+   *
+   * ⚠️ `exigirCaixa` na condição: a oficina que não usa caixa nunca vê isto.
+   */
+  if (!carregandoCaixas && exigirCaixa && !caixaAberto) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="w-full max-w-sm rounded-xl border bg-card p-6 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <IconeCadeado className="h-6 w-6" />
+          </div>
+          {/*
+            ⚠️ Três situações diferentes, e dizer "Nenhum caixa aberto" nas três
+            — inclusive quando há um aberto e este aparelho é que não escolheu —
+            manda abrir um caixa que já está aberto, e o Caixa recusa com "este
+            caixa já está aberto". Daí não há mais o que tentar.
+          */}
+          <h2 className="text-lg font-semibold">
+            {caixas.length === 0
+              ? 'Nenhum caixa cadastrado'
+              : caixas.some((c) => c.turno != null)
+                ? 'Em qual caixa você está?'
+                : 'Nenhum caixa aberto'}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {caixas.length === 0
+              ? 'Cadastre um caixa em Financeiro › Contas, escolhendo o tipo “Caixa”.'
+              : caixas.some((c) => c.turno != null)
+                ? 'Há caixa aberto na oficina. Escolha em qual gaveta as vendas deste aparelho entram.'
+                : 'Abra o caixa para registrar as vendas do dia. Sem isso o dinheiro não entra na conferência.'}
+          </p>
+
+          {/*
+            ⚠️ O seletor aparece sempre que há caixa cadastrado, e não só com
+            mais de um. Era essa condição que fechava o beco: numa oficina com UM
+            caixa não havia nada para clicar.
+          */}
+          {caixas.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {caixas.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => escolher(c.id)}
+                  className={`flex min-h-[52px] w-full items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm transition-colors ${
+                    caixaId === c.id ? 'border-primary bg-primary/5' : 'hover:bg-muted/40'
+                  }`}
+                >
+                  <span className="min-w-0 truncate font-medium">{c.nome}</span>
+                  <span className="shrink-0 text-[11.5px] text-muted-foreground">
+                    {c.turno ? 'aberto' : 'fechado'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <Button
+            className="mt-4 h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+            onClick={() => navegar('/caixa')}
+          >
+            <IconeCadeadoAberto className="mr-1.5 h-4 w-4" />
+            {caixas.length === 0
+              ? 'Ir para Contas'
+              : caixas.some((c) => c.turno != null)
+                ? 'Ver os caixas'
+                : 'Abrir caixa agora'}
+          </Button>
+          <Button variant="outline" className="mt-2 h-11 w-full" onClick={onSair}>
+            Voltar
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full">
     <div className="flex flex-1 min-h-0">
@@ -1952,6 +2263,28 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="text-[2rem] font-bold">CAIXA ABERTO</h2>
+          {/*
+            ── Em qual gaveta esta venda vai entrar ──
+
+            ⚠️ Informação, não controle: quem atende não escolhe o caixa aqui.
+            A escolha é do APARELHO e vale para todas as vendas feitas nele —
+            trocá-la no meio do expediente, com carrinho montado, é como o
+            dinheiro acaba na conferência errada.
+
+            E é justamente por não dar para trocar que precisa estar visível: com
+            dois caixas, uma venda que entra na gaveta errada faz as duas
+            contagens fecharem erradas no fim do dia, uma sobrando e a outra
+            faltando, sem nada na tela que explique.
+          */}
+          {caixaAtual && (
+            <span
+              className="inline-flex min-w-0 shrink items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[12px] font-medium text-primary"
+              title={`Esta venda entra em ${caixaAtual.nome}. A escolha é deste aparelho e muda em Financeiro › Caixa.`}
+            >
+              <MonitorSmartphone className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="min-w-0 truncate">{caixaAtual.nome}</span>
+            </span>
+          )}
           {/* Quem está no caixa, e a saída para trocar. Mora no cabeçalho porque
               é a única coisa da tela que responde "esta venda vai sair no nome de
               quem?" — a barra lateral, que mostraria isso, some no PDV. */}
@@ -2294,7 +2627,18 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                     statusPagamento === s ? 'bg-current border-current' : 'border-muted-foreground'
                   }`}
                 />
-                {LABEL_CONDICAO_PAGAMENTO[s]}
+                <span className="min-w-0">
+                  <span className="block leading-tight">{LABEL_CONDICAO_PAGAMENTO[s]}</span>
+                  {AJUDA_CONDICAO_PAGAMENTO[s] && (
+                    <span
+                      className={`block text-[11px] leading-tight ${
+                        statusPagamento === s ? 'opacity-70' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {AJUDA_CONDICAO_PAGAMENTO[s]}
+                    </span>
+                  )}
+                </span>
               </label>
             ))}
           </div>
@@ -2336,12 +2680,16 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </div>
         )}
 
-        {/* Entrada — paga no ato, abate do valor financiado (parcelado) ou
-            devido (a prazo). Não aparece no à vista. */}
+        {/* Sinal (entrada) — pago no ato, abate do valor financiado (parcelado)
+            ou devido (a prazo). Não aparece no à vista, onde não há o que abater.
+
+            ⚠️ "Sinal" é a palavra do lojista e vem primeiro; "entrada" fica junto
+            porque é a do comércio e a que sai impressa no cupom. Renomear só para
+            "Sinal" faria a tela e o papel discordarem. */}
         {statusPagamento !== 'pago' && (
           <div>
             <Label htmlFor="entrada" className="text-xs mb-1 block">
-              Entrada <span className="text-muted-foreground">(opcional)</span>
+              Sinal <span className="text-muted-foreground">(entrada, opcional)</span>
             </Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
@@ -2361,8 +2709,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             </div>
             <p className="text-[11px] mt-1 text-muted-foreground">
               {statusPagamento === 'parcelado'
-                ? 'Pago agora; o restante é dividido nas parcelas.'
-                : 'Pago agora; o restante fica devido no vencimento.'}
+                ? 'O cliente pagou isto agora; o restante é dividido nas parcelas.'
+                : 'O cliente pagou isto agora; o restante fica devido no vencimento.'}
             </p>
           </div>
         )}
@@ -2403,6 +2751,27 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </div>
         )}
 
+        {/*
+          Observação da venda: o bilhete que hoje é escrito à mão no verso do
+          cupom. "Aparelho entregue sem tampa", "garantia só da peça".
+
+          Fica por último de propósito. É opcional e raro, e todo campo posto
+          acima dos que decidem o pagamento cobra atenção de quem só quer
+          fechar a venda.
+        */}
+        <div>
+          <Label htmlFor="obs-venda" className="text-xs mb-1 block">
+            Observação <span className="text-muted-foreground font-normal">(sai no cupom)</span>
+          </Label>
+          <Input
+            id="obs-venda"
+            value={observacaoVenda}
+            onChange={(e) => setObservacaoVenda(e.target.value)}
+            placeholder="Ex.: garantia da peça até 15/09"
+            maxLength={120}
+          />
+        </div>
+
         {erro && (
           <p className="text-destructive text-xs bg-destructive/10 rounded px-2 py-1.5">{erro}</p>
         )}
@@ -2421,11 +2790,106 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   ? `Finalizar — entrada ${fmt(entradaValor)}`
                   : 'Finalizar venda'}
           </Button>
+          {/*
+            ⚠️ "Separar" fica ao lado de "Finalizar" e não escondido num menu:
+            numa oficina a peça costuma ser apartada antes de o cliente pagar,
+            e esconder faria o balcão voltar a registrar venda que ainda não
+            aconteceu — faturamento de dinheiro que não entrou.
+          */}
+          <Button
+            className="w-full bg-violet-600 text-white hover:bg-violet-700"
+            onClick={() => {
+              setSepararEntrega(false)
+              setSepararEndereco(
+                clientes.find((c) => String(c.id) === clienteId)?.endereco ?? ''
+              )
+              setSepararObs('')
+              setErro('')
+              setSepararAberto(true)
+            }}
+            disabled={separando || carrinho.length === 0}
+          >
+            Separar pedido — receber depois
+          </Button>
           <Button variant="outline" className="w-full" onClick={onSair}>
             Cancelar
           </Button>
         </div>
       </div>
+
+      {/* ── Dialog: separar pedido ── */}
+      <Dialog open={separarAberto} onOpenChange={setSepararAberto}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Separar pedido</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
+            <div className="rounded-lg bg-muted/50 px-3 py-2">
+              <p className="text-[12.5px] text-muted-foreground">Total combinado</p>
+              <p className="num text-xl font-bold">{fmt(total)}</p>
+            </div>
+
+            {/*
+              ⚠️ Nenhuma pergunta sobre COMO o cliente vai pagar. Ele decide na
+              hora de buscar, e é exatamente isso que este recurso permite.
+            */}
+            <p className="text-[12.5px] text-muted-foreground">
+              As peças ficam apartadas com este preço e saem do estoque disponível. Nada entra
+              no faturamento até o cliente pagar.
+            </p>
+
+            <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm">
+              <input
+                type="checkbox"
+                className="accent-blue-600 h-4 w-4"
+                checked={separarEntrega}
+                onChange={(e) => setSepararEntrega(e.target.checked)}
+              />
+              Vai ser entregue no cliente
+            </label>
+
+            {separarEntrega && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="separar-endereco">
+                  Endereço da entrega <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="separar-endereco"
+                  value={separarEndereco}
+                  onChange={(e) => setSepararEndereco(e.target.value)}
+                  placeholder="Rua, nº, bairro"
+                />
+                <p className="text-[11.5px] text-muted-foreground">
+                  Vem do cadastro do cliente quando existe, e pode ser trocado aqui sem mexer
+                  no cadastro.
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="separar-obs">Observação</Label>
+              <Input
+                id="separar-obs"
+                value={separarObs}
+                onChange={(e) => setSepararObs(e.target.value)}
+                placeholder="Combinado com o cliente, referência…"
+              />
+            </div>
+
+            {erro && (
+              <p className="rounded bg-destructive/10 px-3 py-2 text-sm text-destructive">{erro}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSepararAberto(false)}>
+              Voltar
+            </Button>
+            <Button onClick={separarPedido} disabled={separando}>
+              {separando ? 'Separando…' : 'Separar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog: cadastro rápido de cliente ── */}
       <Dialog open={modalClienteAberto} onOpenChange={setModalClienteAberto}>
@@ -2434,8 +2898,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
             <DialogTitle>Cadastro Rápido de Cliente</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground -mt-2">
-            O cliente será cadastrado e já ficará selecionado na venda.
-            Dados adicionais podem ser completados depois em <strong>Clientes</strong>.
+            O cliente será cadastrado e já ficará selecionado na venda. O resto
+            (CPF, nascimento) pode ser completado depois em <strong>Clientes</strong>.
           </p>
           <div className="grid gap-3 py-1">
             {/* Toggle PF/PJ */}
@@ -2519,6 +2983,42 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
             </div>
+
+            {/*
+              ⚠️ Endereço e observação ficam à VISTA, e não atrás de um "mais
+              dados". O cadastro rápido existe para ser rápido, e dois campos a
+              mais custam alguma coisa — mas esconder custa mais: o campo de
+              sinal desta mesma tela existe há meses e o lojista nunca o viu,
+              porque só aparece depois de trocar a condição de pagamento. Campo
+              escondido é campo que não existe para quem usa.
+
+              E o endereço não é enfeite: é por ele que se manda o aparelho de
+              volta, e é o que uma mensagem de "está pronto" pressupõe.
+            */}
+            <div className="grid gap-1.5">
+              <Label htmlFor="endereco-cliente-rapido">
+                Endereço <span className="text-muted-foreground font-normal">(opcional)</span>
+              </Label>
+              <Input
+                id="endereco-cliente-rapido"
+                value={enderecoClienteRapido}
+                onChange={(e) => setEnderecoClienteRapido(e.target.value)}
+                placeholder="Rua, nº, bairro — para entrega"
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="observacao-cliente-rapido">
+                Observação <span className="text-muted-foreground font-normal">(opcional)</span>
+              </Label>
+              <Input
+                id="observacao-cliente-rapido"
+                value={observacaoClienteRapido}
+                onChange={(e) => setObservacaoClienteRapido(e.target.value)}
+                placeholder="Ponto de referência, preferência, combinado..."
+              />
+            </div>
+
             {erroCliente && (
               <p className="text-destructive text-sm bg-destructive/10 rounded px-3 py-2">
                 {erroCliente}

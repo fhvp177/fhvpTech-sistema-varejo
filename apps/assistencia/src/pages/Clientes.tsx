@@ -25,6 +25,14 @@ const ITENS_POR_PAGINA = 20
 
 type TipoPessoa = 'fisica' | 'juridica'
 
+/*
+ * ⚠️ A situação NÃO é um campo do cadastro: vem calculada da história de
+ * compras a cada consulta. O porquê está inteiro em electron/db/queries/
+ * clientes.ts — em resumo, etiqueta gravada envelhece em silêncio e faz a
+ * oficina mandar mensagem de fidelidade para quem sumiu há seis meses.
+ */
+type SituacaoCliente = 'sem_compras' | 'novo' | 'recorrente' | 'reativado' | 'inativo'
+
 type Cliente = {
   id: number
   nome: string
@@ -37,7 +45,31 @@ type Cliente = {
   razao_social: string | null
   observacao: string | null
   data_cadastro: string
+  situacao: SituacaoCliente
+  num_compras: number
+  total_comprado: number
+  ultima_compra: string | null
 }
+
+/*
+ * Como cada situação aparece. A cor carrega o recado sem obrigar a ler:
+ * âmbar e cinza são os dois que pedem ação de quem toca a oficina.
+ */
+const SITUACAO: Record<SituacaoCliente, { rotulo: string; classe: string }> = {
+  sem_compras: { rotulo: 'Sem compras', classe: 'bg-muted text-muted-foreground' },
+  novo: { rotulo: 'Novo', classe: 'bg-sky-100 text-sky-700' },
+  recorrente: { rotulo: 'Recorrente', classe: 'bg-emerald-100 text-emerald-700' },
+  reativado: { rotulo: 'Reativado', classe: 'bg-violet-100 text-violet-700' },
+  inativo: { rotulo: 'Inativo', classe: 'bg-amber-100 text-amber-800' }
+}
+
+const ORDEM_SITUACAO: SituacaoCliente[] = [
+  'novo',
+  'recorrente',
+  'reativado',
+  'inativo',
+  'sem_compras'
+]
 
 const fmtMoeda = (valor: number) =>
   valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -138,6 +170,8 @@ const Clientes: FC = () => {
   const [lista, setLista] = useState<Cliente[]>([])
   const [vendas, setVendas] = useState<VendaDivida[]>([])
   const [busca, setBusca] = useState('')
+  // Filtro das etiquetas. `null` significa "não filtra por isso".
+  const [filtroSituacao, setFiltroSituacao] = useState<SituacaoCliente | null>(null)
   const [dialogAberto, setDialogAberto] = useState(false)
   const [editando, setEditando] = useState<Cliente | null>(null)
   const [form, setForm] = useState<FormCliente>(FORM_VAZIO)
@@ -172,6 +206,10 @@ const Clientes: FC = () => {
   const dividasPorCliente = useMemo(() => calcularDividasPorCliente(vendas), [vendas])
 
   const listaFiltrada = lista.filter((c) => {
+    // A etiqueta corta ANTES da busca por texto: são duas perguntas separadas
+    // ("quais clientes?" e "qual deles?"), e nesta ordem.
+    if (filtroSituacao && c.situacao !== filtroSituacao) return false
+
     const t = busca.toLowerCase()
     return (
       c.nome.toLowerCase().includes(t) ||
@@ -187,7 +225,7 @@ const Clientes: FC = () => {
   // Reseta para a primeira página quando o filtro muda
   useEffect(() => {
     setPaginaAtual(1)
-  }, [busca])
+  }, [busca, filtroSituacao])
 
   // Carrega uma vez a localização da loja para sugerir no cadastro fiscal de
   // clientes novos. Só no Pro — o Básico não tem nota fiscal.
@@ -365,6 +403,48 @@ const Clientes: FC = () => {
         />
       </div>
 
+      {/*
+        ── Etiquetas de filtro ──
+
+        Excludentes por dentro: clicar na etiqueta ligada desliga. Multiescolha
+        daria "novos OU inativos", que não é pergunta que alguém faz.
+
+        A contagem vem colada no rótulo, e não depois de clicar: sem ela quem
+        usa clica em cada uma para descobrir se tem alguém ali.
+      */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-4">
+        {ORDEM_SITUACAO.map((s) => {
+          const quantos = lista.filter((c) => c.situacao === s).length
+          const ligada = filtroSituacao === s
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setFiltroSituacao(ligada ? null : s)}
+              aria-pressed={ligada}
+              className={`rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${
+                ligada
+                  ? 'bg-primary text-primary-foreground'
+                  : `${SITUACAO[s].classe} hover:opacity-80`
+              }`}
+            >
+              {SITUACAO[s].rotulo}
+              <span className="ml-1 opacity-70">{quantos}</span>
+            </button>
+          )
+        })}
+
+        {filtroSituacao && (
+          <button
+            type="button"
+            onClick={() => setFiltroSituacao(null)}
+            className="rounded-full px-2.5 py-1 text-[12px] text-muted-foreground underline underline-offset-2"
+          >
+            limpar
+          </button>
+        )}
+      </div>
+
       <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
@@ -374,6 +454,7 @@ const Clientes: FC = () => {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">CPF / CNPJ</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Telefone</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Endereço</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Situação</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cadastro</th>
               <th className="w-32 px-4 py-3" />
             </tr>
@@ -381,7 +462,7 @@ const Clientes: FC = () => {
           <tbody>
             {listaFiltrada.length === 0 && (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <EstadoVazio
                     icone={<User className="w-9 h-9" />}
                     dica={busca ? 'Tente outro nome, telefone ou documento.' : 'Use o botão "Novo cliente" para começar.'}
@@ -442,6 +523,13 @@ const Clientes: FC = () => {
                   {c.endereco
                     ? <div className="truncate max-w-[130px] 2xl:max-w-[220px]" title={c.endereco}>{c.endereco}</div>
                     : '—'}
+                </td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11.5px] font-medium ${SITUACAO[c.situacao].classe}`}
+                  >
+                    {SITUACAO[c.situacao].rotulo}
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{formatarData(c.data_cadastro)}</td>
                 <td className="px-4 py-3">

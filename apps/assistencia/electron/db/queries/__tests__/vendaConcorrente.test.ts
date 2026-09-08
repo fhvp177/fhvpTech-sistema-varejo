@@ -96,6 +96,7 @@ const SCHEMA = `
     preco REAL NOT NULL,
     custo REAL NOT NULL DEFAULT 0,
     estoque INTEGER DEFAULT 0,
+    reservado INTEGER NOT NULL DEFAULT 0,
     tipo TEXT NOT NULL DEFAULT 'produto'
   );
   CREATE TABLE produto_variacoes (
@@ -103,7 +104,8 @@ const SCHEMA = `
     produto_id INTEGER NOT NULL,
     tamanho TEXT NOT NULL,
     codigo_barras TEXT UNIQUE NOT NULL,
-    estoque INTEGER NOT NULL DEFAULT 0
+    estoque INTEGER NOT NULL DEFAULT 0,
+    reservado INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE vendas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,6 +120,8 @@ const SCHEMA = `
     data_vencimento DATE,
     num_parcelas INTEGER,
     forma_pagamento TEXT,
+    observacao TEXT,
+    turno_id INTEGER,
     cancelada INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE itens_venda (
@@ -126,7 +130,47 @@ const SCHEMA = `
     produto_id INTEGER NOT NULL,
     variacao_id INTEGER,
     quantidade INTEGER NOT NULL,
-    preco_unitario REAL NOT NULL
+    preco_unitario REAL NOT NULL,
+    custo_unitario REAL
+  );
+  CREATE TABLE config (chave TEXT PRIMARY KEY, valor TEXT);
+  CREATE TABLE contas_financeiras (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    tipo TEXT NOT NULL DEFAULT 'banco',
+    banco TEXT, agencia TEXT, conta TEXT,
+    saldo_inicial REAL NOT NULL DEFAULT 0,
+    ativa INTEGER NOT NULL DEFAULT 1,
+    padrao_recebimento INTEGER NOT NULL DEFAULT 0,
+    padrao_pagamento INTEGER NOT NULL DEFAULT 0,
+    forma_padrao TEXT,
+    criada_em TEXT
+  );
+  CREATE TABLE movimentos_financeiros (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conta_id INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    valor REAL NOT NULL,
+    tipo TEXT NOT NULL,
+    descricao TEXT, forma_pagamento TEXT,
+    origem_tipo TEXT, origem_id INTEGER,
+    turno_id INTEGER, vendedor_id INTEGER,
+    criado_em TEXT
+  );
+  CREATE TABLE turnos_caixa (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conta_id INTEGER NOT NULL,
+    aberto_por INTEGER NOT NULL,
+    aberto_em TEXT NOT NULL,
+    fundo_troco REAL NOT NULL DEFAULT 0,
+    fechado_por INTEGER, fechado_em TEXT,
+    confirmado_por INTEGER, confirmado_em TEXT,
+    justificativa TEXT,
+    fora_de_hora INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE contagens_turno (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, turno_id INTEGER NOT NULL,
+    forma TEXT NOT NULL, valor_contado REAL NOT NULL, valor_esperado REAL NOT NULL
   );
   CREATE TABLE parcelas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,6 +198,13 @@ const SCHEMA = `
 
 // Estoque começa em 1: a última peça da bancada, que é o caso que importa.
 const SEED = `
+  -- ⚠️ Esta oficina de teste NÃO exige caixa aberto para vender.
+  --
+  -- Os testes daqui são sobre outra coisa (custo congelado, corrida por
+  -- estoque), e exigir turno obrigaria cada um a abrir caixa antes de chegar
+  -- ao que interessa. Fica declarado no fonte em vez de depender do padrão —
+  -- que é LIGADO, e muda de significado se alguém mexer nele.
+  INSERT INTO config (chave, valor) VALUES ('exigir_caixa_aberto', '0');
   INSERT INTO vendedores (id, nome) VALUES (1, 'Ana');
   INSERT INTO produtos (id, nome, codigo_barras, preco, estoque, tipo)
     VALUES (1, 'Tela de reposição', '7891111111111', 100, 1, 'produto');

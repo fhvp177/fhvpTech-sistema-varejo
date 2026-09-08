@@ -13,6 +13,8 @@ import {
   Tags,
   Receipt,
   ReceiptText,
+  Landmark,
+  PackageCheck,
   HandCoins,
   Settings,
   FileText,
@@ -27,6 +29,9 @@ import {
 } from 'lucide-react'
 import Fornecedores from './pages/Fornecedores'
 import ContasPagar from './pages/ContasPagar'
+import Contas from './pages/Contas'
+import Caixa from './pages/Caixa'
+import Pedidos from './pages/Pedidos'
 import Emprestimos from './pages/Emprestimos'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
@@ -575,6 +580,22 @@ const App: FC = () => {
                       )}
                       <Route path="/fornecedores" element={<Fornecedores />} />
                       <Route
+                        path="/contas"
+                        element={
+                          <RotaSomenteDono titulo="Contas">
+                            <Contas />
+                          </RotaSomenteDono>
+                        }
+                      />
+                      {/*
+                        ⚠️ O caixa NÃO é só do dono: quem opera é quem conta a
+                        gaveta, e é esse o ponto do fechamento às cegas. Quem só
+                        o dono pode fazer é ACEITAR a diferença, e isso o próprio
+                        canal cobra.
+                      */}
+                      <Route path="/caixa" element={<Caixa />} />
+                      <Route path="/pedidos" element={<Pedidos />} />
+                      <Route
                         path="/contas-pagar"
                         element={
                           <RotaSomenteDono titulo="Contas a Pagar">
@@ -779,6 +800,11 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
   {
     titulo: 'Financeiro',
     itens: [
+      // Peça separada esperando o cliente: é venda em andamento, e por isso mora
+      // no Financeiro junto com o dinheiro que ela vai virar.
+      { to: '/pedidos', label: 'Pedidos separados', icon: PackageCheck },
+      { to: '/caixa', label: 'Caixa', icon: Lock },
+      { to: '/contas', label: 'Contas', icon: Landmark, somenteDono: true },
       { to: '/contas-pagar', label: 'Contas a Pagar', icon: Receipt, somenteDono: true },
       // Módulo opcional — só aparece na loja que ligou (ver ModulosContext).
       {

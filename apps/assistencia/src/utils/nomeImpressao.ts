@@ -29,5 +29,7 @@ export const nomeImpressao = {
   osEntrega: (osId: number): string => `OS-${pad(osId)}-Comprovante-Entrega`,
   osOrcamento: (osId: number): string => `OS-${pad(osId)}-Orcamento`,
   osLaudo: (osId: number): string => `OS-${pad(osId)}-Laudo-Tecnico`,
-  recibo: (numero: number): string => `Recibo-${pad(numero)}`
+  recibo: (numero: number): string => `Recibo-${pad(numero)}`,
+  // O papel que vai com quem entrega. Nao e documento fiscal.
+  pedidoEntrega: (id: number): string => `Pedido-${id}-Entrega`
 }

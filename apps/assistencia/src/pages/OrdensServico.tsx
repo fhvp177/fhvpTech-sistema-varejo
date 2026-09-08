@@ -19,6 +19,7 @@ import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteEntradaOS, gerarHtmlComprovanteEntregaOS } from '@/utils/comprovantesOS'
 import { gerarHtmlLaudoOS, gerarHtmlOrcamentoOS } from '@/utils/documentosOS'
 import { abrirWhatsAppOS } from '@/utils/whatsapp'
+import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 import { FORMAS_A_VISTA, type FormaPagamento } from '@/utils/formaPagamento'
 
 const ITENS_POR_PAGINA = 20
@@ -1809,6 +1810,10 @@ const ModalFechamento: FC<{
   onFechar: () => void
   onFechada: (atualizada: OrdemDetalhada) => void
 }> = ({ os, total, onFechar, onFechada }) => {
+  // Em qual caixa este recebimento entra. É do APARELHO, igual ao PDV: quem
+  // entrega a OS pode ser outra pessoa, mas a gaveta é a da máquina.
+  const { caixaId } = useCaixaDoAparelho()
+
   const dataDaqui = (dias: number): string => {
     const d = new Date()
     d.setDate(d.getDate() + dias)
@@ -1859,22 +1864,34 @@ const ModalFechamento: FC<{
       }
     }
     setSalvando(true)
+    /*
+     * ⚠️ O caixa vai junto mesmo na entrega sem cobrança.
+     *
+     * OS de cortesia não gera venda e o campo é ignorado; mandar sempre evita
+     * dois caminhos que se comportam diferente quando alguém mexer nisto depois.
+     */
     const resp = await window.api.os.fechar(
       os.id,
       semCobranca
-        ? { status_pagamento: 'pago' }
+        ? { status_pagamento: 'pago', caixa_id: caixaId }
         : {
             status_pagamento: condicao,
             data_vencimento: condicao === 'pago' ? null : vencimento,
             num_parcelas: condicao === 'parcelado' ? nParcelas : null,
             entrada: condicao === 'pago' ? 0 : entradaNum,
             // A prazo o backend deriva 'crediario' sozinho — não mandamos nada.
-            forma_pagamento: precisaEscolherForma ? formaPagamento : null
+            forma_pagamento: precisaEscolherForma ? formaPagamento : null,
+            caixa_id: caixaId
           }
     )
     setSalvando(false)
     if (resp.success) onFechada(resp.data as OrdemDetalhada)
-    else setErro(resp.error)
+    // `CAIXA_FECHADO` é código do backend, não frase para quem atende.
+    else if (resp.error === 'CAIXA_FECHADO') {
+      setErro(
+        'O caixa está fechado. Abra o caixa em Financeiro › Caixa para registrar o recebimento desta OS.'
+      )
+    } else setErro(resp.error)
   }
 
   return (

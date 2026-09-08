@@ -1,4 +1,5 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { contaSugerida, lancarMovimento } from './financeiro'
 import type { AlertaVivo } from './notificacoes'
 
 // "Contas a pagar" — o que a loja deve (fornecedor, aluguel, luz, salário…).
@@ -130,7 +131,11 @@ export function deletarContaPagar(id: number): void {
 // Registra um pagamento (parcial ou total), espelhando registrarPagamentoParcial
 // das vendas: credita em valor_pago, sem nunca ultrapassar o total, e carimba o
 // pago_em quando a conta é quitada por inteiro.
-export function registrarPagamentoConta(id: number, valor: number): void {
+export function registrarPagamentoConta(
+  id: number,
+  valor: number,
+  contaFinanceiraId?: number | null
+): void {
   const db = obterBancoDeDados()
   db.transaction(() => {
     const conta = db
@@ -152,6 +157,31 @@ export function registrarPagamentoConta(id: number, valor: number): void {
     } else {
       db.prepare('UPDATE contas_pagar SET valor_pago = ? WHERE id = ?').run(novoValorPago, id)
     }
+
+    /*
+     * Dinheiro SAINDO, e por isso o valor vai negativo: no livro-caixa a
+     * direção é o sinal, sem coluna separada dizendo "entrada ou saída" — duas
+     * fontes para a mesma informação um dia discordam.
+     *
+     * Dentro da transação de propósito: uma conta que falha ao ser baixada não
+     * pode deixar a saída registrada no livro.
+     *
+     * ⚠️ De ONDE o dinheiro saiu é escolha de quem paga, não palpite do
+     * sistema: pagar o aluguel pelo banco e ver o saldo do CAIXA cair é um erro
+     * que só aparece na conferência do fim do dia. A queda para a conta padrão
+     * continua, para a baixa feita por outro caminho não ficar sem lançamento.
+     */
+    const contaFin = contaFinanceiraId ?? contaSugerida(db, 'pagamento', null)
+    if (contaFin) {
+      lancarMovimento(db, {
+        conta_id: contaFin,
+        valor: -valorEfetivo,
+        tipo: 'despesa',
+        descricao: `Conta a pagar #${id}`,
+        origem_tipo: 'conta_pagar',
+        origem_id: id
+      })
+    }
   })()
 }
 
@@ -159,10 +189,37 @@ export function registrarPagamentoConta(id: number, valor: number): void {
 // para um livro-caixa pessoal: zera o pago e limpa o carimbo de quitação.
 export function estornarPagamentoConta(id: number): void {
   const db = obterBancoDeDados()
-  const info = db
-    .prepare('UPDATE contas_pagar SET valor_pago = 0, pago_em = NULL WHERE id = ?')
-    .run(id)
-  if (info.changes === 0) throw new Error('Conta não encontrada.')
+  db.transaction(() => {
+    const conta = db
+      .prepare('SELECT valor_pago FROM contas_pagar WHERE id = ?')
+      .get(id) as { valor_pago: number } | undefined
+    if (!conta) throw new Error('Conta não encontrada.')
+
+    db.prepare('UPDATE contas_pagar SET valor_pago = 0, pago_em = NULL WHERE id = ?').run(id)
+
+    /*
+     * ⚠️ O dinheiro tem que VOLTAR ao livro, senão desfazer um pagamento
+     * deixaria a conta em aberto de novo e o saldo continuaria mais baixo —
+     * dinheiro que sumiu do sistema sem ter saído da oficina.
+     *
+     * E volta como um lançamento NOVO, não apagando o antigo: livro-caixa não
+     * se rasura. Quem olhar o extrato vê a saída e a volta, que é o que de fato
+     * aconteceu.
+     */
+    if (conta.valor_pago > 0) {
+      const contaFin = contaSugerida(db, 'pagamento', null)
+      if (contaFin) {
+        lancarMovimento(db, {
+          conta_id: contaFin,
+          valor: +conta.valor_pago.toFixed(2),
+          tipo: 'estorno',
+          descricao: `Estorno da conta a pagar #${id}`,
+          origem_tipo: 'conta_pagar',
+          origem_id: id
+        })
+      }
+    }
+  })()
 }
 
 // ── Resumo para os cartões do topo da página ──

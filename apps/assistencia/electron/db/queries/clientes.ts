@@ -4,6 +4,58 @@ import { comErroAmigavelDeVinculo } from '../erros'
 
 export type TipoPessoa = 'fisica' | 'juridica'
 
+/**
+ * ── ⚠️ As etiquetas de situação são CALCULADAS, nunca gravadas ──────────
+ *
+ * "Novo", "Reativado" e "Recorrente" não são etiquetas que alguém cola no
+ * cliente: são leituras da história de compras dele, e mudam sozinhas quando
+ * ele volta à oficina ou deixa de voltar.
+ *
+ * Guardar isso numa coluna seria mais rápido de consultar e estaria errado na
+ * semana seguinte. Um "Recorrente" que parou de aparecer em março continuaria
+ * escrito Recorrente para sempre, e a oficina mandaria mensagem de fidelidade
+ * para quem sumiu — o oposto do que ela quer. Etiqueta gravada envelhece em
+ * silêncio; conta refeita na hora, não.
+ *
+ * ── A escada, e ela é excludente ──────────────────────────────────
+ * Cada cliente cai em exatamente um degrau, e a ordem importa:
+ *
+ *   1. Sem compras — cadastrado e nunca comprou.
+ *   2. Inativo     — a última compra passou de INATIVO_DIAS.
+ *   3. Reativado   — ficou um vão de VAO_REATIVACAO_DIAS sem comprar e voltou
+ *                    dentro dos últimos JANELA_ATIVO_DIAS.
+ *   4. Recorrente  — COMPRAS_RECORRENTE compras ou mais.
+ *   5. Novo        — comprou pouco, e ainda está no prazo.
+ *
+ * ⚠️ Inativo vem ANTES de recorrente de propósito. Quem trouxe dez aparelhos e
+ * sumiu há seis meses é um problema, não um cliente fiel — e é exatamente esse
+ * que o dono precisa achar na lista.
+ *
+ * ⚠️ E reativado vem antes de recorrente pelo mesmo motivo: quem acabou de
+ * voltar depois de um sumiço merece um tratamento diferente de quem nunca
+ * parou, mesmo que os dois tenham o mesmo número de compras.
+ *
+ * ── ⚠️ Os prazos são chute informado, e ficam em um lugar só ────────────
+ * Ninguém mediu o ciclo de retorno desta oficina ainda. Estes números vieram do
+ * varejo e existem aqui como CONSTANTE justamente para serem trocados numa
+ * linha quando o dono disser qual é o ritmo dele.
+ *
+ * ⚠️ E numa assistência o ritmo é outro: conserto não é compra de roupa. Um
+ * cliente que aparece uma vez por ano com o notebook não sumiu — ele só não
+ * quebrou nada. Vale confirmar os prazos antes de tratar "inativo" como perda.
+ */
+export const JANELA_ATIVO_DIAS = 90
+export const VAO_REATIVACAO_DIAS = 120
+export const INATIVO_DIAS = 180
+export const COMPRAS_RECORRENTE = 3
+
+export type SituacaoCliente =
+  | 'sem_compras'
+  | 'novo'
+  | 'recorrente'
+  | 'reativado'
+  | 'inativo'
+
 export type Cliente = {
   id: number
   nome: string
@@ -16,6 +68,11 @@ export type Cliente = {
   razao_social: string | null
   observacao: string | null
   data_cadastro: string
+  // ── Derivados, só de leitura. Não existem como coluna. ──
+  situacao: SituacaoCliente
+  num_compras: number
+  total_comprado: number
+  ultima_compra: string | null
 }
 
 export type DadosCliente = {
@@ -46,10 +103,73 @@ export type ClienteVencendoHoje = {
   data_vencimento: string
 }
 
+/**
+ * A lista de clientes já vem com a situação calculada.
+ *
+ * ⚠️ `date('now','localtime')`, e não `'now'` seco. O SQLite calcula em UTC:
+ * das 21h em diante ele já acha que é o dia seguinte, e o cliente que comprou
+ * hoje à noite entraria na conta com um dia a mais de idade. Numa fronteira de
+ * 90 ou 180 dias isso troca a etiqueta de um cliente por causa do horário em
+ * que alguém abriu a tela.
+ *
+ * ⚠️ Conta VENDA, e a entrega de uma OS gera venda — então o conserto entregue
+ * conta como visita. OS aberta e ainda na bancada não conta, e está certo: o
+ * cliente ainda não voltou para buscar.
+ */
 export function listarClientes(): Cliente[] {
   const db = obterBancoDeDados()
   return db
-    .prepare('SELECT * FROM clientes ORDER BY nome COLLATE NOCASE')
+    .prepare(
+      `WITH compras AS (
+         SELECT cliente_id,
+                total,
+                date(data) AS d,
+                /*
+                  A compra anterior DESTE cliente. É o que permite achar o vão:
+                  sem olhar de compra em compra, "ficou um tempo sem voltar e
+                  voltou" não é distinguível de "voltou duas vezes seguidas".
+                */
+                LAG(date(data)) OVER (PARTITION BY cliente_id ORDER BY data, id) AS anterior
+           FROM vendas
+          WHERE cliente_id IS NOT NULL AND cancelada = 0
+       ),
+       resumo AS (
+         SELECT cliente_id,
+                COUNT(*) AS num_compras,
+                SUM(total) AS total_comprado,
+                MAX(d) AS ultima,
+                /*
+                  Quantas VOLTAS recentes: um vão longo seguido de uma compra
+                  dentro da janela de ativo. Basta uma para o cliente ser um
+                  reativado.
+                */
+                SUM(
+                  CASE
+                    WHEN anterior IS NOT NULL
+                     AND julianday(d) - julianday(anterior) >= ${VAO_REATIVACAO_DIAS}
+                     AND julianday(date('now','localtime')) - julianday(d) <= ${JANELA_ATIVO_DIAS}
+                    THEN 1 ELSE 0
+                  END
+                ) AS retomadas
+           FROM compras
+          GROUP BY cliente_id
+       )
+       SELECT c.*,
+              COALESCE(r.num_compras, 0) AS num_compras,
+              COALESCE(r.total_comprado, 0) AS total_comprado,
+              r.ultima AS ultima_compra,
+              CASE
+                WHEN COALESCE(r.num_compras, 0) = 0 THEN 'sem_compras'
+                WHEN julianday(date('now','localtime')) - julianday(r.ultima) > ${INATIVO_DIAS}
+                  THEN 'inativo'
+                WHEN r.retomadas > 0 THEN 'reativado'
+                WHEN r.num_compras >= ${COMPRAS_RECORRENTE} THEN 'recorrente'
+                ELSE 'novo'
+              END AS situacao
+         FROM clientes c
+         LEFT JOIN resumo r ON r.cliente_id = c.id
+        ORDER BY c.nome COLLATE NOCASE`
+    )
     .all() as Cliente[]
 }
 
@@ -57,11 +177,24 @@ export function criarCliente(dados: DadosCliente): Cliente {
   const db = obterBancoDeDados()
   const result = db
     .prepare(
-      `INSERT INTO clientes (nome, telefone, endereco, cpf, data_nascimento, tipo_pessoa, cnpj, razao_social, observacao)
-       VALUES (@nome, @telefone, @endereco, @cpf, @data_nascimento, @tipo_pessoa, @cnpj, @razao_social, @observacao)`
+      // Hora da loja, e não UTC — ver o comentário em criarVenda. Aqui alimenta
+      // "clientes novos" do Painel: cadastrado às 22h virava cadastro de amanhã.
+      `INSERT INTO clientes (nome, telefone, endereco, cpf, data_nascimento, tipo_pessoa, cnpj, razao_social, observacao, data_cadastro)
+       VALUES (@nome, @telefone, @endereco, @cpf, @data_nascimento, @tipo_pessoa, @cnpj, @razao_social, @observacao, datetime('now','localtime'))`
     )
     .run(dados)
-  return { id: result.lastInsertRowid as number, data_cadastro: new Date().toISOString(), ...dados }
+  // Cliente recém-criado não comprou nada ainda, e é isso que os derivados
+  // dizem. Inventar aqui uma situação diferente faria a lista mostrar uma coisa
+  // antes de recarregar e outra depois.
+  return {
+    id: result.lastInsertRowid as number,
+    data_cadastro: new Date().toISOString(),
+    ...dados,
+    situacao: 'sem_compras',
+    num_compras: 0,
+    total_comprado: 0,
+    ultima_compra: null
+  }
 }
 
 export function atualizarCliente(id: number, dados: DadosCliente): void {

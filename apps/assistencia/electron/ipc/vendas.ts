@@ -18,6 +18,7 @@ import {
 } from '../db/queries/vendas'
 import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
+import { exigeCaixaAberto } from '../db/queries/turnos'
 import { requerSessao, ehDono } from '../sessao'
 import { verificarPinDono } from '../auth'
 
@@ -60,9 +61,23 @@ export function registrarHandlersVendas(): void {
 
   // A venda é sempre atribuída ao vendedor logado. Ignora qualquer vendedor_id
   // que venha do renderer — a sessão é fonte da verdade pra rastreabilidade.
+  /*
+   * ⚠️ O `caixa_id` vem do renderer e é obrigatório aqui, na fronteira — mas
+   * SÓ NA OFICINA QUE EXIGE CAIXA. Esta é a porta por onde a venda de balcão
+   * nasce, e deixar passar sem caixa abriria por fora a trava que `criarVenda`
+   * põe por dentro.
+   *
+   * ⚠️ A condição é a mesma do banco, e tem que ser. Recusar aqui sem
+   * consultar a exigência derrubaria justamente a oficina que o interruptor da
+   * migration 048 existe para proteger — a que nunca viu uma tela de caixa e
+   * amanheceria sem poder vender depois da atualização.
+   */
   registrarCanal('vendas:criar', (dados: DadosNovaVenda) => {
     try {
       const sessao = requerSessao()
+      if (!dados.caixa_id && exigeCaixaAberto()) {
+        throw new Error('CAIXA_FECHADO')
+      }
       const resultado = criarVenda({ ...dados, vendedor_id: sessao.id })
       obterBackupManager().marcarAlteracao()
       dispararBackupPorVendaSeAtivo()

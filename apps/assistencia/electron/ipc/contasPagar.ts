@@ -110,16 +110,23 @@ export function registrarHandlersContasPagar(): void {
     }
   })
 
-  registrarCanal('contasPagar:registrarPagamento', (id: number, valor: number) => {
+  registrarCanal(
+    'contasPagar:registrarPagamento',
+    (id: number, valor: number, contaFinanceiraId?: number) => {
     try {
       requerDono()
-      registrarPagamentoConta(Number(id), Number(valor))
+      registrarPagamentoConta(
+        Number(id),
+        Number(valor),
+        contaFinanceiraId ? Number(contaFinanceiraId) : null
+      )
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
-  })
+    }
+  )
 
   registrarCanal('contasPagar:estornarPagamento', (id: number) => {
     try {

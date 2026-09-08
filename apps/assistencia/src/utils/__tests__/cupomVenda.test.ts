@@ -267,6 +267,27 @@ describe('conteúdo do cupom', () => {
     expect(html).toContain('<td class="col-num">30,00</td>')
   })
 
+  it('★ a observação da venda sai impressa, e escapada', () => {
+    /*
+     * É texto livre digitado por quem atende num HTML montado à mão. Sem
+     * escapar, uma observação com "<" quebra o cupom inteiro — e o cupom
+     * quebrado só aparece no papel, depois de a venda estar fechada.
+     */
+    const html = gerarHtmlCupomVenda(venda({ observacao: 'Garantia até <15/09>' }), LOJA)
+    expect(html).toContain('OBS.:')
+    expect(html).toContain('Garantia até &lt;15/09&gt;')
+    expect(html).not.toContain('<15/09>')
+  })
+
+  it('★ sem observação, o bloco não é desenhado', () => {
+    /*
+     * Um "OBS.:" vazio impresso todo dia gasta papel e ensina o cliente a
+     * ignorar o campo justamente quando ele tiver conteúdo.
+     */
+    expect(gerarHtmlCupomVenda(venda(), LOJA)).not.toContain('OBS.:')
+    expect(gerarHtmlCupomVenda(venda({ observacao: '   ' }), LOJA)).not.toContain('OBS.:')
+  })
+
   it('escapa o nome do produto (o cupom é HTML montado à mão)', () => {
     const html = gerarHtmlCupomVenda(
       venda({ itens: [{ produto_nome: '<script>x</script>', quantidade: 1, preco_unitario: 1 }] }),

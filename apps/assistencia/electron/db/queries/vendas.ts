@@ -1,4 +1,6 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
+import { contaSugerida, lancarMovimento } from './financeiro'
+import { exigeCaixaAberto } from './turnos'
 
 export type StatusPagamento = 'pago' | 'pendente' | 'inadimplente' | 'parcelado'
 
@@ -33,6 +35,12 @@ export type Venda = {
   cliente_cnpj?: string | null
   cliente_razao_social?: string | null
   vendedor_nome?: string | null
+  // Bilhete desta venda, impresso no cupom. ⚠️ NÃO confundir com
+  // `clientes.observacao`, que vale para sempre: esta vale para UMA venda.
+  observacao?: string | null
+  // Em qual turno de caixa esta venda entrou. NULL nas anteriores à migration
+  // 047 e nas que nascem fora de caixa.
+  turno_id?: number | null
   cancelada?: number
   cancelada_em?: string | null
   cancelada_por_id?: number | null
@@ -50,6 +58,9 @@ export type ItemVenda = {
   variacao_id: number | null
   quantidade: number
   preco_unitario: number
+  // Quanto a peça CUSTOU no dia em que foi vendida. NULL nas vendas anteriores
+  // à migration 043, e quem lê cai no custo atual do produto — ver lá.
+  custo_unitario?: number | null
   produto_nome?: string
   codigo_barras?: string
   tamanho?: string | null
@@ -60,6 +71,19 @@ export type VendaDetalhada = Venda & { itens: ItemVenda[]; parcelas: Parcela[] }
 export type DadosNovaVenda = {
   cliente_id: number | null
   vendedor_id: number
+  /**
+   * Em qual caixa físico esta venda aconteceu.
+   *
+   * ⚠️ Quando vem preenchido, a venda é recusada se aquele caixa não estiver
+   * aberto. Venda fora de turno é dinheiro que não entra em conferência
+   * nenhuma — some do fechamento sem ninguém notar, que é o oposto do que o
+   * controle existe para fazer.
+   *
+   * ⚠️ Ausente com a exigência LIGADA também é recusa (ver abaixo). A oficina
+   * que liga o caixa precisa que a entrega de OS passe por ele também: o
+   * conserto é justamente o dinheiro que mais entra por lá.
+   */
+  caixa_id?: number | null
   status_pagamento: StatusPagamento
   data_vencimento: string | null
   num_parcelas?: number | null
@@ -74,6 +98,9 @@ export type DadosNovaVenda = {
   // à vista: a prazo é crediário por definição e é DERIVADO aqui, não perguntado.
   // Ausente grava NULL ("não sabemos"), que é o caso da venda vinda de uma OS.
   forma_pagamento?: string | null
+  // Bilhete desta venda ("trocar até 15/09", "aparelho sem tampa"), impresso
+  // no cupom. Vazio grava NULL e o bloco não é desenhado.
+  observacao?: string | null
   itens: Array<{
     produto_id: number
     // Tamanho vendido, quando o produto é de grade. null/ausente = produto simples
@@ -316,11 +343,23 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
     throw new Error('Técnico inválido ou inativo.')
   }
 
+  /*
+   * ⚠️ A trava de estoque desconta o RESERVADO.
+   *
+   * É esta comparação que impede vender a mesma peça duas vezes, e ela funciona
+   * por o banco ser síncrono — uma operação por vez, sem vão entre ler e gravar.
+   * Com peça reservada para uma OS, ela continua no `estoque` (ainda é da
+   * oficina até alguém pagar) mas não está mais disponível para vender no balcão.
+   *
+   * A mudança é AQUI, e não numa segunda checagem em outro lugar: duas travas
+   * em pontos diferentes deixam um vão entre elas, e o vão é exatamente onde a
+   * última unidade some duas vezes.
+   */
   for (const item of dados.itens) {
     if (item.variacao_id != null) {
       const v = db
         .prepare(
-          `SELECT pv.estoque AS estoque, pv.tamanho AS tamanho, p.nome AS nome
+          `SELECT pv.estoque - pv.reservado AS estoque, pv.tamanho AS tamanho, p.nome AS nome
            FROM produto_variacoes pv JOIN produtos p ON p.id = pv.produto_id
            WHERE pv.id = ?`
         )
@@ -334,7 +373,7 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       }
     } else {
       const produto = db
-        .prepare('SELECT nome, estoque, tipo FROM produtos WHERE id = ?')
+        .prepare('SELECT nome, estoque - reservado AS estoque, tipo FROM produtos WHERE id = ?')
         .get(item.produto_id) as { nome: string; estoque: number; tipo: string } | undefined
 
       if (!produto) throw new Error(`Produto #${item.produto_id} não encontrado.`)
@@ -392,14 +431,92 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
 
   const formaPagamento = formaDaVenda(dados, total, creditoUsado)
 
+  /*
+   * ⚠️ Com a exigência ligada, sem caixa aberto não se vende.
+   *
+   * A regra parece dura e é o que faz a conferência valer: venda fora de turno
+   * não entra em fechamento nenhum, e o dinheiro dela some do controle sem
+   * ninguém notar. O PDV oferece "abrir caixa" na mesma tela, então o custo para
+   * quem opera é de dois cliques.
+   *
+   * ⚠️ Ela nasce DESLIGADA nas oficinas que já vendem hoje (migration 048): uma
+   * regra nova não pode barrar a primeira venda da manhã seguinte à
+   * atualização, com o cliente no balcão.
+   *
+   * A trava mora AQUI, no banco, e não só na tela: o segundo caixa fala pelo
+   * mesmo canal, e uma regra que vive na interface é uma regra que o outro
+   * aparelho não tem.
+   */
+  let turnoId: number | null = null
+  if (dados.caixa_id) {
+    const turno = db
+      .prepare(
+        `SELECT id FROM turnos_caixa
+          WHERE conta_id = ? AND fechado_em IS NULL
+          ORDER BY id DESC LIMIT 1`
+      )
+      .get(dados.caixa_id) as { id: number } | undefined
+    if (!turno) {
+      throw new Error('CAIXA_FECHADO')
+    }
+    turnoId = turno.id
+  } else if (exigeCaixaAberto()) {
+    /*
+     * ⚠️ Sem `caixa_id` NENHUM, com a exigência ligada, também é recusa.
+     *
+     * Se o guarda só existisse quando a tela mandasse o caixa, a regra
+     * dependeria de a interface se comportar. Bastaria um aparelho com versão
+     * antiga, ou o segundo caixa chamando o canal direto, para a venda passar
+     * sem turno e o dinheiro ficar fora de toda conferência.
+     *
+     * ⚠️ Alcança também a venda que nasce da ENTREGA DE UMA OS, e é de
+     * propósito: numa oficina o conserto é a maior parte do dinheiro do dia, e
+     * deixá-lo de fora do turno esvaziaria o fechamento. A tela de Ordens manda
+     * o caixa do aparelho, igual ao PDV.
+     */
+    throw new Error('CAIXA_FECHADO')
+  }
+
   const inserirVenda = db.prepare(
-    `INSERT INTO vendas (cliente_id, vendedor_id, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento)
-     VALUES (@cliente_id, @vendedor_id, @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento)`
+    /*
+     * ⚠️ `data` vai EXPLÍCITA, em hora da loja.
+     *
+     * O default da coluna é `CURRENT_TIMESTAMP`, que no SQLite é UTC — sempre,
+     * em qualquer fuso da máquina; não é configuração, é a definição. No Brasil
+     * isso gravava a venda três horas adiante do relógio da bancada, e a partir
+     * das 21h no DIA SEGUINTE.
+     *
+     * Na assistência o estrago era visível dentro do próprio fluxo: a OS é
+     * aberta às 14h e gravada em `ordens_servico.criada_em`, que sempre foi hora
+     * local; a venda que ela gera ao ser entregue ficava marcada 17h. Mesma
+     * bancada, mesmo instante, três horas de diferença entre duas telas.
+     *
+     * O default fica onde está de propósito, como rede para quem inserir por
+     * fora — trocá-lo exigiria reconstruir a tabela, e ela é referenciada por
+     * itens, parcelas, devoluções, créditos e ordens de serviço.
+     */
+    `INSERT INTO vendas (cliente_id, vendedor_id, data, total, desconto, entrada, valor_pago, status_pagamento, data_vencimento, num_parcelas, forma_pagamento, observacao, turno_id)
+     VALUES (@cliente_id, @vendedor_id, datetime('now','localtime'), @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @observacao, @turno_id)`
   )
   const inserirItem = db.prepare(
-    `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario)
-     VALUES (@venda_id, @produto_id, @variacao_id, @quantidade, @preco_unitario)`
+    `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario, custo_unitario)
+     VALUES (@venda_id, @produto_id, @variacao_id, @quantidade, @preco_unitario, @custo_unitario)`
   )
+  /*
+   * ⚠️ O custo é lido AGORA e guardado junto, como já acontece com o preço.
+   *
+   * Sem isto o lucro do Painel lia o custo de hoje para uma venda de meses
+   * atrás: bastava o distribuidor reajustar a peça e o técnico atualizar o
+   * preço de compra para TODO o lucro do passado encolher de uma vez, sem que
+   * nenhuma venda tivesse mudado. Ver a migration 043.
+   *
+   * Vale igual para PEÇA e para SERVIÇO: os dois moram em `produtos`, e mão de
+   * obra com custo cadastrado (a hora do técnico) congela do mesmo jeito.
+   *
+   * O custo é do PRODUTO mesmo em grade — na modelagem, preço e custo nunca
+   * moram na variação.
+   */
+  const custoDoProduto = db.prepare('SELECT custo FROM produtos WHERE id = ?')
   // O `tipo != 'servico'` no próprio UPDATE garante que estoque de serviço
   // nunca se mexe, não importa o chamador (idem no cancelamento e na devolução).
   const decrementarEstoqueProduto = db.prepare(
@@ -428,17 +545,38 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
       status_pagamento: dados.status_pagamento,
       data_vencimento: dados.data_vencimento,
       num_parcelas: dados.num_parcelas ?? null,
-      forma_pagamento: formaPagamento
+      forma_pagamento: formaPagamento,
+      // Texto vazio vira NULL: "" e "não escreveu nada" são a mesma coisa, e o
+      // cupom só desenha o bloco quando há o que dizer.
+      //
+      // ⚠️ `?? null` e não só `dados.observacao`: um renderer de versão
+      // anterior manda o objeto SEM o campo, e aí os dois drivers de SQLite
+      // discordam em silêncio — o better-sqlite3 da loja LANÇA "missing named
+      // parameter" com o cliente na frente, e o node:sqlite dos testes aceita.
+      observacao: dados.observacao?.trim() || null,
+      /*
+       * ⚠️ O turno vai na VENDA, e não só no movimento do livro-caixa.
+       *
+       * O movimento só nasce quando entra dinheiro. Venda a prazo sem entrada,
+       * ou paga inteira com crédito da loja, não gera nenhum — e sumiria da
+       * lista do turno, que é justamente onde alguém vai procurar de onde veio
+       * uma diferença. Ver a migration 047.
+       */
+      turno_id: turnoId
     })
     vendaId = result.lastInsertRowid as number
 
     for (const item of dados.itens) {
+      const custo = custoDoProduto.get(item.produto_id) as { custo: number } | undefined
       inserirItem.run({
         venda_id: vendaId,
         produto_id: item.produto_id,
         variacao_id: item.variacao_id ?? null,
         quantidade: item.quantidade,
-        preco_unitario: item.preco_unitario
+        preco_unitario: item.preco_unitario,
+        // NULL, e não 0: zero é custo válido (peça de brinde, serviço de
+        // cortesia) e "não sei" precisa ser distinguido dele por quem lê.
+        custo_unitario: custo?.custo ?? null
       })
       if (item.variacao_id != null) {
         decrementarEstoqueVariacao.run(item.quantidade, item.variacao_id)
@@ -468,6 +606,52 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
         `INSERT INTO creditos_cliente (cliente_id, tipo, valor, venda_id)
          VALUES (?, 'uso', ?, ?)`
       ).run(dados.cliente_id, -creditoUsado, vendaId)
+    }
+
+    /*
+     * O dinheiro que de fato entrou vai para o livro-caixa.
+     *
+     * ⚠️ CRÉDITO DA LOJA NÃO É DINHEIRO. Numa venda de 100 paga com 30 de
+     * crédito e 70 em espécie, `valor_pago` fica 100 (a venda está quitada) mas
+     * só 70 entraram na gaveta. Lançar 100 faria o fechamento acusar falta de 30
+     * sempre que alguém usasse crédito — e um controle que acusa falta sem
+     * motivo é desligado na primeira semana.
+     *
+     * O lançamento acontece DENTRO desta transação: se a venda falhar no meio,
+     * o dinheiro não pode ficar registrado.
+     */
+    const recebidoAgora = +(
+      (dados.status_pagamento === 'pago' ? total : entrada) - creditoUsado
+    ).toFixed(2)
+    if (recebidoAgora > 0) {
+      /*
+       * ⚠️ Dinheiro em espécie cai NO CAIXA DO OPERADOR, sempre.
+       *
+       * Com um caixa só, perguntar "qual conta recebe dinheiro?" dava no mesmo.
+       * Com dois, a nota de R$ 50 que entrou no Caixa 2 iria parar na gaveta do
+       * Caixa 1 — e as duas contagens fechariam erradas, uma sobrando e a outra
+       * faltando exatamente o mesmo valor.
+       *
+       * Cartão e PIX seguem a conta da forma: eles não passam por gaveta nenhuma.
+       */
+      const conta =
+        formaPagamento === 'dinheiro' && dados.caixa_id
+          ? dados.caixa_id
+          : contaSugerida(db, 'recebimento', formaPagamento)
+      if (conta) {
+        lancarMovimento(db, {
+          conta_id: conta,
+          valor: recebidoAgora,
+          tipo: 'venda',
+          descricao: `Venda #${vendaId}`,
+          forma_pagamento: formaPagamento,
+          origem_tipo: 'venda',
+          origem_id: vendaId,
+          vendedor_id: dados.vendedor_id,
+          // O turno é o do CAIXA, mesmo quando o dinheiro cai no banco.
+          turno_id: turnoId
+        })
+      }
     }
   })()
 
@@ -540,6 +724,20 @@ export function registrarPagamentoParcial(id: number, valor: number): void {
       db.prepare('UPDATE vendas SET valor_pago = ? WHERE id = ?')
         .run(novoValorPago, id)
     }
+
+    // Recebimento de dívida: dinheiro de verdade entrando, e por isso vai ao
+    // livro. Sem forma conhecida, cai na conta padrão de recebimento.
+    const conta = contaSugerida(db, 'recebimento', null)
+    if (conta) {
+      lancarMovimento(db, {
+        conta_id: conta,
+        valor: valorEfetivo,
+        tipo: 'recebimento',
+        descricao: `Recebimento da venda #${id}`,
+        origem_tipo: 'venda',
+        origem_id: id
+      })
+    }
   })()
 }
 
@@ -561,6 +759,21 @@ export function pagarParcela(parcelaId: number): void {
     if (!jaPaga) {
       db.prepare('UPDATE vendas SET valor_pago = ROUND(valor_pago + ?, 2) WHERE id = ?')
         .run(parcela.valor, parcela.venda_id)
+
+      // ⚠️ Só lança se a parcela ainda NÃO estava paga. Sem esta guarda, um
+      // clique duplo lançaria o dinheiro duas vezes no livro — e aí o
+      // fechamento acusaria uma sobra que ninguém conseguiria explicar.
+      const conta = contaSugerida(db, 'recebimento', null)
+      if (conta) {
+        lancarMovimento(db, {
+          conta_id: conta,
+          valor: parcela.valor,
+          tipo: 'recebimento',
+          descricao: `Parcela da venda #${parcela.venda_id}`,
+          origem_tipo: 'parcela',
+          origem_id: parcelaId
+        })
+      }
     }
 
     const { total, pagas } = db

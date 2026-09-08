@@ -41,6 +41,8 @@ export type DadosCupomVenda = {
   cliente_cnpj?: string | null
   cliente_razao_social?: string | null
   vendedor_nome?: string | null
+  // Bilhete desta compra. Ausente ou vazio, o bloco inteiro não é desenhado.
+  observacao?: string | null
   itens: ItemCupom[]
   parcelas: ParcelaCupom[]
 }
@@ -192,6 +194,18 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
   const saldoEmAberto = venda.total - venda.valor_pago
   const valorACobrar = saldoEmAberto > 0 ? saldoEmAberto : venda.total
 
+  /*
+   * Só existe quando há o que dizer. Cupom com um "Obs.:" vazio impresso todo
+   * dia gasta papel e ensina o cliente a ignorar o campo justamente quando ele
+   * tiver conteúdo.
+   */
+  const obs = venda.observacao?.trim()
+  const observacaoHtml = obs
+    ? `<div class="observacao"><span class="rot">OBS.:</span> ${escapar(obs)}</div>
+  <div class="divisoria"></div>
+`
+    : ''
+
   const pix = qrPixParaDocumento({
     chave: loja.pix_chave,
     tipo: loja.pix_tipo || undefined,
@@ -314,6 +328,19 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
       margin: 6px 0;
       font-weight: bold;
     }
+    /*
+      A observação é texto livre de quem atende: pode vir um endereço emendado
+      ou uma palavra enorme sem espaço. O 'overflow-wrap: anywhere' corta no
+      meio da palavra em vez de empurrar a linha para fora dos 68mm — na
+      térmica, o que passa da largura não sai cortado na tela, sai AUSENTE do
+      papel.
+    */
+    .observacao {
+      font-size: 10.5px;
+      margin: 4px 0;
+      overflow-wrap: anywhere;
+    }
+    .observacao .rot { font-size: 9.5px; }
     .assinatura {
       margin-top: 60px;
       text-align: center;
@@ -418,7 +445,7 @@ ${CSS_PIX}
   </div>
   ${entrada > 0 ? `
   <div class="total-linha" style="font-size: 11px;">
-    <span>Entrada (paga):</span>
+    <span>Sinal pago:</span>
     <span>- ${fmt(entrada)}</span>
   </div>
   <div class="total-linha" style="font-size: 11px;">
@@ -444,6 +471,7 @@ ${CSS_PIX}
 ${blocoPixHtml(pix, { titulo: tituloPix })}
   <div class="divisoria"></div>
 
+  ${observacaoHtml}
   <div class="aviso">*** Este cupom não é documento fiscal ***</div>
 
   <div class="assinatura">

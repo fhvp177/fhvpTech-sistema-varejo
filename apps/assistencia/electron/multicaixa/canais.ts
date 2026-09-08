@@ -37,6 +37,28 @@
 
 /** Nunca saem da máquina, mesmo com token válido. */
 export const CANAIS_LOCAIS = [
+  // Gestão do dinheiro — fica local: o notebook do multi-caixa pode estar fora
+  // da oficina, e o livro completo mostra quanto ela tem em cada banco. O
+  // segundo caixa vende; quem administra conta é quem está no PC.
+  'financeiro:atualizarConta',
+  'financeiro:criarConta',
+  'financeiro:desativarConta',
+  'financeiro:extrato',
+  // ⚠️ `lancar` é a única porta por onde entra dinheiro sem origem em venda ou
+  // conta. Remoto, ela viraria o jeito de encobrir uma quebra de caixa à
+  // distância — basta lançar um "ajuste" do tamanho da falta.
+  'financeiro:lancar',
+  'financeiro:reativarConta',
+  'financeiro:saldoConsolidado',
+  // ⚠️ Aceitar a diferença do caixa acontece ONDE ESTÁ O DINHEIRO. Confirmar de
+  // longe seria assinar embaixo de uma contagem que ninguém viu.
+  'caixa:confirmarTurno',
+  'caixa:contagens',
+  'caixa:diferencasPorOperador',
+  'caixa:listarTurnos',
+  'caixa:definirExigencia',
+  'caixa:turnoParaRelatorio',
+  'caixa:vendasDoTurno',
   // Atualização — cada máquina se atualiza sozinha.
   'atualizacao:instalar',
   'atualizacao:obterInfo',
@@ -45,6 +67,9 @@ export const CANAIS_LOCAIS = [
   'backup:fazerManual',
   'backup:gravarConfig',
   'backup:listarBackups',
+  // Backup em nuvem é do dono do banco, como o resto da família `backup:`.
+  'backup:listarNuvem',
+  'backup:baixarDaNuvem',
   'backup:obterStatus',
   'backup:restaurar',
   'backup:selecionarPasta',
@@ -93,6 +118,27 @@ export const CANAIS_LOCAIS = [
 
 /** Atendem o segundo caixa. São os dados da loja: um banco, duas telas. */
 export const CANAIS_REDE = [
+  // Contas: só a LISTA, e só porque abrir o turno pede escolher qual caixa. O
+  // resto da família `financeiro:` fica local.
+  'financeiro:listarContas',
+  // A gaveta. ⚠️ Limitação conhecida e aceita: o modelo tem UM turno aberto por
+  // vez na oficina inteira, então o segundo caixa opera o mesmo turno do PC, e
+  // não uma gaveta própria.
+  'caixa:abrirTurno',
+  'caixa:caixasComTurno',
+  'caixa:exigencia',
+  'caixa:fecharTurno',
+  'caixa:sangria',
+  'caixa:suprimento',
+  'caixa:turnoAberto',
+  // Peça separada para uma OS: é venda, e vender é exatamente o que o segundo
+  // caixa faz.
+  'pedidos:cancelar',
+  'pedidos:concluir',
+  'pedidos:criar',
+  'pedidos:detalhe',
+  'pedidos:listar',
+  'pedidos:totalSeparados',
   'auth:alterarPinVendedor',
   'auth:cadastrarPinPrimeiroUso',
   'auth:elevar',
@@ -118,6 +164,11 @@ export const CANAIS_REDE = [
   'clientes:listar',
   'clientes:listarInadimplentes',
   'clientes:listarVencendoHoje',
+  'comprovantes:anexar',
+  'comprovantes:obter',
+  'comprovantes:quaisTem',
+  'comprovantes:remover',
+  'comprovantes:resumo',
   'config:obter',
   'config:salvar',
   'contasPagar:atualizar',
@@ -287,6 +338,7 @@ export const CANAIS_REDE = [
  * Há teste estrutural recusando nesta lista qualquer nome com verbo de escrita.
  */
 export const CANAIS_REPETIVEIS = [
+  'caixa:exigencia',
   'auth:listarVendedoresParaLogin',
   'auth:lerTetoDesconto',
   'auth:obterStatus',
@@ -295,6 +347,9 @@ export const CANAIS_REPETIVEIS = [
   'clientes:listar',
   'clientes:listarInadimplentes',
   'clientes:listarVencendoHoje',
+  'comprovantes:obter',
+  'comprovantes:quaisTem',
+  'comprovantes:resumo',
   'config:obter',
   'contasPagar:listar',
   'contasPagar:resumo',

@@ -35,6 +35,15 @@ import { aplicar033VendaFormaPagamento } from './033_venda_forma_pagamento'
 import { aplicar034ClienteFiscal } from './034_cliente_fiscal'
 import { aplicar035NotaModelo } from './035_nota_modelo'
 import { aplicar036PinTamanho } from './036_pin_tamanho'
+import { aplicar039ContasFinanceiras } from './039_contas_financeiras'
+import { aplicar040TurnosCaixa } from './040_turnos_caixa'
+import { aplicar041PedidosSeparados } from './041_pedidos_separados'
+import { aplicar042VendaObservacao } from './042_venda_observacao'
+import { aplicar043CustoCongelado } from './043_custo_congelado'
+import { aplicar045ComprovanteVenda } from './045_comprovante_venda'
+import { aplicar046DatasDasVendasEmHoraLocal } from './046_datas_das_vendas_em_hora_local'
+import { aplicar047VendaTurno } from './047_venda_turno'
+import { aplicar048ExigirCaixaAberto } from './048_exigir_caixa_aberto'
 import { aplicar027ProdutoTipo } from './os/027_produto_tipo'
 import { aplicar028OrdensServico } from './os/028_ordens_servico'
 import { aplicar029OsNatureza } from './os/029_os_natureza'
@@ -108,6 +117,19 @@ export const MIGRATIONS: Migration[] = [
   { nome: '034_cliente_fiscal', aplicar: aplicar034ClienteFiscal },
   { nome: '035_nota_modelo', aplicar: aplicar035NotaModelo },
   { nome: '036_pin_tamanho', aplicar: aplicar036PinTamanho },
+  // ⚠️ Os números 037 e 038 do varejo não aparecem aqui de propósito: a senha
+  // de restauração veio antes como `at_004` e as comissões de vendedor não
+  // existem na assistência. O buraco é histórico, e fechá-lo faria migration já
+  // carimbada em `_migrations` rodar de novo.
+  { nome: '039_contas_financeiras', aplicar: aplicar039ContasFinanceiras },
+  { nome: '040_turnos_caixa', aplicar: aplicar040TurnosCaixa },
+  { nome: '041_pedidos_separados', aplicar: aplicar041PedidosSeparados },
+  { nome: '042_venda_observacao', aplicar: aplicar042VendaObservacao },
+  { nome: '043_custo_congelado', aplicar: aplicar043CustoCongelado },
+  { nome: '045_comprovante_venda', aplicar: aplicar045ComprovanteVenda },
+  { nome: '046_datas_das_vendas_em_hora_local', aplicar: aplicar046DatasDasVendasEmHoraLocal },
+  { nome: '047_venda_turno', aplicar: aplicar047VendaTurno },
+  { nome: '048_exigir_caixa_aberto', aplicar: aplicar048ExigirCaixaAberto },
 
   // ── Migrations PRÓPRIAS da assistência (arquivos em ./os) ──
   { nome: '027_produto_tipo', aplicar: aplicar027ProdutoTipo },

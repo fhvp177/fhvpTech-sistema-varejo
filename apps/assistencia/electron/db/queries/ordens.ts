@@ -438,6 +438,17 @@ export type DadosFechamentoOS = {
   // COMO o cliente pagou, quando entrega à vista. A prazo o criarVenda deriva
   // 'crediario' sozinho, e OS sem itens não gera venda nenhuma.
   forma_pagamento?: string | null
+  /*
+   * ⚠️ Em qual caixa o dinheiro da entrega entrou.
+   *
+   * O conserto é a maior parte do que uma oficina recebe. Se a entrega de OS
+   * não passasse pelo caixa, a conferência do fim do dia contaria só a venda de
+   * balcão — e fecharia faltando justamente o dinheiro principal.
+   *
+   * Vem da tela, que sabe em qual aparelho está. Numa oficina que não exige
+   * caixa vem nulo, e aí a venda nasce sem turno, como antes.
+   */
+  caixa_id?: number | null
 }
 
 // Entrega e recebe: o momento em que a OS encontra a máquina de vendas. Os
@@ -496,6 +507,8 @@ export function fecharOS(id: number, dados: DadosFechamentoOS, vendedorId: numbe
       const venda = criarVenda({
         cliente_id: os.cliente_id,
         vendedor_id: vendedorId,
+        // O caixa da entrega — ver o comentário em DadosFechamentoOS.
+        caixa_id: dados.caixa_id ?? null,
         status_pagamento: forma,
         data_vencimento: vencimento,
         num_parcelas: numParcelas,

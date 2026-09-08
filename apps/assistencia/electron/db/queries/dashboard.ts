@@ -409,13 +409,26 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     )
     .all() as ProdutoEstoqueBaixo[]
 
-  // ── Custo das vendas (base do lucro/margem). Usa o custo ATUAL do produto como
-  // estimativa — itens_venda não guarda o custo do momento da venda. Produtos sem
-  // custo cadastrado entram como 0 (a UI avisa quando o custo total é 0).
+  /*
+   * ── Custo das vendas, base do lucro e da margem ────────────────────────
+   *
+   * ⚠️ `COALESCE(iv.custo_unitario, p.custo)`, nessa ordem, e a ordem é o ponto.
+   *
+   * O custo CONGELADO no item é o que a peça custou no dia em que foi vendida —
+   * é o número certo. O custo atual do produto é só o plano B, para as vendas
+   * anteriores à migration 043, que não têm como saber.
+   *
+   * Ler o custo de hoje para uma venda de meses atrás fazia o lucro do passado
+   * encolher inteiro assim que alguém atualizasse um preço de compra, sem que
+   * nenhuma venda tivesse mudado. Agora isso só acontece com a parte antiga do
+   * histórico, e ela encolhe sozinha a cada venda nova.
+   *
+   * Produto sem custo cadastrado entra como 0, e a UI avisa quando o total é 0.
+   */
   const custoVendas = (ini: string, fim: string): number => {
     const r = db
       .prepare(
-        `SELECT COALESCE(SUM(iv.quantidade * p.custo), 0) AS custo
+        `SELECT COALESCE(SUM(iv.quantidade * COALESCE(iv.custo_unitario, p.custo)), 0) AS custo
          FROM itens_venda iv
          JOIN vendas v ON v.id = iv.venda_id
          JOIN produtos p ON p.id = iv.produto_id

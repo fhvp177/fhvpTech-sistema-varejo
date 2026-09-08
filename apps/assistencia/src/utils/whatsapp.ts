@@ -35,6 +35,30 @@ export function linkWhatsApp(telefone: string | null | undefined, mensagem: stri
   return `https://wa.me/${completo}?text=${encodeURIComponent(mensagem)}`
 }
 
+export type DadosMensagemPedido = {
+  cliente: string | null
+  loja: string
+  total: string
+  paraEntrega: boolean
+}
+
+/**
+ * A mensagem padrão de uma peça separada / pedido pronto.
+ *
+ * Escrita para ser enviada como está, mas quem atende sempre pode editar antes
+ * de mandar — o WhatsApp abre com o texto no campo, não enviado. É a mesma
+ * decisão do resto deste arquivo: `wa.me` abre o aplicativo que a pessoa já
+ * usa, e mensagem que sai sozinha, sem ninguém ler, é como se perde cliente.
+ */
+export function mensagemPedidoSeparado(d: DadosMensagemPedido): string {
+  const nome = primeiroNome(d.cliente ?? undefined)
+  const saudacao = nome ? `Olá, ${nome}!` : 'Olá!'
+  const fecho = d.paraEntrega
+    ? 'Podemos combinar a entrega?'
+    : 'Já está separado e pode ser retirado quando você puder vir.'
+  return `${saudacao} Aqui é da ${d.loja}. Seu pedido está pronto, no valor de ${d.total}. ${fecho}`
+}
+
 export function mensagemWhatsAppOS(os: OSParaMensagem): string {
   const num = String(os.id).padStart(3, '0')
   const nome = primeiroNome(os.cliente_nome)
