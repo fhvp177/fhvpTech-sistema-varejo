@@ -45,6 +45,9 @@ export const CANAIS_LOCAIS = [
   'backup:fazerManual',
   'backup:gravarConfig',
   'backup:listarBackups',
+  // Backup em nuvem é do dono do banco, como o resto da família `backup:`.
+  'backup:listarNuvem',
+  'backup:baixarDaNuvem',
   'backup:obterStatus',
   'backup:restaurar',
   'backup:selecionarPasta',

@@ -51,6 +51,18 @@ export type Cliente = {
   // renegociação, porque o preço é negociado caso a caso) — não cancela. Ligar
   // isto é decisão deliberada para um caso específico, nunca a política geral.
   bloquearAcimaDoTeto?: boolean
+  /*
+   * Esta loja tem backup em nuvem no plano dela?
+   *
+   * ⚠️ AUSENTE É NÃO, e aqui o padrão é o contrário da cota de notas e do
+   * limite de máquinas, onde ausência significa "sem restrição". A razão é que
+   * este campo CONCEDE em vez de restringir: ler ausência como "pode" faria
+   * toda loja instalada começar a subir a base de clientes finais dela para a
+   * nossa infraestrutura sem ninguém ter combinado isso.
+   *
+   * Quem liga é o dono da FHVP, loja a loja, pelo painel. Ver backupNuvem.ts.
+   */
+  backupNuvem?: boolean
 }
 
 export type StatusCobranca = 'pendente' | 'paga' | 'expirada'

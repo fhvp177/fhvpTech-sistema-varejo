@@ -1018,6 +1018,11 @@
         { texto: 'Mensalidade', icone: 'banknote', aoClicar: () => modalPreco(cl) },
         { texto: 'Cota de notas', icone: 'file-text', aoClicar: () => modalCota(cl) },
         { texto: 'Máquinas', icone: 'monitor', aoClicar: () => modalDispositivos(cl) },
+        {
+          texto: cl.backupNuvem ? 'Backup em nuvem: ligado' : 'Backup em nuvem: desligado',
+          icone: 'cloud',
+          aoClicar: () => modalBackupNuvem(cl)
+        },
         '-',
         {
           texto: cl.bloqueadoPor ? 'Desbloquear loja' : 'Bloquear loja',
@@ -1313,6 +1318,50 @@
         corpo.bloquear = sim
         const resp = await api('/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/cota',
           { metodo: 'POST', corpo })
+        return resp.ok ? null : { mensagem: resp.erro }
+      }
+    })
+    if (r) await carregarClientes(cl.clienteId)
+  }
+
+  /**
+   * Backup em nuvem desta loja: liga e desliga.
+   *
+   * ⚠️ NÃO está dentro da chave de licença. A licença é offline e vale até a
+   * data; um recurso que nós hospedamos e pagamos precisa poder ser ligado e
+   * desligado hoje, sem reemitir chave nem esperar release.
+   *
+   * Desligar não apaga o que já está guardado — quem parou de pagar hoje pode
+   * precisar do backup de ontem amanhã. Só para de receber envio novo.
+   */
+  async function modalBackupNuvem(cl) {
+    const ligado = cl.backupNuvem === true
+    const r = await abrirModal({
+      titulo: 'Backup em nuvem',
+      subtitulo: (cl.nome || cl.clienteId) + ' — hoje ' + (ligado ? 'LIGADO' : 'desligado'),
+      aviso:
+        'Ligado, o sistema instalado manda uma cópia do banco para a nuvem depois de cada backup local. ' +
+        'Desligar não apaga o que já está guardado: a loja só para de enviar e de ver a lista.',
+      campos: [
+        {
+          id: 'ligado',
+          rotulo: 'Backup em nuvem',
+          valor: ligado ? 'sim' : 'nao',
+          opcoes: [
+            { valor: 'nao', rotulo: 'Desligado' },
+            { valor: 'sim', rotulo: 'Ligado (a loja envia para a nuvem)' }
+          ],
+          ajuda:
+            'O envio acontece FORA do caminho da venda: se a internet cair, a loja continua ' +
+            'trabalhando e o envio tenta de novo depois.'
+        }
+      ],
+      rotuloConfirmar: 'Salvar',
+      aoConfirmar: async (v) => {
+        const resp = await api(
+          '/admin/cliente/' + encodeURIComponent(cl.clienteId) + '/backup-nuvem',
+          { metodo: 'POST', corpo: { ligado: v.ligado === 'sim' } }
+        )
         return resp.ok ? null : { mensagem: resp.erro }
       }
     })

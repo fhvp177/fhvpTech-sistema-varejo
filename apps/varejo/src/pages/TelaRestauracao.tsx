@@ -58,7 +58,40 @@ const TelaRestauracao: FC = () => {
         setSenhaConfigurada(s.senhaConfigurada)
       }
     })
+    // A lista da nuvem é buscada junto. Volta vazia (e a seção some) na loja
+    // sem o recurso ou com a internet fora — sem erro na tela, porque aqui
+    // é onde alguém chega no pior dia.
+    void carregarNuvem()
   }, [])
+
+  /*
+   * ── Backups guardados na nuvem ──
+   *
+   * Só aparece na loja que tem o recurso: sem ele o servidor recusa e a lista
+   * volta vazia, e a seção inteira não é desenhada. Nada muda para quem não
+   * contratou — nem um convite, nem uma seção vazia dizendo que existe algo
+   * que ela não pode usar.
+   *
+   * ⚠️ Baixar NÃO restaura. O arquivo desce para a pasta `da-nuvem`, que esta
+   * mesma tela lista primeiro — restaurar continua sendo a segunda decisão,
+   * com a senha que ela já pede.
+   */
+  const [naNuvem, setNaNuvem] = useState<
+    Array<{ chave: string; nome: string; tamanhoBytes: number; quando: string }>
+  >([])
+  const [baixando, setBaixando] = useState('')
+
+  const carregarNuvem = async (): Promise<void> => {
+    const r = await window.api.backup.listarNuvem()
+    if (r.success) setNaNuvem(r.data)
+  }
+
+  const baixar = async (chave: string): Promise<void> => {
+    setBaixando(chave)
+    const r = await window.api.backup.baixarDaNuvem(chave)
+    setBaixando('')
+    if (r.success) await carregarBackups()
+  }
 
   const carregarBackups = async () => {
     const resp = await window.api.backup.listarBackups()
@@ -166,7 +199,14 @@ const TelaRestauracao: FC = () => {
             Selecione um backup para restaurar. Um backup de segurança será criado automaticamente antes.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={carregarBackups}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void carregarBackups()
+            void carregarNuvem()
+          }}
+        >
           Atualizar lista
         </Button>
       </div>
@@ -179,6 +219,44 @@ const TelaRestauracao: FC = () => {
           Esta operação não pode ser desfeita (exceto usando outro backup).
         </p>
       </div>
+
+      {naNuvem.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+            Na nuvem
+          </h3>
+          <p className="text-xs text-muted-foreground mb-2">
+            Cópias guardadas fora deste computador. Baixe uma para ela aparecer na lista
+            abaixo, em “da nuvem”, e só então escolha restaurar.
+          </p>
+          <div className="border rounded-lg overflow-hidden">
+            {naNuvem.map((b, i) => (
+              <div
+                key={b.chave}
+                className={`flex items-center justify-between px-4 py-3 text-sm ${
+                  i > 0 ? 'border-t' : ''
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{b.nome}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(b.quando).toLocaleString('pt-BR')} ·{' '}
+                    {(b.tamanhoBytes / 1024).toFixed(0)} KB
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={baixando !== ''}
+                  onClick={() => void baixar(b.chave)}
+                >
+                  {baixando === b.chave ? 'Baixando…' : 'Baixar'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {backups.length === 0 ? (
         <div className="border rounded-lg py-16 text-center text-muted-foreground text-sm">

@@ -5,6 +5,9 @@ import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBa
 import { obterBackupAutomatico } from '@fhvptech/core/electron/backup/BackupAutomatico'
 import { verificarSenha, temSenhaConfigurada } from '@fhvptech/core/electron/backup/SenhaRestauracao'
 import { listarBackupsDisponiveis, restaurarBackup } from '@fhvptech/core/electron/backup/Restaurador'
+import { baixarDaNuvem, listarNaNuvem } from '@fhvptech/core/electron/backup/EnvioNuvem'
+import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
+import { urlBackend } from '../backendUrl'
 
 export function registrarHandlersBackup(): void {
   registrarCanal('backup:fazerManual', async () => {
@@ -81,6 +84,35 @@ export function registrarHandlersBackup(): void {
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
+  })
+
+
+  /*
+   * ── Backup em nuvem ──
+   *
+   * Só o caminho de VOLTA passa por aqui. O envio não tem canal de propósito:
+   * ele roda sozinho, no fundo, e nada na tela espera por ele — um botão
+   * "enviar agora" convidaria alguém a ficar olhando a barra de progresso de
+   * uma coisa que existe justamente para não precisar de atenção.
+   *
+   * ⚠️ Os dois devolvem vazio/erro em vez de lançar: a tela de restauração é
+   * onde alguém chega no pior dia, e ela não pode quebrar porque a internet
+   * caiu.
+   */
+  registrarCanal('backup:listarNuvem', async () => {
+    const itens = await listarNaNuvem({
+      pastaBackups: obterBackupManager().pastaPadrao,
+      urlBackend: urlBackend()
+    })
+    return { success: true, data: itens }
+  })
+
+  registrarCanal('backup:baixarDaNuvem', async (chaveObjeto: string) => {
+    const r = await baixarDaNuvem(
+      { pastaBackups: obterBackupManager().pastaPadrao, urlBackend: urlBackend() },
+      String(chaveObjeto)
+    )
+    return r.ok ? { success: true, data: r.caminho } : { success: false, error: r.erro }
   })
 
   registrarCanal('backup:selecionarPasta', async () => {

@@ -65,6 +65,15 @@ import {
   type OrigemDispositivo
 } from './dispositivos.ts'
 import {
+  avaliarEnvio,
+  lerListagem,
+  lojaTemBackupNuvem,
+  MINUTOS_DE_VALIDADE,
+  objetoPertenceALoja,
+  prefixoDaLoja
+} from './backupNuvem.ts'
+import { credenciaisR2DoAmbiente, urlAssinada } from './presignR2.ts'
+import {
   clienteBloqueado,
   limitarAoTeto,
   montarClienteId,
@@ -372,6 +381,148 @@ app.post('/licenca/dispositivo', async (c) => {
   })
 })
 
+
+/*
+ * ── Backup em nuvem das lojas instaladas ────────────────────────────────────
+ *
+ * Três rotas, e a mesma regra nas três: quem diz de qual loja se trata é a
+ * CHAVE DE LICENÇA, nunca um campo do corpo. O `clienteId` sai da conferência
+ * do HMAC e é ele que monta o prefixo — sem isso, trocar uma letra no pedido
+ * daria a uma loja o backup da outra, e dentro dele está o cadastro de
+ * clientes finais com dívida e telefone.
+ *
+ * ⚠️ A credencial do R2 vive só aqui. O que vai para a máquina do lojista é um
+ * endereço assinado, para UM objeto, por 15 minutos. Mandar a chave do bucket
+ * junto do aplicativo entregaria o backup de todas as lojas a quem abrisse o
+ * binário num editor de texto.
+ *
+ * As regras puras (quem pode, nome válido, teto) estão em `backupNuvem.ts`,
+ * com testes; aqui fica só o HTTP.
+ */
+
+/** Onde a nuvem ainda não está configurada, as rotas dizem isso e não quebram. */
+function credOuErro(): ReturnType<typeof credenciaisR2DoAmbiente> {
+  return credenciaisR2DoAmbiente()
+}
+
+app.post('/backup/enviar-url', async (c) => {
+  const body = await c.req
+    .json<{ chave?: string; nomeArquivo?: string; tamanhoBytes?: number }>()
+    .catch(() => null)
+  if (!body) return c.json({ erro: 'corpo inválido' }, 400)
+
+  const conferida = await conferirChaveDeLicenca(config.CHAVE_HMAC, body.chave)
+  if (!conferida.ok) return c.json({ erro: conferida.erro }, 400)
+
+  const cliente = obterCliente(conferida.clienteId)
+  const veredito = avaliarEnvio(cliente, {
+    nomeArquivo: body.nomeArquivo,
+    tamanhoBytes: body.tamanhoBytes
+  })
+  if (!veredito.ok) return c.json({ erro: veredito.erro }, veredito.status)
+
+  const cred = credOuErro()
+  if (!cred) return c.json({ erro: 'backup em nuvem indisponível no servidor' }, 503)
+
+  return c.json({
+    url: urlAssinada({
+      metodo: 'PUT',
+      cred,
+      chaveObjeto: veredito.chaveObjeto,
+      expiraEmSegundos: MINUTOS_DE_VALIDADE * 60,
+      agora: new Date()
+    }),
+    chaveObjeto: veredito.chaveObjeto,
+    expiraEm: new Date(Date.now() + MINUTOS_DE_VALIDADE * 60_000).toISOString()
+  })
+})
+
+app.post('/backup/listar', async (c) => {
+  const body = await c.req.json<{ chave?: string }>().catch(() => null)
+  if (!body) return c.json({ erro: 'corpo inválido' }, 400)
+
+  const conferida = await conferirChaveDeLicenca(config.CHAVE_HMAC, body.chave)
+  if (!conferida.ok) return c.json({ erro: conferida.erro }, 400)
+
+  const cliente = obterCliente(conferida.clienteId)
+  if (!lojaTemBackupNuvem(cliente)) {
+    return c.json({ erro: 'esta loja não tem backup em nuvem no plano dela' }, 403)
+  }
+
+  const cred = credOuErro()
+  if (!cred) return c.json({ erro: 'backup em nuvem indisponível no servidor' }, 503)
+
+  /*
+   * ⚠️ A LISTAGEM é feita pelo servidor, e não pelo app.
+   *
+   * Listar exige assinar o bucket inteiro com um prefixo; se esse endereço
+   * fosse para a máquina do lojista, bastaria trocar o `prefix=` nele para ver
+   * o nome dos backups de todas as lojas. Aqui o prefixo nunca sai daqui.
+   */
+  const prefixo = prefixoDaLoja(conferida.clienteId)
+  const url = urlAssinada({
+    metodo: 'GET',
+    cred,
+    chaveObjeto: '',
+    extras: [
+      ['list-type', '2'],
+      ['prefix', prefixo]
+    ],
+    expiraEmSegundos: 60,
+    agora: new Date()
+  })
+  const r = await fetch(url)
+  if (!r.ok) {
+    return c.json({ erro: `armazenamento respondeu ${r.status}` }, 502)
+  }
+  const itens = lerListagem(await r.text())
+    // Do mais recente para o mais antigo: quem vai restaurar procura o último.
+    .sort((a, b) => (a.quando < b.quando ? 1 : -1))
+    .map((o) => ({
+      chave: o.chave,
+      nome: o.chave.slice(prefixo.length),
+      tamanhoBytes: o.tamanhoBytes,
+      quando: o.quando
+    }))
+  return c.json({ total: itens.length, itens })
+})
+
+app.post('/backup/baixar-url', async (c) => {
+  const body = await c.req.json<{ chave?: string; chaveObjeto?: string }>().catch(() => null)
+  if (!body) return c.json({ erro: 'corpo inválido' }, 400)
+
+  const conferida = await conferirChaveDeLicenca(config.CHAVE_HMAC, body.chave)
+  if (!conferida.ok) return c.json({ erro: conferida.erro }, 400)
+
+  const cliente = obterCliente(conferida.clienteId)
+  if (!lojaTemBackupNuvem(cliente)) {
+    return c.json({ erro: 'esta loja não tem backup em nuvem no plano dela' }, 403)
+  }
+
+  /*
+   * ⚠️ A conferência de dono acontece SEMPRE, mesmo que a chave tenha vindo da
+   * nossa própria listagem. É a linha que impede uma loja de baixar o backup da
+   * outra trocando um pedaço do caminho na mão.
+   */
+  if (!objetoPertenceALoja(body.chaveObjeto, conferida.clienteId)) {
+    return c.json({ erro: 'este arquivo não é desta loja' }, 403)
+  }
+
+  const cred = credOuErro()
+  if (!cred) return c.json({ erro: 'backup em nuvem indisponível no servidor' }, 503)
+
+  return c.json({
+    url: urlAssinada({
+      metodo: 'GET',
+      cred,
+      chaveObjeto: body.chaveObjeto,
+      expiraEmSegundos: MINUTOS_DE_VALIDADE * 60,
+      agora: new Date()
+    }),
+    expiraEm: new Date(Date.now() + MINUTOS_DE_VALIDADE * 60_000).toISOString()
+  })
+})
+
 // Painel do revendedor: página única, servida pelo próprio backend.
 //
 // Mesma origem da API de propósito — sem CORS, sem token viajando entre
@@ -561,7 +712,10 @@ app.get('/admin/clientes', (c) => {
         cl.limiteDispositivos,
         agoraMs
       ),
-      permitirAcimaDoLimite: cl.permitirAcimaDoLimite === true
+      permitirAcimaDoLimite: cl.permitirAcimaDoLimite === true,
+      // Ausente = não contratado. Vem explicitado como booleano para a tela
+      // não ter que distinguir "campo não veio" de "está desligado".
+      backupNuvem: cl.backupNuvem === true
     }
   })
 
@@ -646,6 +800,36 @@ app.get('/admin/cliente/:clienteId/dispositivos', (c) => {
  * instalacao, longe de quem digitou. Para desligar uma loja existem o bloqueio
  * e a validade, que dizem o que sao.
  */
+/**
+ * Liga ou desliga o backup em nuvem de uma loja.
+ *
+ * ⚠️ É aqui, e não dentro da chave de licença assinada. A licença é offline e
+ * vale até a data; um recurso que a FHVP hospeda e paga precisa poder ser
+ * ligado e desligado no mesmo dia, sem reemitir chave nem esperar release.
+ *
+ * Desligar NÃO apaga o que já está guardado: o cliente pode ter parado de
+ * pagar hoje e precisar do backup de ontem amanhã. Some da lista dele e para
+ * de receber envio novo.
+ */
+app.post('/admin/cliente/:clienteId/backup-nuvem', async (c) => {
+  const clienteId = c.req.param('clienteId')
+  const cliente = obterCliente(clienteId)
+  if (!cliente) return c.json({ erro: 'cliente não encontrado' }, 404)
+
+  const body = await c.req.json<{ ligado?: boolean }>().catch(() => null)
+  if (!body || typeof body.ligado !== 'boolean') {
+    return c.json({ erro: 'informe ligado: true ou false' }, 400)
+  }
+
+  if (body.ligado) cliente.backupNuvem = true
+  // Apaga o campo em vez de gravar `false`: "nunca teve" e "foi desligado"
+  // levam ao mesmo lugar, e um campo a menos é um estado a menos para explicar.
+  else delete cliente.backupNuvem
+  gravarCliente(cliente)
+
+  return c.json({ ok: true, clienteId, backupNuvem: cliente.backupNuvem === true })
+})
+
 app.post('/admin/cliente/:clienteId/dispositivos', async (c) => {
   const clienteId = c.req.param('clienteId')
   const cliente = obterCliente(clienteId)

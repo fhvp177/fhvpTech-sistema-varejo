@@ -14,6 +14,9 @@ import {
   inicializarBackupAutomatico,
   obterBackupAutomatico
 } from '@fhvptech/core/electron/backup/BackupAutomatico'
+import { agendarEnvioNuvem } from '@fhvptech/core/electron/backup/EnvioNuvem'
+import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
+import { urlBackend } from './backendUrl'
 import { registrarBackupAoFechar } from '@fhvptech/core/electron/backup/BackupAoFechar'
 import { registrarHandlersLicenca } from '@fhvptech/core/electron/ipc/licenca'
 import { registrarHandlersLicencaPagamento } from '@fhvptech/core/electron/ipc/licenca-pagamento'
@@ -210,6 +213,22 @@ app.whenReady().then(() => {
     corrigirCaminhosBackupLegados()
     inicializarBackupManager()
     inicializarBackupAutomatico()
+    /*
+     * ── Backup em nuvem ──
+     *
+     * ⚠️ Aqui, na abertura, e em nenhum outro lugar. Nada na venda, no
+     * fechamento do app ou na atualização espera por isto — é a regra que
+     * este recurso inteiro segue, e ela vem da v1.36, quando uma chamada
+     * nova dentro do instalador de atualização travou o sistema.
+     *
+     * Quem NÃO tem o recurso (que hoje são todas as lojas) gasta uma ida de
+     * rede a cada meia hora e para no primeiro não do servidor. Nada mais
+     * muda para ela.
+     */
+    agendarEnvioNuvem({
+      pastaBackups: obterBackupManager().pastaPadrao,
+      urlBackend: urlBackend()
+    })
   }
 
   // Registra todos os handlers IPC antes de criar a janela
