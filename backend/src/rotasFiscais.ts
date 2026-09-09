@@ -46,6 +46,7 @@ import {
   type ConfigNfse
 } from './fiscal.ts'
 import { consultarCreditos, chamarAcbr, ErroAcbr, type CodigoErroAcbr } from './acbr.ts'
+import { larguraDoDanfe } from './danfe.ts'
 
 // O que a ACBr devolve numa emissão/consulta de DF-e (subconjunto que usamos).
 type RespostaDfe = {
@@ -466,9 +467,13 @@ export function registrarRotasFiscais(app: Hono): void {
       return c.json({ erro: 'A nota ainda não foi autorizada.' }, 409)
     }
 
-    // A NFC-e sai em bobina (80mm padrão, 58mm estreita); a NF-e é A4 e não
-    // aceita largura — mandar o parâmetro ali seria pedir um papel que não existe.
-    const largura = Number(c.req.query('largura')) === 58 ? 58 : 80
+    // A NFC-e sai em bobina; a NF-e é A4 e não aceita largura — mandar o
+    // parâmetro ali seria pedir um papel que não existe.
+    //
+    // ⚠️ A largura vem do app em MILÍMETROS IMPRESSOS e passa inteira (ver
+    // danfe.ts). Reduzi-la aqui a 58 ou 80, como antes, devolvia uma nota mais
+    // larga que a cabeça térmica e cortava a coluna da direita.
+    const largura = larguraDoDanfe(c.req.query('largura'))
     const rota = rotaDoModelo(emissao.modelo)
     const query = emissao.modelo === 55 ? '' : `?largura=${largura}`
     try {

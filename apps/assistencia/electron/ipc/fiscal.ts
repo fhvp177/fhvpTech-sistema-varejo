@@ -4,6 +4,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { extrairClienteIdLocal } from '@fhvptech/core/electron/licenca'
+import { larguraDoDanfeMm } from '@fhvptech/core/electron/impressao/larguraImpressa'
 import {
   diagnosticoFiscal,
   vendaParaNota,
@@ -963,7 +964,13 @@ function registrarHandlersFiscalRemoto(): void {
         throw new Error('A nota ainda não foi autorizada pela SEFAZ.')
       }
       // Largura vale só pra NFC-e (bobina). A NF-e é A4 e o backend ignora.
-      const largura = lerConfig('fiscal_largura_bobina') === '58' ? 58 : 80
+      //
+      // ⚠️ Vai a largura IMPRESSA (72mm numa bobina de 80), não a da bobina.
+      // Pedindo 80 o provedor monta 76mm de conteúdo, e os 4mm do fim caem
+      // fora do alcance da cabeça térmica: some a coluna da direita inteira.
+      // A mesma função dá o tamanho da página em `ipc/impressao.ts` — as duas
+      // medidas TÊM que ser iguais.
+      const largura = larguraDoDanfeMm()
       const r = await chamarBackendFiscal(
         `/fiscal/nfce/${nota.referencia}/danfe?largura=${largura}`
       )

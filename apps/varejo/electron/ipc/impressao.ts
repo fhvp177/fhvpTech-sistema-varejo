@@ -4,6 +4,7 @@ import { writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { lerConfig, gravarConfig } from '@fhvptech/core/electron/backup/configBackup'
+import { larguraDoDanfeMm } from '@fhvptech/core/electron/impressao/larguraImpressa'
 
 type RespostaIPC<T = unknown> = { success: true; data: T } | { success: false; error: string }
 
@@ -171,27 +172,36 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
    * comprovante de entrega, e por um motivo parecido, mas não igual.
    *
    * Lá a causa era CSS nosso (`margin: 0 auto` sem `@media print`). Aqui não
-   * há CSS nosso: o DANFE vem PRONTO do provedor fiscal, com 80mm de largura,
-   * e o layout dele é definido em lei. O que faltava era dizer ao Chromium em
-   * que papel imprimir: sem `pageSize`, ele monta a página no padrão dele
-   * (carta/A4) e encaixa os 80mm CENTRALIZADOS numa folha de 210mm. Começando
-   * aos 65mm da borda, e a bobina acabando aos 80, sobra exatamente aquela
-   * tira.
+   * há CSS nosso: o DANFE vem PRONTO do provedor fiscal, e o layout dele é
+   * definido em lei. O que faltava era dizer ao Chromium em que papel
+   * imprimir: sem `pageSize`, ele monta a página no padrão dele (carta/A4) e
+   * encaixa a nota CENTRALIZADA numa folha de 210mm. Começando aos 65mm da
+   * borda, e a bobina acabando aos 80, sobra exatamente aquela tira.
    *
-   * 80000 µm = 80mm, a largura da bobina. A altura de 297mm é folgada: nota
-   * mais longa que isso quebra em duas páginas, o que na bobina é só
-   * continuar imprimindo.
+   * ── ⚠️ E o pedaço que ainda faltava ────────────────────────────
+   * Com a página de 80mm a nota voltou pro lugar, mas continuou cortada na
+   * direita: sumiam a coluna de VL TOTAL, o valor a pagar, o troco e o último
+   * dígito da chave. É que 80mm é a largura da BOBINA, não a que a cabeça
+   * térmica escreve — ela alcança 72mm. A página tem que ser a largura
+   * impressa, e o PDF tem que vir do provedor nessa mesma medida: página
+   * maior que o PDF centraliza a nota e joga um pedaço pra fora de novo.
+   *
+   * Por isso a medida vem de `larguraDoDanfeMm()`, a mesma função que pede o
+   * PDF à ACBr em `ipc/fiscal.ts`. É calculada a cada impressão porque a
+   * bobina é configuração da loja e muda sem reiniciar o app.
+   *
+   * A altura de 297mm é folgada: nota mais longa que isso quebra em duas
+   * páginas, o que na bobina é só continuar imprimindo.
    *
    * ⚠️ `documento` fica SEM tamanho de propósito. A NF-e (modelo 55) é A4 e
    * vai para a impressora de documentos; forçar papel ali tiraria do driver
    * uma escolha que é dele.
    */
-  const PAPEL_DA_IMPRESSAO: Record<
-    CategoriaImpressao,
-    { width: number; height: number } | null
-  > = {
-    documento: null,
-    cupom: { width: 80_000, height: 297_000 }
+  function papelDaImpressao(
+    categoria: CategoriaImpressao
+  ): { width: number; height: number } | null {
+    if (categoria === 'documento') return null
+    return { width: larguraDoDanfeMm() * 1000, height: 297_000 }
   }
 
   // Imprime um PDF já pronto (DANFE da nota fiscal). Mesmo comportamento do
@@ -208,7 +218,7 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
         janela = await carregarPdfOculto(pdfBase64, nomeArquivo || 'documento')
         const alvo = janela
         await new Promise<void>((resolve, reject) => {
-          const papel = PAPEL_DA_IMPRESSAO[categoria]
+          const papel = papelDaImpressao(categoria)
           const opcoes = {
             ...(deviceName ? { silent: true, deviceName } : { silent: false }),
             printBackground: true,
