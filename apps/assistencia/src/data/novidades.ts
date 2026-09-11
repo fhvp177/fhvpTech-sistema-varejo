@@ -9,6 +9,15 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A primeira entrada é a da 1.0.0, a release que estreia o nicho.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.6.1',
+    itens: [
+      {
+        emoji: '✨',
+        titulo: 'Correção de bugs'
+      }
+    ]
+  },
+  {
     versao: '1.6.0',
     itens: [
       {
