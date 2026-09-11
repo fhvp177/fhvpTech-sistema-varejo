@@ -24,6 +24,7 @@ import {
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
 import { useSessao } from '@/App'
+import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 import { CLASSE_DINHEIRO, paraNumero } from '@/utils/mascaras'
 import DetalheTurno from '@/components/DetalheTurno'
@@ -73,6 +74,7 @@ type CaixaComTurno = { id: number; nome: string; turno: TurnoCaixa | null }
 
 const Caixa: FC = () => {
   const { ehDono } = useSessao()
+  const { ehCaixaAdicional } = useSituacaoMulticaixa()
   const { showToast } = useToast()
   const { caixaId, escolher } = useCaixaDoAparelho()
 
@@ -99,12 +101,14 @@ const Caixa: FC = () => {
   const carregar = useCallback(async () => {
     const [rCaixas, rHist] = await Promise.all([
       window.api.caixa.caixasComTurno(),
-      ehDono ? window.api.caixa.listarTurnos(20) : Promise.resolve({ success: true, data: [] })
+      ehDono && !ehCaixaAdicional
+        ? window.api.caixa.listarTurnos(20)
+        : Promise.resolve({ success: true, data: [] })
     ])
     if (rCaixas.success) setCaixas(rCaixas.data as CaixaComTurno[])
     if (rHist.success) setHistorico((rHist.data as TurnoCaixa[]) ?? [])
     setCarregando(false)
-  }, [ehDono])
+  }, [ehDono, ehCaixaAdicional])
 
   useEffect(() => {
     void carregar()
@@ -364,7 +368,24 @@ const Caixa: FC = () => {
             <History className="w-4 h-4 text-muted-foreground" />
             Fechamentos anteriores
           </h3>
-          {historico.filter((t) => t.fechado_em).length === 0 ? (
+          {/*
+            ⚠️ No caixa adicional o histórico NÃO aparece, e isso é escolha, não
+            falta: `caixa:listarTurnos` está em CANAIS_LOCAIS porque o notebook
+            pode estar fora da loja e histórico de fechamento é dado de
+            auditoria — a mesma razão que mantém comissão fora da rede.
+
+            Mas sumir sem explicação faz o operador procurar o que não existe, e
+            depois ligar perguntando. Então o lugar continua ali, dizendo onde
+            está o que ele veio buscar.
+          */}
+          {ehCaixaAdicional ? (
+            <div className="rounded-xl border bg-card">
+              <EstadoVazio icone={<History className="w-9 h-9" />}>
+                Os fechamentos anteriores ficam só no computador principal.
+                Consulte por lá.
+              </EstadoVazio>
+            </div>
+          ) : historico.filter((t) => t.fechado_em).length === 0 ? (
             <div className="rounded-xl border bg-card">
               <EstadoVazio icone={<History className="w-9 h-9" />}>
                 Nenhum turno fechado ainda.
