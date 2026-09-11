@@ -12,6 +12,8 @@ import {
 import { Button } from '@fhvptech/core/ui/button'
 import { Select } from '@fhvptech/core/ui/select'
 import { Input } from '@fhvptech/core/ui/input'
+import { IMaskInput } from 'react-imask'
+import { CLASSE_DINHEIRO, paraMascara } from '@/utils/mascaras'
 import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
@@ -112,10 +114,42 @@ type Props = {
 const dinheiro = (v: number): string =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+/**
+ * Lê preço e margem desta tela.
+ *
+ * ⚠️ Os pontos são separador de MILHAR, não decimal. Desde que os campos
+ * ganharam máscara, "1.234,56" chega aqui como texto e um `parseFloat` ingênuo
+ * leria 1,234 — mil vezes menos, com o número continuando a parecer válido.
+ *
+ * ⚠️ E a margem usa a MESMA leitura de propósito. Ela e o preço se calculam um
+ * do outro: com dois jeitos de ler na mesma tela, um deles vira 30 em 3.000 na
+ * primeira vez que alguém digitar um milhar. Ou os dois campos têm máscara, ou
+ * nenhum — meio caminho aqui é pior que o começo.
+ *
+ * Devolve NaN quando não há dígito nenhum: quem chama distingue "vazio" de
+ * "zero", e `paraNumero` sozinho devolveria 0 para os dois.
+ */
 const parseValor = (s: string): number => {
-  const n = parseFloat(s.replace(',', '.'))
+  const cru = String(s ?? '').trim()
+  if (!/\d/.test(cru)) return NaN
+  const n = parseFloat(cru.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''))
   return Number.isFinite(n) ? n : NaN
 }
+
+/**
+ * A máscara de dinheiro sem o tamanho dela.
+ *
+ * `CLASSE_DINHEIRO.className` traz `h-10 w-full`, e estes campos são pequenos e
+ * ficam em linha. Somar as duas classes NÃO resolve: `h-8` e `h-10` têm a mesma
+ * especificidade, então quem vence é a ordem no CSS gerado, não a ordem no
+ * atributo — e o resultado varia entre build de desenvolvimento e de produção.
+ */
+const { className: _classeDinheiro, ...MASCARA_VALOR } = CLASSE_DINHEIRO
+
+/** Base visual dos campos pequenos com máscara, sem altura nem largura. */
+const CAMPO_INLINE =
+  'num rounded-md border border-input bg-background px-2 text-sm ring-offset-background ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
 const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias, produtos }) => {
   const [etapa, setEtapa] = useState<'arquivo' | 'conferencia' | 'sucesso'>('arquivo')
@@ -196,7 +230,7 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
     const margem = a.margemPadrao
 
     const precoSugerido = (custo: number): string =>
-      margem ? String(calcularPrecoVenda(custo, margem.valor, margem.tipo)) : ''
+      margem ? paraMascara(calcularPrecoVenda(custo, margem.valor, margem.tipo)) : ''
 
     const resultado: LinhaConf[] = []
     const semMatch: ItemNota[] = []
@@ -308,7 +342,7 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
     setLinha(l.id, {
       margem: valor,
       margemTipo: t,
-      preco: Number.isFinite(n) ? String(calcularPrecoVenda(l.custo, n, t)) : l.preco
+      preco: Number.isFinite(n) ? paraMascara(calcularPrecoVenda(l.custo, n, t)) : l.preco
     })
   }
 
@@ -318,8 +352,8 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
     const margem =
       Number.isFinite(p) && l.custo > 0
         ? l.margemTipo === 'pct'
-          ? String(+(((p - l.custo) / l.custo) * 100).toFixed(1))
-          : String(+(p - l.custo).toFixed(2))
+          ? paraMascara(+(((p - l.custo) / l.custo) * 100).toFixed(1))
+          : paraMascara(+(p - l.custo).toFixed(2))
         : l.margem
     setLinha(l.id, { preco: valor, margem })
   }
@@ -332,7 +366,7 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
         ...l,
         margem: margemGeral,
         margemTipo: margemGeralTipo,
-        preco: String(calcularPrecoVenda(l.custo, n, margemGeralTipo))
+        preco: paraMascara(calcularPrecoVenda(l.custo, n, margemGeralTipo))
       }))
     )
   }
@@ -637,15 +671,13 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                   Lucro desejado (aplica em todos os itens)
                 </Label>
                 <div className="flex gap-2">
-                  <Input
+                  <IMaskInput
                     id="margem-geral"
-                    type="number"
-                    min="0"
-                    step="0.1"
+                    {...MASCARA_VALOR}
                     value={margemGeral}
-                    onChange={(e) => setMargemGeral(e.target.value)}
-                    className="w-28"
-                    placeholder="30"
+                    onAccept={(v: string) => setMargemGeral(v)}
+                    className={`${CAMPO_INLINE} h-10 w-28 py-2`}
+                    placeholder="30,00"
                   />
                   <Select
                     value={margemGeralTipo}
@@ -808,13 +840,11 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
 
                         <div className="flex items-center gap-1 ml-auto">
                           <span className="text-xs text-muted-foreground">lucro</span>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.1"
+                          <IMaskInput
+                            {...MASCARA_VALOR}
                             value={l.margem}
-                            onChange={(e) => setMargemLinha(l, e.target.value)}
-                            className="h-8 w-20 text-right"
+                            onAccept={(v: string) => setMargemLinha(l, v)}
+                            className={`${CAMPO_INLINE} h-8 w-20 text-right`}
                           />
                           <Select
                             value={l.margemTipo}
@@ -827,14 +857,11 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                             ]}
                           />
                           <span className="text-xs text-muted-foreground ml-2">vende a</span>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
+                          <IMaskInput
+                            {...MASCARA_VALOR}
                             value={l.preco}
-                            onChange={(e) => setPrecoLinha(l, e.target.value)}
-                            className="h-8 w-24 text-right font-medium"
-                            placeholder="0,00"
+                            onAccept={(v: string) => setPrecoLinha(l, v)}
+                            className={`${CAMPO_INLINE} h-8 w-24 text-right font-medium`}
                           />
                         </div>
                       </div>
@@ -940,13 +967,11 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                         </label>
                         {l.atualizarPreco && (
                           <span className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.1"
+                            <IMaskInput
+                              {...MASCARA_VALOR}
                               value={l.margem}
-                              onChange={(e) => setMargemLinha(l, e.target.value)}
-                              className="h-7 w-16 text-right"
+                              onAccept={(v: string) => setMargemLinha(l, v)}
+                              className={`${CAMPO_INLINE} h-7 w-16 text-right`}
                             />
                             <Select
                               value={l.margemTipo}
@@ -959,13 +984,11 @@ const ModalImportarXml: FC<Props> = ({ aberto, onFechar, onImportado, categorias
                               ]}
                             />
                             →
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
+                            <IMaskInput
+                              {...MASCARA_VALOR}
                               value={l.preco}
-                              onChange={(e) => setPrecoLinha(l, e.target.value)}
-                              className="h-7 w-20 text-right font-medium"
+                              onAccept={(v: string) => setPrecoLinha(l, v)}
+                              className={`${CAMPO_INLINE} h-7 w-20 text-right font-medium`}
                             />
                           </span>
                         )}

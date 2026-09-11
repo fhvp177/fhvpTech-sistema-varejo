@@ -137,12 +137,17 @@ describe('campo com formato tem máscara', () => {
      * `dinheiroComMascara.test.ts`, que reprova a leitura ingênua com o caso
      * real: "1.234,56" lido como 1,234.
      *
-     * ── O que sobrou, e por quê ────────────────────────────────────────────
-     * O preço da importação de XML. Ali a linha nasce do arquivo da nota, não
-     * do banco, e a tela mexe em várias linhas de uma vez: é um caminho de
-     * carga diferente, que merece a sua própria conferência.
+     * ── A importação de XML saiu daqui em 11/09, e a lista ficou VAZIA ────
+     * Era o último. Ali o preço e a MARGEM se calculam um do outro, então os
+     * cinco campos tiveram que virar máscara na mesma mexida: com metade
+     * mascarada, a leitura da margem transformaria 30 em 3.000 na primeira vez
+     * que alguém digitasse um milhar. A leitura ficou uma só, no `parseValor`
+     * daquele arquivo, com o porquê escrito em cima dela.
+     *
+     * A lista vazia é para continuar assim: campo de dinheiro novo em `<Input>`
+     * cru derruba o teste, e agora não há precedente para copiar.
      */
-    const PENDENTES = ['components\\ModalImportarXml.tsx → l.preco']
+    const PENDENTES: string[] = []
     const novos = culpados.filter((c) => !PENDENTES.includes(c))
 
     expect(
