@@ -1,6 +1,6 @@
 import { FC, useCallback, useEffect, useState } from 'react'
 import { Button } from '@fhvptech/core/ui/button'
-import { Loader2, MonitorSmartphone, ShieldAlert, Trash2, Wifi, WifiOff } from 'lucide-react'
+import { Copy, Loader2, MonitorSmartphone, ShieldAlert, Trash2, Wifi, WifiOff } from 'lucide-react'
 import type { EstadoMulticaixa } from '@/types/multicaixa'
 
 /**
@@ -160,6 +160,19 @@ const ConfigMulticaixa: FC = () => {
                 e o código abaixo.
               </p>
             </div>
+            {/*
+              ⚠️ O ícone aqui não é enfeite: "Gerar código de conexão" e "Gerar
+              código de cópia" são dois botões pequenos, parecidos, na mesma
+              tela, e fazem coisas MUITO diferentes — um liga um segundo caixa
+              ao vivo, o outro manda uma cópia dos dados embora. Lidos de
+              relance, os rótulos se confundem.
+
+              A escolha dos desenhos segue o que a tela já usa:
+                • dois aparelhos = um caixa adicional (é o mesmo ícone da lista
+                  de terminais pareados, lá embaixo, e o mesmo do "Conectar como
+                  caixa adicional" na tela de entrada);
+                • duas folhas = cópia, que é a palavra do próprio botão.
+            */}
             {!codigo && (
               <Button
                 size="sm"
@@ -168,6 +181,7 @@ const ConfigMulticaixa: FC = () => {
                 disabled={ocupado}
                 onClick={() => acao(window.api.multicaixa.abrirPareamento)}
               >
+                <MonitorSmartphone className="w-4 h-4 mr-1.5" />
                 Gerar código de conexão
               </Button>
             )}
@@ -224,6 +238,7 @@ const ConfigMulticaixa: FC = () => {
               disabled={ocupado}
               onClick={() => acao(window.api.multicaixa.abrirClonagem)}
             >
+              <Copy className="w-4 h-4 mr-1.5" />
               Gerar código de cópia
             </Button>
           )}
