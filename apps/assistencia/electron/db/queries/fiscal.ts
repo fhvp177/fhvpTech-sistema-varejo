@@ -303,7 +303,12 @@ export function registrarNotaServicoLocal(dados: {
        (venda_id, tentativa, referencia, acbr_id, ambiente, numero,
         codigo_verificacao, link_url, status, motivo)
      VALUES (@venda_id, @tentativa, @referencia, @acbr_id, @ambiente, @numero,
-             @codigo_verificacao, @link_url, @status, @motivo)`
+             @codigo_verificacao, @link_url, @status, @motivo)
+     ON CONFLICT(referencia) DO UPDATE SET
+       acbr_id = excluded.acbr_id, numero = excluded.numero,
+       codigo_verificacao = excluded.codigo_verificacao, link_url = excluded.link_url,
+       status = excluded.status, motivo = excluded.motivo,
+       atualizada_em = datetime('now','localtime')`
   ).run(dados)
 }
 
@@ -507,7 +512,8 @@ export function registrarNotaLocal(dados: {
      VALUES (@venda_id, @tentativa, @referencia, @acbr_id, @ambiente, @modelo, @serie, @numero, @chave, @status, @motivo, datetime('now'))
      ON CONFLICT(referencia) DO UPDATE SET
        status = excluded.status, chave = excluded.chave, motivo = excluded.motivo,
-       acbr_id = excluded.acbr_id, atualizada_em = datetime('now')`
+       acbr_id = excluded.acbr_id, numero = excluded.numero,
+       serie = excluded.serie, atualizada_em = datetime('now')`
   ).run(dados)
 }
 

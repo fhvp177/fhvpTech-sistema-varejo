@@ -8,9 +8,18 @@ import { lerConfig, gravarConfig } from './configBackup'
  * Não substitui o handler window-all-closed existente.
  */
 export function registrarBackupAoFechar(janela: BrowserWindow): void {
+  let fechando = false
   janela.on('close', async (event) => {
     event.preventDefault()
-    await processarFechamento(janela)
+    // Cliques repetidos no X não podem disparar dois backups nem duas caixas
+    // de confirmação. Cancelar libera o fechamento para uma próxima tentativa.
+    if (fechando) return
+    fechando = true
+    try {
+      await processarFechamento(janela)
+    } finally {
+      fechando = false
+    }
   })
 }
 

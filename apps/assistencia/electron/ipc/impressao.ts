@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog } from 'electron'
+import { carregarJanelaImpressao } from '@fhvptech/core/electron/impressao/janelaOculta'
 import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { writeFileSync } from 'fs'
 import { join } from 'path'
@@ -32,13 +33,9 @@ async function carregarHtmlOculto(html: string, nomeBase: string): Promise<Brows
   const tmpPath = join(tmpdir(), `${base}-${Date.now()}.html`)
   writeFileSync(tmpPath, html, 'utf-8')
 
-  const janela = new BrowserWindow({
-    show: false,
-    autoHideMenuBar: true,
-    webPreferences: { sandbox: false }
-  })
-  await janela.loadFile(tmpPath)
-  return janela
+  return carregarJanelaImpressao(() => new BrowserWindow({
+    show: false, autoHideMenuBar: true, webPreferences: { sandbox: false }
+  }), tmpPath)
 }
 
 // Mesma ideia, mas com um PDF pronto — o caso do DANFE da nota fiscal, que vem
@@ -50,16 +47,9 @@ async function carregarPdfOculto(base64: string, nomeBase: string): Promise<Brow
   const tmpPath = join(tmpdir(), `${base}-${Date.now()}.pdf`)
   writeFileSync(tmpPath, Buffer.from(base64, 'base64'))
 
-  const janela = new BrowserWindow({
-    show: false,
-    autoHideMenuBar: true,
-    webPreferences: { sandbox: false, plugins: true } // plugins: viewer de PDF
-  })
-  await janela.loadFile(tmpPath)
-  // O viewer precisa de um instante pra renderizar antes de imprimir; sem isso
-  // sai página em branco em máquina lenta.
-  await new Promise((r) => setTimeout(r, 400))
-  return janela
+  return carregarJanelaImpressao(() => new BrowserWindow({
+    show: false, autoHideMenuBar: true, webPreferences: { sandbox: false, plugins: true }
+  }), tmpPath, true)
 }
 
 /**
@@ -138,14 +128,16 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
       nomeArquivo?: string,
       deviceName?: string
     ): Promise<RespostaIPC> => {
+      let janela: BrowserWindow | null = null
       try {
-        const janela = await carregarHtmlOculto(html, nomeArquivo || 'documento')
+        janela = await carregarHtmlOculto(html, nomeArquivo || 'documento')
+        const alvo = janela
         await new Promise<void>((resolve, reject) => {
           const opcoes = deviceName
             ? { silent: true, deviceName, printBackground: false }
             : { silent: false, printBackground: false }
-          janela.webContents.print(opcoes, (sucesso, motivo) => {
-            janela.close()
+          alvo.webContents.print(opcoes, (sucesso, motivo) => {
+            if (!alvo.isDestroyed()) alvo.destroy()
             // No modo silencioso, sucesso=false é falha real (ex.: impressora
             // offline). No modo nativo, sucesso=false é só o usuário cancelando.
             if (deviceName && !sucesso) reject(new Error(motivo || 'Falha na impressão'))
@@ -155,6 +147,8 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
         return { success: true, data: null }
       } catch (e) {
         return { success: false, error: String(e) }
+      } finally {
+        if (janela && !janela.isDestroyed()) janela.destroy()
       }
     }
   )
@@ -229,15 +223,16 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
               : {})
           }
           alvo.webContents.print(opcoes, (sucesso, motivo) => {
-            alvo.close()
+            if (!alvo.isDestroyed()) alvo.destroy()
             if (deviceName && !sucesso) reject(new Error(motivo || 'Falha na impressão'))
             else resolve()
           })
         })
         return { success: true, data: null }
       } catch (e) {
-        if (janela && !janela.isDestroyed()) janela.close()
         return { success: false, error: String(e) }
+      } finally {
+        if (janela && !janela.isDestroyed()) janela.destroy()
       }
     }
   )
@@ -319,7 +314,7 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
         writeFileSync(filePath, pdf)
         return { success: true, data: { canceled: false, filePath } }
       } catch (e) {
-        if (janela) janela.close()
+        if (janela && !janela.isDestroyed()) janela.destroy()
         return { success: false, error: String(e) }
       }
     }

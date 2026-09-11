@@ -1,4 +1,5 @@
 import { dialog } from 'electron'
+import { pedirRespostaFiscal, exigirEmissaoFiscal, ErroRespostaFiscal, MOTIVO_SEM_REGISTRO, type RespostaBackendFiscal } from '@fhvptech/core/electron/fiscal/respostaFiscal'
 import { registrarCanal } from '@fhvptech/core/electron/roteador'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -367,7 +368,7 @@ export function registrarHandlersFiscal(): void {
 // CSC, flag "configurado") ficam no config local, pra alimentar a tela e o
 // aviso de vencimento sem precisar bater na API toda hora.
 
-type RespostaBackend = { ok?: boolean; erro?: string; [k: string]: unknown }
+type RespostaBackend = RespostaBackendFiscal
 
 // Chamada ao backend com o clienteId da licença. Traduz o corpo de erro do
 // backend na mensagem que a tela mostra (o backend já manda `erro` legível).
@@ -384,26 +385,11 @@ async function chamarBackendFiscal(
   const url = new URL(`${urlBackend()}${rota}`)
   if (!temCorpo) url.searchParams.set('clienteId', clienteId)
 
-  let r: Response
-  try {
-    r = await fetch(url, {
-      method: metodo,
-      headers: temCorpo ? { 'Content-Type': 'application/json' } : undefined,
-      body: temCorpo ? JSON.stringify({ clienteId, ...corpo }) : undefined
-    })
-  } catch (e) {
-    throw new Error(`Não foi possível falar com o servidor fiscal: ${(e as Error).message}`)
-  }
-
-  const texto = await r.text()
-  let dados: RespostaBackend = {}
-  try {
-    dados = texto ? (JSON.parse(texto) as RespostaBackend) : {}
-  } catch {
-    throw new Error(`Resposta inesperada do servidor fiscal (HTTP ${r.status}).`)
-  }
-  if (!r.ok) throw new Error(dados.erro || `Erro ${r.status} no servidor fiscal.`)
-  return dados
+  return pedirRespostaFiscal(url, {
+    method: metodo,
+    headers: temCorpo ? { 'Content-Type': 'application/json' } : undefined,
+    body: temCorpo ? JSON.stringify({ clienteId, ...corpo }) : undefined
+  })
 }
 
 // Monta os dados do emitente a partir do que já está no banco (identidade da
@@ -562,6 +548,7 @@ function registrarHandlersFiscalRemoto(): void {
   registrarCanal(
     'fiscal:emitirNfce',
     async (args: { vendaId: number; formaPagamento?: string; modelo?: 55 | 65 }) => {
+      let referenciaEmEnvio: string | null = null
       try {
         // Emitir é rotina de balcão: qualquer usuário logado pode. Só a
         // CONFIGURAÇÃO fiscal (certificado, CSC, regime) é do gerente.
@@ -675,18 +662,17 @@ function registrarHandlersFiscalRemoto(): void {
         // O ambiente (teste × produção) é do seletor da tela e SÓ é conhecido
         // aqui — o backend lê da query e, sem ela, assume homologação. Sem este
         // parâmetro, escolher "Produção" não tinha efeito: tudo saía como teste.
+        registrarNotaLocal({
+          venda_id: vendaId, tentativa, referencia, acbr_id: null,
+          ambiente: cfg.ambiente, modelo, serie: cfg.serie_nfce, numero: 0,
+          chave: null, status: 'pendente', motivo: null
+        })
+        referenciaEmEnvio = referencia
         const r = await chamarBackendFiscal(`/fiscal/nfce?ambiente=${cfg.ambiente}`, {
           metodo: 'POST',
           corpo
         })
-        const emissao = (r.emissao ?? {}) as {
-          serie?: number
-          numero?: number
-          acbr_id?: string | null
-          status?: string
-          chave?: string | null
-          motivo?: string | null
-        }
+        const emissao = exigirEmissaoFiscal(r)
 
         registrarNotaLocal({
           venda_id: vendaId,
@@ -704,6 +690,9 @@ function registrarHandlersFiscalRemoto(): void {
 
         return { success: true, data: { jaEmitida: Boolean(r.jaEmitida), nota: notaDaVenda(vendaId) } }
       } catch (error) {
+        if (referenciaEmEnvio && error instanceof ErroRespostaFiscal && error.recusada) {
+          atualizarStatusNotaLocal(referenciaEmEnvio, 'erro', null, error.message)
+        }
         return { success: false, error: (error as Error).message }
       }
     }
@@ -720,12 +709,39 @@ function registrarHandlersFiscalRemoto(): void {
       if (nota.status !== 'pendente') return { success: true, data: nota }
 
       const r = await chamarBackendFiscal(`/fiscal/nfce/${nota.referencia}`)
-      const e = (r.emissao ?? {}) as { status?: string; chave?: string | null; motivo?: string | null }
-      if (e.status && e.status !== nota.status) {
-        atualizarStatusNotaLocal(nota.referencia, e.status, e.chave ?? null, e.motivo ?? null)
-      }
+      const e = exigirEmissaoFiscal(r)
+      registrarNotaLocal({
+        venda_id: Number(args.vendaId), tentativa: nota.tentativa,
+        referencia: nota.referencia, ambiente: nota.ambiente, modelo: nota.modelo,
+        acbr_id: e.acbr_id ?? nota.acbr_id,
+        serie: e.serie ?? nota.serie, numero: e.numero ?? nota.numero,
+        status: e.status, chave: e.chave ?? nota.chave, motivo: e.motivo ?? null
+      })
       return { success: true, data: notaDaVenda(Number(args.vendaId)) }
     } catch (error) {
+      /*
+       * 404 é o backend dizendo que NUNCA viu esta referência. Como ele é o
+       * único caminho até a SEFAZ, nada foi emitido: a reserva local é
+       * liberada e o balconista consegue emitir de novo.
+       *
+       * Sem isto, uma queda de internet na hora de emitir condenava a venda a
+       * ficar sem nota para sempre, porque `fiscal:emitirNfce` recusa enquanto
+       * existir nota `pendente` — e a reserva passou a ser gravada ANTES da
+       * chamada de rede, justamente para não emitir duas vezes.
+       *
+       * ⚠️ Só o 404. Timeout e erro 5xx continuam segurando a reserva: ali o
+       * pedido pode ter chegado, e reemitir geraria nota em duplicidade.
+       */
+      const presa = notaDaVenda(Number(args?.vendaId))
+      if (
+        presa &&
+        presa.status === 'pendente' &&
+        error instanceof ErroRespostaFiscal &&
+        error.semRegistro
+      ) {
+        atualizarStatusNotaLocal(presa.referencia, 'erro', null, MOTIVO_SEM_REGISTRO)
+        return { success: true, data: notaDaVenda(Number(args?.vendaId)) }
+      }
       return { success: false, error: (error as Error).message }
     }
   })
@@ -1114,6 +1130,7 @@ function registrarHandlersFiscalRemoto(): void {
    * gravada: prefeitura fora do ar não trava o caixa, a nota fica pendente.
    */
   registrarCanal('fiscal:emitirNfse', async (args: { vendaId: number }) => {
+    let referenciaEmEnvio: string | null = null
     try {
       requerSessao()
       const vendaId = Number(args?.vendaId)
@@ -1154,6 +1171,12 @@ function registrarHandlersFiscalRemoto(): void {
       const tentativa = proximaTentativaServico(vendaId)
       const referencia = `s${vendaId}-t${tentativa}`
 
+      registrarNotaServicoLocal({
+        venda_id: vendaId, tentativa, referencia, acbr_id: null,
+        ambiente: cfg.ambiente, numero: 0, codigo_verificacao: null,
+        link_url: null, status: 'processando', motivo: null
+      })
+      referenciaEmEnvio = referencia
       const r = await chamarBackendFiscal(`/fiscal/nfse?ambiente=${cfg.ambiente}`, {
         metodo: 'POST',
         corpo: {
@@ -1197,14 +1220,7 @@ function registrarHandlersFiscalRemoto(): void {
         }
       })
 
-      const emissao = (r.emissao ?? {}) as {
-        numero?: number
-        acbr_id?: string | null
-        status?: string
-        codigo_verificacao?: string | null
-        link_url?: string | null
-        motivo?: string | null
-      }
+      const emissao = exigirEmissaoFiscal(r)
 
       registrarNotaServicoLocal({
         venda_id: vendaId,
@@ -1224,6 +1240,9 @@ function registrarHandlersFiscalRemoto(): void {
         data: { jaEmitida: Boolean(r.jaEmitida), nota: notaServicoDaVenda(vendaId) }
       }
     } catch (error) {
+      if (referenciaEmEnvio && error instanceof ErroRespostaFiscal && error.recusada) {
+        atualizarStatusNotaServicoLocal(referenciaEmEnvio, 'erro', null, error.message)
+      }
       return { success: false, error: (error as Error).message }
     }
   })
@@ -1238,22 +1257,31 @@ function registrarHandlersFiscalRemoto(): void {
       if (nota.status !== 'processando') return { success: true, data: nota }
 
       const r = await chamarBackendFiscal(`/fiscal/nfse/${nota.referencia}`)
-      const e = (r.emissao ?? {}) as {
-        status?: string
-        chave?: string | null
-        numero?: number
-      }
-      if (e.status && e.status !== nota.status) {
-        atualizarStatusNotaServicoLocal(
-          nota.referencia,
-          e.status,
-          e.chave ?? null,
-          (r.motivo as string | null) ?? null,
-          e.numero
-        )
-      }
+      const e = exigirEmissaoFiscal(r)
+      registrarNotaServicoLocal({
+        venda_id: Number(args.vendaId), tentativa: nota.tentativa,
+        referencia: nota.referencia, ambiente: nota.ambiente,
+        acbr_id: e.acbr_id ?? nota.acbr_id, numero: e.numero ?? nota.numero,
+        status: e.status,
+        codigo_verificacao: e.codigo_verificacao ?? e.chave ?? nota.codigo_verificacao,
+        link_url: e.link_url ?? (r.link_url as string | null) ?? nota.link_url,
+        motivo: e.motivo ?? (r.motivo as string | null) ?? null
+      })
       return { success: true, data: notaServicoDaVenda(Number(args.vendaId)) }
     } catch (error) {
+      // Mesma liberação da NFC-e, e pelo mesmo motivo: 404 é o backend
+      // afirmando que não tem registro desta referência, então a prefeitura
+      // nunca chegou a receber nada. Ver o comentário em `fiscal:statusNfce`.
+      const presa = notaServicoDaVenda(Number(args?.vendaId))
+      if (
+        presa &&
+        presa.status === 'processando' &&
+        error instanceof ErroRespostaFiscal &&
+        error.semRegistro
+      ) {
+        atualizarStatusNotaServicoLocal(presa.referencia, 'erro', null, MOTIVO_SEM_REGISTRO)
+        return { success: true, data: notaServicoDaVenda(Number(args?.vendaId)) }
+      }
       return { success: false, error: (error as Error).message }
     }
   })

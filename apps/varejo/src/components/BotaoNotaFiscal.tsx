@@ -94,26 +94,40 @@ const BotaoNotaFiscal: FC<Props> = ({
     emitir(modeloEscolhido, aPrazo ? 'crediario' : (formaEscolhida as FormaPagamento))
   }
 
-  const emitir = async (modelo: 55 | 65, forma: FormaPagamento) => {
-    setEscolhendo(false)
+  const consultar = async () => {
     setOcupado(true)
-    const r = await window.api.fiscal.emitirNfce({ vendaId, formaPagamento: forma, modelo })
-    if (!r.success) {
+    try {
+      const r = await window.api.fiscal.statusNfce({ vendaId })
+      if (r.success) onMudou(r.data)
+      else setDetalhe(r.error)
+    } catch {
+      setDetalhe('Não foi possível consultar a nota. Tente consultar novamente.')
+    } finally {
       setOcupado(false)
-      setDetalhe(r.error)
-      return
     }
-    onMudou(r.data.nota)
+  }
 
-    // A SEFAZ responde em segundos, mas não na mesma requisição. Faz uma
-    // consulta rápida pra tirar a nota do "aguardando" sem o lojista ter que
-    // recarregar a tela. Consultar status não custa crédito.
-    if (r.data.nota?.status === 'pendente') {
-      await new Promise((r) => setTimeout(r, 2500))
-      const s = await window.api.fiscal.statusNfce({ vendaId })
-      if (s.success) onMudou(s.data)
+  const emitir = async (modelo: 55 | 65, forma: FormaPagamento) => {
+    setOcupado(true)
+    try {
+      const r = await window.api.fiscal.emitirNfce({ vendaId, formaPagamento: forma, modelo })
+      if (!r.success) {
+        setDetalhe(r.error)
+        return
+      }
+      setEscolhendo(false)
+      onMudou(r.data.nota)
+      if (r.data.nota?.status === 'pendente') {
+        await new Promise((resolve) => setTimeout(resolve, 2500))
+        const consulta = await window.api.fiscal.statusNfce({ vendaId })
+        if (consulta.success) onMudou(consulta.data)
+        else setDetalhe(consulta.error)
+      }
+    } catch {
+      setDetalhe('Não foi possível confirmar a emissão. Consulte a nota antes de tentar novamente.')
+    } finally {
+      setOcupado(false)
     }
-    setOcupado(false)
   }
 
   const clicar = () => {
@@ -130,10 +144,7 @@ const BotaoNotaFiscal: FC<Props> = ({
     if (nota && nota.status === 'pendente') {
       // Consulta o desfecho de uma nota que ficou pendente.
       setOcupado(true)
-      window.api.fiscal.statusNfce({ vendaId }).then((s) => {
-        setOcupado(false)
-        if (s.success) onMudou(s.data)
-      })
+      void consultar()
       return
     }
     // Sem nota ainda: escolhe o documento (e a forma de pagamento, se à vista).
@@ -286,7 +297,7 @@ const BotaoNotaFiscal: FC<Props> = ({
             <Button variant="outline" onClick={() => setEscolhendo(false)}>
               Cancelar
             </Button>
-            <Button onClick={confirmarEmissao} disabled={!aPrazo && !formaEscolhida}>
+            <Button onClick={confirmarEmissao} disabled={ocupado || (!aPrazo && !formaEscolhida)}>
               Emitir
             </Button>
           </div>

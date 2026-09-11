@@ -223,7 +223,8 @@ export function registrarNotaLocal(dados: {
      VALUES (@venda_id, @tentativa, @referencia, @acbr_id, @ambiente, @modelo, @serie, @numero, @chave, @status, @motivo, datetime('now'))
      ON CONFLICT(referencia) DO UPDATE SET
        status = excluded.status, chave = excluded.chave, motivo = excluded.motivo,
-       acbr_id = excluded.acbr_id, atualizada_em = datetime('now')`
+       acbr_id = excluded.acbr_id, numero = excluded.numero,
+       serie = excluded.serie, atualizada_em = datetime('now')`
   ).run(dados)
 }
 

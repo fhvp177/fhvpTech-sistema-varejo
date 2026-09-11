@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { registrarEncerramentoJanela } from '@fhvptech/core/electron/encerramentoJanela'
 import { montarPonteIpc } from '@fhvptech/core/electron/roteador'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
@@ -152,6 +153,8 @@ function criarJanelaPrincipal(): void {
   })
 
   registrarBackupAoFechar(janelaAtual)
+  registrarEncerramentoJanela(janelaAtual, () => app.quit())
+  janelaAtual.once('closed', () => { janelaAtual = null })
 
   // Abre links externos no navegador padrão, não dentro do app
   janelaAtual.webContents.setWindowOpenHandler(({ url }) => {

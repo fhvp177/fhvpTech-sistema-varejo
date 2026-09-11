@@ -58,29 +58,37 @@ const BotaoNotaServico = forwardRef<GatilhoNota, Props>(function BotaoNotaServic
   const emitir = async () => {
     setOcupado(true)
     setDetalhe('')
-    const r = await window.api.fiscal.emitirNfse({ vendaId })
-    setOcupado(false)
-    if (!r.success) {
-      setDetalhe(r.error)
-      return
-    }
-    onMudou(r.data.nota)
-    // A prefeitura responde em segundos, mas não na mesma requisição. Uma
-    // consulta rápida tira o "processando" da tela sozinha na maioria das vezes.
-    if (r.data.nota?.status === 'processando') {
-      setTimeout(async () => {
-        const s = await window.api.fiscal.statusNfse({ vendaId })
-        if (s.success) onMudou(s.data)
-      }, 2500)
+    try {
+      const r = await window.api.fiscal.emitirNfse({ vendaId })
+      if (!r.success) {
+        setDetalhe(r.error)
+        return
+      }
+      onMudou(r.data.nota)
+      if (r.data.nota?.status === 'processando') {
+        await new Promise((resolve) => setTimeout(resolve, 2500))
+        const consulta = await window.api.fiscal.statusNfse({ vendaId })
+        if (consulta.success) onMudou(consulta.data)
+        else setDetalhe(consulta.error)
+      }
+    } catch {
+      setDetalhe('Não foi possível confirmar a emissão. Consulte a nota antes de tentar novamente.')
+    } finally {
+      setOcupado(false)
     }
   }
 
   const consultar = async () => {
     setOcupado(true)
-    const r = await window.api.fiscal.statusNfse({ vendaId })
-    setOcupado(false)
-    if (r.success) onMudou(r.data)
-    else setDetalhe(r.error)
+    try {
+      const r = await window.api.fiscal.statusNfse({ vendaId })
+      if (r.success) onMudou(r.data)
+      else setDetalhe(r.error)
+    } catch {
+      setDetalhe('Não foi possível consultar a nota. Tente consultar novamente.')
+    } finally {
+      setOcupado(false)
+    }
   }
 
   const imprimir = async () => {
