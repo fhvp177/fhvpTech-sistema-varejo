@@ -87,6 +87,80 @@ describe('campo com formato tem máscara', () => {
     expect(clientes, 'a sentinela deixou de ter campo de documento').toMatch(/id="cpf"/)
   })
 
+  /*
+   * ★ DINHEIRO e números de banco também têm forma — e foi por aqui que a regra
+   * escapou.
+   *
+   * Em 06/09 o dono cobrou máscara pela terceira vez, e desta vez não era CPF
+   * nem telefone: eram SALDO INICIAL, AGÊNCIA, CONTA, FUNDO DE TROCO e a
+   * contagem do caixa. Todos passaram pela guarda de baixo porque ela só
+   * conhecia documento. O campo de saldo aceitava letra.
+   *
+   * ⚠️ E dinheiro não se resolve com `type="number"`: o campo numérico do
+   * navegador aceita ponto ou vírgula conforme o idioma da máquina, mostra
+   * setinhas que ninguém quer, e no celular abre um teclado sem vírgula. Por
+   * isso ele também conta como cru aqui.
+   *
+   * ⚠️ `valor` NÃO entra na lista, por mais tentador que seja: é o nome do prop
+   * de meia dúzia de componentes desta casa (`valor.endereco_bairro`,
+   * `valor.cidade`), e incluí-lo encheria a guarda de acusação falsa. Guarda que
+   * grita à toa é guarda que alguém desliga.
+   */
+  const CAMPOS_DE_NUMERO =
+    /\b(saldo|preco|preço|custo|troco|contado|agencia|agência|fundo|sangria|suprimento)\b/i
+
+  it('★ dinheiro, agência e conta também têm máscara', () => {
+    const culpados: string[] = []
+    for (const arquivo of arquivos) {
+      const fonte = readFileSync(arquivo, 'utf-8')
+      for (const bloco of blocosDeInput(fonte)) {
+        const campo = campoDoInput(bloco)
+        if (CAMPOS_DE_NUMERO.test(campo)) {
+          culpados.push(`${arquivo.slice(RAIZ_SRC.length + 1)} → ${campo.trim()}`)
+        }
+      }
+    }
+    /*
+     * ⚠️ Dívida conhecida, e escrita de propósito.
+     *
+     * A lista existe para a dívida ser CONTADA em vez de esquecida: campo novo
+     * fora dela derruba o teste, e quem consertar um dos antigos vai ter que
+     * apagar a linha daqui — que é o momento certo de comemorar.
+     *
+     * ── Preço e custo do produto saíram daqui em 10/09 ─────────────────────
+     * Eram os dois mais temidos, pelo motivo certo: o formulário carregava o
+     * preço do banco como número e lia de volta com `parseFloat`, então trocar
+     * só o campo estragaria o preço de todo produto de todo cliente. Os TRÊS
+     * lados mudaram juntos: a carga passou a `paraMascara`, a leitura a
+     * `paraNumero`, e o campo vazio é barrado ANTES da conversão (porque
+     * `paraNumero('')` é 0, e não NaN). O que prende isso é
+     * `dinheiroComMascara.test.ts`, que reprova a leitura ingênua com o caso
+     * real: "1.234,56" lido como 1,234.
+     *
+     * ── O que sobrou, e por quê ────────────────────────────────────────────
+     * O preço da importação de XML. Ali a linha nasce do arquivo da nota, não
+     * do banco, e a tela mexe em várias linhas de uma vez: é um caminho de
+     * carga diferente, que merece a sua própria conferência.
+     */
+    const PENDENTES = ['components\\ModalImportarXml.tsx → l.preco']
+    const novos = culpados.filter((c) => !PENDENTES.includes(c))
+
+    expect(
+      novos,
+      'Estes campos guardam dinheiro ou número de banco num <Input> cru — dá para ' +
+        'digitar letra. Use IMaskInput com CLASSE_DINHEIRO / CLASSE_AGENCIA / ' +
+        'CLASSE_CONTA de utils/mascaras.ts.'
+    ).toEqual([])
+
+    // E se um pendente for consertado, esta lista precisa encolher junto —
+    // senão ela vira folclore e ninguém sabe mais o que ainda falta.
+    const resolvidos = PENDENTES.filter((p) => !culpados.includes(p))
+    expect(
+      resolvidos,
+      'Estes campos já foram corrigidos: tire-os da lista PENDENTES acima.'
+    ).toEqual([])
+  })
+
   it('nenhum CPF, CNPJ, RG, CEP ou telefone em <Input> cru', () => {
     const culpados: string[] = []
     for (const arquivo of arquivos) {

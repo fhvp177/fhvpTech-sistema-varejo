@@ -7,6 +7,7 @@ import { caixaParaAdotar, useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 import MesPicker from '@/components/MesPicker'
 import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { IMaskInput } from 'react-imask'
+import { CLASSE_DINHEIRO, paraNumero } from '@/utils/mascaras'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
@@ -2109,7 +2110,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const persistirProduto = async (pinDono?: string) => {
     setSalvandoProduto(true)
     setErroProduto('')
-    const preco = parseFloat(precoProdutoRapido.replace(',', '.'))
+    const preco = paraNumero(precoProdutoRapido)
     const estoque = Math.max(0, parseInt(estoqueProdutoRapido) || 0)
     const dados = {
       codigo_barras: codigoProdutoRapido.trim() || null,
@@ -2140,8 +2141,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   const salvarProdutoRapido = () => {
     setErroProduto('')
     if (!nomeProdutoRapido.trim()) { setErroProduto('Informe o nome do produto.'); return }
-    const preco = parseFloat(precoProdutoRapido.replace(',', '.'))
-    if (isNaN(preco) || preco <= 0) { setErroProduto('Informe um preço de venda válido.'); return }
+    // ⚠️ Vazio antes de converter: `paraNumero('')` é 0, não NaN. O teste de
+    // "maior que zero" abaixo cobre, mas só porque está escrito assim.
+    const preco = paraNumero(precoProdutoRapido)
+    if (preco <= 0) { setErroProduto('Informe um preço de venda válido.'); return }
 
     // Gerente cadastra direto; vendedor precisa do PIN de um gerente (validado no backend).
     if (ehDono) {
@@ -2354,7 +2357,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         {/* Carrinho */}
         <div className="flex-1 border rounded-lg overflow-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0">
+            <thead className="cabecalho-fixo">
               <tr>
                 <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produto</th>
                 <th className="text-center px-3 py-2 font-medium text-muted-foreground w-24">Qtd</th>
@@ -3092,16 +3095,13 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
                     R$
                   </span>
-                  <Input
+                  <IMaskInput
                     id="preco-produto-rapido"
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    {...CLASSE_DINHEIRO}
                     value={precoProdutoRapido}
-                    onChange={(e) => setPrecoProdutoRapido(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') salvarProdutoRapido() }}
-                    placeholder="0,00"
-                    className="pl-9"
+                    onAccept={(v: string) => setPrecoProdutoRapido(v)}
+                    onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') salvarProdutoRapido() }}
+                    className={`${CLASSE_DINHEIRO.className} pl-9`}
                   />
                 </div>
               </div>

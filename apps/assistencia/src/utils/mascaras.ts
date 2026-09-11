@@ -68,6 +68,38 @@ export const CLASSE_CONTA = {
   inputMode: 'numeric' as const
 }
 
+/**
+ * Endereço de rede do outro computador: os pontos aparecem sozinhos.
+ *
+ * Antes era campo de texto livre, e quem digita está lendo um número da tela do
+ * outro PC, de longe, muitas vezes agachado atrás do balcão. Um ponto no lugar
+ * errado dá "não foi possível falar com o caixa principal", que não diz em que
+ * ponto está o erro.
+ *
+ * ⚠️ `0[00]` por grupo, e não `000`: endereço de loja tem grupo curto ("0", "1",
+ * "10"), e exigir três dígitos obrigaria a digitar "192.168.000.010", que NÃO é
+ * o que aparece na tela do outro computador.
+ *
+ * `lazy` deixa o campo vazio de verdade até o primeiro dígito, em vez de mostrar
+ * "___.___.___.___" e assustar quem só queria ver a tela.
+ */
+export const CLASSE_IP = {
+  mask: '0[00].0[00].0[00].0[00]',
+  lazy: true,
+  placeholder: '192.168.0.10',
+  className: `num ${CLASSE_CAMPO}`,
+  inputMode: 'numeric' as const
+}
+
+/** Porta: só dígitos, até 5. O maior número de porta que existe é 65535. */
+export const CLASSE_PORTA = {
+  mask: '00000',
+  lazy: true,
+  placeholder: '8123',
+  className: `num ${CLASSE_CAMPO}`,
+  inputMode: 'numeric' as const
+}
+
 /** Quantidade inteira (posições a pular, unidades). */
 export const CLASSE_INTEIRO = {
   mask: Number,

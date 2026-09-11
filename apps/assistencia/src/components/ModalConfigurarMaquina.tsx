@@ -1,8 +1,10 @@
 import { FC, useEffect, useState } from 'react'
+import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
 import { AlertTriangle, ArrowLeft, Download, Loader2, MonitorSmartphone, X } from 'lucide-react'
+import { CLASSE_IP, CLASSE_PORTA } from '@/utils/mascaras'
 
 /**
  * Alcançável a partir da tela de login, e é aí que está o motivo de existir:
@@ -90,24 +92,60 @@ const Escolha: FC<{ onEscolher: (t: Tela) => void }> = ({ onEscolher }) => (
   </div>
 )
 
-/** Campos comuns às duas operações: endereço e código de 6 dígitos. */
+/**
+ * Campos comuns às duas operações: endereço, porta e código de 6 dígitos.
+ *
+ * ── Por que o endereço tem máscara ──────────────────────────────────────────
+ * Era campo de texto livre. Quem digita está lendo um número na tela do OUTRO
+ * computador, muitas vezes agachado atrás do balcão, e precisava acertar na mão
+ * os três pontos do endereço e os dois-pontos da porta. Errar um deles devolve
+ * "não foi possível falar com o caixa principal", que não diz qual caractere
+ * está errado — e aí a pessoa confere o número, que está certo, e desiste.
+ *
+ * Agora são só dígitos: os pontos aparecem sozinhos e a porta é campo separado.
+ *
+ * ── Por que a porta continua existindo, e vazia ─────────────────────────────
+ * Ela é fixa (4877) em praticamente toda instalação, então o normal é não
+ * encostar nela: vazia, quem resolve é o `normalizarEndereco` lá no processo
+ * principal, que aplica a porta configurada nesta máquina.
+ *
+ * ⚠️ O campo não some porque a tela do computador principal MOSTRA a porta ao
+ * lado do endereço. Escondê-la deixaria à vista um número que não tem onde ser
+ * digitado — e numa loja onde ela foi mudada, não haveria saída pela interface.
+ */
 const CamposConexao: FC<{
   endereco: string
   setEndereco: (v: string) => void
+  porta: string
+  setPorta: (v: string) => void
   codigo: string
   setCodigo: (v: string) => void
   ocupado: boolean
-}> = ({ endereco, setEndereco, codigo, setCodigo, ocupado }) => (
-  <div className="grid grid-cols-2 gap-3">
+}> = ({ endereco, setEndereco, porta, setPorta, codigo, setCodigo, ocupado }) => (
+  <div className="space-y-3">
     <div>
       <Label htmlFor="endereco">Endereço do outro computador</Label>
-      <Input
-        id="endereco"
-        value={endereco}
-        onChange={(e) => setEndereco(e.target.value)}
-        placeholder="192.168.0.10"
-        disabled={ocupado}
-      />
+      <div className="grid grid-cols-[1fr_5.5rem] gap-2">
+        <IMaskInput
+          id="endereco"
+          {...CLASSE_IP}
+          value={endereco}
+          onAccept={(v: string) => setEndereco(v)}
+          disabled={ocupado}
+        />
+        <IMaskInput
+          id="porta"
+          {...CLASSE_PORTA}
+          value={porta}
+          onAccept={(v: string) => setPorta(v)}
+          disabled={ocupado}
+          aria-label="Porta"
+        />
+      </div>
+      <p className="text-xs text-slate-500 mt-1">
+        Os dois números aparecem juntos na tela do computador principal, no formato
+        192.168.0.10:4877. Digite só os números; se a porta for a de sempre, pode deixar em branco.
+      </p>
     </div>
     <div>
       <Label htmlFor="codigo">Código</Label>
@@ -124,8 +162,21 @@ const CamposConexao: FC<{
   </div>
 )
 
+/**
+ * Junta o que os dois campos têm, no formato que o processo principal espera.
+ *
+ * Porta em branco sai de fora de propósito: `normalizarEndereco` completa com a
+ * porta desta instalação, e mandar "192.168.0.10:" faria a URL não abrir.
+ */
+function enderecoCompleto(ip: string, porta: string): string {
+  const limpo = ip.trim()
+  const p = porta.trim()
+  return p ? `${limpo}:${p}` : limpo
+}
+
 const FormClonar: FC = () => {
   const [endereco, setEndereco] = useState('')
+  const [porta, setPorta] = useState('')
   const [codigo, setCodigo] = useState('')
   const [senha, setSenha] = useState('')
   const [exigeSenha, setExigeSenha] = useState(false)
@@ -144,7 +195,7 @@ const FormClonar: FC = () => {
   async function trazer() {
     setOcupado(true)
     setErro(null)
-    const r = await window.api.multicaixa.receberBanco(endereco, codigo, senha)
+    const r = await window.api.multicaixa.receberBanco(enderecoCompleto(endereco, porta), codigo, senha)
     if (!r.success) {
       setErro(r.error)
       setOcupado(false)
@@ -189,6 +240,8 @@ const FormClonar: FC = () => {
       <CamposConexao
         endereco={endereco}
         setEndereco={setEndereco}
+        porta={porta}
+        setPorta={setPorta}
         codigo={codigo}
         setCodigo={setCodigo}
         ocupado={ocupado}
@@ -236,6 +289,7 @@ const FormClonar: FC = () => {
 
 const FormConectar: FC = () => {
   const [endereco, setEndereco] = useState('')
+  const [porta, setPorta] = useState('')
   const [codigo, setCodigo] = useState('')
   const [nome, setNome] = useState('')
   const [ocupado, setOcupado] = useState(false)
@@ -245,7 +299,7 @@ const FormConectar: FC = () => {
   async function conectar() {
     setOcupado(true)
     setErro(null)
-    const r = await window.api.multicaixa.conectarComoTerminal(endereco, codigo, nome)
+    const r = await window.api.multicaixa.conectarComoTerminal(enderecoCompleto(endereco, porta), codigo, nome)
     if (!r.success) {
       setErro(r.error)
       setOcupado(false)
@@ -279,6 +333,8 @@ const FormConectar: FC = () => {
       <CamposConexao
         endereco={endereco}
         setEndereco={setEndereco}
+        porta={porta}
+        setPorta={setPorta}
         codigo={codigo}
         setCodigo={setCodigo}
         ocupado={ocupado}

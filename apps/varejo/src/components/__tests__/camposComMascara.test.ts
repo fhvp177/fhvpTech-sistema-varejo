@@ -123,21 +123,26 @@ describe('campo com formato tem máscara', () => {
     /*
      * ⚠️ Dívida conhecida, e escrita de propósito.
      *
-     * Estes três são anteriores ao livro-caixa e usam `type="number"`. Não
-     * foram corrigidos junto porque o conserto não é só trocar o campo: o
-     * formulário de produto carrega o preço do banco como NÚMERO e lê com
-     * `parseFloat`. Passar a máscara exige mudar também a carga, e um erro ali
-     * estraga o preço de todo produto de todo cliente.
-     *
      * A lista existe para a dívida ser CONTADA em vez de esquecida: campo novo
      * fora dela derruba o teste, e quem consertar um dos antigos vai ter que
      * apagar a linha daqui — que é o momento certo de comemorar.
+     *
+     * ── Preço e custo do produto saíram daqui em 10/09 ─────────────────────
+     * Eram os dois mais temidos, pelo motivo certo: o formulário carregava o
+     * preço do banco como número e lia de volta com `parseFloat`, então trocar
+     * só o campo estragaria o preço de todo produto de todo cliente. Os TRÊS
+     * lados mudaram juntos: a carga passou a `paraMascara`, a leitura a
+     * `paraNumero`, e o campo vazio é barrado ANTES da conversão (porque
+     * `paraNumero('')` é 0, e não NaN). O que prende isso é
+     * `dinheiroComMascara.test.ts`, que reprova a leitura ingênua com o caso
+     * real: "1.234,56" lido como 1,234.
+     *
+     * ── O que sobrou, e por quê ────────────────────────────────────────────
+     * O preço da importação de XML. Ali a linha nasce do arquivo da nota, não
+     * do banco, e a tela mexe em várias linhas de uma vez: é um caminho de
+     * carga diferente, que merece a sua própria conferência.
      */
-    const PENDENTES = [
-      'pages\\Produtos.tsx → preco form.preco',
-      'pages\\Produtos.tsx → custo form.custo',
-      'components\\ModalImportarXml.tsx → l.preco'
-    ]
+    const PENDENTES = ['components\\ModalImportarXml.tsx → l.preco']
     const novos = culpados.filter((c) => !PENDENTES.includes(c))
 
     expect(

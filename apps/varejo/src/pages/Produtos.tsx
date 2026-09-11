@@ -24,6 +24,8 @@ import ModalCategorias from '@/components/ModalCategorias'
 import ModalImportarXml from '@/components/ModalImportarXml'
 import ModalNotasEntrada from '@/components/ModalNotasEntrada'
 import { useSessao } from '@/App'
+import { IMaskInput } from 'react-imask'
+import { CLASSE_DINHEIRO, paraMascara, paraNumero } from '@/utils/mascaras'
 import { useEhCelular } from '@/hooks/useEhCelular'
 import DicaRolante from '@/components/DicaRolante'
 import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
@@ -243,8 +245,8 @@ const Produtos: FC = () => {
       referencia: p.referencia ?? '',
       nome: p.nome,
       categoria: p.categoria ?? '',
-      preco: p.preco.toFixed(2),
-      custo: (p.custo ?? 0) > 0 ? (p.custo ?? 0).toFixed(2) : '',
+      preco: paraMascara(p.preco),
+      custo: (p.custo ?? 0) > 0 ? paraMascara(p.custo ?? 0) : '',
       estoque: temGrade ? '0' : String(p.estoque),
       fornecedor_id: p.fornecedor_id ? String(p.fornecedor_id) : '',
       temGrade,
@@ -274,10 +276,14 @@ const Produtos: FC = () => {
 
   const salvar = async () => {
     if (!form.nome.trim()) { setErro('O nome do produto é obrigatório.'); return }
-    const preco = parseFloat(form.preco.replace(',', '.'))
-    if (isNaN(preco) || preco < 0) { setErro('Preço inválido.'); return }
-    const custo = form.custo.trim() ? parseFloat(form.custo.replace(',', '.')) : 0
-    if (isNaN(custo) || custo < 0) { setErro('Preço de compra inválido.'); return }
+    // ⚠️ O campo vazio precisa ser barrado ANTES de converter: `paraNumero('')`
+    // devolve 0, e sem esta linha um produto sem preço entraria valendo zero,
+    // em silêncio. O `parseFloat` antigo devolvia NaN e barrava sozinho.
+    if (!form.preco.trim()) { setErro('Preço inválido.'); return }
+    const preco = paraNumero(form.preco)
+    if (preco < 0) { setErro('Preço inválido.'); return }
+    const custo = form.custo.trim() ? paraNumero(form.custo) : 0
+    if (custo < 0) { setErro('Preço de compra inválido.'); return }
 
     // Tamanhos efetivamente cadastrados = os que têm código de barras preenchido.
     const ativos = form.variacoes.filter((v) => v.codigo_barras.trim())
@@ -1008,14 +1014,11 @@ const Produtos: FC = () => {
                 <Label htmlFor="preco">
                   Preço de venda (R$) <span className="text-destructive">*</span>
                 </Label>
-                <Input
+                <IMaskInput
                   id="preco"
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  {...CLASSE_DINHEIRO}
                   value={form.preco}
-                  onChange={setF('preco')}
-                  placeholder="0,00"
+                  onAccept={(v: string) => setForm((f) => ({ ...f, preco: v }))}
                 />
               </div>
 
@@ -1026,14 +1029,11 @@ const Produtos: FC = () => {
                     <Info className="w-3.5 h-3.5 cursor-help text-muted-foreground" />
                   </Tooltip>
                 </Label>
-                <Input
+                <IMaskInput
                   id="custo"
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  {...CLASSE_DINHEIRO}
                   value={form.custo}
-                  onChange={setF('custo')}
-                  placeholder="0,00"
+                  onAccept={(v: string) => setForm((f) => ({ ...f, custo: v }))}
                 />
               </div>
 

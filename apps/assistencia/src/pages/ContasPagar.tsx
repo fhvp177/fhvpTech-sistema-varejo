@@ -28,6 +28,8 @@ import {
 import Paginacao from '@fhvptech/core/ui/paginacao'
 import { Select } from '@fhvptech/core/ui/select'
 import { useSessao } from '@/App'
+import { IMaskInput } from 'react-imask'
+import { CLASSE_DINHEIRO, paraMascara, paraNumero } from '@/utils/mascaras'
 
 const ITENS_POR_PAGINA = 20
 
@@ -179,7 +181,7 @@ const ContasPagar: FC = () => {
       descricao: c.descricao,
       categoria: c.categoria ?? '',
       fornecedor_id: c.fornecedor_id != null ? String(c.fornecedor_id) : '',
-      valor_total: String(c.valor_total),
+      valor_total: paraMascara(c.valor_total),
       vencimento: c.vencimento ?? '',
       observacao: c.observacao ?? ''
     })
@@ -192,8 +194,11 @@ const ContasPagar: FC = () => {
       setErro('Descreva a conta (ex.: "Duplicata Fornecedor X", "Aluguel de julho").')
       return
     }
-    const valor = parseFloat(form.valor_total.replace(',', '.'))
-    if (isNaN(valor) || valor <= 0) {
+    // ⚠️ Vazio precisa ser barrado ANTES de converter: `paraNumero('')`
+    // devolve 0, e o teste de "maior que zero" logo abaixo pega esse caso,
+    // mas com a mensagem errada. Aqui a mensagem diz o que houve.
+    const valor = paraNumero(form.valor_total)
+    if (!form.valor_total.trim() || valor <= 0) {
       setErro('Informe um valor maior que zero.')
       return
     }
@@ -537,14 +542,11 @@ const ContasPagar: FC = () => {
                 <Label htmlFor="valor">
                   Valor <span className="text-destructive">*</span>
                 </Label>
-                <Input
+                <IMaskInput
                   id="valor"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
+                  {...CLASSE_DINHEIRO}
                   value={form.valor_total}
-                  onChange={(e) => setCampo('valor_total')(e.target.value)}
-                  placeholder="0,00"
+                  onAccept={(v: string) => setCampo('valor_total')(v)}
                 />
               </div>
               <div className="grid gap-1.5">
