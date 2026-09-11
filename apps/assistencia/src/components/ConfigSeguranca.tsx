@@ -124,10 +124,14 @@ const ConfigSeguranca: FC = () => {
   return (
     <div className="space-y-5">
       {/* Alterar PIN */}
-      <div className="flex items-center justify-between p-4 border rounded-lg">
-        <div className="flex items-start gap-3">
+      {/*
+        ⚠️ Na janela estreita o botão desce: "Alterar PIN" ao lado de duas linhas
+        de texto não cabe nos ~264px de coluna, e era ele que saía pela direita.
+      */}
+      <div className="flex flex-col items-stretch gap-3 p-4 border rounded-lg lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
           <KeyRound className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-          <div>
+          <div className="min-w-0">
             <p className="font-medium text-sm">Seu PIN de acesso</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               {vendedor
@@ -140,7 +144,7 @@ const ConfigSeguranca: FC = () => {
           variant="outline"
           size="sm"
           onClick={() => setModalAberto(true)}
-          className="shrink-0"
+          className="h-11 shrink-0 lg:h-9"
           disabled={!vendedor}
         >
           Alterar PIN

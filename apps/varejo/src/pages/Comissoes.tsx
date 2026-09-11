@@ -481,7 +481,7 @@ const Comissoes: FC = () => {
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50 sticky top-0">
+              <thead className="cabecalho-fixo">
                 <tr>
                   <th className="text-left font-medium px-3 py-2">Venda</th>
                   <th className="text-left font-medium px-3 py-2">Data</th>

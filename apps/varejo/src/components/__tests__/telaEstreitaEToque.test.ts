@@ -1166,6 +1166,26 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
     expect(bloco).not.toMatch(/\.ilha-abas\s*\{[^}]*bottom:\s*0/)
   })
 
+  it('★ não existe no computador, e o corte é o MESMO dos dois lados', () => {
+    /*
+     * O defeito que isto prende: todo o visual da ilha mora no `@media
+     * (max-width: 1023.98px)`. Acima de 1024px nenhuma regra valia e o `<nav>`
+     * continuava sendo desenhado — cinco botões crus empilhados no canto,
+     * "CaixaPainelProdutosClientesMais", por cima da barra lateral. Apareceu na
+     * loja hospedada, no navegador do computador.
+     *
+     * A guarda do ponto de corte é a segunda metade: 1023.98 e 1024 são a mesma
+     * fronteira escrita de dois jeitos. Se alguém mudar um e esquecer o outro,
+     * abre uma faixa de larguras sem dono, e o bug volta só nela.
+     */
+    const desktop = CSS.slice(CSS.indexOf('@media (min-width: 1024px)'))
+    expect(desktop, 'falta o bloco que esconde a ilha no computador').toContain(
+      '@media (min-width: 1024px)'
+    )
+    expect(desktop).toMatch(/\[data-alvo='web'\]\s*\.ilha-abas\s*\{\s*display:\s*none/)
+    expect(CSS).toContain('@media (max-width: 1023.98px)')
+  })
+
   it('★ é uma ilha: arredondada, com sombra e largura limitada', () => {
     const bloco = blocoDaIlha()
     expect(bloco).toContain('border-radius: 999px')

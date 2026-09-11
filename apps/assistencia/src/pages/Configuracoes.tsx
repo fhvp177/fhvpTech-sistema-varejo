@@ -3,7 +3,7 @@ import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
 import { Select } from '@fhvptech/core/ui/select'
-import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, Save, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone, Blocks, Settings } from 'lucide-react'
+import { RefreshCw, Upload, Trash2, Store, ChevronDown, Sparkles, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone, Blocks, Settings } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import CadastroPixLoja from '@/components/CadastroPixLoja'
@@ -71,11 +71,10 @@ const Configuracoes: FC = () => {
   const [porVenda, setPorVenda] = useState(false)
   const [pastaPadrao, setPastaPadrao] = useState('')
   const [pastaSecundaria, setPastaSecundaria] = useState('')
-  const [salvando, setSalvando] = useState(false)
   const [fazendoBackup, setFazendoBackup] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   // Feedback do backup manual mora DENTRO do card dele — mensagem de backup
-  // aparecendo ao lado do "Salvar configurações" era metade da confusão.
+  // aparecendo ao lado das preferências era metade da confusão.
   const [feedbackBackup, setFeedbackBackup] = useState<Feedback | null>(null)
 
   // Dados da loja (identidade no cupom)
@@ -200,19 +199,38 @@ const Configuracoes: FC = () => {
     setTimeout(() => setFeedback(null), 4000)
   }
 
-  const salvar = async () => {
-    setSalvando(true)
+  /**
+   * Grava uma preferência de backup na hora em que ela muda.
+   *
+   * ── Por que não existe mais botão de salvar ────────────────────────────────
+   * Metade desta tela já salvava sozinha (escolher pasta, pasta secundária,
+   * limpar), e a outra metade esperava um botão no rodapé. Quem mexia num
+   * interruptor e saía da tela achava que tinha configurado — e não tinha.
+   * Pior: o texto no alto da tela já dizia "tudo aqui salva sozinho", então a
+   * pessoa tinha todo motivo para acreditar.
+   *
+   * Não era um botão faltando: eram duas regras convivendo na mesma tela, e a
+   * pessoa não tem como saber qual vale para qual campo. A tela toda passa a
+   * seguir a regra que já valia para a maioria dos campos.
+   *
+   * ── O estado da tela anda ANTES da gravação ────────────────────────────────
+   * O interruptor vira na hora e a gravação acontece atrás. Se ela falhar, o
+   * valor volta para o que estava e o erro aparece — nunca fica um interruptor
+   * ligado na tela e desligado no banco, que é o pior dos dois mundos.
+   */
+  const gravarPreferencia = async (
+    chave: string,
+    valor: string,
+    desfazer: () => void
+  ): Promise<void> => {
     try {
-      await window.api.backup.gravarConfig('backup_ativo', ativo ? '1' : '0')
-      await window.api.backup.gravarConfig('backup_frequencia_horas', frequencia)
-      await window.api.backup.gravarConfig('backup_ao_fechar', aoFechar)
-      await window.api.backup.gravarConfig('backup_por_venda', porVenda ? '1' : '0')
-      mostrarFeedback('ok', 'Configurações salvas com sucesso!')
+      const resp = await window.api.backup.gravarConfig(chave, valor)
+      if (!resp.success) throw new Error(resp.error)
+      mostrarFeedback('ok', 'Salvo.')
       await carregarStatus()
     } catch {
-      mostrarFeedback('erro', 'Erro ao salvar configurações.')
-    } finally {
-      setSalvando(false)
+      desfazer()
+      mostrarFeedback('erro', 'Não foi possível salvar. A opção voltou como estava.')
     }
   }
 
@@ -224,6 +242,11 @@ const Configuracoes: FC = () => {
       await window.api.backup.gravarConfig('backup_pasta_padrao', pasta)
       mostrarFeedback('ok', 'Pasta primária atualizada!')
       await carregarStatus()
+    } else if (!resp.success) {
+      // Sem este ramo, o botão ficava mudo: clicar não abria nada e não dizia
+      // nada. Quem está sem permissão na pasta, ou com o diálogo recusado pelo
+      // sistema, ficava achando que o clique não pegou.
+      mostrarFeedback('erro', resp.error)
     }
   }
 
@@ -235,6 +258,9 @@ const Configuracoes: FC = () => {
       await window.api.backup.gravarConfig('backup_pasta_secundaria', pasta)
       mostrarFeedback('ok', 'Pasta secundária configurada!')
       await carregarStatus()
+    } else if (!resp.success) {
+      // Ver o comentário do irmão acima.
+      mostrarFeedback('erro', resp.error)
     }
   }
 
@@ -279,12 +305,12 @@ const Configuracoes: FC = () => {
         : `${estadoMulticaixa.terminais.length} ${estadoMulticaixa.terminais.length === 1 ? 'caixa conectado' : 'caixas conectados'}`
 
   return (
-    <div className="p-8 max-w-2xl">
-      <h2 className="text-2xl font-bold flex items-center gap-2">
-        <Settings className="w-6 h-6 text-primary" />
+    <div className="p-4 lg:p-8 max-w-2xl">
+      <h2 className="text-xl lg:text-2xl font-bold flex items-center gap-2">
+        <Settings className="w-5 h-5 lg:w-6 lg:h-6 text-primary" />
         Configurações
       </h2>
-      <p className="text-sm text-muted-foreground mt-1 mb-6">
+      <p className="text-sm text-muted-foreground mt-1 mb-4 lg:mb-6">
         Ajustes da oficina. Tudo aqui salva sozinho, sem botão de confirmar.
       </p>
 
@@ -297,8 +323,13 @@ const Configuracoes: FC = () => {
         <div className="space-y-6">
 
         <div className="border rounded-lg p-4 bg-muted/30 space-y-3">
-          <div className="flex items-start justify-between gap-4">
-            <div>
+          {/*
+            "Verificar atualizações" tem 190px e a coluna útil aqui dentro
+            tem ~264 numa janela estreita: ao lado do texto ele saía pela
+            direita. Empilhado, o botão ocupa a linha inteira.
+          */}
+          <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-4">
+            <div className="min-w-0">
               <p className="font-medium text-sm">FHVP Tech — Sistema de Gestão</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Versão atual: <span className="font-mono font-semibold text-foreground">
@@ -321,15 +352,15 @@ const Configuracoes: FC = () => {
               size="sm"
               onClick={verificarAtualizacao}
               disabled={verificandoUpdate}
-              className="shrink-0"
+              className="h-11 w-full shrink-0 lg:h-9 lg:w-auto"
             >
               <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${verificandoUpdate ? 'animate-spin' : ''}`} />
               {verificandoUpdate ? 'Verificando...' : 'Verificar atualizações'}
             </Button>
           </div>
           {infoAtualizacao?.versaoBaixada && (
-            <div className="border-t pt-3 flex items-center justify-between gap-3">
-              <p className="text-sm text-green-700">
+            <div className="border-t pt-3 flex flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
+              <p className="min-w-0 text-sm text-green-700">
                 Atualização <span className="font-semibold">{infoAtualizacao.versaoBaixada}</span> pronta para instalar.
               </p>
               <Button size="sm" onClick={instalarAtualizacao}>
@@ -411,7 +442,12 @@ const Configuracoes: FC = () => {
           <div className="space-y-4">
             {/* Logo */}
             <div className="border rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-4">
+              {/*
+                Na janela estreita a logo fica em cima e os botões embaixo.
+                Lado a lado, os 96px do quadrado mais "Trocar logo" e
+                "Remover" não cabem, e o segundo botão saía pela direita.
+              */}
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="w-24 h-24 rounded-lg border bg-muted/30 flex items-center justify-center overflow-hidden shrink-0">
                   {loja.logo ? (
                     <img src={loja.logo} alt="Logo da loja" className="max-w-full max-h-full object-contain" />
@@ -419,7 +455,7 @@ const Configuracoes: FC = () => {
                     <Store className="w-8 h-8 text-muted-foreground/40" />
                   )}
                 </div>
-                <div className="flex-1 space-y-2">
+                <div className="w-full min-w-0 flex-1 space-y-2">
                   <input
                     ref={inputLogoRef}
                     type="file"
@@ -501,7 +537,13 @@ const Configuracoes: FC = () => {
             </div>
 
             {/* Campos de texto */}
-            <div className="grid sm:grid-cols-2 gap-3">
+            {/*
+              `[&>*]:min-w-0` é o que impede o campo de crescer além da
+              coluna: item de grade nasce com `min-width: auto` e, em vez
+              de apertar, ESTOURA. Mesmo defeito que deixou campo por cima
+              de campo em Produtos.
+            */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 [&>*]:min-w-0 [&>*>*]:min-w-0">
               <div className="sm:col-span-2">
                 <Label className="text-sm mb-1.5 block">Nome da loja</Label>
                 <Input
@@ -589,8 +631,8 @@ const Configuracoes: FC = () => {
               onChange={(campo, valor) => atualizarLoja(campo, valor)}
             />
 
-            <div className="flex items-center gap-3">
-              <Button onClick={salvarLoja} disabled={salvandoLoja}>
+            <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:gap-3">
+              <Button onClick={salvarLoja} disabled={salvandoLoja} className="h-11 lg:h-10">
                 {salvandoLoja ? 'Salvando...' : 'Salvar dados da loja'}
               </Button>
               {feedbackLoja && (
@@ -675,7 +717,7 @@ const Configuracoes: FC = () => {
           é o computador principal, e é lá que o backup se configura. */}
       {!ehCaixaAdicional && (
       <div className="space-y-6">
-        <h3 className="text-lg font-semibold border-b pb-2">Backup de Dados</h3>
+        <h3 className="text-base lg:text-lg font-semibold border-b pb-2">Backup de Dados</h3>
 
         {/* Status */}
         {status && (
@@ -698,12 +740,19 @@ const Configuracoes: FC = () => {
         )}
 
         {/* Toggle backup ativo */}
-        <div className="flex items-center justify-between p-4 border rounded-lg">
+        <div className="flex items-center justify-between gap-3 p-4 border rounded-lg">
           <div>
             <p className="font-medium text-sm">Backup automático</p>
             <p className="text-xs text-muted-foreground mt-0.5">Habilita backups periódicos e ao fechar o sistema</p>
           </div>
-          <Interruptor ligado={ativo} onAlternar={setAtivo} rotulo="Backup automático" />
+          <Interruptor
+            ligado={ativo}
+            onAlternar={(novo) => {
+              setAtivo(novo)
+              gravarPreferencia('backup_ativo', novo ? '1' : '0', () => setAtivo(ativo))
+            }}
+            rotulo="Backup automático"
+          />
         </div>
 
         {/* Frequência */}
@@ -711,7 +760,11 @@ const Configuracoes: FC = () => {
           <Label className="text-sm font-medium mb-1.5 block">Frequência do backup automático</Label>
           <Select
             value={frequencia}
-            onChange={setFrequencia}
+            onChange={(v) => {
+              const anterior = frequencia
+              setFrequencia(v)
+              gravarPreferencia('backup_frequencia_horas', v, () => setFrequencia(anterior))
+            }}
             classNameContainer="max-w-xs"
             opcoes={[
               { valor: '1', rotulo: 'A cada 1 hora' },
@@ -734,7 +787,10 @@ const Configuracoes: FC = () => {
           </div>
           <Interruptor
             ligado={porVenda}
-            onAlternar={setPorVenda}
+            onAlternar={(novo) => {
+              setPorVenda(novo)
+              gravarPreferencia('backup_por_venda', novo ? '1' : '0', () => setPorVenda(porVenda))
+            }}
             rotulo="Fazer backup também a cada venda"
             className="ml-4"
           />
@@ -745,7 +801,11 @@ const Configuracoes: FC = () => {
           <Label className="text-sm font-medium mb-1.5 block">Backup ao fechar o sistema</Label>
           <Select
             value={aoFechar}
-            onChange={setAoFechar}
+            onChange={(v) => {
+              const anterior = aoFechar
+              setAoFechar(v)
+              gravarPreferencia('backup_ao_fechar', v, () => setAoFechar(anterior))
+            }}
             classNameContainer="max-w-xs"
             opcoes={[
               { valor: 'perguntar', rotulo: 'Perguntar se houve alterações' },
@@ -758,14 +818,19 @@ const Configuracoes: FC = () => {
         {/* Pasta padrão */}
         <div>
           <Label className="text-sm font-medium mb-1.5 block">Pasta de backups</Label>
-          <div className="flex gap-2">
+          {/*
+            O caminho é longo e monoespaçado; ao lado de um botão ele fica
+            com uns 150px e vira "C:\\Users\\...". Estreito, o campo ocupa a
+            linha e o botão desce.
+          */}
+          <div className="flex flex-col gap-2 lg:flex-row">
             <input
               type="text"
               readOnly
               value={pastaPadrao}
-              className="flex-1 h-10 rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground font-mono truncate"
+              className="min-w-0 flex-1 h-10 rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground font-mono truncate"
             />
-            <Button variant="outline" onClick={selecionarPasta}>
+            <Button variant="outline" onClick={selecionarPasta} className="h-11 shrink-0 lg:h-10">
               Alterar...
             </Button>
           </div>
@@ -780,20 +845,28 @@ const Configuracoes: FC = () => {
             Pasta secundária{' '}
             <span className="text-xs font-normal text-muted-foreground">(opcional — espelho de segurança)</span>
           </Label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               type="text"
               readOnly
               value={pastaSecundaria || 'Não configurada'}
-              className={`flex-1 h-10 rounded-md border border-input px-3 py-2 text-sm font-mono truncate ${
+              className={`min-w-0 h-10 w-full rounded-md border border-input px-3 py-2 text-sm font-mono truncate lg:w-auto lg:flex-1 ${
                 pastaSecundaria ? 'bg-muted text-muted-foreground' : 'bg-muted/50 text-muted-foreground/60 italic'
               }`}
             />
-            <Button variant="outline" onClick={selecionarPastaSecundaria}>
+            <Button
+              variant="outline"
+              onClick={selecionarPastaSecundaria}
+              className="h-11 flex-1 lg:h-10 lg:flex-none"
+            >
               {pastaSecundaria ? 'Alterar...' : 'Configurar...'}
             </Button>
             {pastaSecundaria && (
-              <Button variant="outline" onClick={limparPastaSecundaria} className="text-destructive hover:text-destructive">
+              <Button
+                variant="outline"
+                onClick={limparPastaSecundaria}
+                className="h-11 flex-1 text-destructive hover:text-destructive lg:h-10 lg:flex-none"
+              >
                 Remover
               </Button>
             )}
@@ -815,8 +888,15 @@ const Configuracoes: FC = () => {
                 <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">manuais/</code>.
                 Útil antes de operações importantes.
               </p>
-              <div className="flex items-center gap-3">
-                <Button variant="outline" onClick={fazerBackup} disabled={fazendoBackup}>
+              <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:gap-3">
+                {/* Cor própria: é a única ação desta seção que FAZ alguma
+                    coisa agora (as outras só guardam preferência). O
+                    contorno neutro a deixava indistinguível de um campo. */}
+                <Button
+                  onClick={fazerBackup}
+                  disabled={fazendoBackup}
+                  className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white lg:h-10"
+                >
                   <HardDriveDownload className="w-4 h-4 mr-2" />
                   {fazendoBackup ? 'Criando backup...' : 'Fazer backup agora'}
                 </Button>
@@ -830,18 +910,16 @@ const Configuracoes: FC = () => {
           </div>
         </div>
 
-        {/* Salvar — rodapé clássico do formulário: sozinho, com divisória e ícone */}
-        <div className="border-t pt-5 flex items-center gap-3">
-          <Button onClick={salvar} disabled={salvando}>
-            <Save className="w-4 h-4 mr-2" />
-            {salvando ? 'Salvando...' : 'Salvar configurações'}
-          </Button>
-          {feedback && (
+        {/* Sem botão de salvar: cada opção grava ao mudar (ver gravarPreferencia).
+            O aviso do resultado fica aqui, no fim da seção, para não pular ao
+            lado de cada controle a cada clique. */}
+        {feedback && (
+          <div className="border-t pt-4">
             <p className={`text-sm font-medium ${feedback.tipo === 'ok' ? 'text-green-600' : 'text-destructive'}`}>
               {feedback.msg}
             </p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       )}
     </div>

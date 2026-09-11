@@ -808,3 +808,58 @@
     }
   }
 }
+
+/*
+ * ═══ A ilha NÃO existe no computador ════════════════════════════════════════
+ *
+ * Todo o visual da ilha mora no `@media (max-width: 1023.98px)` acima. Acima de
+ * 1024px nenhuma daquelas regras vale, e o `<nav>` continuava sendo desenhado:
+ * saíam os cinco botões crus, sem grade e sem posição, empilhados no canto de
+ * baixo por cima da barra lateral. Foi assim que "CaixaPainelProdutosClientesMais"
+ * apareceu na loja hospedada, e só no navegador — o programa instalado nunca
+ * monta esta barra.
+ *
+ * ⚠️ Esconder aqui, e não no React, é de propósito: o ponto de corte é o MESMO
+ * 1023.98px do bloco acima, escrito uma vez em cada lado da mesma fronteira. Em
+ * JavaScript ele viraria um segundo número, capaz de discordar deste.
+ *
+ * As duas condições são mutuamente exclusivas, então nenhuma regra disputa com
+ * a outra e a ordem dos blocos no arquivo deixa de importar.
+ */
+@media (min-width: 1024px) {
+  [data-alvo='web'] .ilha-abas {
+    display: none;
+  }
+}
+
+/*
+ * ═══ Cabeçalho de tabela que fica no topo enquanto a lista rola ═════════════
+ *
+ * Existe porque o mesmo defeito apareceu em NOVE telas dos dois aplicativos, e
+ * consertar tela a tela é esteira infinita. Quem tem tabela rolante usa esta
+ * classe no `<thead>` e acabou.
+ *
+ * ── As duas coisas que ela conserta ─────────────────────────────────────────
+ *
+ * **(a) O fundo é OPACO.** Era `bg-muted/40`, quarenta por cento. O produto
+ * passava por baixo e aparecia através do cabeçalho: na tela de classificação
+ * fiscal dava para ler "Produto" e o nome de um cabo empilhados na mesma linha.
+ * Fundo de cabeçalho grudado no topo não pode ter transparência nenhuma.
+ *
+ * **(b) O fundo mora no `th`, não no `thead`.** Com `border-collapse: collapse`
+ * — que é o padrão do Tailwind — o navegador não pinta o fundo declarado em
+ * `thead` nem em `tr`: as células é que pintam. Declarar ali deixava o
+ * cabeçalho transparente mesmo com a cor cheia, e o (a) sozinho não resolveria.
+ *
+ * O `z-index` completa: sem ele, célula de corpo com fundo próprio (linha
+ * zebrada, destaque de seleção) passa por cima do cabeçalho.
+ */
+.cabecalho-fixo {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.cabecalho-fixo th {
+  background-color: hsl(var(--muted));
+}

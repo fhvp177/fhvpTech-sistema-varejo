@@ -146,7 +146,7 @@ const RelatorioNotasFiscais: FC<Props> = ({ aberta, onFechar }) => {
 
             <div className="border rounded-md max-h-80 overflow-auto">
               <table className="w-full text-sm">
-                <thead className="bg-muted/40 sticky top-0">
+                <thead className="cabecalho-fixo">
                   <tr>
                     <th className="p-2 text-left font-medium w-20">Número</th>
                     <th className="p-2 text-left font-medium w-28">Situação</th>

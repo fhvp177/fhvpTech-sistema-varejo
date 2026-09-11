@@ -231,7 +231,7 @@ const ClassificacaoFiscal: FC<Props> = ({ aberta, onFechar, onMudou }) => {
 
           <div className="border rounded-md max-h-64 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="bg-muted/40 sticky top-0">
+              <thead className="cabecalho-fixo">
                 <tr>
                   <th className="p-2 w-8">
                     <input

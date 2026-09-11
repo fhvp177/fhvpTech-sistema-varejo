@@ -2687,7 +2687,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         ) : (
           <div className="flex-1 border rounded-lg overflow-auto">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50 sticky top-0">
+              <thead className="cabecalho-fixo">
                 <tr>
                   <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produto</th>
                   <th className="text-center px-3 py-2 font-medium text-muted-foreground w-24">Qtd</th>
