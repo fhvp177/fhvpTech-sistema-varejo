@@ -593,8 +593,20 @@ interface Window {
       criar: (dados: unknown) => Promise<RespostaIPC>
       atualizarStatus: (id: number, status: string) => Promise<RespostaIPC>
       buscarPorId: (id: number) => Promise<RespostaIPC>
-      pagarParcela: (parcelaId: number) => Promise<RespostaIPC>
-      registrarPagamentoParcial: (id: number, valor: number) => Promise<RespostaIPC>
+      // `forma` e `caixaId` NÃO são opcionais por preguiça: sem forma o
+      // movimento nasce sem ela e o fechamento do caixa conta como dinheiro.
+      // São opcionais só para não quebrar chamada de versão anterior.
+      pagarParcela: (
+        parcelaId: number,
+        forma?: string | null,
+        caixaId?: number | null
+      ) => Promise<RespostaIPC>
+      registrarPagamentoParcial: (
+        id: number,
+        valor: number,
+        forma?: string | null,
+        caixaId?: number | null
+      ) => Promise<RespostaIPC>
       estornarParcela: (parcelaId: number) => Promise<RespostaIPC>
       estornarRecebimento: (id: number) => Promise<RespostaIPC>
       resumoDashboard: () => Promise<RespostaIPC>
@@ -925,6 +937,7 @@ interface Window {
         tipo: 'credito' | 'dinheiro'
         cliente_id?: number | null
         motivo?: string | null
+        caixa_id?: number | null
         itens: Array<{ item_venda_id: number; quantidade: number; restocar: boolean }>
         pinDono?: string
       }) => Promise<

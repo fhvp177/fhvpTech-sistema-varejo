@@ -292,6 +292,21 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [busca, setBusca] = useState('')
   const [vendaDetalhada, setVendaDetalhada] = useState<VendaDetalhada | null>(null)
   const [valorPagamento, setValorPagamento] = useState('')
+  /*
+   * COMO o cliente quitou a dívida.
+   *
+   * ⚠️ Não é enfeite: sem esta resposta o movimento nascia sem forma, e o
+   * fechamento do caixa agrupa o que não tem forma como DINHEIRO. Um fiado
+   * pago por PIX virava dinheiro esperado na gaveta e o caixa fechava com
+   * falta, do tamanho exato da dívida.
+   *
+   * Nasce em dinheiro porque é o caso mais comum de quem volta para quitar.
+   * Serve também às parcelas, logo abaixo: é o mesmo balcão e o mesmo
+   * momento, e dois seletores seriam duas perguntas para a mesma resposta.
+   */
+  const [formaRecebimento, setFormaRecebimento] = useState('dinheiro')
+  // De qual gaveta entra o dinheiro em espécie. Mesmo caixa que o PDV usa.
+  const { caixaId: caixaDoAparelho } = useCaixaDoAparelho()
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
   const [erroPagamento, setErroPagamento] = useState('')
   const [paginaAtual, setPaginaAtual] = useState(1)
@@ -483,7 +498,12 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     }
     setSalvandoPagamento(true)
     setErroPagamento('')
-    const resp = await window.api.vendas.registrarPagamentoParcial(id, valor)
+    const resp = await window.api.vendas.registrarPagamentoParcial(
+      id,
+      valor,
+      formaRecebimento,
+      caixaDoAparelho
+    )
     if (resp.success) {
       await verDetalhes(id)
       await carregar()
@@ -618,7 +638,11 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   }
 
   const pagarParcela = async (parcelaId: number) => {
-    const resp = await window.api.vendas.pagarParcela(parcelaId)
+    const resp = await window.api.vendas.pagarParcela(
+      parcelaId,
+      formaRecebimento,
+      caixaDoAparelho
+    )
     if (vendaDetalhada) {
       const r = await window.api.vendas.buscarPorId(vendaDetalhada.id)
       if (r.success && r.data) setVendaDetalhada(r.data as VendaDetalhada)
@@ -1262,7 +1286,7 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                       />
                     </div>
                   )}
-                  <div className="flex gap-2 pt-0.5">
+                  <div className="flex flex-wrap gap-2 pt-0.5">
                     <input
                       type="number"
                       min="0.01"
@@ -1270,7 +1294,19 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                       value={valorPagamento}
                       onChange={(e) => { setValorPagamento(e.target.value); setErroPagamento('') }}
                       placeholder="Valor recebido"
-                      className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    />
+                    <Select
+                      value={formaRecebimento}
+                      onChange={setFormaRecebimento}
+                      classNameContainer="w-40 shrink-0"
+                      className="h-9"
+                      opcoes={[
+                        { valor: 'dinheiro', rotulo: 'Dinheiro' },
+                        { valor: 'pix', rotulo: 'PIX' },
+                        { valor: 'debito', rotulo: 'Cartão de débito' },
+                        { valor: 'credito', rotulo: 'Cartão de crédito' }
+                      ]}
                     />
                     <Button
                       size="sm"

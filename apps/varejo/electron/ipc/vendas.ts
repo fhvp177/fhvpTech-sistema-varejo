@@ -99,25 +99,31 @@ export function registrarHandlersVendas(): void {
     }
   })
 
-  registrarCanal('vendas:pagarParcela', (parcelaId: number) => {
-    try {
-      pagarParcela(parcelaId)
-      obterBackupManager().marcarAlteracao()
-      return { success: true, data: null }
-    } catch (error) {
-      return { success: false, error: (error as Error).message }
+  registrarCanal(
+    'vendas:pagarParcela',
+    (parcelaId: number, forma?: string | null, caixaId?: number | null) => {
+      try {
+        pagarParcela(parcelaId, forma, caixaId)
+        obterBackupManager().marcarAlteracao()
+        return { success: true, data: null }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
     }
-  })
+  )
 
-  registrarCanal('vendas:registrarPagamentoParcial', (id: number, valor: number) => {
-    try {
-      registrarPagamentoParcial(id, valor)
-      obterBackupManager().marcarAlteracao()
-      return { success: true, data: null }
-    } catch (error) {
-      return { success: false, error: (error as Error).message }
+  registrarCanal(
+    'vendas:registrarPagamentoParcial',
+    (id: number, valor: number, forma?: string | null, caixaId?: number | null) => {
+      try {
+        registrarPagamentoParcial(id, valor, forma, caixaId)
+        obterBackupManager().marcarAlteracao()
+        return { success: true, data: null }
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
+      }
     }
-  })
+  )
 
   // Estornar (reverter) um recebimento. Ação corretiva do gerente — coerente com a
   // hierarquia: o vendedor registra o recebimento, mas só o gerente reverte. A regra

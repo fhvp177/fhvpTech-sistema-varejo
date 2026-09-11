@@ -697,7 +697,51 @@ export function atualizarStatusVenda(id: number, status: StatusPagamento): void 
   })()
 }
 
-export function registrarPagamentoParcial(id: number, valor: number): void {
+/**
+ * Onde o dinheiro de um recebimento entra, e em qual turno.
+ *
+ * ── O defeito que isto conserta ─────────────────────────────────────────────
+ * Receber dívida e receber parcela não perguntavam a FORMA. O movimento nascia
+ * sem ela, e o fechamento agrupa por `COALESCE(forma_pagamento, 'dinheiro')` —
+ * então um fiado quitado por PIX virava dinheiro esperado na gaveta. Dava
+ * FALTA do tamanho da dívida, e no dia em que ninguém quitava nada o caixa
+ * fechava certo. Era a origem mais provável do "às vezes não faz sentido".
+ *
+ * ── Espécie vai para a GAVETA de quem recebeu ───────────────────────────────
+ * Mesma regra da venda: com dois caixas abertos, a nota que entrou no Caixa 2
+ * não pode cair na gaveta do Caixa 1. Cartão e PIX seguem a conta da forma —
+ * eles não passam por gaveta nenhuma.
+ *
+ * ── O turno vem de quem recebeu, mesmo quando o dinheiro cai no banco ───────
+ * Igual à venda: o PIX do balcão pertence ao turno do caixa onde foi recebido,
+ * senão ele some da conferência daquele turno.
+ */
+function destinoDoRecebimento(
+  db: ReturnType<typeof obterBancoDeDados>,
+  forma: string | null | undefined,
+  caixaId: number | null | undefined
+): { conta: number | null; turnoId: number | null } {
+  const especie = (forma ?? '').toLowerCase() === 'dinheiro'
+  const conta = especie && caixaId ? caixaId : contaSugerida(db, 'recebimento', forma ?? null)
+  const turnoId = caixaId
+    ? ((
+        db
+          .prepare(
+            `SELECT id FROM turnos_caixa
+              WHERE conta_id = ? AND fechado_em IS NULL
+              ORDER BY id DESC LIMIT 1`
+          )
+          .get(caixaId) as { id: number } | undefined
+      )?.id ?? null)
+    : null
+  return { conta, turnoId }
+}
+
+export function registrarPagamentoParcial(id: number,
+  valor: number,
+  forma?: string | null,
+  caixaId?: number | null
+): void {
   const db = obterBancoDeDados()
   garantirVendaAtiva(id)
   db.transaction(() => {
@@ -726,22 +770,29 @@ export function registrarPagamentoParcial(id: number, valor: number): void {
     }
 
     // Recebimento de dívida: dinheiro de verdade entrando, e por isso vai ao
-    // livro. Sem forma conhecida, cai na conta padrão de recebimento.
-    const conta = contaSugerida(db, 'recebimento', null)
+    // livro — agora COM a forma, que é o que o fechamento usa para separar o
+    // que está na gaveta do que está no cartão. Ver destinoDoRecebimento.
+    const { conta, turnoId } = destinoDoRecebimento(db, forma, caixaId)
     if (conta) {
       lancarMovimento(db, {
         conta_id: conta,
         valor: valorEfetivo,
         tipo: 'recebimento',
         descricao: `Recebimento da venda #${id}`,
+        forma_pagamento: forma ?? undefined,
         origem_tipo: 'venda',
-        origem_id: id
+        origem_id: id,
+        turno_id: turnoId
       })
     }
   })()
 }
 
-export function pagarParcela(parcelaId: number): void {
+export function pagarParcela(
+  parcelaId: number,
+  forma?: string | null,
+  caixaId?: number | null
+): void {
   const db = obterBancoDeDados()
   const parcela = db
     .prepare('SELECT venda_id, valor, status FROM parcelas WHERE id = ?')
@@ -763,15 +814,17 @@ export function pagarParcela(parcelaId: number): void {
       // ⚠️ Só lança se a parcela ainda NÃO estava paga. Sem esta guarda, um
       // clique duplo lançaria o dinheiro duas vezes no livro — e aí o
       // fechamento acusaria uma sobra que ninguém conseguiria explicar.
-      const conta = contaSugerida(db, 'recebimento', null)
+      const { conta, turnoId } = destinoDoRecebimento(db, forma, caixaId)
       if (conta) {
         lancarMovimento(db, {
           conta_id: conta,
           valor: parcela.valor,
           tipo: 'recebimento',
           descricao: `Parcela da venda #${parcela.venda_id}`,
+          forma_pagamento: forma ?? undefined,
           origem_tipo: 'parcela',
-          origem_id: parcelaId
+          origem_id: parcelaId,
+          turno_id: turnoId
         })
       }
     }
@@ -807,6 +860,64 @@ export function pagarParcela(parcelaId: number): void {
 // venda (valor_pago) e recalcula o status. É o inverso exato do pagarParcela e
 // funciona em qualquer parcela paga, a qualquer momento. Ação do gerente — a trava
 // de permissão fica no IPC.
+/**
+ * Desfaz no LIVRO o dinheiro que uma venda ou parcela tinha trazido.
+ *
+ * ── Por que precisa existir ─────────────────────────────────────────────────
+ * Estornar mexia só na venda: `valor_pago` caía, o status reabria, e o
+ * lançamento continuava no livro. O dinheiro tinha voltado para a mão do
+ * cliente e o sistema seguia esperando encontrá-lo na gaveta — dava FALTA no
+ * fechamento, do tamanho exato do que foi estornado, sem nada na tela que
+ * ligasse uma coisa à outra.
+ *
+ * ── Devolve na MESMA conta e na MESMA forma do original ────────────────────
+ * Se entrou no cartão, sai do cartão; se entrou na gaveta, sai da gaveta.
+ * Adivinhar aqui faria o saldo de uma conta subir e o de outra cair.
+ *
+ * ── ⚠️ Mas no turno de AGORA, não no turno original ────────────────────────
+ * `lancarMovimento` carimba o turno aberto da conta, e é o que se quer. O turno
+ * em que a venda aconteceu pode estar fechado e já conferido pelo gerente;
+ * lançar lá dentro mudaria o esperado de uma contagem que já foi assinada.
+ *
+ * Devolve o total estornado, ou 0 quando não havia nada lançado (loja sem conta
+ * configurada na época da venda — aí não há o que desfazer).
+ */
+function estornarNoLivro(
+  db: ReturnType<typeof obterBancoDeDados>,
+  origemTipo: 'venda' | 'parcela',
+  origemId: number,
+  descricao: string
+): number {
+  const entradas = db
+    .prepare(
+      `SELECT conta_id, forma_pagamento, SUM(valor) AS total
+         FROM movimentos_financeiros
+        WHERE origem_tipo = ? AND origem_id = ?
+        GROUP BY conta_id, forma_pagamento
+       HAVING SUM(valor) > 0`
+    )
+    .all(origemTipo, origemId) as Array<{
+    conta_id: number
+    forma_pagamento: string | null
+    total: number
+  }>
+
+  let estornado = 0
+  for (const e of entradas) {
+    lancarMovimento(db, {
+      conta_id: e.conta_id,
+      valor: -(+e.total.toFixed(2)),
+      tipo: 'estorno',
+      descricao,
+      forma_pagamento: e.forma_pagamento ?? undefined,
+      origem_tipo: origemTipo,
+      origem_id: origemId
+    })
+    estornado = +(estornado + e.total).toFixed(2)
+  }
+  return estornado
+}
+
 export function estornarParcela(parcelaId: number): void {
   const db = obterBancoDeDados()
   const parcela = db
@@ -834,6 +945,8 @@ export function estornarParcela(parcelaId: number): void {
       .get(parcela.venda_id)
     const novoStatus = temAtrasada ? 'inadimplente' : 'parcelado'
     db.prepare('UPDATE vendas SET status_pagamento = ? WHERE id = ?').run(novoStatus, parcela.venda_id)
+    // O dinheiro da parcela volta para quem pagou, então sai do livro também.
+    estornarNoLivro(db, 'parcela', parcelaId, `Estorno da parcela da venda #${parcela.venda_id}`)
   })()
 }
 
@@ -877,14 +990,20 @@ export function estornarRecebimento(vendaId: number): void {
     )
   }
 
-  db.prepare(
-    `UPDATE vendas
-     SET valor_pago = 0,
-         status_pagamento = CASE
-           WHEN data_vencimento IS NOT NULL AND data_vencimento < date('now', 'localtime') THEN 'inadimplente'
-           ELSE 'pendente' END
-     WHERE id = ?`
-  ).run(vendaId)
+  // ⚠️ Numa transação só: reabrir a venda e desfazer o livro têm que acontecer
+  // junto. Meio caminho deixaria a venda em aberto com o dinheiro ainda lançado,
+  // que é exatamente o estado errado que este conserto veio remover.
+  db.transaction(() => {
+    db.prepare(
+      `UPDATE vendas
+       SET valor_pago = 0,
+           status_pagamento = CASE
+             WHEN data_vencimento IS NOT NULL AND data_vencimento < date('now', 'localtime') THEN 'inadimplente'
+             ELSE 'pendente' END
+       WHERE id = ?`
+    ).run(vendaId)
+    estornarNoLivro(db, 'venda', vendaId, `Estorno do recebimento da venda #${vendaId}`)
+  })()
 }
 
 // Estados em que cancelar é seguro (a regra completa fica aqui).

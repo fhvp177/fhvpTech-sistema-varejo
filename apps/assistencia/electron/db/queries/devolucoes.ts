@@ -1,5 +1,6 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { buscarVendaPorId } from './vendas'
+import { contaSugerida, lancarMovimento } from './financeiro'
 
 export type TipoDevolucao = 'credito' | 'dinheiro'
 
@@ -43,6 +44,15 @@ export type DadosNovaDevolucao = {
   tipo: TipoDevolucao
   cliente_id?: number | null // obrigatório p/ crédito (crédito é de alguém)
   motivo?: string | null
+  /**
+   * De qual gaveta sai o dinheiro. Só vale quando `tipo = 'dinheiro'`.
+   *
+   * É o caixa escolhido NAQUELE aparelho, o mesmo que a venda usa. Com dois
+   * caixas abertos, tirar do caixa errado faria uma contagem sobrar e a outra
+   * faltar exatamente o mesmo valor — o defeito mais difícil de entender que
+   * existe num fechamento.
+   */
+  caixa_id?: number | null
   itens: ItemDevolverEntrada[]
 }
 
@@ -207,6 +217,40 @@ export function registrarDevolucao(dados: DadosNovaDevolucao): Devolucao {
         valor: valorTotal,
         devolucao_id: devolucaoId
       })
+    }
+
+    /*
+     * ⚠️ Dinheiro de volta SAI DA GAVETA, e por isso vai ao livro.
+     *
+     * Sem este lançamento, a nota saía fisicamente do caixa e o sistema
+     * continuava esperando encontrá-la no fechamento: dava FALTA do tamanho
+     * exato da devolução, e o lojista não tinha como descobrir de onde vinha.
+     * O aviso de "exige gerente" já reconhecia que o dinheiro sai do caixa; o
+     * que faltava era anotar a saída.
+     *
+     * Devolução em CRÉDITO não entra aqui, e está certo: nada sai da gaveta,
+     * o cliente fica com saldo na loja.
+     *
+     * ── Por que o turno vem da queda, e não daqui ─────────────────────────
+     * `lancarMovimento` carimba o turno ABERTO da conta. É o que se quer: a
+     * saída pertence ao turno de agora, não ao turno em que a venda original
+     * aconteceu — aquele pode estar fechado e conferido, e mexer no esperado
+     * dele mudaria uma contagem que já foi assinada.
+     */
+    if (dados.tipo === 'dinheiro') {
+      const conta = dados.caixa_id ?? contaSugerida(db, 'pagamento', 'dinheiro')
+      if (conta) {
+        lancarMovimento(db, {
+          conta_id: conta,
+          valor: -valorTotal,
+          tipo: 'devolucao',
+          descricao: `Devolução da venda #${dados.venda_id}`,
+          forma_pagamento: 'dinheiro',
+          origem_tipo: 'devolucao',
+          origem_id: devolucaoId,
+          vendedor_id: dados.vendedor_id
+        })
+      }
     }
   })()
 

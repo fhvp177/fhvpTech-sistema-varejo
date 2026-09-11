@@ -19,6 +19,8 @@ type EntradaDevolucao = {
   tipo: TipoDevolucao
   cliente_id?: number | null
   motivo?: string | null
+  // De qual gaveta sai o dinheiro. É o caixa escolhido NAQUELE aparelho.
+  caixa_id?: number | null
   itens: ItemDevolverEntrada[]
   // Só usado quando tipo='dinheiro' e o vendedor logado não é gerente: PIN de um
   // gerente pra autorizar a saída de dinheiro do caixa.
@@ -78,6 +80,7 @@ export function registrarHandlersDevolucoes(): void {
         tipo: entrada.tipo,
         cliente_id: entrada.cliente_id ?? null,
         motivo: entrada.motivo ?? null,
+        caixa_id: entrada.caixa_id ?? null,
         itens: entrada.itens
       })
       obterBackupManager().marcarAlteracao()

@@ -1,5 +1,6 @@
 import { FC, useEffect, useMemo, useState } from 'react'
 import { Wallet, Banknote, UserPlus, ShieldAlert, AlertTriangle } from 'lucide-react'
+import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 import {
   Dialog,
   DialogContent,
@@ -65,6 +66,8 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
   const [pinDono, setPinDono] = useState('')
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
+  // A gaveta deste aparelho, para a saída de dinheiro cair no lugar certo.
+  const { caixaId: caixaDoAparelho } = useCaixaDoAparelho()
 
   // Cadastro rápido (nome + telefone) para o crédito de venda avulsa.
   const [novoAberto, setNovoAberto] = useState(false)
@@ -211,6 +214,9 @@ const ModalDevolucao: FC<Props> = ({ vendaId, onClose, onConcluido, ehDono }) =>
       tipo,
       cliente_id: tipo === 'credito' ? parseInt(clienteCreditoId) : null,
       motivo: motivo.trim() || null,
+      // De qual gaveta sai o dinheiro. Só pesa quando tipo = 'dinheiro': é o
+      // caixa deste aparelho, o mesmo em que as vendas dele entram.
+      caixa_id: caixaDoAparelho,
       itens: itensEnviar,
       pinDono: tipo === 'dinheiro' && !ehDono ? pinDono : undefined
     })

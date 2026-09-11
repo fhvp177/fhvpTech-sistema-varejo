@@ -228,10 +228,19 @@ const api = {
     atualizarStatus: (id: number, status: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:atualizarStatus', id, status),
     buscarPorId: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:buscarPorId', id),
-    pagarParcela: (parcelaId: number): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('vendas:pagarParcela', parcelaId),
-    registrarPagamentoParcial: (id: number, valor: number): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('vendas:registrarPagamentoParcial', id, valor),
+    pagarParcela: (
+      parcelaId: number,
+      forma?: string | null,
+      caixaId?: number | null
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendas:pagarParcela', parcelaId, forma, caixaId),
+    registrarPagamentoParcial: (
+      id: number,
+      valor: number,
+      forma?: string | null,
+      caixaId?: number | null
+    ): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendas:registrarPagamentoParcial', id, valor, forma, caixaId),
     estornarParcela: (parcelaId: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:estornarParcela', parcelaId),
     estornarRecebimento: (id: number): Promise<RespostaIPC> =>
@@ -449,6 +458,7 @@ const api = {
       tipo: 'credito' | 'dinheiro'
       cliente_id?: number | null
       motivo?: string | null
+      caixa_id?: number | null
       itens: Array<{ item_venda_id: number; quantidade: number; restocar: boolean }>
       pinDono?: string
     }): Promise<RespostaIPC> => ipcRenderer.invoke('devolucoes:registrar', entrada)
