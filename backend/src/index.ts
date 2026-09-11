@@ -93,6 +93,7 @@ import {
 } from './licenca.ts'
 import { licencaAtiva } from './licencaGuard.ts'
 import { registrarRotasRelay } from './relay.ts'
+import { PRAZO_R2_MS, prazoDe } from './prazoRede.ts'
 import { registrarRotasFiscais } from './rotasFiscais.ts'
 import { registrarRotasRevenda } from './rotasRevenda.ts'
 import { gerarHashSenha, senhaAceitavel, emailAceitavel } from './revendaAuth.ts'
@@ -159,6 +160,31 @@ const app = new Hono()
 app.use('*', cors())
 
 app.get('/', (c) => c.text('FHVP Tech — licenca API ok'))
+
+/**
+ * "Este processo ainda atende?" — a pergunta que o Fly faz de 30 em 30s.
+ *
+ * ── Por que isto existe ─────────────────────────────────────────────────────
+ * Em 11/09/2026 este servidor ficou TRAVADO: aceitava a conexao em 0,06s e nao
+ * devolvia um byte, em qualquer endereco, ate estourar 35 segundos. Licenca,
+ * nota fiscal e painel, tudo fora. E ficou assim ate alguem reclamar, porque
+ * o app nao tinha checagem de saude nenhuma — o proprio `fly machine restart`
+ * respondeu "No health checks found".
+ *
+ * O Fly reinicia sozinho a maquina doente, mas so se voce disser COMO
+ * perguntar se ela esta bem. Sem esta rota, travar era permanente; com ela,
+ * travar dura o tempo de duas checagens.
+ *
+ * ── ⚠️ NAO toca no banco, e nao chama ninguem de fora ───────────────────────
+ * A pergunta e sobre o PROCESSO, nao sobre as dependencias dele. Consultar o
+ * SQLite aqui faria um disco lento derrubar um servidor que estava atendendo;
+ * chamar a ACBr faria a indisponibilidade DELES virar reinicio NOSSO — e em
+ * laco, porque reiniciar nao conserta terceiro.
+ *
+ * Responder isto exige o laco de eventos girando e uma conexao livre, que sao
+ * exatamente as duas coisas que faltavam quando ele travou.
+ */
+app.get('/saude', (c) => c.json({ ok: true, desde: Math.round(process.uptime()) }))
 
 /**
  * Identidade visual dos painéis — folha e logotipo, servidos pelo backend.
@@ -471,7 +497,7 @@ app.post('/backup/listar', async (c) => {
     expiraEmSegundos: 60,
     agora: new Date()
   })
-  const r = await fetch(url)
+  const r = await fetch(url, { signal: prazoDe(PRAZO_R2_MS) })
   if (!r.ok) {
     return c.json({ erro: `armazenamento respondeu ${r.status}` }, 502)
   }

@@ -23,10 +23,15 @@ Ele é o **dono do negócio e o decisor**, não um programador. Opera sistemas e
   Use dois-pontos, parênteses, vírgula ou ponto final.
 - **A marca é "FHVP Tech".** "Sistema RT" e "GN Modas" são nomes aposentados.
   Não use nem no raciocínio interno.
-- ⚠️ **A palavra `gnmodas` NUNCA vai para produção.** Ela ainda existe em 19
-  arquivos (é o nome do app no Fly, que não dá para renomear) e há um teste
-  (`backend/src/painelNoDominio.test.ts`) que prende essa lista: ela pode
+- ⚠️ **O nome do cliente antigo NUNCA vai para produção.** É o nome que aparece
+  no endereço do backend no Fly (`licenca-...fly.dev`), e por isso ainda existe
+  em 19 arquivos: o app não dá para renomear. Há um teste
+  (`backend/src/painelNoDominio.test.ts`) que prende essa lista — ela pode
   encolher, nunca crescer. Arquivo novo com o nome dentro quebra o build.
+
+  ⚠️ Isto vale para ESTE arquivo também, e já mordeu: escrever a regra
+  soletrando a palavra faz o próprio teste reprovar, porque ele não distingue
+  usar de citar. Descreva o nome, não o escreva.
 - **Vocabulário genérico no varejo.** O app de varejo é produto de prateleira
   para lojas de qualquer ramo. Fale em produto, item, unidade, estoque, venda.
   Nunca em peça, blusa, roupa, "loja de roupas".

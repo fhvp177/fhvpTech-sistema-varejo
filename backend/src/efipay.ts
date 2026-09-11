@@ -11,6 +11,7 @@
 // Documentação: https://dev.efipay.com.br/docs/api-pix/
 
 import { Agent } from 'undici'
+import { PRAZO_EFI_MS, PRAZO_TOKEN_MS, prazoDe } from './prazoRede.ts'
 
 export type CobrancaPIX = {
   txid: string
@@ -67,7 +68,8 @@ async function obterToken(): Promise<string> {
     },
     body: JSON.stringify({ grant_type: 'client_credentials' }),
     // @ts-expect-error — fetch global aceita dispatcher do undici em runtime
-    dispatcher
+    dispatcher,
+    signal: prazoDe(PRAZO_TOKEN_MS)
   })
   if (!r.ok) {
     throw new Error(`EfiPay oauth falhou ${r.status}: ${await r.text()}`)
@@ -118,7 +120,8 @@ export async function criarCobrancaPIX(
     },
     body: JSON.stringify(corpo),
     // @ts-expect-error
-    dispatcher
+    dispatcher,
+    signal: prazoDe(PRAZO_EFI_MS)
   })
   if (!r.ok) {
     throw new Error(`EfiPay criar cob falhou ${r.status}: ${await r.text()}`)
@@ -132,7 +135,8 @@ export async function criarCobrancaPIX(
   const rQr = await fetch(`${baseUrl}/v2/loc/${cob.location.id}/qrcode`, {
     headers: { Authorization: `Bearer ${token}` },
     // @ts-expect-error
-    dispatcher
+    dispatcher,
+    signal: prazoDe(PRAZO_EFI_MS)
   })
   if (rQr.ok) {
     const qr = (await rQr.json()) as RespostaQrcode
@@ -167,7 +171,8 @@ export async function consultarCobrancaPIX(
   const r = await fetch(`${baseUrl}/v2/cob/${txid}`, {
     headers: { Authorization: `Bearer ${token}` },
     // @ts-expect-error
-    dispatcher
+    dispatcher,
+    signal: prazoDe(PRAZO_EFI_MS)
   })
   if (!r.ok) {
     throw new Error(`EfiPay consultar cob falhou ${r.status}: ${await r.text()}`)
@@ -196,7 +201,8 @@ export async function configurarWebhook(webhookUrl: string): Promise<void> {
     },
     body: JSON.stringify({ webhookUrl }),
     // @ts-expect-error
-    dispatcher
+    dispatcher,
+    signal: prazoDe(PRAZO_EFI_MS)
   })
   if (!r.ok) {
     throw new Error(`EfiPay PUT webhook falhou ${r.status}: ${await r.text()}`)
@@ -210,7 +216,8 @@ export async function obterWebhookConfigurado(): Promise<{ webhookUrl: string; c
   const r = await fetch(`${baseUrl}/v2/webhook/${encodeURIComponent(chavePix)}`, {
     headers: { Authorization: `Bearer ${token}` },
     // @ts-expect-error
-    dispatcher
+    dispatcher,
+    signal: prazoDe(PRAZO_EFI_MS)
   })
   if (r.status === 404) return null
   if (!r.ok) {

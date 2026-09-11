@@ -15,9 +15,50 @@ primary_region = "gru"
   auto_start_machines = true
   min_machines_running = 1
 
+  # ⚠️ Sem este bloco valia o padrão do Fly, que conta CONEXÕES e é baixo.
+  #
+  # Aqui isso morde por um motivo que não é óbvio: o multicaixa mantém pedidos
+  # PENDURADOS neste servidor — cada loja com o modo servidor ligado segura oito
+  # de cada vez, por 25 segundos, o tempo todo. São conexões ocupadas sem
+  # nenhum trabalho acontecendo, e elas não "terminam" para liberar a vaga.
+  #
+  # Contar REQUISIÇÕES em vez de conexões é o que faz o long-poll parar de
+  # consumir o orçamento como se fosse tráfego real. Os números são os mesmos
+  # das lojas, que rodam o mesmo tipo de coisa sem apertos.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+# ⚠️ A CHECAGEM QUE NÃO EXISTIA, e é a razão de o painel "cair tanto".
+#
+# Em 11/09/2026 este servidor travou: aceitava a conexão em 0,06s e não devolvia
+# um byte, em qualquer endereço, até estourar 35 segundos. Licença, nota fiscal
+# e painel, todos fora. E ficou assim até alguém reclamar — o próprio
+# `fly machine restart` respondeu "No health checks found".
+#
+# O Fly reinicia sozinho a máquina doente, mas só se lhe disserem COMO perguntar
+# se ela está bem. Sem isto, travar era permanente; com isto, travar dura o
+# tempo de duas perguntas.
+#
+# `/saude` responde sem tocar no banco e sem chamar ninguém de fora: a pergunta
+# é sobre o PROCESSO. Consultar o SQLite aqui faria disco lento derrubar um
+# servidor que estava atendendo, e chamar a ACBr faria a queda DELES virar
+# reinício NOSSO, em laço — reiniciar não conserta terceiro.
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "20s"
+  method = "GET"
+  path = "/saude"
+
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "256mb"
+  # 512 MB e não 256: este processo carrega XML e PDF de nota fiscal em memória
+  # (o DANFE vai e volta em base64) e ainda segura os pedidos pendurados do
+  # multicaixa. Errar para baixo aqui custa a máquina morrer no meio de uma
+  # emissão, que é o pior momento possível.
+  memory = "512mb"
 
 [[mounts]]
   source = "licenca_data"

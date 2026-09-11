@@ -17,6 +17,7 @@
 //    parece problema de ambiente. Por isso o cache é POR AMBIENTE.
 
 import { createHash } from 'node:crypto'
+import { PRAZO_ACBR_MS, PRAZO_TOKEN_MS, prazoDe } from './prazoRede.ts'
 
 import {
   apagarTokenAcbr,
@@ -118,7 +119,8 @@ export async function buscarTokenRemoto(
     r = await fetch(URL_TOKEN, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: corpo
+      body: corpo,
+      signal: prazoDe(PRAZO_TOKEN_MS)
     })
   } catch (e) {
     throw new ErroAcbr('indisponivel', `Falha ao contatar a ACBr: ${(e as Error).message}`)
@@ -264,7 +266,8 @@ export async function chamarAcbr<T = unknown>(
       return await fetch(`${base}${rota}`, {
         method: metodo,
         headers,
-        body: corpo === undefined ? undefined : JSON.stringify(corpo)
+        body: corpo === undefined ? undefined : JSON.stringify(corpo),
+        signal: prazoDe(PRAZO_ACBR_MS)
       })
     } catch (e) {
       throw new ErroAcbr('indisponivel', `Falha de rede ao chamar a ACBr: ${(e as Error).message}`)
