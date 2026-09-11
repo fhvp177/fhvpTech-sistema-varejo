@@ -32,6 +32,29 @@ export interface GanchosBackup {
    * salvo" não pode ser uma promessa com atraso.
    */
   aoConcluirBackup?: () => void
+  /**
+   * Quem registra `backup:listarNuvem` e `backup:baixarDaNuvem` é outro.
+   *
+   * ── Por que esta opção existe ───────────────────────────────────────────
+   * A loja hospedada já tinha os dois canais, em `servidor/restaurarDaNuvem`.
+   * Quando o backup em nuvem chegou ao aplicativo INSTALADO, os mesmos dois
+   * nomes nasceram aqui — e o servidor passou a registrar cada um duas vezes.
+   * `registrarCanal` recusa nome repetido, o processo não subiu, e a loja do
+   * cliente ficou fora do ar até voltar para a versão anterior.
+   *
+   * ── Por que a versão do servidor é a que fica ───────────────────────────
+   * As duas fazem a mesma coisa por caminhos diferentes, e só uma serve lá:
+   *
+   *   • a daqui pede ao BACKEND, porque o computador do lojista não tem (nem
+   *     pode ter) credencial do R2;
+   *   • a do servidor fala DIRETO com o R2, com a credencial que só existe no
+   *     ambiente dele, e confere que a chave começa em `lojas/<clienteId>/` —
+   *     é essa conferência que impede uma loja baixar o banco de outra.
+   *
+   * Trocar pela daqui apagaria essa conferência. Por isso o servidor passa
+   * `semNuvem: true` e continua registrando a dele.
+   */
+  semNuvem?: boolean
 }
 
 export function registrarHandlersBackup(ganchos: GanchosBackup = {}): void {
@@ -127,21 +150,25 @@ export function registrarHandlersBackup(ganchos: GanchosBackup = {}): void {
    * onde alguém chega no pior dia, e ela não pode quebrar porque a internet
    * caiu.
    */
-  registrarCanal('backup:listarNuvem', async () => {
-    const itens = await listarNaNuvem({
-      pastaBackups: obterBackupManager().pastaPadrao,
-      urlBackend: urlBackend()
+  // ⚠️ `semNuvem` existe porque a loja hospedada já registra estes dois, com
+  // a implementação dela. Ver o comentário em GanchosBackup.
+  if (!ganchos.semNuvem) {
+    registrarCanal('backup:listarNuvem', async () => {
+      const itens = await listarNaNuvem({
+        pastaBackups: obterBackupManager().pastaPadrao,
+        urlBackend: urlBackend()
+      })
+      return { success: true, data: itens }
     })
-    return { success: true, data: itens }
-  })
 
-  registrarCanal('backup:baixarDaNuvem', async (chaveObjeto: string) => {
-    const r = await baixarDaNuvem(
-      { pastaBackups: obterBackupManager().pastaPadrao, urlBackend: urlBackend() },
-      String(chaveObjeto)
-    )
-    return r.ok ? { success: true, data: r.caminho } : { success: false, error: r.erro }
-  })
+    registrarCanal('backup:baixarDaNuvem', async (chaveObjeto: string) => {
+      const r = await baixarDaNuvem(
+        { pastaBackups: obterBackupManager().pastaPadrao, urlBackend: urlBackend() },
+        String(chaveObjeto)
+      )
+      return r.ok ? { success: true, data: r.caminho } : { success: false, error: r.erro }
+    })
+  }
 
   registrarCanal('backup:selecionarPasta', async () => {
     try {

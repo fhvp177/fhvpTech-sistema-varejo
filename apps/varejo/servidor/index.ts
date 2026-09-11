@@ -294,9 +294,20 @@ function registrarHandlers(): void {
   registrarHandlersLicencaPagamento()
   registrarHandlersAuth()
   // Sem `aoMudarAgenda`: aqui não há agendador de janela para reiniciar.
-  registrarHandlersBackup({ aoConcluirBackup: envioImediato })
-  // Só existem aqui: no aplicativo instalado não há nuvem de onde buscar, e o
-  // lojista tem a pasta dele e o pendrive.
+  // ⚠️ `semNuvem` NÃO é arrumação: sem ele o processo não sobe.
+  //
+  // `registrarHandlersBackup` também registra `backup:listarNuvem` e
+  // `backup:baixarDaNuvem` desde que o backup em nuvem chegou ao aplicativo
+  // instalado. Como `registrarHandlersNuvem` logo abaixo registra os mesmos
+  // dois nomes, e `registrarCanal` recusa nome repetido, o servidor morria no
+  // arranque com "Canal backup:listarNuvem registrado duas vezes" — e a loja
+  // do cliente ficava fora do ar, reiniciando em laço.
+  registrarHandlersBackup({ aoConcluirBackup: envioImediato, semNuvem: true })
+  // A implementação daqui é a que FICA, e não a do aplicativo instalado: ela
+  // fala direto com o R2 (a credencial só existe no ambiente do servidor) e
+  // exige que a chave comece em `lojas/<clienteId>/`. É essa exigência que
+  // impede uma loja baixar o banco de outra; a do instalado passa pelo backend
+  // e não tem como fazer essa conferência.
   registrarHandlersNuvem()
   registrarHandlersCategorias()
   registrarHandlersOrigens()

@@ -138,6 +138,96 @@ describe('inventário de canais IPC', () => {
     expect(sobrando.sort(), 'exceção declarada para handler que não existe mais').toEqual([])
   })
 
+  /*
+   * ⚠️⚠️ E O OUTRO LADO DA MESMA MOEDA: CANAL REGISTRADO DUAS VEZES ──────────
+   *
+   * A guarda acima pega handler que FALTA na loja hospedada. Esta pega o
+   * contrário, que é pior: handler a MAIS, com um nome de canal que a loja
+   * hospedada já tinha.
+   *
+   * ── O que aconteceu em 11/09/2026 ───────────────────────────────────────
+   * A loja hospedada já registrava `backup:listarNuvem` e
+   * `backup:baixarDaNuvem`, em `servidor/restaurarDaNuvem.ts`. Quando o backup
+   * em nuvem chegou ao aplicativo INSTALADO, os mesmos dois nomes nasceram em
+   * `electron/ipc/backup.ts` — que a loja hospedada também registra.
+   *
+   * `registrarCanal` recusa nome repetido, e faz certo. Mas o resultado é que
+   * o processo do servidor NÃO SOBE: ele morre no arranque, reinicia em laço
+   * até bater o limite, e a loja do cliente fica fora do ar. Foi preciso voltar
+   * para a versão anterior para reabrir a loja.
+   *
+   * ── Por que nada acusou antes ───────────────────────────────────────────
+   * No aplicativo instalado só existe um dos dois registros, então tudo
+   * funciona. A duplicidade só existe na COMBINAÇÃO que a loja hospedada faz, e
+   * ninguém carregava essa combinação fora de produção. Typecheck não vê:
+   * canal é string. Os testes não viam: ninguém montava a lista do servidor.
+   *
+   * ── Como sair da duplicidade ────────────────────────────────────────────
+   * Não é apagar um dos dois: as implementações são diferentes de propósito (a
+   * do servidor fala direto com o R2 e confere a pasta da loja; a do instalado
+   * passa pelo backend). O certo é o servidor DESLIGAR o lado que não serve,
+   * por opção explícita — e é isso que a lista abaixo exige e confere.
+   */
+  it('★ nenhum canal nasce duas vezes na loja hospedada', () => {
+    const SERVIDOR = join(ELECTRON_VAREJO, '..', 'servidor')
+    const IPC = join(ELECTRON_VAREJO, 'ipc')
+
+    const canaisPorModulo = (dir: string): Map<string, string[]> => {
+      const mapa = new Map<string, string[]>()
+      for (const caminho of arquivosTs(dir)) {
+        for (const canal of canaisDoArquivo(caminho)) {
+          const onde = mapa.get(canal) ?? []
+          onde.push(caminho.slice(caminho.lastIndexOf('\\') + 1))
+          mapa.set(canal, onde)
+        }
+      }
+      return mapa
+    }
+
+    const noServidor = canaisPorModulo(SERVIDOR)
+    const noIpc = canaisPorModulo(IPC)
+
+    /**
+     * Canal que existe nos dois lados → a opção que o `servidor/index.ts` tem
+     * que passar para desligar o lado do aplicativo instalado.
+     *
+     * Entrada nova aqui é uma DECISÃO: significa dizer qual das duas
+     * implementações vale na loja hospedada, e por quê. O comentário fica no
+     * `GanchosBackup`, junto da opção.
+     */
+    const DUPLICADOS_COM_SAIDA: Record<string, string> = {
+      'backup:listarNuvem': 'semNuvem',
+      'backup:baixarDaNuvem': 'semNuvem'
+    }
+
+    const indexServidor = readFileSync(join(SERVIDOR, 'index.ts'), 'utf-8')
+
+    const semSaida: string[] = []
+    for (const canal of noServidor.keys()) {
+      if (!noIpc.has(canal)) continue
+      const opcao = DUPLICADOS_COM_SAIDA[canal]
+      // Sem opção declarada, ou com a opção declarada e NÃO passada, o servidor
+      // registraria o mesmo nome duas vezes e morreria no arranque.
+      if (!opcao || !new RegExp(`${opcao}\\s*:\\s*true`).test(indexServidor)) {
+        semSaida.push(`${canal} (servidor/${noServidor.get(canal)}, ipc/${noIpc.get(canal)})`)
+      }
+    }
+
+    expect(
+      semSaida.sort(),
+      'estes canais são registrados pelo servidor E pelo ipc do aplicativo. Na ' +
+        'loja hospedada isso derruba o processo no arranque, porque registrarCanal ' +
+        'recusa nome repetido. Decida qual implementação vale lá e passe a opção ' +
+        'que desliga a outra em servidor/index.ts'
+    ).toEqual([])
+
+    // A lista também não pode envelhecer: canal que deixou de colidir some daqui.
+    const obsoletos = Object.keys(DUPLICADOS_COM_SAIDA).filter(
+      (c) => !(noServidor.has(c) && noIpc.has(c))
+    )
+    expect(obsoletos.sort(), 'saída declarada para canal que já não colide').toEqual([])
+  })
+
   it('encontra os arquivos que registram canais', () => {
     expect(existsSync(ELECTRON_VAREJO)).toBe(true)
     for (const modulo of MODULOS_CORE) {
