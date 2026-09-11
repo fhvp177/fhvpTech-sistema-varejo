@@ -30,7 +30,7 @@ export function construirSlidesGuia(): SlideGuia[] {
       corIcone: 'bg-orange-100 text-orange-600',
       titulo: 'Controle seu estoque',
       descricao:
-        'Cadastre produtos com preço, custo e quantidade — cada um ganha uma referência curta pra achar sem leitor. Roupas têm grade de tamanhos (P ao GG, com estoque por tamanho), e o sistema avisa sozinho quando algo está acabando.'
+        'Cadastre produtos com preço, custo e quantidade — cada um ganha uma referência curta pra achar sem leitor. Quem vende por tamanho pode ligar a grade (P ao GG, com estoque por tamanho), e o sistema avisa sozinho quando algo está acabando.'
     },
     {
       icone: <FileUp className="w-8 h-8" />,

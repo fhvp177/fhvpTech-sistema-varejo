@@ -41,7 +41,7 @@ export function construirPassosTour(ehDono: boolean): PassoTour[] {
         alvo: 'produtos-novo',
         titulo: 'Cadastrar produto',
         descricao:
-          'Cadastro completo: preço, custo, categoria, fornecedor, grade de tamanhos (pra roupas) e a referência curta — que o sistema numera sozinho se você deixar em branco.'
+          'Cadastro completo: preço, custo, categoria, fornecedor, grade de tamanhos (pra quem vende por tamanho) e a referência curta — que o sistema numera sozinho se você deixar em branco.'
       },
       {
         alvo: 'produtos-importar-xml',

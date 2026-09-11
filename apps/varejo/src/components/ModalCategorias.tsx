@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Check, X, Shirt } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, X, Ruler } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
 import { Input } from '@fhvptech/core/ui/input'
@@ -163,11 +163,24 @@ const ModalCategorias: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
                       </>
                     ) : (
                       <>
-                        <span className="flex-1 text-sm">{c.nome}</span>
+                        {/*
+                          ⚠️ `min-w-0` + `truncate` é o que alinha a linha inteira, e
+                          não é enfeite.
+
+                          Sem eles, o nome tem `min-width: auto` e se recusa a
+                          encolher: categoria de nome comprido EMPURRA o ícone, a
+                          contagem e os dois botões para a direita, e cada linha
+                          para num lugar diferente. Era o que se via na foto —
+                          quatro réguas em quatro posições. Com `min-w-0` o nome
+                          absorve a diferença e todo o resto vira uma coluna fixa.
+                        */}
+                        <span className="min-w-0 flex-1 truncate text-sm" title={c.nome}>
+                          {c.nome}
+                        </span>
                         <button
                           onClick={() => alternarTamanhos(c)}
                           aria-pressed={!!c.usa_tamanhos}
-                          className={`p-1 ${
+                          className={`shrink-0 p-1 ${
                             c.usa_tamanhos
                               ? 'text-primary'
                               : 'text-muted-foreground/40 hover:text-muted-foreground'
@@ -178,21 +191,28 @@ const ModalCategorias: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
                               : 'Sem tamanhos — clique para ativar a grade (P/M/G/GG)'
                           }
                         >
-                          <Shirt className="w-4 h-4" />
+                          <Ruler className="w-4 h-4" />
                         </button>
-                        <span className="text-xs text-muted-foreground">
+                        {/*
+                          Largura fixa e alinhada à direita: sem isso "1 produto" e
+                          "12 produtos" têm larguras diferentes e desalinham o lápis
+                          e a lixeira. `whitespace-nowrap` impede o que aparecia na
+                          foto — a contagem quebrando em duas linhas e entortando a
+                          altura da linha inteira.
+                        */}
+                        <span className="w-20 shrink-0 whitespace-nowrap text-right text-xs text-muted-foreground">
                           {c.produtos_count} produto{c.produtos_count !== 1 ? 's' : ''}
                         </span>
                         <button
                           onClick={() => iniciarEdicao(c)}
-                          className="text-muted-foreground hover:text-foreground p-1"
+                          className="shrink-0 text-muted-foreground hover:text-foreground p-1"
                           title="Renomear"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => excluir(c)}
-                          className="text-destructive/70 hover:text-destructive p-1"
+                          className="shrink-0 text-destructive/70 hover:text-destructive p-1"
                           title="Excluir"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -207,7 +227,7 @@ const ModalCategorias: FC<Props> = ({ aberto, onFechar, onMudancas }) => {
 
           <p className="text-xs text-muted-foreground">
             Renomear uma categoria atualiza automaticamente todos os produtos vinculados.
-            O ícone <Shirt className="inline w-3.5 h-3.5 -mt-0.5" /> liga a grade de tamanhos
+            O ícone <Ruler className="inline w-3.5 h-3.5 -mt-0.5" /> liga a grade de tamanhos
             (P/M/G/GG) no cadastro dos produtos desta categoria.
           </p>
         </div>
