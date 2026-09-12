@@ -1,6 +1,6 @@
 import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
-import { aReceberPorVencimento, type AReceberPorVencimento } from './vendas'
+import { aReceberPorVencimento, aReceberSemPrazo, type AReceberPorVencimento } from './vendas'
 import {
   aPagarPorVencimento,
   aPagarFuturo,
@@ -117,6 +117,15 @@ export type MetricasDashboard = {
   // A receber com VENCIMENTO dentro do período filtrado (inclui vendas de
   // períodos anteriores). Não somar com faturamento — são âncoras diferentes.
   a_receber_periodo: AReceberPorVencimento
+  /*
+   * O que está em aberto sem prazo combinado.
+   *
+   * ⚠️ Fica FORA de `a_receber_periodo` de propósito: aquele número é
+   * ancorado em vencimento, e estas vendas não têm nenhum. Somar as duas
+   * coisas numa linha só daria um total que não bate com nenhum recorte
+   * de data e que muda quando o filtro do Painel muda, sem motivo visível.
+   */
+  a_receber_sem_prazo: number
   // A pagar (contas da loja) — espelho do a_receber: recorte pelo vencimento no
   // período filtrado + a projeção de 30/60/90 dias.
   a_pagar_periodo: APagarPorVencimento
@@ -350,6 +359,9 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
 
   // A receber ancorado no vencimento, recortado pelo período do filtro.
   const aReceberPeriodo = aReceberPorVencimento(inicio_atual, fim_atual)
+  // E o que não tem vencimento nenhum, que por isso não entra em recorte
+  // de data nenhum. Ver `aReceberSemPrazo`.
+  const aReceberSemPrazoTotal = aReceberSemPrazo()
 
   // A pagar (contas da loja), mesmas âncoras do a receber.
   const aPagarPeriodo = aPagarPorVencimento(inicio_atual, fim_atual)
@@ -379,7 +391,9 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
              ) AS INTEGER
            ) AS dias_parado
          FROM produtos p
-         WHERE p.estoque > 0
+         -- Arquivado nao entra: parado e um convite a promover, e a loja
+         -- ja decidiu nao vender mais este item. Ver a migration 052.
+         WHERE p.arquivado = 0 AND p.estoque > 0
        )
        WHERE dias_parado >= 30
        ORDER BY dias_parado DESC, estoque DESC, nome COLLATE NOCASE
@@ -395,13 +409,13 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
       `SELECT produto_id, nome, estoque, tamanho FROM (
          SELECT p.id AS produto_id, p.nome AS nome, p.estoque AS estoque, NULL AS tamanho
          FROM produtos p
-         WHERE p.estoque > 0 AND p.estoque <= 5
+         WHERE p.arquivado = 0 AND p.estoque > 0 AND p.estoque <= 5
            AND NOT EXISTS (SELECT 1 FROM produto_variacoes v WHERE v.produto_id = p.id)
          UNION ALL
          SELECT p.id AS produto_id, p.nome AS nome, pv.estoque AS estoque, pv.tamanho AS tamanho
          FROM produto_variacoes pv
          JOIN produtos p ON p.id = pv.produto_id
-         WHERE pv.estoque > 0 AND pv.estoque <= 5
+         WHERE p.arquivado = 0 AND pv.estoque > 0 AND pv.estoque <= 5
        )
        ORDER BY estoque ASC, nome COLLATE NOCASE
        LIMIT 10`
@@ -537,6 +551,7 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     distribuicao_pagamento: distribuicaoPagamento,
     recebivel_futuro: recebivelFuturo,
     a_receber_periodo: aReceberPeriodo,
+    a_receber_sem_prazo: aReceberSemPrazoTotal,
     a_pagar_periodo: aPagarPeriodo,
     a_pagar_futuro: aPagarProjecao,
     produtos_parados: produtosParados,

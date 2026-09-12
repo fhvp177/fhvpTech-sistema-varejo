@@ -9,12 +9,15 @@ type RespostaIPC<T = unknown> = { success: true; data: T } | { success: false; e
 const api = {
   // Produtos — será preenchido no módulo de produtos
   produtos: {
-    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('produtos:listar'),
+    listar: (incluirArquivados?: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('produtos:listar', incluirArquivados),
     criar: (dados: unknown, pinDono?: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('produtos:criar', dados, pinDono),
     atualizar: (id: number, dados: unknown): Promise<RespostaIPC> =>
       ipcRenderer.invoke('produtos:atualizar', id, dados),
     deletar: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('produtos:deletar', id),
+    arquivar: (id: number, arquivar?: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('produtos:arquivar', id, arquivar),
     buscarPorCodigoBarras: (codigo: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('produtos:buscarPorCodigoBarras', codigo)
   },
@@ -85,7 +88,26 @@ const api = {
     mesesComMovimento: (): Promise<RespostaIPC> =>
       ipcRenderer.invoke('financeiro:mesesComMovimento'),
     lancar: (contaId: number, valor: number, tipo: string, descricao: string): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('financeiro:lancar', contaId, valor, tipo, descricao)
+      ipcRenderer.invoke('financeiro:lancar', contaId, valor, tipo, descricao),
+    // Dinheiro mudando de conta dentro da própria loja. Não é receita nem
+    // despesa — ver a migration 055.
+    transferir: (dados: unknown): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:transferir', dados),
+    listarTransferencias: (mes?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:listarTransferencias', mes),
+    mesesComTransferencia: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:mesesComTransferencia')
+  },
+
+  // Categorias de conta a pagar — o mesmo cadastro que os produtos já têm.
+  categoriasConta: {
+    listar: (): Promise<RespostaIPC> => ipcRenderer.invoke('categoriasConta:listar'),
+    criar: (nome: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('categoriasConta:criar', nome),
+    atualizar: (id: number, nome: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('categoriasConta:atualizar', id, nome),
+    deletar: (id: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('categoriasConta:deletar', id)
   },
 
   // Turno de caixa. ⚠️ NÃO existe canal que devolva o esperado de um turno
@@ -232,6 +254,11 @@ const api = {
     atualizarStatus: (id: number, status: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:atualizarStatus', id, status),
     buscarPorId: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:buscarPorId', id),
+    recebimentos: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('vendas:recebimentos', id),
+    permiteParcelamento: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendas:permiteParcelamento'),
+    definirPermissaoParcelamento: (permitir: boolean): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('vendas:definirPermissaoParcelamento', permitir),
     pagarParcela: (
       parcelaId: number,
       forma?: string | null,

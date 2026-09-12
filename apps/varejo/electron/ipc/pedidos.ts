@@ -51,6 +51,19 @@ function validar(payload: unknown): Omit<DadosNovoPedido, 'vendedor_id'> {
     endereco_entrega: endereco,
     observacao: String(p.observacao ?? '').trim() || null,
     desconto: Number(p.desconto ?? 0) || 0,
+    /*
+     * ⚠️ O sinal atravessa a fronteira, e antes ele MORRIA aqui.
+     *
+     * A tela do PDV já oferecia o campo de sinal, e o botão "Separar pedido"
+     * mandava o pedido sem ele: o operador recebia o dinheiro na maquininha, o
+     * sistema não guardava nada, e o caixa fechava com sobra sem explicação.
+     * Quem valida o valor e a forma é `criarPedido` — aqui só se limpa o que
+     * veio da tela.
+     */
+    sinal: Number(p.sinal ?? 0) || 0,
+    sinal_forma: (p.sinal_forma as string | null) ?? null,
+    conta_id: p.conta_id == null || p.conta_id === '' ? null : Number(p.conta_id),
+    caixa_id: p.caixa_id == null || p.caixa_id === '' ? null : Number(p.caixa_id),
     itens: limpos
   }
 }
@@ -86,7 +99,10 @@ export function registrarHandlersPedidos(): void {
         data_vencimento: (p.data_vencimento as string | null) ?? null,
         num_parcelas: p.num_parcelas == null ? null : Number(p.num_parcelas),
         entrada: Number(p.entrada ?? 0) || 0,
-        forma_pagamento: (p.forma_pagamento as string | null) ?? null
+        forma_pagamento: (p.forma_pagamento as string | null) ?? null,
+        // Em qual conta o dinheiro da ENTREGA entra. ⚠️ Ignorada quando a forma
+        // é espécie: a nota fica na gaveta do operador (ver destinoDoRecebimento).
+        conta_id: p.conta_id == null || p.conta_id === '' ? null : Number(p.conta_id)
       })
       obterBackupManager().marcarAlteracao()
       return { success: true, data: venda }

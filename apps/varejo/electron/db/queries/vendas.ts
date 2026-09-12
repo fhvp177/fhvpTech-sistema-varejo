@@ -119,6 +119,41 @@ export type DadosNovaVenda = {
   // à vista: a prazo é crediário por definição e é DERIVADO aqui, não perguntado.
   // Ausente grava NULL ("não sabemos"), que é o caso da venda vinda de uma OS.
   forma_pagamento?: string | null
+  /**
+   * COM QUE MEIO o cliente pagou o SINAL, na venda a prazo ou parcelada.
+   *
+   * ⚠️ É outra pergunta que `forma_pagamento`, e por isso é outro campo. A
+   * VENDA a prazo é crediário — é isso que fica em `vendas.forma_pagamento` e é
+   * assim que ela conta nos relatórios. Mas o sinal é dinheiro de verdade
+   * entrando agora, e ele entra por um meio: espécie, PIX, cartão.
+   *
+   * ⚠️ Sem isto o sinal ia para o livro carimbado como "crediario", e aí a
+   * trava que manda espécie para a gaveta não o reconhecia: o sinal pago em
+   * notas era registrado na conta padrão de recebimento, que numa loja com
+   * banco cadastrado é o banco. O dinheiro ficava na gaveta e o sistema
+   * anotava no banco, todo dia, sem nada na tela ligando uma coisa à outra.
+   *
+   * Ausente presume ESPÉCIE — ver `formaDoDinheiroQueEntrou`.
+   */
+  forma_entrada?: string | null
+  /**
+   * Quanto do dinheiro desta venda JÁ está lançado no livro-caixa por outro
+   * caminho.
+   *
+   * ⚠️ Existe por causa do sinal do pedido separado (migration 053): o dinheiro
+   * entrou no dia em que a peça foi apartada, e foi registrado naquele dia, com
+   * a forma e a conta daquele dia. Quando o pedido vira venda, o `entrada` da
+   * venda precisa refletir o que o cliente já pagou — senão o cupom e a dívida
+   * mentem — mas o livro NÃO pode receber o mesmo dinheiro de novo.
+   *
+   * Sem isto, cada pedido com sinal lançaria o sinal duas vezes: a loja
+   * apareceria tendo recebido mais do que recebeu, e o fechamento do dia da
+   * entrega acusaria uma sobra do tamanho exato do sinal.
+   *
+   * ⚠️ NÃO é desconto nem abatimento: a venda continua valendo o total, e o
+   * cliente continua devendo o que falta. É só o livro que já foi avisado.
+   */
+  valor_ja_lancado?: number
   // Bilhete opcional impresso no cupom não fiscal.
   observacao?: string | null
   itens: Array<{
@@ -293,6 +328,117 @@ export function buscarVendaPorId(id: number): VendaDetalhada | undefined {
   return { ...venda, itens, parcelas }
 }
 
+/**
+ * Esta loja usa venda PARCELADA (carnê de várias parcelas)?
+ *
+ * ── Por que virou interruptor, e não uma remoção ────────────────────────────
+ * O pedido veio de uma loja só: "tira o Parcelado da tela". Tirar do produto
+ * cobraria a conta de quem vive de crediário — que é a maior parte do comércio
+ * de bairro — e, pior, não apagaria as vendas parceladas que a própria loja já
+ * tem. Um interruptor resolve o pedido sem tocar em ninguém mais.
+ *
+ * ── ⚠️ Nasce LIGADO, e desligar não apaga nada ──────────────────────────────
+ * Quem nunca respondeu continua com o parcelamento disponível: a ausência de
+ * resposta nunca pode virar mudança de comportamento numa loja que já opera.
+ *
+ * Desligado, o PDV deixa de OFERECER a condição. As vendas parceladas que já
+ * existem continuam inteiras: aparecem na lista, recebem baixa de parcela,
+ * aceitam estorno. Esconder o que já foi vendido seria apagar dívida de
+ * cliente da tela do lojista.
+ *
+ * ── Por que a trava é de tela, e não do banco ───────────────────────────────
+ * Diferente da exigência de caixa, aqui não há dinheiro fora de conferência
+ * nem promessa ao cliente: é preferência de operação. Uma venda parcelada que
+ * entrasse por um caminho antigo seria uma venda válida, visível e cancelável
+ * — não um dado corrompido. Pôr a recusa no banco criaria a chance de barrar
+ * uma venda no balcão por causa de um interruptor que alguém virou sem querer.
+ */
+export function permiteParcelamento(): boolean {
+  const db = obterBancoDeDados()
+  const r = db
+    .prepare("SELECT valor FROM config WHERE chave = 'permitir_parcelamento'")
+    .get() as { valor: string } | undefined
+  return r?.valor !== '0'
+}
+
+export function definirPermissaoParcelamento(permitir: boolean): void {
+  const db = obterBancoDeDados()
+  db.prepare(
+    "INSERT OR REPLACE INTO config (chave, valor) VALUES ('permitir_parcelamento', ?)"
+  ).run(permitir ? '1' : '0')
+}
+
+export type RecebimentoDaVenda = {
+  id: number
+  data: string
+  valor: number
+  /** 'venda' (o que entrou ao fechar a venda), 'recebimento' ou 'estorno'. */
+  tipo: string
+  forma_pagamento: string | null
+  conta_id: number
+  conta_nome: string
+  /** 'venda' ou 'parcela' — de onde este dinheiro veio. */
+  origem_tipo: string | null
+  /** Número da parcela, quando a linha for a baixa de uma. */
+  parcela_numero: number | null
+}
+
+/**
+ * Cada entrada e cada saída de dinheiro DESTA venda, em ordem.
+ *
+ * ── Por que isto não precisou de tabela nova ────────────────────────────────
+ * O livro-caixa já guarda tudo: quem lança carimba `origem_tipo` e `origem_id`
+ * desde a migration 039. O que faltava era só perguntar. Criar uma tabela de
+ * "recebimentos da venda" daria DUAS verdades sobre o mesmo dinheiro, e a
+ * segunda envelheceria calada no primeiro caminho que esquecesse de gravar nela.
+ *
+ * ── ⚠️ Os ESTORNOS entram na lista ──────────────────────────────────────────
+ * Eles são movimentos negativos com a mesma origem. Esconder os negativos daria
+ * uma lista que soma mais do que a venda recebeu — bonita e errada. Quem lê
+ * precisa ver que entraram 185 e que 185 voltaram.
+ *
+ * ── ⚠️ O sinal do PEDIDO entra aqui ────────────────────────────────────────
+ * Quando a venda nasceu de um pedido separado, o sinal foi lançado no dia em
+ * que a peça foi apartada e continua apontando para o PEDIDO — reescrever a
+ * origem faria o extrato daquele dia mudar de assunto. Sem este terceiro ramo,
+ * o histórico da venda mostraria só o que foi pago na entrega e pareceria que
+ * o cliente pagou menos do que pagou.
+ *
+ * ── ⚠️ Os parênteses em volta do OR não são enfeite ────────────────────────
+ * `AND` ganha de `OR` em SQL. Sem o par externo, um filtro que alguém
+ * acrescente no fim (um `AND m.valor > 0` para "limpar" a lista, digamos) gruda
+ * só no ramo da PARCELA e não vale para o da venda: a consulta passa a filtrar
+ * metade do que se pediu, sem erro nenhum. Descoberto tentando exatamente essa
+ * mutação, que ficou VERDE por causa disto.
+ *
+ * ── ⚠️ Pode vir VAZIA com a venda paga ──────────────────────────────────────
+ * Venda antiga da loja que não tinha conta financeira configurada, ou paga
+ * inteira com crédito da loja, não gerou movimento nenhum. A tela trata isso
+ * dizendo que não há lançamento, nunca afirmando que não houve pagamento — quem
+ * responde quanto a venda recebeu continua sendo `valor_pago`.
+ */
+export function recebimentosDaVenda(vendaId: number): RecebimentoDaVenda[] {
+  const db = obterBancoDeDados()
+  return db
+    .prepare(
+      `SELECT m.id, m.data, m.valor, m.tipo, m.forma_pagamento,
+              m.conta_id, c.nome AS conta_nome,
+              m.origem_tipo, p.numero AS parcela_numero
+         FROM movimentos_financeiros m
+         JOIN contas_financeiras c ON c.id = m.conta_id
+         LEFT JOIN parcelas p ON m.origem_tipo = 'parcela' AND p.id = m.origem_id
+        WHERE (
+                (m.origem_tipo = 'venda' AND m.origem_id = @venda)
+                OR (m.origem_tipo = 'parcela'
+                    AND m.origem_id IN (SELECT id FROM parcelas WHERE venda_id = @venda))
+                OR (m.origem_tipo = 'pedido'
+                    AND m.origem_id IN (SELECT id FROM pedidos WHERE venda_id = @venda))
+              )
+        ORDER BY m.data, m.id`
+    )
+    .all({ venda: vendaId }) as RecebimentoDaVenda[]
+}
+
 // As únicas que o operador pode ESCOLHER. 'crediario' e 'credito_loja' não
 // entram: são derivadas de fatos que o sistema já conhece (ver formaDaVenda).
 // Espelha src/utils/formaPagamento.ts — o renderer não é importável daqui.
@@ -332,6 +478,55 @@ export function formaDaVenda(
     throw new Error(`Forma de pagamento inválida: "${dados.forma_pagamento}".`)
   }
   return forma
+}
+
+/**
+ * COM QUE MEIO entrou o dinheiro que a loja recebeu NESTE instante.
+ *
+ * ── Por que não é a mesma pergunta de `formaDaVenda` ────────────────────────
+ * `formaDaVenda` responde "como esta VENDA foi paga", e a prazo a resposta é
+ * sempre crediário. Esta aqui responde "o que entrou na mão agora", que numa
+ * venda a prazo é o sinal — e sinal se paga em notas, PIX ou cartão como
+ * qualquer outra coisa.
+ *
+ * Misturar as duas é o defeito que isto veio consertar: o sinal ia ao livro
+ * como "crediario", escapava da trava da espécie (que compara com a palavra
+ * "dinheiro") e era lançado numa conta de banco enquanto as notas ficavam na
+ * gaveta. De quebra, o fechamento ganhava uma linha "crediario" que o operador
+ * não tinha como contar.
+ *
+ * ── ⚠️ Sem escolha, presume ESPÉCIE ─────────────────────────────────────────
+ * Sinal nasce no balcão, na frente do operador, e espécie é o caso comum.
+ * Mais do que comum, é a suposição que a loja consegue DESMENTIR: se o dinheiro
+ * não estiver na gaveta, a contagem do fechamento acusa na mesma hora. Supor
+ * banco erra em silêncio — nenhuma conferência do dia percebe.
+ *
+ * A tela obriga a escolha quando há sinal; este padrão é para quem chama o
+ * canal por fora (segundo caixa antigo, pedido concluído, script).
+ */
+export function formaDoDinheiroQueEntrou(
+  dados: DadosNovaVenda,
+  formaDaVendaResolvida: string | null
+): string | null {
+  if (dados.status_pagamento === 'pago') return formaDaVendaResolvida
+  return formaDoDinheiroRecebido(dados.forma_entrada)
+}
+
+/**
+ * Valida o meio de um dinheiro que está entrando AGORA, no balcão.
+ *
+ * Vale para o sinal da venda a prazo e para o sinal do pedido separado — os
+ * dois são a mesma coisa vista de dois fluxos, e a regra do padrão (espécie)
+ * não pode discordar entre eles. A razão do padrão está em
+ * `formaDoDinheiroQueEntrou`.
+ */
+export function formaDoDinheiroRecebido(forma: string | null | undefined): string {
+  const escolhida = (forma ?? '').trim().toLowerCase()
+  if (!escolhida) return 'dinheiro'
+  if (!FORMAS_ESCOLHIVEIS.has(escolhida)) {
+    throw new Error(`Forma de pagamento inválida: "${forma}".`)
+  }
+  return escolhida
 }
 
 export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
@@ -440,6 +635,9 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
   }
 
   const formaPagamento = formaDaVenda(dados, total, creditoUsado)
+  // O que fica gravado NA VENDA (crediário, quando é a prazo) e o meio pelo
+  // qual o dinheiro entrou agora são coisas diferentes. Ver a função.
+  const formaDoDinheiro = formaDoDinheiroQueEntrou(dados, formaPagamento)
 
   /*
    * ⚠️ Sem caixa aberto não se vende.
@@ -630,8 +828,17 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
      * O lançamento acontece DENTRO desta transação: se a venda falhar no meio,
      * o dinheiro não pode ficar registrado.
      */
+    /*
+     * ⚠️ E o que JÁ ESTÁ no livro sai da conta.
+     *
+     * É o sinal do pedido separado: aquele dinheiro entrou no dia em que a peça
+     * foi apartada e foi registrado naquele dia. Lançar de novo agora faria a
+     * loja aparecer recebendo duas vezes o mesmo valor, e o fechamento do dia
+     * da entrega acusaria sobra do tamanho do sinal. Ver `valor_ja_lancado`.
+     */
+    const jaLancado = Math.max(0, +(dados.valor_ja_lancado ?? 0).toFixed(2))
     const recebidoAgora = +(
-      (dados.status_pagamento === 'pago' ? total : entrada) - creditoUsado
+      (dados.status_pagamento === 'pago' ? total : entrada) - creditoUsado - jaLancado
     ).toFixed(2)
     if (recebidoAgora > 0) {
       /*
@@ -650,10 +857,14 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
        * A decisão inteira mora em `destinoDoRecebimento`, junto com a do
        * recebimento de dívida e a da baixa de parcela — três telas diferentes
        * que não podem discordar sobre onde o dinheiro entrou.
+       *
+       * ⚠️ Quem manda aqui é `formaDoDinheiro`, não a forma da VENDA. Numa
+       * venda a prazo com sinal as duas discordam de propósito: a venda é
+       * crediário, o sinal é o meio pelo qual as notas ou o PIX chegaram.
        */
       const { conta } = destinoDoRecebimento(
         db,
-        formaPagamento,
+        formaDoDinheiro,
         dados.caixa_id,
         dados.conta_id
       )
@@ -663,7 +874,7 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
           valor: recebidoAgora,
           tipo: 'venda',
           descricao: `Venda #${vendaId}`,
-          forma_pagamento: formaPagamento,
+          forma_pagamento: formaDoDinheiro,
           origem_tipo: 'venda',
           origem_id: vendaId,
           vendedor_id: dados.vendedor_id,
@@ -735,7 +946,7 @@ export function atualizarStatusVenda(id: number, status: StatusPagamento): void 
  * Igual à venda: o PIX do balcão pertence ao turno do caixa onde foi recebido,
  * senão ele some da conferência daquele turno.
  */
-function destinoDoRecebimento(
+export function destinoDoRecebimento(
   db: ReturnType<typeof obterBancoDeDados>,
   forma: string | null | undefined,
   caixaId: number | null | undefined,
@@ -926,9 +1137,9 @@ export function pagarParcela(
  * Devolve o total estornado, ou 0 quando não havia nada lançado (loja sem conta
  * configurada na época da venda — aí não há o que desfazer).
  */
-function estornarNoLivro(
+export function estornarNoLivro(
   db: ReturnType<typeof obterBancoDeDados>,
-  origemTipo: 'venda' | 'parcela',
+  origemTipo: 'venda' | 'parcela' | 'pedido',
   origemId: number,
   descricao: string
 ): number {
@@ -1236,6 +1447,40 @@ export function aReceberPorVencimento(inicio: string, fim: string): AReceberPorV
   }
 }
 
+/**
+ * O que está em aberto SEM prazo combinado.
+ *
+ * ── Por que esta consulta existe ────────────────────────────────────────────
+ * Desde 12/09/2026 a venda a prazo pode nascer sem data de vencimento: existe
+ * combinação que se faz assim ("me paga quando a mercadoria chegar"). O preço
+ * disso é que a venda some de TODA conta ancorada em vencimento — o card do
+ * Painel, o relatório do mês, a promoção para inadimplente. Todas filtram
+ * `data_vencimento IS NOT NULL`, e continuam filtrando: sem data não há prazo
+ * para vencer, e inventar um seria mentir no relatório.
+ *
+ * Sem esta soma, porém, o dinheiro sumiria da vista do dono, que é pior. Ela é
+ * a linha que devolve essas vendas para a tela.
+ *
+ * ⚠️ Não tem recorte de período, e não é esquecimento: período aqui seria
+ * recorte por vencimento, e é justamente o que estas vendas não têm. É o total
+ * em aberto, hoje.
+ */
+export function aReceberSemPrazo(): number {
+  const db = obterBancoDeDados()
+  const r = db
+    .prepare(
+      `SELECT COALESCE(SUM(total - valor_pago), 0) AS total
+         FROM vendas
+        WHERE status_pagamento IN ('pendente', 'inadimplente')
+          AND cancelada = 0
+          AND num_parcelas IS NULL
+          AND data_vencimento IS NULL
+          AND total - valor_pago > 0`
+    )
+    .get() as { total: number }
+  return +r.total.toFixed(2)
+}
+
 // Mesma conta, recortada para um mês ('YYYY-MM') — usada pelo relatório de vendas.
 export function aReceberPorVencimentoNoMes(mes: string): AReceberPorVencimento {
   const [ano, m] = mes.split('-').map(Number)
@@ -1258,7 +1503,7 @@ export function resumoDashboard(): ResumoDashboard {
     .get() as { total_clientes: number }
 
   const { total_produtos } = db
-    .prepare('SELECT COUNT(*) AS total_produtos FROM produtos')
+    .prepare('SELECT COUNT(*) AS total_produtos FROM produtos WHERE arquivado = 0')
     .get() as { total_produtos: number }
 
   return { vendas_hoje, total_hoje, total_clientes, total_produtos }

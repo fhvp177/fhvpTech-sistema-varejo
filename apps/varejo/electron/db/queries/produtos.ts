@@ -35,6 +35,19 @@ export type Produto = {
    */
   garantia_dias: number | null
   estoque: number // simples: o próprio; grade: soma das variações
+  /**
+   * 1 = fora de circulação.
+   *
+   * ⚠️ Não é o mesmo que estoque zero, e não é exclusão. O produto arquivado
+   * some da lista, do caixa, das etiquetas e dos alertas, e continua inteiro no
+   * histórico de quem já comprou — inclusive na garantia. Ver a migration 052.
+   *
+   * ⚠️ A busca por código de barras ACHA o arquivado de propósito: é o que
+   * permite ao caixa dizer "este produto está arquivado" em vez de "não
+   * encontrado", e o que impede a importação de XML de cadastrar uma segunda
+   * cópia do mesmo item.
+   */
+  arquivado: number
   fornecedor_id: number | null
   data_cadastro: string
   fornecedor_nome?: string | null
@@ -91,17 +104,51 @@ function anexarVariacoes(rows: ProdutoRow[]): Produto[] {
   })
 }
 
-export function listarProdutos(): Produto[] {
+/**
+ * Os produtos da loja.
+ *
+ * ⚠️ Sem os ARQUIVADOS por padrão. Esta lista alimenta a tela de Produtos, a
+ * busca do caixa, as etiquetas e o inventário — tudo que é "o que a loja tem
+ * hoje". Produto arquivado saiu de circulação por decisão do lojista, e voltar
+ * em qualquer uma dessas telas anularia o arquivamento na prática.
+ *
+ * `incluirArquivados` existe para uma tela só: a de Produtos, quando o lojista
+ * pede para ver o que arquivou.
+ */
+export function listarProdutos(incluirArquivados = false): Produto[] {
   const db = obterBancoDeDados()
   const rows = db
     .prepare(
       `SELECT p.*, f.nome AS fornecedor_nome
        FROM produtos p
        LEFT JOIN fornecedores f ON f.id = p.fornecedor_id
+       ${incluirArquivados ? '' : 'WHERE p.arquivado = 0'}
        ORDER BY p.nome COLLATE NOCASE`
     )
     .all() as ProdutoRow[]
   return anexarVariacoes(rows)
+}
+
+/**
+ * Tira o produto de circulação, ou traz de volta.
+ *
+ * ── ⚠️ Não é o mesmo que excluir, e o motivo é o histórico ──────────────────
+ * Excluir esbarra na chave estrangeira de `itens_venda` — e isso é proteção,
+ * não obstáculo: apagar o produto levaria junto a linha dele em toda venda
+ * passada, e com ela o cupom, o lucro do mês, a comissão paga e a garantia que
+ * o cliente tem em mãos. Ver a migration 052.
+ *
+ * Arquivar resolve o que o lojista quer (sumir da lista e do caixa) sem tocar
+ * em nada do que já aconteceu.
+ *
+ * ⚠️ O estoque NÃO é zerado. A peça arquivada que ainda está na prateleira
+ * continua sendo patrimônio da loja; mexer no número aqui seria inventar uma
+ * baixa que ninguém fez. Quem quiser zerar faz pelo cadastro, de propósito.
+ */
+export function arquivarProduto(id: number, arquivar = true): void {
+  const db = obterBancoDeDados()
+  const r = db.prepare('UPDATE produtos SET arquivado = ? WHERE id = ?').run(arquivar ? 1 : 0, id)
+  if (r.changes === 0) throw new Error('Produto não encontrado.')
 }
 
 export function obterProdutoPorId(id: number): Produto | undefined {
@@ -318,7 +365,8 @@ export function deletarProduto(id: number): void {
   comErroAmigavelDeVinculo(
     apagar,
     'Não dá pra excluir este produto porque ele já aparece em vendas registradas. ' +
-      'Para tirá-lo do dia a dia, zere o estoque dele.'
+      'Apagar agora levaria junto a linha dele nessas vendas, com o lucro, a comissão e a ' +
+      'garantia do cliente. Use "Arquivar": ele some da lista e do caixa e o histórico fica de pé.'
   )
 }
 

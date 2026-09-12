@@ -108,7 +108,7 @@ export function ultimoDiaDoMes(mes: string): string {
  */
 const LADO = `
   CASE
-    WHEN m.tipo IN ('sangria','suprimento') THEN 'interno'
+    WHEN m.tipo IN ('sangria','suprimento','transferencia') THEN 'interno'
     WHEN m.tipo = 'estorno' AND m.origem_tipo = 'conta_pagar' THEN 'despesa'
     WHEN m.tipo = 'estorno' THEN 'receita'
     WHEN m.tipo = 'despesa' THEN 'despesa'

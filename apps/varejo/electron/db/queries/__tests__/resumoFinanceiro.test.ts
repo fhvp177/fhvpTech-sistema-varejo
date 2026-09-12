@@ -193,6 +193,26 @@ describe('resumoFinanceiroMes — de que lado cada lançamento entra', () => {
     expect(r.movimentacoes_internas).toBe(-800)
   })
 
+  seTiverSqlite('★ transferência entre contas não vira faturamento nem despesa', () => {
+    /*
+     * ⚠️ É a mesma nota mudando de bolso. Contada como entrada, a loja que
+     * deposita o caixa no banco todo dia apareceria faturando DUAS vezes cada
+     * venda — uma na venda e outra no depósito. Quem olha esse número decide
+     * compra em cima dele.
+     *
+     * As duas pontas se anulam na linha de movimentação interna, como já
+     * acontece com sangria e suprimento.
+     */
+    mov('2026-05-04 10:00:00', 1000, 'venda', { tipo: 'venda', id: 1 })
+    mov('2026-05-04 18:00:00', -700, 'transferencia', { tipo: 'transferencia', id: 1 })
+    mov('2026-05-04 18:00:00', 700, 'transferencia', { tipo: 'transferencia', id: 1 }, 2)
+
+    const r = resumoFinanceiroMes('2026-05')
+    expect(r.receitas).toBe(1000)
+    expect(r.despesas).toBe(0)
+    expect(r.movimentacoes_internas).toBe(0)
+  })
+
   seTiverSqlite('retirada lançada na mão é despesa; aporte é receita', () => {
     mov('2026-05-04 10:00:00', 3000, 'aporte')
     mov('2026-05-20 10:00:00', -700, 'ajuste')

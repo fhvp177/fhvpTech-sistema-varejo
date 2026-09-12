@@ -27,8 +27,11 @@ export function buscarProdutos(termo: string | undefined, limite = 40): ProdutoC
               f.nome AS fornecedor
        FROM produtos p
        LEFT JOIN fornecedores f ON f.id = p.fornecedor_id
-       WHERE p.nome LIKE @like COLLATE NOCASE
-          OR (p.categoria IS NOT NULL AND p.categoria LIKE @like COLLATE NOCASE)
+       -- ⚠️ Os parenteses em volta do OR importam: sem eles, o filtro de
+       -- arquivado valeria so para o segundo ramo (AND ganha de OR).
+       WHERE p.arquivado = 0
+         AND (p.nome LIKE @like COLLATE NOCASE
+              OR (p.categoria IS NOT NULL AND p.categoria LIKE @like COLLATE NOCASE))
        ORDER BY p.nome COLLATE NOCASE
        LIMIT @limite`
     )
@@ -52,7 +55,7 @@ export function giroProduto(termo: string, dias = 30, limite = 20): GiroChat[] {
        FROM produtos p
        LEFT JOIN itens_venda iv ON iv.produto_id = p.id
        LEFT JOIN vendas v ON v.id = iv.venda_id AND date(v.data) >= date('now', @janela)
-       WHERE p.nome LIKE @like COLLATE NOCASE
+       WHERE p.arquivado = 0 AND p.nome LIKE @like COLLATE NOCASE
        GROUP BY p.id
        ORDER BY vendidos DESC, p.nome COLLATE NOCASE
        LIMIT @limite`

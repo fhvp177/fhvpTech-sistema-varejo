@@ -3,11 +3,12 @@ import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
 import { Select } from '@fhvptech/core/ui/select'
-import { RefreshCw, Settings, Upload, Trash2, Store, ChevronDown, Sparkles, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone } from 'lucide-react'
+import { RefreshCw, Settings, Upload, Trash2, Store, ChevronDown, Sparkles, HardDriveDownload, Footprints, ShieldCheck, Users, Printer, MonitorSmartphone, HandCoins } from 'lucide-react'
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigComissao from '@/components/ConfigComissao'
 import ConfigGarantia from '@/components/ConfigGarantia'
+import ConfigParcelamento from '@/components/ConfigParcelamento'
 import CadastroPixLoja from '@/components/CadastroPixLoja'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
 import ConfigImpressao from '@/components/ConfigImpressao'
@@ -85,6 +86,7 @@ const Configuracoes: FC = () => {
   const { autoLockMinutos } = useLock()
   const [totalVendedores, setTotalVendedores] = useState<number | null>(null)
   const [prazoGarantia, setPrazoGarantia] = useState<number | null>(null)
+  const [permiteParcelamento, setPermiteParcelamento] = useState<boolean | null>(null)
   const [estadoMulticaixa, setEstadoMulticaixa] = useState<EstadoMulticaixa | null>(null)
   const { ehCaixaAdicional } = useSituacaoMulticaixa()
   const [prefsImpressao, setPrefsImpressao] = useState<{
@@ -300,6 +302,12 @@ const Configuracoes: FC = () => {
       : prazoGarantia === 0
         ? 'sem garantia padrão'
         : `${prazoGarantia} dias`
+  const resumoCondicoes =
+    permiteParcelamento == null
+      ? 'carregando…'
+      : permiteParcelamento
+        ? 'à vista, a prazo e parcelado'
+        : 'à vista e a prazo'
   const resumoMulticaixa =
     estadoMulticaixa === null
       ? null
@@ -661,6 +669,25 @@ const Configuracoes: FC = () => {
             seção e leria "90 dias" no cabeçalho.
           */}
           <ConfigGarantia onSalvo={setPrazoGarantia} />
+        </div>
+      </SecaoConfig>
+
+      {/*
+        As condições de pagamento ficam em seção própria porque são decisão de
+        COMO a loja vende, não de operação do caixa. O lojista vem aqui quando
+        quer simplificar o balcão.
+      */}
+      <SecaoConfig
+        id="condicoes-pagamento"
+        titulo="Condições de pagamento"
+        icone={<HandCoins className="w-4 h-4" />}
+        resumo={resumoCondicoes}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground -mt-1">
+            O que o caixa oferece na hora de fechar a venda.
+          </p>
+          <ConfigParcelamento onMudou={setPermiteParcelamento} />
         </div>
       </SecaoConfig>
 

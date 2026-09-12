@@ -7,7 +7,8 @@ import {
   ArrowUpRight,
   Pencil,
   Power,
-  ScrollText
+  ScrollText,
+  ArrowLeftRight
 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Input } from '@fhvptech/core/ui/input'
@@ -88,6 +89,20 @@ const Contas: FC = () => {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
 
+  /*
+   * Transferência entre contas da loja.
+   *
+   * ⚠️ É movimento INTERNO: não entra como receita nem como despesa no resumo
+   * do mês. Ver a migration 055 — contada como entrada, o mês apareceria
+   * faturando o que só mudou de bolso.
+   */
+  const [transfAberta, setTransfAberta] = useState(false)
+  const [transfOrigem, setTransfOrigem] = useState('')
+  const [transfDestino, setTransfDestino] = useState('')
+  const [transfValor, setTransfValor] = useState('')
+  const [transfObs, setTransfObs] = useState('')
+  const [transferindo, setTransferindo] = useState(false)
+
   const [lancamentoAberto, setLancamentoAberto] = useState(false)
   const [lancValor, setLancValor] = useState('')
   const [lancDescricao, setLancDescricao] = useState('')
@@ -96,6 +111,59 @@ const Contas: FC = () => {
   const confirmar = useConfirm()
   const { showToast } = useToast()
   const ehCelular = useEhCelular()
+
+  /*
+   * Só contas ATIVAS podem transferir.
+   *
+   * ⚠️ Esta tela lista também as desativadas (é onde o lojista as reativa), mas
+   * conta fora de circulação não recebe nem envia: o banco recusa, e oferecer
+   * aqui faria o lojista descobrir a regra levando um erro.
+   */
+  const contasAtivas = useMemo(() => contas.filter((c) => c.ativa), [contas])
+
+  const abrirTransferencia = (): void => {
+    // A conta aberta na tela entra como origem: é de onde o lojista está
+    // olhando o dinheiro sair. O destino ele escolhe.
+    setTransfOrigem(selecionada ? String(selecionada) : '')
+    setTransfDestino('')
+    setTransfValor('')
+    setTransfObs('')
+    setErro('')
+    setTransfAberta(true)
+  }
+
+  const transferir = async (): Promise<void> => {
+    const valor = paraNumero(transfValor)
+    if (!transfOrigem || !transfDestino) {
+      setErro('Escolha a conta de origem e a de destino.')
+      return
+    }
+    if (transfOrigem === transfDestino) {
+      setErro('Escolha duas contas diferentes.')
+      return
+    }
+    if (!valor || valor <= 0) {
+      setErro('Informe um valor maior que zero.')
+      return
+    }
+    setTransferindo(true)
+    setErro('')
+    const r = await window.api.financeiro.transferir({
+      conta_origem_id: Number(transfOrigem),
+      conta_destino_id: Number(transfDestino),
+      valor,
+      observacao: transfObs.trim() || null
+    })
+    setTransferindo(false)
+    if (!r.success) {
+      setErro(r.error)
+      return
+    }
+    setTransfAberta(false)
+    showToast({ message: 'Transferência registrada.', variant: 'success' })
+    await carregar()
+    await carregarExtrato(selecionada)
+  }
 
   const carregar = useCallback(async () => {
     const r = await window.api.financeiro.listarContas(true)
@@ -347,19 +415,34 @@ const Contas: FC = () => {
               <ScrollText className="w-4 h-4 text-muted-foreground" />
               Extrato de {contaAtual.nome}
             </h3>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-11 lg:h-9"
-              onClick={() => {
-                setLancSaida(false)
-                setLancValor('')
-                setLancDescricao('')
-                setLancamentoAberto(true)
-              }}
-            >
-              Lançar ajuste
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/*
+                Transferir fica ao lado do extrato da conta aberta, e não no topo
+                da tela: é daqui que o lojista olha o saldo e decide mover.
+              */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-11 lg:h-9"
+                onClick={abrirTransferencia}
+              >
+                <ArrowLeftRight className="w-4 h-4 mr-1.5" aria-hidden />
+                Transferir
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-11 lg:h-9"
+                onClick={() => {
+                  setLancSaida(false)
+                  setLancValor('')
+                  setLancDescricao('')
+                  setLancamentoAberto(true)
+                }}
+              >
+                Lançar ajuste
+              </Button>
+            </div>
           </div>
 
           {movimentos.length === 0 ? (
@@ -570,6 +653,84 @@ const Contas: FC = () => {
             </Button>
             <Button onClick={salvar} disabled={salvando}>
               {salvando ? 'Salvando…' : editando ? 'Salvar' : 'Cadastrar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Diálogo: transferência entre contas ── */}
+      <Dialog open={transfAberta} onOpenChange={setTransfAberta}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Transferir entre contas</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
+            <div className="grid gap-1.5">
+              <Label htmlFor="transf-origem">Sai de</Label>
+              <Select
+                id="transf-origem"
+                value={transfOrigem}
+                onChange={setTransfOrigem}
+                opcoes={[
+                  { valor: '', rotulo: 'Escolha a conta' },
+                  ...contasAtivas.map((c) => ({
+                    valor: String(c.id),
+                    rotulo: `${c.nome} · ${fmt(c.saldo)}`
+                  }))
+                ]}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="transf-destino">Entra em</Label>
+              {/*
+                ⚠️ A conta de origem sai da lista de destino. O banco recusa as
+                duas iguais de qualquer jeito, mas oferecer a opção e depois
+                recusar é fazer o lojista descobrir a regra errando.
+              */}
+              <Select
+                id="transf-destino"
+                value={transfDestino}
+                onChange={setTransfDestino}
+                opcoes={[
+                  { valor: '', rotulo: 'Escolha a conta' },
+                  ...contasAtivas
+                    .filter((c) => String(c.id) !== transfOrigem)
+                    .map((c) => ({ valor: String(c.id), rotulo: c.nome }))
+                ]}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="transf-valor">Valor</Label>
+              <IMaskInput
+                id="transf-valor"
+                {...CLASSE_DINHEIRO}
+                value={transfValor}
+                onAccept={(v: string) => setTransfValor(v)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="transf-obs">Observação</Label>
+              <Input
+                id="transf-obs"
+                value={transfObs}
+                onChange={(e) => setTransfObs(e.target.value)}
+                placeholder="Depósito do caixa, acerto entre bancos…"
+              />
+            </div>
+            <p className="text-[11.5px] text-muted-foreground">
+              Transferência não conta como venda nem como despesa: é o mesmo dinheiro mudando
+              de conta. Se sair do caixa, o valor baixa do esperado no fechamento.
+            </p>
+            {erro && (
+              <p className="text-destructive text-xs bg-destructive/10 rounded px-2 py-1.5">{erro}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransfAberta(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={transferir} disabled={transferindo}>
+              {transferindo ? 'Transferindo…' : 'Transferir'}
             </Button>
           </DialogFooter>
         </DialogContent>

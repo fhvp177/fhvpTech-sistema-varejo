@@ -61,6 +61,9 @@ const SCHEMA = `
     referencia TEXT,
     categoria TEXT,
     preco REAL NOT NULL DEFAULT 0,
+    -- Migration 052: produto arquivado nao sai em nota, entao nao entra nem na
+    -- classificacao fiscal nem no diagnostico de NCM.
+    arquivado INTEGER NOT NULL DEFAULT 0,
     ncm TEXT, cfop TEXT, cst_csosn TEXT, origem TEXT DEFAULT '0', unidade TEXT DEFAULT 'UN'
   );
   CREATE TABLE produto_variacoes (

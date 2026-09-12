@@ -1715,6 +1715,22 @@ const CardRecebivel: FC<{ metricas: MetricasDashboard | null; rotuloPeriodo: str
           </p>
         )}
       </div>
+      {/*
+        Vendas a prazo combinadas SEM data. Elas não entram em nenhuma das
+        contas acima, que são todas ancoradas em vencimento — sem esta linha o
+        dinheiro simplesmente não apareceria no Painel.
+
+        Só desenha quando existe: numa loja que sempre combina data, seria uma
+        linha de zero para sempre.
+      */}
+      {!!metricas?.a_receber_sem_prazo && (
+        <div className="rounded-lg border border-dashed px-3 py-2 mb-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-sm text-muted-foreground">Sem prazo combinado</span>
+            <span className="font-semibold shrink-0">{fmt(metricas.a_receber_sem_prazo)}</span>
+          </div>
+        </div>
+      )}
       <div className="space-y-2.5">
         <div className="flex items-baseline justify-between">
           <span className="text-sm text-muted-foreground">Próximos 30 dias</span>

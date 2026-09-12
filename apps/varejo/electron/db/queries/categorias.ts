@@ -12,7 +12,8 @@ export function listarCategorias(): Categoria[] {
   return db
     .prepare(
       `SELECT c.id, c.nome, c.usa_tamanhos,
-              (SELECT COUNT(*) FROM produtos p WHERE p.categoria = c.nome COLLATE NOCASE) AS produtos_count
+              (SELECT COUNT(*) FROM produtos p
+                WHERE p.categoria = c.nome COLLATE NOCASE AND p.arquivado = 0) AS produtos_count
        FROM categorias c
        ORDER BY c.nome COLLATE NOCASE`
     )

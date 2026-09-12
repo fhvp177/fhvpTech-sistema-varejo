@@ -150,11 +150,13 @@ export function alertasDoBanco(): AlertaVivo[] {
     .prepare(
       `SELECT COUNT(*) AS estoqueBaixo FROM (
          SELECT 1 FROM produtos p
-         WHERE p.estoque > 0 AND p.estoque <= 5
+         -- Arquivado nao toca o sino: ver a migration 052.
+         WHERE p.arquivado = 0 AND p.estoque > 0 AND p.estoque <= 5
            AND NOT EXISTS (SELECT 1 FROM produto_variacoes v WHERE v.produto_id = p.id)
          UNION ALL
          SELECT 1 FROM produto_variacoes pv
-         WHERE pv.estoque > 0 AND pv.estoque <= 5
+         JOIN produtos p ON p.id = pv.produto_id
+         WHERE p.arquivado = 0 AND pv.estoque > 0 AND pv.estoque <= 5
        )`
     )
     .get() as { estoqueBaixo: number }
@@ -183,7 +185,7 @@ export function alertasDoBanco(): AlertaVivo[] {
            )
          ) AS INTEGER) AS dias
          FROM produtos p
-         WHERE p.estoque > 0
+         WHERE p.arquivado = 0 AND p.estoque > 0
        ) WHERE dias >= 30`
     )
     .get() as { parados: number }

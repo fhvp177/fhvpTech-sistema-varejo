@@ -81,13 +81,16 @@ export function listarProdutosAlerta(tipo: TipoProdutoAlerta): ProdutoAlertaDeta
       .prepare(
         `SELECT nome, estoque FROM (
            SELECT p.nome AS nome, p.estoque AS estoque
+           -- Produto arquivado saiu de circulacao por decisao do lojista:
+           -- cobrar reposicao dele seria pedir para repor o que ele nao
+           -- quer mais vender. Ver a migration 052.
            FROM produtos p
-           WHERE p.estoque > 0 AND p.estoque <= 5
+           WHERE p.arquivado = 0 AND p.estoque > 0 AND p.estoque <= 5
              AND NOT EXISTS (SELECT 1 FROM produto_variacoes v WHERE v.produto_id = p.id)
            UNION ALL
            SELECT p.nome || ' (' || pv.tamanho || ')' AS nome, pv.estoque AS estoque
            FROM produto_variacoes pv JOIN produtos p ON p.id = pv.produto_id
-           WHERE pv.estoque > 0 AND pv.estoque <= 5
+           WHERE p.arquivado = 0 AND pv.estoque > 0 AND pv.estoque <= 5
          )
          ORDER BY estoque ASC, nome COLLATE NOCASE
          LIMIT 100`
@@ -106,7 +109,7 @@ export function listarProdutosAlerta(tipo: TipoProdutoAlerta): ProdutoAlertaDeta
                   )
                 ) AS INTEGER) AS dias_parado
          FROM produtos p
-         WHERE p.estoque > 0
+         WHERE p.arquivado = 0 AND p.estoque > 0
        )
        WHERE dias_parado >= 30
        ORDER BY dias_parado DESC, estoque DESC, nome COLLATE NOCASE

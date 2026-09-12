@@ -1,7 +1,8 @@
 import { FC, Fragment, Suspense, lazy, useEffect, useRef, useState } from 'react'
-import { Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, FileUp, FileText, ChevronRight, ChevronDown, Layers, Info, Package } from 'lucide-react'
+import { Archive, ArchiveRestore, Pencil, Trash2, Plus, Search, Barcode, RefreshCw, UserPlus, Printer, Tag, FileDown, FileUp, FileText, ChevronRight, ChevronDown, Layers, Info, Package } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
+import { useToast } from '@fhvptech/core/ui/toast'
 import { useImprimir } from '@/components/ImpressaoProvider'
 import { Input } from '@fhvptech/core/ui/input'
 import { Label } from '@fhvptech/core/ui/label'
@@ -52,6 +53,9 @@ type Produto = {
   // Nulo = herda o padrão da loja. Zero = vendido sem garantia.
   garantia_dias: number | null
   estoque: number // simples: o próprio; grade: soma dos tamanhos
+  // 1 = fora de circulação. Não é exclusão nem estoque zero: some da lista e
+  // do caixa, e o histórico de quem comprou fica inteiro. Ver a migration 052.
+  arquivado: number
   fornecedor_id: number | null
   fornecedor_nome?: string | null
   variacoes: Variacao[]
@@ -134,6 +138,13 @@ const Produtos: FC = () => {
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [modalCategoriasAberto, setModalCategoriasAberto] = useState(false)
   const [busca, setBusca] = useState('')
+  /*
+   * Mostrar também os arquivados.
+   *
+   * ⚠️ Nasce FECHADO: o valor do arquivamento é justamente a lista limpa.
+   * Abrir por padrão devolveria o problema que ele veio resolver.
+   */
+  const [verArquivados, setVerArquivados] = useState(false)
   const [dialogAberto, setDialogAberto] = useState(false)
   const [editando, setEditando] = useState<Produto | null>(null)
   const [form, setForm] = useState<FormProduto>(FORM_VAZIO)
@@ -179,7 +190,7 @@ const Produtos: FC = () => {
 
   const carregar = async () => {
     const [rProdutos, rFornecedores, rCategorias] = await Promise.all([
-      window.api.produtos.listar(),
+      window.api.produtos.listar(verArquivados),
       window.api.fornecedores.listar(),
       window.api.categorias.listar()
     ])
@@ -188,12 +199,18 @@ const Produtos: FC = () => {
     if (rCategorias.success) setCategorias(rCategorias.data)
   }
 
+  /*
+   * ⚠️ `verArquivados` está nas dependências: a lista vem do BANCO com o
+   * filtro aplicado, não da memória. Filtrar aqui dentro obrigaria a tela a
+   * carregar sempre tudo, e a de Produtos é a maior lista da loja.
+   */
   useEffect(() => {
     carregar()
     void window.api.garantias.prazoPadrao().then((r) => {
       if (r.success) setPrazoPadraoLoja(r.data)
     })
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verArquivados])
 
   // Captura leitura do leitor USB: digita rápido e envia Enter
   const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -410,9 +427,46 @@ const Produtos: FC = () => {
   }
 
   const confirmar = useConfirm()
+  const { showToast } = useToast()
   const imprimir = useImprimir()
 
   const saidaLinha = useSaidaDeLinha()
+
+  /*
+   * Tirar de circulação, ou trazer de volta.
+   *
+   * ⚠️ Este é o caminho para o produto que JÁ FOI VENDIDO, e por isso não pode
+   * ser excluído: apagar levaria junto a linha dele nas vendas passadas, com o
+   * lucro, a comissão e a garantia do cliente. Arquivar tira da lista e do
+   * caixa e deixa o histórico de pé.
+   */
+  const alternarArquivo = async (p: Produto) => {
+    const arquivando = !p.arquivado
+    if (
+      arquivando &&
+      !(await confirmar({
+        titulo: 'Arquivar produto',
+        mensagem:
+          `"${p.nome}" sai da lista, da busca do caixa e dos alertas de estoque. ` +
+          'As vendas antigas dele continuam como estão, e você pode trazê-lo de volta quando quiser.',
+        rotuloConfirmar: 'Arquivar'
+      }))
+    )
+      return
+    const resp = await window.api.produtos.arquivar(p.id, arquivando)
+    if (!resp.success) {
+      showToast({ message: resp.error, variant: 'destructive' })
+      return
+    }
+    showToast({
+      message: arquivando ? `"${p.nome}" foi arquivado.` : `"${p.nome}" voltou para a lista.`,
+      variant: 'success'
+    })
+    // Arquivando com o filtro fechado, a linha sai da tela; reativando, ela
+    // fica. Nos dois casos a lista vem do banco de novo, nunca de palpite.
+    if (arquivando && !verArquivados) saidaLinha.sairEntao(String(p.id), () => void carregar())
+    else void carregar()
+  }
 
   const excluir = async (id: number, nome: string) => {
     if (
@@ -582,6 +636,28 @@ const Produtos: FC = () => {
           {ehCelular && busca === '' && <DicaRolante texto="Buscar por nome, código, categoria" />}
         </div>
         {/*
+          Ver também o que foi arquivado.
+
+          ⚠️ Só o dono, pelo mesmo motivo do inventário: produto arquivado é
+          decisão de gestão, e a lista do balcão tem que ser o que se vende.
+        */}
+        {ehDono && (
+          <button
+            type="button"
+            onClick={() => setVerArquivados((v) => !v)}
+            aria-pressed={verArquivados}
+            title={verArquivados ? 'Ocultar os arquivados' : 'Mostrar também os arquivados'}
+            className={`h-11 shrink-0 rounded-md border px-3 text-sm transition-colors lg:h-10 ${
+              verArquivados
+                ? 'bg-primary/10 border-primary text-primary font-medium'
+                : 'bg-background hover:bg-muted/30'
+            }`}
+          >
+            <Archive className="w-4 h-4 inline-block lg:mr-1.5" />
+            <span className="hidden lg:inline">Arquivados</span>
+          </button>
+        )}
+        {/*
           No celular as ferramentas do topo viram menu, e o "novo produto" fica
           como botão — é o que se faz ao abrir esta tela.
         */}
@@ -681,8 +757,18 @@ const Produtos: FC = () => {
                   */}
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                     <div className="min-w-0">
+                      {/*
+                        O selo existe porque a lista com arquivados ligada mistura os
+                        dois estados. Sem marca, o lojista tentaria vender um item que
+                        o caixa vai recusar, e a culpa pareceria do sistema.
+                      */}
                       <p className="truncate text-[14.5px] font-semibold leading-tight" title={p.nome}>
                         {p.nome}
+                        {p.arquivado ? (
+                      <span className="ml-1.5 align-middle rounded-full bg-muted px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
+                        arquivado
+                      </span>
+                    ) : null}
                       </p>
                       {/*
                         `min-w-0` no texto cinza e `shrink-0` nos números: quem
@@ -712,6 +798,15 @@ const Produtos: FC = () => {
                               rotulo: 'Editar',
                               icone: <Pencil className="w-4 h-4" />,
                               onSelecionar: () => abrirEdicao(p)
+                            },
+                            {
+                              rotulo: p.arquivado ? 'Reativar' : 'Arquivar',
+                              icone: p.arquivado ? (
+                                <ArchiveRestore className="w-4 h-4" />
+                              ) : (
+                                <Archive className="w-4 h-4" />
+                              ),
+                              onSelecionar: () => alternarArquivo(p)
                             },
                             {
                               rotulo: 'Excluir',
@@ -821,7 +916,14 @@ const Produtos: FC = () => {
                     )}
                   </td>
                   <td className="px-4 py-3 font-medium">
-                    <div className="truncate max-w-[205px] 2xl:max-w-[280px]" title={p.nome}>{p.nome}</div>
+                    <div className="truncate max-w-[205px] 2xl:max-w-[280px]" title={p.nome}>
+                      {p.nome}
+                      {p.arquivado ? (
+                      <span className="ml-1.5 align-middle rounded-full bg-muted px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
+                        arquivado
+                      </span>
+                    ) : null}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {p.categoria

@@ -7,6 +7,64 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.45.0',
+    itens: [
+      {
+        emoji: '💵',
+        titulo: 'Sinal da venda a prazo',
+        descricao:
+          'Ao registrar uma venda a prazo com sinal, passa a ser informado como o sinal '
+          + 'foi pago e em qual conta o valor entra.'
+      },
+      {
+        emoji: '📜',
+        titulo: 'Histórico de recebimentos',
+        descricao:
+          'A venda passa a exibir cada valor recebido, com a data, a forma de pagamento '
+          + 'e a conta de destino.'
+      },
+      {
+        emoji: '📦',
+        titulo: 'Arquivar produto',
+        descricao:
+          'Produto que já foi vendido pode ser arquivado: ele sai da lista, do caixa e '
+          + 'dos avisos de estoque, e as vendas antigas dele continuam no histórico.'
+      },
+      {
+        emoji: '⚙️',
+        titulo: 'Condições de pagamento por loja',
+        descricao:
+          'Em Configurações, a loja passa a escolher se oferece venda parcelada. '
+          + 'Na venda a prazo, a data de vencimento passa a ser opcional.'
+      },
+      {
+        emoji: '🔁',
+        titulo: 'Transferência entre contas',
+        descricao:
+          'Na aba Contas, passa a ser possível mover dinheiro de uma conta para outra. '
+          + 'O histórico fica na aba de Relatórios.'
+      },
+      {
+        emoji: '🏷️',
+        titulo: 'Categorias de contas a pagar',
+        descricao:
+          'As categorias das despesas passam a ser cadastradas pela loja, com opção de '
+          + 'renomear e excluir.'
+      },
+      {
+        emoji: '📦',
+        titulo: 'Sinal no pedido separado',
+        descricao:
+          'Ao separar um pedido, o sinal pago pelo cliente passa a ser registrado, e na '
+          + 'entrega o sistema cobra apenas o valor restante.'
+      },
+      {
+        emoji: '✨',
+        titulo: 'Correção de bugs'
+      }
+    ]
+  },
+  {
     versao: '1.44.0',
     itens: [
       {

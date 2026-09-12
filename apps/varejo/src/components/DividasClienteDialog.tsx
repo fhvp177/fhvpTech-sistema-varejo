@@ -7,6 +7,7 @@ import {
   DialogTitle,
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
+import { rotuloVenda } from '@/utils/rotuloVenda'
 
 export type StatusPagamento = 'pago' | 'pendente' | 'inadimplente' | 'parcelado'
 
@@ -16,6 +17,8 @@ export type VendaDivida = {
   data: string
   total: number
   valor_pago: number
+  /* Sinal pago no ato. Já vinha do banco (`SELECT v.*`); faltava declarar. */
+  entrada: number
   status_pagamento: StatusPagamento
   data_vencimento: string | null
   num_parcelas: number | null
@@ -27,13 +30,6 @@ const CORES_STATUS: Record<StatusPagamento, string> = {
   pendente: 'bg-amber-100 text-amber-700 border border-amber-200',
   inadimplente: 'bg-red-100 text-red-700 border border-red-200',
   parcelado: 'bg-blue-100 text-blue-700 border border-blue-200'
-}
-
-const LABEL_STATUS: Record<StatusPagamento, string> = {
-  pago: 'Pago',
-  pendente: 'A prazo',
-  inadimplente: 'Inadimplente',
-  parcelado: 'Parcelado'
 }
 
 const fmtMoeda = (valor: number) =>
@@ -96,9 +92,9 @@ const DividasClienteDialog: FC<Props> = ({ clienteNome, vendas, totalEmAberto, o
                         <td className="px-3 py-2 text-muted-foreground">{fmtDataHora(v.data)}</td>
                         <td className="px-3 py-2">
                           <span className={`inline-block whitespace-nowrap text-xs px-2 py-0.5 rounded-full font-medium ${CORES_STATUS[v.status_pagamento]}`}>
-                            {v.num_parcelas
-                              ? `${LABEL_STATUS[v.status_pagamento]} (${v.num_parcelas}x)`
-                              : LABEL_STATUS[v.status_pagamento]}
+                            {/* Mesma regra da aba Vendas: quem teve sinal se
+                                chama "Com sinal". Ver `rotuloVenda`. */}
+                            {rotuloVenda(v)}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right">{fmtMoeda(v.total)}</td>

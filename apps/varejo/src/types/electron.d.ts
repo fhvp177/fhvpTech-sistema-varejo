@@ -217,6 +217,8 @@ type MetricasDashboard = {
     a_vencer: number
     vencido: number
   }
+  /** Em aberto sem data combinada — fora de qualquer recorte de vencimento. */
+  a_receber_sem_prazo: number
   a_pagar_periodo: {
     a_vencer: number
     vencido: number
@@ -258,6 +260,26 @@ type ContaFinanceira = {
   forma_padrao: string | null
   criada_em: string
   saldo: number
+}
+
+type Transferencia = {
+  id: number
+  conta_origem_id: number
+  conta_origem_nome: string
+  conta_destino_id: number
+  conta_destino_nome: string
+  valor: number
+  observacao: string | null
+  vendedor_id: number | null
+  vendedor_nome: string | null
+  criada_em: string
+}
+
+type CategoriaConta = {
+  id: number
+  nome: string
+  /** Quantas contas a pagar usam esta categoria. */
+  contas_count: number
 }
 
 type MovimentoFinanceiro = {
@@ -466,6 +488,8 @@ type PedidoSeparado = {
   observacao: string | null
   desconto: number
   total: number
+  /** Sinal já pago e já lançado no livro. Falta receber `total - sinal`. */
+  sinal: number
   venda_id: number | null
   concluido_em: string | null
   cancelado_em: string | null
@@ -549,10 +573,18 @@ type PagamentoComissao = {
 interface Window {
   api: {
     produtos: {
-      listar: () => Promise<RespostaIPC>
+      /** Sem os arquivados, a menos que se peça — só a tela de Produtos pede. */
+      listar: (incluirArquivados?: boolean) => Promise<RespostaIPC>
       criar: (dados: unknown, pinDono?: string) => Promise<RespostaIPC>
       atualizar: (id: number, dados: unknown) => Promise<RespostaIPC>
       deletar: (id: number) => Promise<RespostaIPC>
+      /**
+       * Tira de circulação sem apagar o passado (ou traz de volta, com `false`).
+       * É o caminho para o produto que já foi vendido e por isso não pode ser
+       * excluído — ver a migration 052.
+       */
+      arquivar: (id: number, arquivar?: boolean) => Promise<RespostaIPC>
+      /** ⚠️ ACHA o arquivado de propósito, para o caixa poder dizer o que houve. */
       buscarPorCodigoBarras: (codigo: string) => Promise<RespostaIPC>
     }
     clientes: {
@@ -604,6 +636,16 @@ interface Window {
         tipo: string,
         descricao: string
       ) => Promise<RespostaIPC>
+      /** Move dinheiro entre duas contas da loja. Nunca é receita nem despesa. */
+      transferir: (dados: unknown) => Promise<RespostaIPC<{ id: number }>>
+      listarTransferencias: (mes?: string) => Promise<RespostaIPC<Transferencia[]>>
+      mesesComTransferencia: () => Promise<RespostaIPC<string[]>>
+    }
+    categoriasConta: {
+      listar: () => Promise<RespostaIPC<CategoriaConta[]>>
+      criar: (nome: string) => Promise<RespostaIPC<{ id: number; nome: string }>>
+      atualizar: (id: number, nome: string) => Promise<RespostaIPC>
+      deletar: (id: number) => Promise<RespostaIPC>
     }
     caixa: {
       turnoAberto: (caixaId?: number) => Promise<RespostaIPC<TurnoCaixa | null>>
@@ -723,6 +765,14 @@ interface Window {
       criar: (dados: unknown) => Promise<RespostaIPC>
       atualizarStatus: (id: number, status: string) => Promise<RespostaIPC>
       buscarPorId: (id: number) => Promise<RespostaIPC>
+      /** Onde cada dinheiro desta venda entrou, estornos inclusive. */
+      recebimentos: (id: number) => Promise<RespostaIPC>
+      /**
+       * Se esta loja oferece venda parcelada. Ler é livre (o PDV decide se
+       * desenha a opção); gravar é do dono.
+       */
+      permiteParcelamento: () => Promise<RespostaIPC>
+      definirPermissaoParcelamento: (permitir: boolean) => Promise<RespostaIPC>
       // `forma` e `caixaId` NÃO são opcionais por preguiça: sem forma o
       // movimento nasce sem ela e o fechamento do caixa conta como dinheiro.
       // São opcionais só para não quebrar chamada de versão anterior.

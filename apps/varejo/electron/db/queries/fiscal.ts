@@ -353,7 +353,9 @@ export function listarParaClassificar(opcoes: {
   limite?: number
 }): ProdutoClassificacao[] {
   const db = obterBancoDeDados()
-  const cond: string[] = []
+  // Produto arquivado nao vai sair em nota: cobrar NCM dele seria encher a
+  // lista de pendencia que ninguem precisa resolver. Ver a migration 052.
+  const cond: string[] = ['arquivado = 0']
   const params: unknown[] = []
 
   if (opcoes.apenasPendentes) cond.push(`(ncm IS NULL OR TRIM(ncm) = '')`)
@@ -438,7 +440,7 @@ export function categoriasPendentes(): Array<{ categoria: string | null; total: 
   return db
     .prepare(
       `SELECT categoria, COUNT(*) AS total FROM produtos
-       WHERE ncm IS NULL OR TRIM(ncm) = ''
+       WHERE arquivado = 0 AND (ncm IS NULL OR TRIM(ncm) = '')
        GROUP BY categoria ORDER BY total DESC`
     )
     .all() as Array<{ categoria: string | null; total: number }>
@@ -513,17 +515,22 @@ export function gravarFormaPagamento(vendaId: number, forma: string): void {
 export function diagnosticoFiscal(limiteExemplos = 20): DiagnosticoFiscal {
   const db = obterBancoDeDados()
 
-  const total = db.prepare('SELECT COUNT(*) AS n FROM produtos').get() as { n: number }
+  const total = db
+    .prepare('SELECT COUNT(*) AS n FROM produtos WHERE arquivado = 0')
+    .get() as { n: number }
 
   // Só conta produto que pode ser vendido: NCM em branco é o que trava a nota.
   const semNcm = db
-    .prepare(`SELECT COUNT(*) AS n FROM produtos WHERE ncm IS NULL OR TRIM(ncm) = ''`)
+    .prepare(
+      `SELECT COUNT(*) AS n FROM produtos
+        WHERE arquivado = 0 AND (ncm IS NULL OR TRIM(ncm) = '')`
+    )
     .get() as { n: number }
 
   const exemplos = db
     .prepare(
       `SELECT id, nome, codigo_barras FROM produtos
-       WHERE ncm IS NULL OR TRIM(ncm) = ''
+       WHERE arquivado = 0 AND (ncm IS NULL OR TRIM(ncm) = '')
        ORDER BY nome LIMIT ?`
     )
     .all(limiteExemplos) as ProdutoSemClassificacao[]

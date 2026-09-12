@@ -38,7 +38,18 @@ vi.mock('@fhvptech/core/electron/db/conexao', () => ({
   }
 }))
 
-const { criarVenda, pagarParcela, registrarPagamentoParcial } = await import('../vendas')
+const {
+  criarVenda,
+  pagarParcela,
+  registrarPagamentoParcial,
+  recebimentosDaVenda,
+  estornarRecebimento,
+  permiteParcelamento,
+  definirPermissaoParcelamento,
+  promoverVendasVencidas,
+  aReceberSemPrazo,
+  cancelarVenda
+} = await import('../vendas')
 const { listarContas, extrato } = await import('../financeiro')
 const { abrirTurno, fecharTurno, confirmarTurno, sangria, contagensDoTurno } = await import('../turnos')
 const { criarPedido, cancelarPedido, concluirPedido } = await import('../pedidos')
@@ -190,6 +201,9 @@ const SCHEMA = `
     criado_em TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     para_entrega INTEGER NOT NULL DEFAULT 0, endereco_entrega TEXT, observacao TEXT,
     desconto REAL NOT NULL DEFAULT 0, total REAL NOT NULL, venda_id INTEGER,
+    -- Sinal recebido ao separar (migration 053). Sem esta coluna o pedido com
+    -- sinal nem insere, e o defeito volta calado.
+    sinal REAL NOT NULL DEFAULT 0,
     concluido_em TEXT, cancelado_em TEXT, motivo_cancelamento TEXT
   );
   CREATE TABLE itens_pedido (
@@ -752,5 +766,639 @@ describe('em qual conta o dinheiro entra', () => {
       .get() as { conta_id: number; turno_id: number | null }
     expect(mov.conta_id).toBe(2)
     expect(mov.turno_id).not.toBeNull()
+  })
+})
+/**
+ * O SINAL da venda a prazo: com que meio ele foi pago, e onde ele entra.
+ *
+ * ── O defeito que estes testes prendem ──────────────────────────────────────
+ * A tela nao perguntava a forma quando a condicao nao era "a vista", entao o
+ * sinal ia ao livro carimbado como "crediario". A trava que manda especie para
+ * a gaveta compara a forma com a palavra "dinheiro" e nao reconhecia aquilo:
+ * o sinal pago em notas era lancado na conta padrao de recebimento, que numa
+ * loja com banco cadastrado e o banco. As notas ficavam na gaveta e o sistema
+ * anotava no banco, todo dia, sem nada na tela ligando uma coisa a outra.
+ *
+ * ⚠️ A loja destes testes tem o BANCO como padrao de recebimento, que e a
+ * configuracao onde o defeito aparece. Com o caixa como padrao ele se esconde:
+ * o destino errado calhava de ser o certo.
+ */
+describe('o sinal da venda a prazo', () => {
+  const comBancoComoPadrao = (): void => {
+    db!.exec(`
+      UPDATE contas_financeiras SET padrao_recebimento = 0 WHERE id = 1;
+      UPDATE contas_financeiras SET padrao_recebimento = 1 WHERE id = 2;
+    `)
+  }
+
+  const vendaAPrazoComSinal = (extras: Record<string, unknown> = {}) =>
+    criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pendente',
+      data_vencimento: '2026-12-31',
+      entrada: 185,
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 370 }],
+      ...extras
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+  const movimentoDaVenda = (vendaId: number) =>
+    db!
+      .prepare(
+        `SELECT conta_id, valor, forma_pagamento, turno_id
+           FROM movimentos_financeiros
+          WHERE origem_tipo = 'venda' AND origem_id = ?
+          ORDER BY id DESC LIMIT 1`
+      )
+      .get(vendaId) as
+      | { conta_id: number; valor: number; forma_pagamento: string | null; turno_id: number | null }
+      | undefined
+
+  seTiverSqlite('★ sinal em especie cai na GAVETA, mesmo com banco como padrao', () => {
+    comBancoComoPadrao()
+    abrirTurno(1, 1, 0)
+    const venda = vendaAPrazoComSinal({ forma_entrada: 'dinheiro' })
+    const mov = movimentoDaVenda(venda.id)!
+    expect(mov.conta_id).toBe(1)
+    expect(mov.valor).toBe(185)
+    expect(mov.forma_pagamento).toBe('dinheiro')
+  })
+
+  seTiverSqlite('sinal no PIX vai para a conta escolhida', () => {
+    comBancoComoPadrao()
+    abrirTurno(1, 1, 0)
+    const venda = vendaAPrazoComSinal({ forma_entrada: 'pix', conta_id: 2 })
+    const mov = movimentoDaVenda(venda.id)!
+    expect(mov.conta_id).toBe(2)
+    expect(mov.forma_pagamento).toBe('pix')
+  })
+
+  seTiverSqlite('★ sinal em especie IGNORA a conta escolhida', () => {
+    // Mesma regra da venda a vista: a nota esta na gaveta daquele operador, e a
+    // trava mora no banco de dados justamente porque a tela pode nao existir.
+    abrirTurno(1, 1, 0)
+    const venda = vendaAPrazoComSinal({ forma_entrada: 'dinheiro', conta_id: 2 })
+    expect(movimentoDaVenda(venda.id)!.conta_id).toBe(1)
+  })
+
+  seTiverSqlite('sem forma declarada, o sinal e tratado como especie', () => {
+    /*
+     * ⚠️ A presuncao e deliberada. Sinal nasce no balcao, e especie e a
+     * suposicao que a loja consegue DESMENTIR: se o dinheiro nao estiver na
+     * gaveta, a contagem do fechamento acusa no mesmo dia. Supor banco erra em
+     * silencio, e nenhuma conferencia percebe.
+     */
+    comBancoComoPadrao()
+    abrirTurno(1, 1, 0)
+    const venda = vendaAPrazoComSinal()
+    const mov = movimentoDaVenda(venda.id)!
+    expect(mov.conta_id).toBe(1)
+    expect(mov.forma_pagamento).toBe('dinheiro')
+  })
+
+  seTiverSqlite('★ a VENDA continua sendo crediario, mesmo com o sinal no PIX', () => {
+    // As duas perguntas convivem e nao podem se atropelar: a venda a prazo e
+    // crediario no relatorio; o sinal e o meio pelo qual o dinheiro entrou hoje.
+    abrirTurno(1, 1, 0)
+    const venda = vendaAPrazoComSinal({ forma_entrada: 'pix', conta_id: 2 })
+    const gravada = db!
+      .prepare('SELECT forma_pagamento FROM vendas WHERE id = ?')
+      .get(venda.id) as { forma_pagamento: string }
+    expect(gravada.forma_pagamento).toBe('crediario')
+    expect(movimentoDaVenda(venda.id)!.forma_pagamento).toBe('pix')
+  })
+
+  seTiverSqlite('forma de sinal invalida e recusada', () => {
+    abrirTurno(1, 1, 0)
+    expect(() => vendaAPrazoComSinal({ forma_entrada: 'boleto' })).toThrow(/inv[áa]lida/i)
+  })
+
+  seTiverSqlite('venda a prazo SEM sinal nao lanca nada no livro', () => {
+    abrirTurno(1, 1, 0)
+    const venda = vendaAPrazoComSinal({ entrada: 0, forma_entrada: null })
+    expect(movimentoDaVenda(venda.id)).toBeUndefined()
+  })
+
+  seTiverSqlite('o sinal pertence ao turno do caixa, mesmo caindo no banco', () => {
+    abrirTurno(1, 1, 0)
+    const venda = vendaAPrazoComSinal({ forma_entrada: 'pix', conta_id: 2 })
+    const mov = movimentoDaVenda(venda.id)!
+    expect(mov.conta_id).toBe(2)
+    expect(mov.turno_id).not.toBeNull()
+  })
+})
+
+/**
+ * O historico de recebimentos de UMA venda.
+ *
+ * ⚠️ Nao ha tabela nova: o livro-caixa ja carimba `origem_tipo`/`origem_id`
+ * desde a migration 039, e uma segunda tabela daria duas verdades sobre o mesmo
+ * dinheiro. O que estes testes prendem e que a leitura ache TUDO — inclusive o
+ * que saiu.
+ */
+describe('historico de recebimentos da venda', () => {
+  seTiverSqlite('★ traz o sinal e o saldo, cada um com sua forma e sua conta', () => {
+    abrirTurno(1, 1, 0)
+    const venda = criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pendente',
+      data_vencimento: '2026-12-31',
+      entrada: 185,
+      forma_entrada: 'pix',
+      conta_id: 2,
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 370 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    registrarPagamentoParcial(venda.id, 185, 'dinheiro', 1, null)
+
+    const linhas = recebimentosDaVenda(venda.id)
+    expect(linhas).toHaveLength(2)
+    expect(linhas[0]).toMatchObject({
+      valor: 185,
+      tipo: 'venda',
+      forma_pagamento: 'pix',
+      conta_nome: 'Banco'
+    })
+    expect(linhas[1]).toMatchObject({
+      valor: 185,
+      tipo: 'recebimento',
+      forma_pagamento: 'dinheiro',
+      conta_nome: 'Caixa da loja'
+    })
+  })
+
+  seTiverSqlite('★ o estorno aparece na lista, negativo', () => {
+    // Esconder os negativos daria uma lista que soma mais do que a venda
+    // recebeu: bonita e errada.
+    abrirTurno(1, 1, 0)
+    const venda = criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pendente',
+      data_vencimento: '2026-12-31',
+      entrada: 185,
+      forma_entrada: 'dinheiro',
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 370 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    estornarRecebimento(venda.id)
+
+    const linhas = recebimentosDaVenda(venda.id)
+    expect(linhas).toHaveLength(2)
+    expect(linhas[1].tipo).toBe('estorno')
+    expect(linhas[1].valor).toBe(-185)
+  })
+
+  seTiverSqlite('a baixa de parcela entra com o NUMERO da parcela', () => {
+    abrirTurno(1, 1, 0)
+    const venda = criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'parcelado',
+      data_vencimento: '2026-12-31',
+      num_parcelas: 2,
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 400 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    const parcela2 = db!
+      .prepare('SELECT id FROM parcelas WHERE venda_id = ? AND numero = 2')
+      .get(venda.id) as { id: number }
+    pagarParcela(parcela2.id, 'pix', 1, 2)
+
+    const linhas = recebimentosDaVenda(venda.id)
+    expect(linhas).toHaveLength(1)
+    expect(linhas[0].origem_tipo).toBe('parcela')
+    expect(linhas[0].parcela_numero).toBe(2)
+    expect(linhas[0].conta_nome).toBe('Banco')
+  })
+
+  seTiverSqlite('venda sem lancamento nenhum devolve lista vazia, nao erro', () => {
+    abrirTurno(1, 1, 0)
+    const venda = criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pendente',
+      data_vencimento: '2026-12-31',
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 370 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    expect(recebimentosDaVenda(venda.id)).toEqual([])
+  })
+
+  seTiverSqlite('★ venda cujo id colide com o id de uma PARCELA nao vira parcela', () => {
+    /*
+     * ⚠️ `parcelas.id` e `vendas.id` sao duas contagens independentes, entao
+     * elas se cruzam o tempo todo: aqui a venda 2 nasce quando ja existe a
+     * parcela 2. Se o LEFT JOIN casar so por `p.id = m.origem_id`, sem exigir
+     * que a origem seja 'parcela', o sinal da venda 2 sai na tela como
+     * "Parcela 2" — de uma parcela de OUTRA venda, que nem foi paga.
+     *
+     * Este teste existe porque a mutacao que tira essa guarda ficou VERDE na
+     * primeira rodada: a lista tinha o numero certo de linhas, so o rotulo e que
+     * estava mentindo.
+     */
+    abrirTurno(1, 1, 0)
+    criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'parcelado',
+      data_vencimento: '2026-12-31',
+      num_parcelas: 2,
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 400 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    const segunda = criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pendente',
+      data_vencimento: '2026-12-31',
+      entrada: 50,
+      forma_entrada: 'dinheiro',
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 370 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    // A armadilha so existe se os numeros realmente coincidirem.
+    const parcelaHomonima = db!
+      .prepare('SELECT numero FROM parcelas WHERE id = ?')
+      .get(segunda.id) as { numero: number } | undefined
+    expect(parcelaHomonima).toBeDefined()
+
+    const linhas = recebimentosDaVenda(segunda.id)
+    expect(linhas).toHaveLength(1)
+    expect(linhas[0].origem_tipo).toBe('venda')
+    expect(linhas[0].parcela_numero).toBeNull()
+  })
+
+  seTiverSqlite('nao mistura o dinheiro de OUTRA venda', () => {
+    // `origem_id` sozinho nao identifica nada: a parcela 7 e a venda 7 tem o
+    // mesmo numero. O par com `origem_tipo` e o que separa as duas.
+    abrirTurno(1, 1, 0)
+    const umaEOutra = [370, 500].map((preco) =>
+      criarVenda({
+        cliente_id: 1,
+        vendedor_id: 1,
+        status_pagamento: 'pendente',
+        data_vencimento: '2026-12-31',
+        entrada: 50,
+        forma_entrada: 'dinheiro',
+        caixa_id: 1,
+        itens: [{ produto_id: 1, quantidade: 1, preco_unitario: preco }]
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+    )
+    for (const v of umaEOutra) {
+      const linhas = recebimentosDaVenda(v.id)
+      expect(linhas).toHaveLength(1)
+      expect(linhas[0].valor).toBe(50)
+    }
+  })
+})
+
+/**
+ * O interruptor do parcelamento e a venda a prazo SEM data.
+ *
+ * Os dois vieram do mesmo pedido: simplificar o balcao de uma loja sem cobrar a
+ * conta das outras.
+ */
+describe('condicoes de pagamento por loja', () => {
+  seTiverSqlite('★ loja que nunca respondeu OFERECE parcelamento', () => {
+    // O padrao de quem nunca respondeu jamais pode mudar o comportamento de uma
+    // loja que ja opera: crediario parcelado e o meio de vida de muita delas.
+    db!.exec("DELETE FROM config WHERE chave = 'permitir_parcelamento'")
+    expect(permiteParcelamento()).toBe(true)
+  })
+
+  seTiverSqlite('desligar e religar vale na hora, sem cache', () => {
+    definirPermissaoParcelamento(false)
+    expect(permiteParcelamento()).toBe(false)
+    definirPermissaoParcelamento(true)
+    expect(permiteParcelamento()).toBe(true)
+  })
+
+  seTiverSqlite('★ desligado, a venda parcelada que JA existe continua inteira', () => {
+    /*
+     * Desligar o parcelamento e decisao sobre o que a loja OFERECE daqui pra
+     * frente. As parcelas ja combinadas sao divida de cliente: sumir com elas
+     * seria esconder do lojista dinheiro que ele tem a receber.
+     */
+    abrirTurno(1, 1, 0)
+    const venda = criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'parcelado',
+      data_vencimento: '2026-12-31',
+      num_parcelas: 2,
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 400 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    definirPermissaoParcelamento(false)
+
+    const parcelas = db!
+      .prepare('SELECT id, status FROM parcelas WHERE venda_id = ? ORDER BY numero')
+      .all(venda.id) as Array<{ id: number; status: string }>
+    expect(parcelas).toHaveLength(2)
+    // e continua recebendo
+    pagarParcela(parcelas[0].id, 'dinheiro', 1, null)
+    const depois = db!
+      .prepare('SELECT valor_pago FROM vendas WHERE id = ?')
+      .get(venda.id) as { valor_pago: number }
+    expect(depois.valor_pago).toBe(200)
+  })
+})
+
+describe('venda a prazo sem data de vencimento', () => {
+  const aPrazoSemData = (extras: Record<string, unknown> = {}) =>
+    criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pendente',
+      data_vencimento: null,
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 370 }],
+      ...extras
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+  seTiverSqlite('e aceita, e nasce devendo o total', () => {
+    abrirTurno(1, 1, 0)
+    const venda = aPrazoSemData()
+    const gravada = db!
+      .prepare('SELECT data_vencimento, total, valor_pago, status_pagamento FROM vendas WHERE id = ?')
+      .get(venda.id) as { data_vencimento: string | null; total: number; valor_pago: number; status_pagamento: string }
+    expect(gravada.data_vencimento).toBeNull()
+    expect(gravada.total - gravada.valor_pago).toBe(370)
+    expect(gravada.status_pagamento).toBe('pendente')
+  })
+
+  seTiverSqlite('★ NUNCA vira atrasada, porque nao ha prazo para vencer', () => {
+    // Marcar de inadimplente uma venda sem prazo seria acusar o cliente de
+    // furar um combinado que ninguem fez.
+    //
+    // ⚠️ A protecao e DUPLA, e de proposito: alem do filtro explicito
+    // `data_vencimento IS NOT NULL`, a comparacao `date(NULL) < date('now')`
+    // nunca e verdadeira em SQL. Tirar o filtro sozinho nao quebra nada — o
+    // que quebra, e este teste pega, e enfiar um COALESCE numa data de 1900.
+    abrirTurno(1, 1, 0)
+    const venda = aPrazoSemData()
+    promoverVendasVencidas()
+    const depois = db!
+      .prepare('SELECT status_pagamento FROM vendas WHERE id = ?')
+      .get(venda.id) as { status_pagamento: string }
+    expect(depois.status_pagamento).toBe('pendente')
+  })
+
+  seTiverSqlite('★ aparece no total em aberto SEM PRAZO', () => {
+    // Esta soma e o que impede o dinheiro de sumir da vista do dono: a venda sem
+    // data sai de toda conta ancorada em vencimento.
+    abrirTurno(1, 1, 0)
+    aPrazoSemData()
+    expect(aReceberSemPrazo()).toBe(370)
+  })
+
+  seTiverSqlite('★ venda COM data nao entra nessa soma', () => {
+    abrirTurno(1, 1, 0)
+    aPrazoSemData({ data_vencimento: '2026-12-31' })
+    expect(aReceberSemPrazo()).toBe(0)
+  })
+
+  seTiverSqlite('o sinal abate do que fica sem prazo', () => {
+    abrirTurno(1, 1, 0)
+    aPrazoSemData({ entrada: 70, forma_entrada: 'dinheiro' })
+    expect(aReceberSemPrazo()).toBe(300)
+  })
+
+  seTiverSqlite('venda cancelada sai da soma', () => {
+    abrirTurno(1, 1, 0)
+    const venda = aPrazoSemData()
+    cancelarVenda(venda.id, 2, 'cliente desistiu')
+    expect(aReceberSemPrazo()).toBe(0)
+  })
+
+  seTiverSqlite('quitada sai da soma', () => {
+    abrirTurno(1, 1, 0)
+    const venda = aPrazoSemData()
+    registrarPagamentoParcial(venda.id, 370, 'dinheiro', 1, null)
+    expect(aReceberSemPrazo()).toBe(0)
+  })
+})
+/**
+ * O SINAL do pedido separado — o dinheiro que entra antes de a venda existir.
+ *
+ * ── O que estes testes prendem ──────────────────────────────────────────────
+ *
+ *  1. ★ **O dinheiro entra HOJE, no caixa de hoje.** A peça só sai na entrega,
+ *     mas a nota entrou na gaveta agora, e é a contagem de hoje que descobre
+ *     diferença.
+ *
+ *  2. ★ **E entra UMA VEZ SÓ.** Na entrega, o livro recebe apenas o que falta.
+ *     Somar o sinal de novo faria a loja aparecer recebendo o dobro, e o
+ *     fechamento do dia da entrega acusaria sobra do tamanho do sinal.
+ *
+ *  3. ★ **Cancelou, o sinal volta** — na mesma conta e na mesma forma. Sem
+ *     isso o livro guardaria um dinheiro que já voltou para a mão do cliente.
+ *
+ * ⚠️ Antes disto existir, a tela do PDV aceitava o valor do sinal e o botão
+ * "Separar pedido" o DESCARTAVA em silêncio.
+ */
+describe('o sinal do pedido separado', () => {
+  const comBancoComoPadrao = (): void => {
+    db!.exec(`
+      UPDATE contas_financeiras SET padrao_recebimento = 0 WHERE id = 1;
+      UPDATE contas_financeiras SET padrao_recebimento = 1 WHERE id = 2;
+    `)
+  }
+
+  const pedidoComSinal = (extras: Record<string, unknown> = {}) =>
+    criarPedido({
+      cliente_id: 1,
+      vendedor_id: 1,
+      para_entrega: false,
+      endereco_entrega: null,
+      observacao: null,
+      caixa_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 200 }],
+      ...extras
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+  const movimentosDoPedido = (id: number) =>
+    db!
+      .prepare(
+        `SELECT conta_id, valor, tipo, forma_pagamento
+           FROM movimentos_financeiros
+          WHERE origem_tipo = 'pedido' AND origem_id = ?
+          ORDER BY id`
+      )
+      .all(id) as Array<{ conta_id: number; valor: number; tipo: string; forma_pagamento: string | null }>
+
+  const totalNoLivro = (): number =>
+    +(
+      (db!.prepare('SELECT COALESCE(SUM(valor), 0) AS s FROM movimentos_financeiros').get() as {
+        s: number
+      }).s
+    ).toFixed(2)
+
+  seTiverSqlite('★ o sinal entra no livro no ato de separar', () => {
+    abrirTurno(1, 1, 0)
+    const { id } = pedidoComSinal({ sinal: 100, sinal_forma: 'debito', conta_id: 2 })
+    const movs = movimentosDoPedido(id)
+    expect(movs).toHaveLength(1)
+    expect(movs[0]).toMatchObject({ valor: 100, conta_id: 2, forma_pagamento: 'debito' })
+  })
+
+  seTiverSqlite('★ sinal em especie cai na GAVETA, mesmo com banco como padrao', () => {
+    // Mesma trava da venda: a nota esta na gaveta daquele operador, e a escolha
+    // de conta e ignorada. Um segundo caminho com regra propria daria duas
+    // respostas para a mesma pergunta.
+    comBancoComoPadrao()
+    abrirTurno(1, 1, 0)
+    const { id } = pedidoComSinal({ sinal: 100, sinal_forma: 'dinheiro', conta_id: 2 })
+    expect(movimentosDoPedido(id)[0].conta_id).toBe(1)
+  })
+
+  seTiverSqlite('pedido sem sinal nao lanca nada', () => {
+    abrirTurno(1, 1, 0)
+    const { id } = pedidoComSinal()
+    expect(movimentosDoPedido(id)).toHaveLength(0)
+  })
+
+  seTiverSqlite('sinal igual ou maior que o total e recusado', () => {
+    abrirTurno(1, 1, 0)
+    expect(() => pedidoComSinal({ sinal: 200, sinal_forma: 'pix' })).toThrow(/n[ãa]o pode ser igual/i)
+  })
+
+  seTiverSqlite('★ forma invalida derruba o pedido INTEIRO', () => {
+    /*
+     * ⚠️ A validação acontece antes de gravar de propósito. Se o pedido fosse
+     * criado e só o lançamento falhasse, sobraria uma peça reservada e um
+     * dinheiro recebido sem registro nenhum — o pior dos dois mundos.
+     */
+    abrirTurno(1, 1, 0)
+    const antes = (db!.prepare('SELECT COUNT(*) n FROM pedidos').get() as { n: number }).n
+    expect(() => pedidoComSinal({ sinal: 50, sinal_forma: 'boleto' })).toThrow(/inv[áa]lida/i)
+    const depois = (db!.prepare('SELECT COUNT(*) n FROM pedidos').get() as { n: number }).n
+    expect(depois).toBe(antes)
+    // e a peça não ficou reservada
+    const reservado = (db!.prepare('SELECT reservado FROM produtos WHERE id = 1').get() as {
+      reservado: number
+    }).reservado
+    expect(reservado).toBe(0)
+  })
+
+  seTiverSqlite('★ na entrega, o livro recebe SO o que falta', () => {
+    // O teste que impede o dinheiro de ser contado duas vezes.
+    abrirTurno(1, 1, 0)
+    const { id } = pedidoComSinal({ sinal: 100, sinal_forma: 'pix', conta_id: 2 })
+    expect(totalNoLivro()).toBe(100)
+
+    concluirPedido(id, {
+      vendedor_id: 1,
+      caixa_id: 1,
+      status_pagamento: 'pago',
+      data_vencimento: null,
+      forma_pagamento: 'dinheiro'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    // 100 do sinal + 100 na entrega = 200, o total do pedido. Nem mais, nem menos.
+    expect(totalNoLivro()).toBe(200)
+  })
+
+  seTiverSqlite('★ a venda nasce sabendo que o sinal ja foi pago', () => {
+    abrirTurno(1, 1, 0)
+    const { id } = pedidoComSinal({ sinal: 60, sinal_forma: 'pix', conta_id: 2 })
+    const venda = concluirPedido(id, {
+      vendedor_id: 1,
+      caixa_id: 1,
+      status_pagamento: 'pendente',
+      data_vencimento: '2026-12-31',
+      forma_entrada: 'pix'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    const gravada = db!
+      .prepare('SELECT total, entrada, valor_pago FROM vendas WHERE id = ?')
+      .get(venda.id) as { total: number; entrada: number; valor_pago: number }
+    expect(gravada.total).toBe(200)
+    expect(gravada.entrada).toBe(60)
+    expect(gravada.valor_pago).toBe(60)
+    // e o livro continua com 60 só: a entrega não recebeu nada ainda
+    expect(totalNoLivro()).toBe(60)
+  })
+
+  seTiverSqlite('★ o historico da VENDA mostra o sinal que entrou pelo pedido', () => {
+    // Sem isto a venda pareceria ter recebido só o da entrega, e o cliente
+    // apareceria tendo pago menos do que pagou.
+    abrirTurno(1, 1, 0)
+    const { id } = pedidoComSinal({ sinal: 100, sinal_forma: 'pix', conta_id: 2 })
+    const venda = concluirPedido(id, {
+      vendedor_id: 1,
+      caixa_id: 1,
+      status_pagamento: 'pago',
+      data_vencimento: null,
+      forma_pagamento: 'dinheiro'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    const linhas = recebimentosDaVenda(venda.id)
+    expect(linhas).toHaveLength(2)
+    expect(linhas[0]).toMatchObject({ tipo: 'sinal', valor: 100, conta_nome: 'Banco' })
+    expect(linhas[1]).toMatchObject({ tipo: 'venda', valor: 100, conta_nome: 'Caixa da loja' })
+  })
+
+  seTiverSqlite('★ cancelar DEVOLVE o sinal, na mesma conta e forma', () => {
+    abrirTurno(1, 1, 0)
+    const { id } = pedidoComSinal({ sinal: 100, sinal_forma: 'pix', conta_id: 2 })
+    cancelarPedido(id, 'cliente desistiu')
+
+    const movs = movimentosDoPedido(id)
+    expect(movs).toHaveLength(2)
+    expect(movs[1]).toMatchObject({ valor: -100, conta_id: 2, tipo: 'estorno', forma_pagamento: 'pix' })
+    expect(totalNoLivro()).toBe(0)
+  })
+
+  seTiverSqlite('cancelar pedido SEM sinal nao mexe no livro', () => {
+    abrirTurno(1, 1, 0)
+    const { id } = pedidoComSinal()
+    cancelarPedido(id, 'desistiu')
+    expect(totalNoLivro()).toBe(0)
+    expect(movimentosDoPedido(id)).toHaveLength(0)
+  })
+
+  seTiverSqlite('★ sinal SEM caixa aberto e recusado na loja que exige', () => {
+    /*
+     * ⚠️ Dinheiro fora de turno some de toda conferencia. A trava e a mesma da
+     * venda; o que muda e a condicao: separar peca sem dinheiro continua
+     * podendo acontecer com o caixa fechado.
+     */
+    db!.exec("UPDATE config SET valor = '1' WHERE chave = 'exigir_caixa_aberto'")
+    expect(() => pedidoComSinal({ sinal: 50, sinal_forma: 'pix', caixa_id: null })).toThrow(
+      'CAIXA_FECHADO'
+    )
+    // e sem sinal passa normalmente
+    expect(() => pedidoComSinal({ caixa_id: null })).not.toThrow()
+  })
+
+  seTiverSqlite('★ cancelar devolve a PECA junto com o dinheiro', () => {
+    abrirTurno(1, 1, 0)
+    const { id } = pedidoComSinal({ sinal: 100, sinal_forma: 'pix', conta_id: 2 })
+    const reservadoAntes = (db!.prepare('SELECT reservado FROM produtos WHERE id = 1').get() as {
+      reservado: number
+    }).reservado
+    expect(reservadoAntes).toBe(1)
+    cancelarPedido(id, 'desistiu')
+    const reservadoDepois = (db!.prepare('SELECT reservado FROM produtos WHERE id = 1').get() as {
+      reservado: number
+    }).reservado
+    expect(reservadoDepois).toBe(0)
   })
 })

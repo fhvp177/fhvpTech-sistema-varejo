@@ -5,6 +5,7 @@ import { Select } from '@fhvptech/core/ui/select'
 import { Label } from '@fhvptech/core/ui/label'
 import { useImprimir } from '@/components/ImpressaoProvider'
 import PainelFinanceiroMes from '@/components/PainelFinanceiroMes'
+import HistoricoTransferencias from '@/components/HistoricoTransferencias'
 import DataPicker from '@/components/DataPicker'
 import MesPicker from '@/components/MesPicker'
 import { nomeImpressao } from '@/utils/nomeImpressao'
@@ -400,6 +401,18 @@ const Relatorios: FC = () => {
         continuam embaixo, porque contador pede papel.
       */}
       <PainelFinanceiroMes />
+
+      {/*
+        Logo abaixo do resumo do mês, e fechado por padrão.
+
+        ⚠️ Transferência não entra em receita nem em despesa — é o mesmo dinheiro
+        mudando de conta. Justamente por ficar fora dos totais é que ela precisa
+        de um lugar onde se possa olhar: sem isto, o lojista vê o saldo de uma
+        conta cair e não acha a explicação em canto nenhum.
+      */}
+      <div className="mt-4 lg:mt-5">
+        <HistoricoTransferencias />
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <CardRelatorio

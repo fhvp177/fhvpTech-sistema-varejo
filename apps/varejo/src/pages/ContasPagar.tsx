@@ -9,7 +9,8 @@ import {
   AlertTriangle,
   CalendarClock,
   Receipt,
-  Wallet
+  Wallet,
+  Tags
 } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { useConfirm } from '@fhvptech/core/ui/confirm'
@@ -33,6 +34,7 @@ import { useEhCelular } from '@/hooks/useEhCelular'
 import DataPicker from '@/components/DataPicker'
 import DicaRolante from '@/components/DicaRolante'
 import { IMaskInput } from 'react-imask'
+import ModalCategoriasConta from '@/components/ModalCategoriasConta'
 import { CLASSE_DINHEIRO, paraMascara, paraNumero } from '@/utils/mascaras'
 
 const ITENS_POR_PAGINA = 20
@@ -59,18 +61,15 @@ const FORM_VAZIO: FormConta = {
   observacao: ''
 }
 
-// Sugestões de categoria — o campo é livre (o lojista pode digitar outra).
-const CATEGORIAS_SUGERIDAS = [
-  'Mercadoria',
-  'Aluguel',
-  'Energia',
-  'Água',
-  'Internet/Telefone',
-  'Salário',
-  'Impostos',
-  'Manutenção',
-  'Outros'
-]
+/*
+ * As categorias agora vêm do cadastro da loja (migration 054), e não mais de
+ * uma lista fixa aqui dentro.
+ *
+ * ⚠️ O campo continua ACEITANDO texto livre. Barrar o que não está cadastrado
+ * pararia o lojista no meio de um lançamento para obrigá-lo a abrir outra tela
+ * — e a saída fácil seria deixar a conta sem categoria, que é pior. Ele digita
+ * agora e organiza depois, no botão ao lado.
+ */
 
 const BADGE: Record<ContaPagar['situacao'], string> = {
   aberta: 'bg-amber-100 text-amber-700',
@@ -116,6 +115,8 @@ const ContasPagar: FC = () => {
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [filtro, setFiltro] = useState<Filtro>('aberto')
   const [busca, setBusca] = useState('')
+  const [categorias, setCategorias] = useState<CategoriaConta[]>([])
+  const [modalCategoriasAberto, setModalCategoriasAberto] = useState(false)
   const [paginaAtual, setPaginaAtual] = useState(1)
 
   // Dialog de criar/editar
@@ -142,6 +143,11 @@ const ContasPagar: FC = () => {
     if (respResumo.success) setResumo(respResumo.data)
   }
 
+  const carregarCategorias = async () => {
+    const r = await window.api.categoriasConta.listar()
+    if (r.success) setCategorias(r.data)
+  }
+
   const carregarFornecedores = async () => {
     const resp = await window.api.fornecedores.listar()
     if (resp.success) setFornecedores(resp.data as Fornecedor[])
@@ -149,6 +155,7 @@ const ContasPagar: FC = () => {
 
   useEffect(() => {
     carregar()
+    void carregarCategorias()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro])
 
@@ -744,16 +751,34 @@ const ContasPagar: FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 [&>*]:min-w-0 [&>*>*]:min-w-0">
               <div className="grid gap-1.5">
                 <Label htmlFor="categoria">Categoria</Label>
-                <Input
-                  id="categoria"
-                  list="categorias-conta"
-                  value={form.categoria}
-                  onChange={(e) => setCampo('categoria')(e.target.value)}
-                  placeholder="Mercadoria, Aluguel..."
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="categoria"
+                    list="categorias-conta"
+                    value={form.categoria}
+                    onChange={(e) => setCampo('categoria')(e.target.value)}
+                    placeholder="Mercadoria, Aluguel..."
+                    className="min-w-0 flex-1"
+                  />
+                  {/*
+                    O cadastro fica ao lado do campo, como na tela de produtos:
+                    é aqui que o lojista percebe que tem categoria repetida.
+                  */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    onClick={() => setModalCategoriasAberto(true)}
+                    title="Gerenciar categorias"
+                    aria-label="Gerenciar categorias"
+                  >
+                    <Tags className="w-4 h-4" />
+                  </Button>
+                </div>
                 <datalist id="categorias-conta">
-                  {CATEGORIAS_SUGERIDAS.map((cat) => (
-                    <option key={cat} value={cat} />
+                  {categorias.map((cat) => (
+                    <option key={cat.id} value={cat.nome} />
                   ))}
                 </datalist>
               </div>
@@ -906,6 +931,20 @@ const ContasPagar: FC = () => {
           </DialogContent>
         )}
       </Dialog>
+
+      {/*
+        ⚠️ Recarrega a LISTA junto com as categorias ao fechar: renomear uma
+        categoria muda o nome gravado nas contas que a usam, e a tabela atrás do
+        modal continuaria mostrando o nome antigo até alguém trocar de aba.
+      */}
+      <ModalCategoriasConta
+        aberto={modalCategoriasAberto}
+        onFechar={() => setModalCategoriasAberto(false)}
+        onMudancas={() => {
+          void carregarCategorias()
+          void carregar()
+        }}
+      />
     </div>
   )
 }

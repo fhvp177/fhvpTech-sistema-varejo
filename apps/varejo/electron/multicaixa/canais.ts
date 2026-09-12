@@ -85,7 +85,10 @@ export const CANAIS_LOCAIS = [
   // loja, com o saldo de cada banco e cada gasto por categoria numa tela só.
   'financeiro:mesesComMovimento',
   'financeiro:reativarConta',
+  'financeiro:listarTransferencias',
+  'financeiro:mesesComTransferencia',
   'financeiro:resumoMensal',
+  'financeiro:transferir',
   'financeiro:saldoConsolidado',
   // Tráfego pago. Quanto a loja gasta em anúncio e o retorno de cada canal é
   // estratégia de dono, e o lançamento é a porta por onde o número entra: de
@@ -155,6 +158,10 @@ export const CANAIS_LOCAIS = [
 export const CANAIS_REDE = [
   // Contas: só a LISTA, e só porque abrir o turno pede escolher qual caixa. O
   // resto da família `financeiro:` fica local.
+  'categoriasConta:atualizar',
+  'categoriasConta:criar',
+  'categoriasConta:deletar',
+  'categoriasConta:listar',
   'financeiro:listarContas',
   // A gaveta. ⚠️ Limitação conhecida e aceita: o modelo tem UM turno aberto por
   // vez na loja inteira, então o segundo caixa opera o mesmo turno do PC, e não
@@ -291,6 +298,7 @@ export const CANAIS_REDE = [
   'origens:criar',
   'origens:deletar',
   'origens:listar',
+  'produtos:arquivar',
   'produtos:atualizar',
   'produtos:buscarPorCodigoBarras',
   'produtos:criar',
@@ -301,12 +309,15 @@ export const CANAIS_REDE = [
   'vendas:buscarPorId',
   'vendas:cancelar',
   'vendas:criar',
+  'vendas:definirPermissaoParcelamento',
   'vendas:estornarParcela',
   'vendas:estornarRecebimento',
   'vendas:listar',
   'vendas:listarCanceladas',
   'vendas:pagarParcela',
+  'vendas:permiteParcelamento',
   'vendas:produtosMaisVendidos',
+  'vendas:recebimentos',
   'vendas:registrarPagamentoParcial',
   'vendas:resumoDashboard',
   'vendedores:alterarPapel',
@@ -380,7 +391,9 @@ export const CANAIS_REPETIVEIS = [
   'vendas:buscarPorId',
   'vendas:listar',
   'vendas:listarCanceladas',
+  'vendas:permiteParcelamento',
   'vendas:produtosMaisVendidos',
+  'vendas:recebimentos',
   'vendas:resumoDashboard',
   'vendedores:listar'
 ] as const

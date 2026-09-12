@@ -35,6 +35,16 @@ export type ProdutoInventario = {
   custo: number
   /** Simples: o do próprio produto. Grade: a soma dos tamanhos. */
   estoque: number
+  /**
+   * 1 = fora de circulação.
+   *
+   * ⚠️ Arquivado NÃO entra no inventário, mesmo com o filtro da tela ligado.
+   * O inventário é a base de decisão de compra: "quanto dinheiro está parado no
+   * que eu vendo". Somar o que a loja tirou de linha inflaria esse número — e,
+   * pior, ele mudaria de valor só porque alguém ligou um filtro de exibição.
+   * Número que muda por causa de botão de tela deixa de ser confiável.
+   */
+  arquivado?: number
 }
 
 export type LinhaCategoriaInventario = {
@@ -83,6 +93,8 @@ export function calcularInventario(produtos: ProdutoInventario[]): Inventario {
   let semCusto = 0
 
   for (const p of produtos) {
+    // Ver o campo `arquivado` no tipo: o que saiu de linha não é base de compra.
+    if (p.arquivado) continue
     /*
      * ⚠️ Estoque negativo entra como zero. Ele não deveria existir, mas quando
      * aparece (venda lançada de item que já tinha saído) o valor negativo

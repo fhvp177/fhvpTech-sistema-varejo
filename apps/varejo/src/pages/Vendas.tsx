@@ -12,6 +12,10 @@ import { Select } from '@fhvptech/core/ui/select'
 import { MonitorSmartphone } from 'lucide-react'
 import ComprovanteVenda from '@/components/ComprovanteVenda'
 import { Paperclip } from 'lucide-react'
+// Os dois botões de fechar a tela do caixa fazem coisas MUITO diferentes com
+// a mercadoria: um deixa a peça sair, o outro guarda a peça na loja. O símbolo
+// é a diferença lida de relance, antes da frase.
+import { CheckCheck, PackageCheck } from 'lucide-react'
 import { Label } from '@fhvptech/core/ui/label'
 import {
   Dialog,
@@ -33,6 +37,8 @@ import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlComprovanteDevolucao } from '@/utils/comprovanteDevolucao'
 import { gerarHtmlRelatorioVendas, rotuloMes, type ProdutoMaisVendido, type VencimentosMes } from '@/utils/relatorioVendas'
 import { FORMAS_A_VISTA, type FormaPagamento } from '@/utils/formaPagamento'
+import { montarHistorico, type MovimentoDaVenda } from '@/utils/recebimentosVenda'
+import { rotuloVenda, rotuloVendaComSaldo } from '@/utils/rotuloVenda'
 import { useCalculadora, useLock, usePdvMode, useSessao } from '@/App'
 import {
   useLinhaNova,
@@ -150,6 +156,10 @@ type Produto = {
   nome: string
   preco: number
   estoque: number // simples: o próprio; grade: soma dos tamanhos
+  // 1 = fora de circulação. A busca por código ACHA o arquivado de propósito,
+  // para o caixa poder dizer o que houve em vez de "não encontrado" — senão o
+  // operador cadastraria o mesmo item de novo. Ver a migration 052.
+  arquivado?: number
   variacoes: Variacao[]
 }
 
@@ -213,7 +223,16 @@ const LABEL_STATUS: Record<StatusPagamento, string> = {
 // mais sabe qual é qual.
 const LABEL_CONDICAO_PAGAMENTO: Record<StatusPagamento, string> = {
   pago: 'À vista',
-  pendente: 'Venda a prazo',
+  /*
+   * ⚠️ O nome cobre os DOIS casos, e isso não é enfeite de texto.
+   *
+   * O lojista pediu "Venda com sinal", que é como ele vende. Mas quem vende
+   * fiado puro, sem entrada nenhuma, leria um rótulo que fala só de sinal e
+   * concluiria que a opção não serve — e a saída errada mais à mão é marcar
+   * "À vista" numa venda que não foi paga. Isso é erro de dinheiro, não de
+   * vocabulário.
+   */
+  pendente: 'Com sinal ou a prazo',
   inadimplente: 'Inadimplente',
   parcelado: 'Parcelado'
 }
@@ -232,7 +251,7 @@ const LABEL_CONDICAO_PAGAMENTO: Record<StatusPagamento, string> = {
  */
 const AJUDA_CONDICAO_PAGAMENTO: Partial<Record<StatusPagamento, string>> = {
   pago: 'Recebe tudo agora',
-  pendente: 'Recebe depois — com ou sem sinal na hora',
+  pendente: 'Recebe parte agora, se houver, e o restante depois',
   parcelado: 'Sinal na hora (opcional) + parcelas'
 }
 
@@ -242,13 +261,15 @@ const CORES_PARCELA: Record<string, string> = {
   inadimplente: 'bg-red-100 text-red-700'
 }
 
-const badgeVenda = (v: Venda): string => {
-  if (v.num_parcelas) {
-    if (v.status_pagamento === 'parcelado') return `Parcelado (${v.num_parcelas}x)`
-    if (v.status_pagamento === 'pago') return `Pago (${v.num_parcelas}x)`
-  }
-  return LABEL_STATUS[v.status_pagamento]
-}
+/*
+ * O nome da venda na lista e na tabela.
+ *
+ * ⚠️ A regra mora em `src/utils/rotuloVenda.ts`, testada fora da tela: ela
+ * decide quando a venda a prazo se chama "Com sinal", e é calculada de
+ * `entrada > 0` em vez de gravada. Ver lá o porquê de não existir uma
+ * condição de pagamento nova para isso.
+ */
+const badgeVenda = (v: Venda): string => rotuloVenda(v)
 
 // Indicador de devolução — dimensão separada do status de pagamento, mostrado
 // como ícone ↩ discreto (não como pílula, pra não competir com o status).
@@ -296,6 +317,34 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
   const [filtroMes, setFiltroMes] = useState<string>('') // '' = todas as datas; 'YYYY-MM' = mês específico
   const [busca, setBusca] = useState('')
   const [vendaDetalhada, setVendaDetalhada] = useState<VendaDetalhada | null>(null)
+  /*
+   * Onde cada dinheiro desta venda entrou.
+   *
+   * ⚠️ Recarrega quando o TOTAL RECEBIDO muda, não só quando a venda abre: o
+   * pagamento e o estorno acontecem dentro deste mesmo diálogo, e uma lista que
+   * só carrega na abertura mostraria o histórico de antes do que a pessoa
+   * acabou de fazer. `valor_pago` é o que muda nos dois casos.
+   */
+  const [recebimentos, setRecebimentos] = useState<MovimentoDaVenda[]>([])
+  useEffect(() => {
+    const id = vendaDetalhada?.id
+    if (id == null) {
+      setRecebimentos([])
+      return
+    }
+    let vivo = true
+    window.api.vendas
+      .recebimentos(id)
+      .then((r) => {
+        if (vivo && r.success) setRecebimentos(r.data as MovimentoDaVenda[])
+      })
+      .catch(() => {
+        /* histórico vazio: o bloco some, e o resto do detalhe continua de pé */
+      })
+    return () => {
+      vivo = false
+    }
+  }, [vendaDetalhada?.id, vendaDetalhada?.valor_pago, vendaDetalhada?.status_pagamento])
   const [valorPagamento, setValorPagamento] = useState('')
   /*
    * COMO o cliente quitou a dívida.
@@ -1155,7 +1204,9 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                 <div>
                   <span className="font-medium text-foreground">Status: </span>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CORES_STATUS[vendaDetalhada.status_pagamento]}`}>
-                    {badgeVenda(vendaDetalhada)}
+                    {/* No detalhe cabe o saldo: aqui ele não repete a coluna
+                        de dinheiro de nenhuma lista. Ver `rotuloVendaComSaldo`. */}
+                    {rotuloVendaComSaldo(vendaDetalhada)}
                   </span>
                   {(() => {
                     const selo = seloDevolucao(vendaDetalhada)
@@ -1176,6 +1227,17 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                   <div>
                     <span className="font-medium text-foreground">Vencimento: </span>
                     {fmtDataCurta(vendaDetalhada.data_vencimento)}
+                  </div>
+                ) : vendaDetalhada.status_pagamento !== 'pago' ? (
+                  /*
+                    Venda a prazo sem data combinada. Deixar o campo sumir daria
+                    a impressão de dado faltando ou de tela quebrada; dizer o que
+                    é deixa claro que foi escolha de quem vendeu — e por que esta
+                    venda não aparece na cobrança por vencimento.
+                  */
+                  <div>
+                    <span className="font-medium text-foreground">Vencimento: </span>
+                    sem prazo combinado
                   </div>
                 ) : null}
                 {vendaDetalhada.entrada > 0 && (
@@ -1397,6 +1459,56 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                                   </button>
                                 ) : null)}
                             </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/*
+                Histórico do dinheiro desta venda: sinal, saldo, parcelas e
+                estornos, cada um com o meio e a conta em que entrou.
+
+                ⚠️ Só desenha quando há lançamento. Venda paga inteira com
+                crédito da loja, e venda antiga de quando a loja ainda não tinha
+                conta financeira, não geraram movimento nenhum — um bloco vazio
+                ali sugeriria que o dinheiro sumiu. Quem responde quanto a venda
+                recebeu continua sendo o "Já pago" logo acima.
+              */}
+              {recebimentos.length > 0 && (
+                <div>
+                  <p className="font-medium text-sm mb-1.5">Recebimentos</p>
+                  <div className="border rounded-lg overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Data</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">O quê</th>
+                          <th className="text-right px-3 py-2 font-medium text-muted-foreground">Valor</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Forma</th>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Conta</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {montarHistorico(recebimentos, vendaDetalhada.entrada > 0).map((l, i) => (
+                          <tr key={l.id} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
+                            <td className="px-3 py-2 whitespace-nowrap">{fmtData(l.data)}</td>
+                            <td className="px-3 py-2">{l.rotulo}</td>
+                            <td
+                              className={`px-3 py-2 text-right font-medium whitespace-nowrap ${
+                                l.ehEstorno ? 'text-destructive' : ''
+                              }`}
+                            >
+                              {fmt(l.valor)}
+                            </td>
+                            {/*
+                              Venda anterior ao campo de forma não recebe chute:
+                              travessão é honesto, "Dinheiro" seria invenção.
+                            */}
+                            <td className="px-3 py-2">{l.forma ?? '—'}</td>
+                            <td className="px-3 py-2">{l.conta}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1673,6 +1785,40 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
    * Quem de fato barra é o banco; isto aqui decide o que a tela mostra.
    */
   const [exigirCaixa, setExigirCaixa] = useState(true)
+  /*
+   * Esta loja oferece parcelamento?
+   *
+   * ⚠️ Começa LIGADO, que é o padrão de quem nunca respondeu. Começar
+   * desligado esconderia a condição pelo instante entre abrir o PDV e a
+   * resposta chegar — e numa loja que parcela isso é a opção piscando na
+   * cara do operador no meio do atendimento.
+   */
+  const [permiteParcelar, setPermiteParcelar] = useState(true)
+  useEffect(() => {
+    let vivo = true
+    window.api.vendas
+      .permiteParcelamento()
+      .then((r) => {
+        if (vivo && r.success) setPermiteParcelar(r.data as boolean)
+      })
+      .catch(() => {
+        /* sem resposta, segue oferecendo: a loja que parcela não pode parar */
+      })
+    return () => {
+      vivo = false
+    }
+  }, [])
+
+  /*
+   * As condições que esta loja oferece, na ordem em que aparecem.
+   *
+   * ⚠️ Uma venda parcelada que JÁ existe não é afetada por isto: ela continua
+   * na lista, continua recebendo baixa de parcela e continua estornável. Aqui
+   * só se decide o que o caixa OFERECE daqui pra frente.
+   */
+  const CONDICOES_OFERECIDAS: StatusPagamento[] = permiteParcelar
+    ? ['pago', 'pendente', 'parcelado']
+    : ['pago', 'pendente']
 
   /*
    * ⚠️ Recarrega sempre que a tela volta ao foco: o caixa pode ter sido
@@ -1743,6 +1889,28 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
    * e o banco recusa a escolha de qualquer jeito (ver destinoDoRecebimento).
    */
   const [contaVenda, setContaVenda] = useState('')
+  /*
+   * Com que meio o SINAL foi pago, na venda a prazo ou parcelada.
+   *
+   * ⚠️ Não é a forma da venda: a venda continua sendo crediário. Esta responde
+   * só pelo dinheiro que entrou agora, e é o que leva o sinal em espécie para a
+   * gaveta certa em vez de para a conta padrão de recebimento.
+   */
+  const [formaEntrada, setFormaEntrada] = useState<FormaPagamento | null>(null)
+
+  /*
+   * Interruptor desligado com "Parcelado" já escolhido na tela: volta para à
+   * vista. Sem isto o operador ficaria com uma condição marcada que a tela não
+   * desenha mais, e finalizaria uma venda parcelada sem ver como.
+   */
+  useEffect(() => {
+    if (!permiteParcelar && statusPagamento === 'parcelado') {
+      setStatusPagamento('pago')
+      setEntradaInput('')
+      setDataVencimento('')
+      setFormaEntrada(null)
+    }
+  }, [permiteParcelar, statusPagamento])
   const [creditoDisponivel, setCreditoDisponivel] = useState(0)
   const [usarCredito, setUsarCredito] = useState(false)
   const [dataVencimento, setDataVencimento] = useState('')
@@ -1885,6 +2053,15 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     statusPagamento !== 'pago' ? +Math.min(total, Math.max(0, entradaNum)).toFixed(2) : 0
   const valorFinanciado = +(total - entradaValor).toFixed(2)
 
+  /*
+   * Venda a prazo SEM data combinada: o caso em que separar pedido costuma ser
+   * o registro certo, porque a peça quase sempre fica na loja esperando.
+   *
+   * ⚠️ Isto muda só o PESO dos botões e pede uma confirmação — nunca esconde a
+   * venda. Ver o comentário longo junto dos botões.
+   */
+  const sugerirPedido = statusPagamento === 'pendente' && !dataVencimento
+
   // Adiciona ao carrinho. `variacao` definida = vende aquele tamanho (baixa o
   // estoque dele); null = produto simples. A linha do carrinho é única por tamanho.
   const adicionarItem = (produto: Produto, variacao: Variacao | null) => {
@@ -1946,7 +2123,20 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
 
     if (resp.success && resp.data) {
       const r = resp.data as Produto & { variacao_encontrada: Variacao | null }
-      adicionarItem(r, r.variacao_encontrada)
+      /*
+        ⚠️ Arquivado é ACHADO e recusado, em vez de não ser achado.
+        "Não encontrado" mandaria o operador cadastrar de novo o mesmo item —
+        e a loja terminaria com duas fichas do mesmo produto, que é o problema
+        que o arquivamento veio resolver. Dizer o que houve custa uma frase.
+      */
+      if (r.arquivado) {
+        setFeedbackScan({
+          tipo: 'erro',
+          msg: `"${r.nome}" está arquivado. Para vender de novo, reative o produto no cadastro.`
+        })
+      } else {
+        adicionarItem(r, r.variacao_encontrada)
+      }
     } else {
       // Em vez de só avisar, oferece o cadastro na hora (painel logo abaixo)
       // já com o código bipado — o caixa não precisa abandonar o carrinho.
@@ -1993,6 +2183,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     setClienteId('')
     setStatusPagamento('pago')
     setFormaPagamento(null)
+    setFormaEntrada(null)
     setContaVenda('')
     setDataVencimento('')
     setNumParcelas(2)
@@ -2045,6 +2236,9 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       // Só vai quando houve escolha. Nos outros casos o backend deriva
       // ('crediario' a prazo, 'credito_loja' quando o saldo cobre tudo).
       forma_pagamento: precisaEscolherForma ? formaPagamento : null,
+      // Com que meio o SINAL foi pago. Só faz sentido quando existe sinal —
+      // sem valor não entrou dinheiro nenhum e não há meio a declarar.
+      forma_entrada: entradaValor > 0 ? formaEntrada : null,
       // Só quando houve escolha; sem isso o backend decide como sempre.
       conta_id: contaVenda ? Number(contaVenda) : null,
       observacao: observacaoVenda.trim() || null,
@@ -2100,8 +2294,22 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
    * O que sai daqui é mercadoria apartada e preço congelado. Faturamento,
    * comissão e nota só acontecem quando alguém paga.
    */
+  const abrirSepararPedido = (): void => {
+    setSepararEntrega(false)
+    setSepararEndereco(clientes.find((c) => String(c.id) === clienteId)?.endereco ?? '')
+    setSepararObs('')
+    setErro('')
+    setSepararAberto(true)
+  }
+
   const separarPedido = async () => {
     if (carrinho.length === 0) { setErro('Adicione pelo menos um produto.'); return }
+    // Mesma exigência da venda: dinheiro que entra precisa dizer por onde
+    // entrou, senão o fechamento do caixa conta tudo como espécie.
+    if (entradaValor > 0 && !formaEntrada) {
+      setErro('Escolha como o cliente pagou o sinal (dinheiro, débito, crédito ou PIX).')
+      return
+    }
     if (separarEntrega && !separarEndereco.trim()) {
       setErro('Para entregar é preciso informar o endereço.')
       return
@@ -2114,6 +2322,18 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       endereco_entrega: separarEndereco.trim() || null,
       observacao: separarObs.trim() || null,
       desconto: descontoValor,
+      /*
+       * ⚠️ O sinal vai JUNTO, e antes ele era descartado aqui em silêncio.
+       *
+       * O campo de sinal já existia na tela, e este botão mandava o pedido sem
+       * ele: quem recebia R$ 100 na maquininha ficava sem registro nenhum, e o
+       * caixa fechava com sobra sem explicação. Agora o dinheiro entra no livro
+       * no ato de separar, e é abatido na entrega.
+       */
+      sinal: entradaValor,
+      sinal_forma: entradaValor > 0 ? formaEntrada : null,
+      conta_id: contaVenda ? Number(contaVenda) : null,
+      caixa_id: exigirCaixa ? caixaId : caixaAberto ? caixaId : null,
       itens: carrinho.map((i) => ({
         produto_id: i.produto_id,
         variacao_id: i.variacao_id ?? null,
@@ -2140,16 +2360,26 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       setErro('Escolha como o cliente pagou (dinheiro, débito, crédito ou PIX).')
       return
     }
+    // ⚠️ Sinal sem meio declarado vira espécie no banco, e espécie vai para a
+    // gaveta. Numa loja que recebe sinal por PIX isso daria falta na contagem,
+    // então a escolha é obrigatória aqui em vez de silenciosa lá.
+    if (entradaValor > 0 && !formaEntrada) {
+      setErro('Escolha como o cliente pagou o sinal (dinheiro, débito, crédito ou PIX).')
+      return
+    }
     if (statusPagamento !== 'pago' && !clienteId) {
       setErro('Selecione um cliente para vendas a prazo ou parceladas.')
       return
     }
-    if (statusPagamento !== 'pago' && !dataVencimento) {
-      setErro(
-        statusPagamento === 'parcelado'
-          ? 'Informe a data de vencimento da 1ª parcela.'
-          : 'Informe a data de vencimento para pagamentos pendentes.'
-      )
+    /*
+     * ⚠️ Só o PARCELADO exige data, e é por necessidade, não por regra: a data
+     * da 1ª parcela é o que gera o carnê, cada uma vencendo um mês depois da
+     * anterior. Sem ela não existe parcela para criar.
+     *
+     * A venda a prazo passa sem data de propósito — ver o campo na tela.
+     */
+    if (statusPagamento === 'parcelado' && !dataVencimento) {
+      setErro('Informe a data de vencimento da 1ª parcela.')
       return
     }
     if (statusPagamento === 'parcelado' && (numParcelas < 2 || numParcelas > 24)) {
@@ -2167,6 +2397,27 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     if (statusPagamento !== 'pago' && entradaValor >= total && total > 0) {
       setErro('A entrada não pode ser igual ou maior que o total. Para receber tudo agora, use "À vista".')
       return
+    }
+
+    /*
+     * ⚠️ Confirmação, e não bloqueio.
+     *
+     * Sem data, esta venda nunca vence e por isso nunca entra na régua de
+     * cobrança: ela só aparece na linha "sem prazo combinado" do Painel. Quem
+     * está vendendo fiado precisa saber disso ANTES, e quem na verdade queria
+     * separar um pedido tem aqui a última chance de perceber.
+     */
+    if (sugerirPedido) {
+      const seguir = await confirmar({
+        titulo: 'Vender sem prazo combinado?',
+        mensagem:
+          'O cliente está levando a mercadoria agora, sem data para pagar o restante? ' +
+          'Esta venda não vai aparecer na cobrança por vencimento e nunca será marcada como atrasada.' +
+          '\n\n' +
+          'Se a mercadoria fica na loja até a entrega, volte e use "Separar pedido".',
+        rotuloConfirmar: 'Sim, o cliente está levando'
+      })
+      if (!seguir) return
     }
 
     // Vendedor (não-gerente) só finaliza desconto acima do teto se um gerente autorizar
@@ -2997,7 +3248,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         <div>
           <Label className="text-xs mb-2 block">Condição de pagamento</Label>
           <div className="space-y-1.5">
-            {(['pago', 'pendente', 'parcelado'] as StatusPagamento[]).map((s) => (
+            {CONDICOES_OFERECIDAS.map((s) => (
               <label
                 key={s}
                 className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors text-sm ${
@@ -3023,6 +3274,10 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                     if (s === 'pago') {
                       setEntradaInput('')
                       setDataVencimento('')
+                      // O sinal deixou de existir, e o meio dele junto — senão
+                      // a escolha voltaria sozinha se alguém retornar para "a
+                      // prazo", marcada sem ninguém ter marcado agora.
+                      setFormaEntrada(null)
                     }
                   }}
                   className="hidden"
@@ -3130,6 +3385,58 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 ? 'O cliente pagou isto agora; o restante é dividido nas parcelas.'
                 : 'O cliente pagou isto agora; o restante fica devido no vencimento.'}
             </p>
+
+            {/*
+              Como o sinal foi pago, e em qual conta ele entrou.
+
+              ⚠️ Só aparece quando há sinal. Sem valor não há dinheiro entrando,
+              e perguntar o meio de um pagamento que não existe é campo que só
+              serve pra ser preenchido errado.
+
+              ⚠️ Esta pergunta é diferente da forma da VENDA, que segue sendo
+              crediário: a venda é a prazo, o sinal é o dinheiro que entrou hoje.
+              Sem ela o sinal ia para o livro como "crediario", escapava da
+              trava da espécie e caía numa conta de banco com as notas na gaveta.
+            */}
+            {entradaValor > 0 && (
+              <div className="mt-3 space-y-2 border-t pt-3">
+                <Label className="text-xs block">
+                  Como o cliente pagou o sinal <span className="text-destructive">*</span>
+                </Label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {FORMAS_A_VISTA.map((f) => {
+                    const Icone = f.icone
+                    const marcada = formaEntrada === f.valor
+                    return (
+                      <button
+                        key={f.valor}
+                        type="button"
+                        onClick={() => {
+                          setFormaEntrada(f.valor)
+                          setErro('')
+                        }}
+                        aria-pressed={marcada}
+                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left ${
+                          marcada
+                            ? 'bg-primary/10 border-primary text-primary font-medium'
+                            : 'bg-background hover:bg-muted/30'
+                        }`}
+                      >
+                        <Icone className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{f.rotulo}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                {/* Some no dinheiro e na loja de uma conta só. Ver o componente. */}
+                <SeletorContaEntrada
+                  forma={formaEntrada}
+                  value={contaVenda}
+                  onChange={setContaVenda}
+                  className="h-9"
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -3153,12 +3460,33 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
           </div>
         )}
 
-        {/* Data de vencimento */}
+        {/*
+          Data de vencimento.
+
+          ⚠️ OBRIGATÓRIA no parcelado e OPCIONAL na venda a prazo, e a diferença
+          não é capricho: no parcelado a data gera o carnê inteiro (cada parcela
+          vence um mês depois da anterior), então sem ela não há o que criar. Na
+          venda a prazo ela é só uma combinação, e existe venda que se combina
+          sem data: "me paga quando chegar a mercadoria".
+
+          Sem data a venda fica devendo para sempre e NUNCA vira atrasada — o
+          que é honesto, porque não há prazo para vencer. O aviso abaixo diz
+          isso na tela, senão o lojista deixaria em branco sem saber que está
+          abrindo mão da cobrança automática.
+        */}
         {statusPagamento !== 'pago' && (
           <div>
             <Label htmlFor="vencimento" className="text-xs mb-1 block">
-              {statusPagamento === 'parcelado' ? '1ª parcela — vencimento' : 'Data de vencimento'}
-              {' '}<span className="text-destructive">*</span>
+              {statusPagamento === 'parcelado' ? (
+                <>
+                  1ª parcela — vencimento <span className="text-destructive">*</span>
+                </>
+              ) : (
+                <>
+                  Data de vencimento{' '}
+                  <span className="text-muted-foreground font-normal">(opcional)</span>
+                </>
+              )}
             </Label>
             <DataPicker
               id="vencimento"
@@ -3166,6 +3494,12 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
               onChange={setDataVencimento}
               className="w-full"
             />
+            {statusPagamento === 'pendente' && !dataVencimento && (
+              <p className="text-[11px] mt-1 text-muted-foreground">
+                Sem data, a venda fica em aberto sem prazo combinado: ela não aparece na
+                cobrança por vencimento e nunca é marcada como atrasada.
+              </p>
+            )}
           </div>
         )}
 
@@ -3195,40 +3529,80 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
         )}
 
         <div className="mt-auto space-y-2">
-          <Button
-            className="w-full"
-            onClick={finalizarVenda}
-            disabled={salvando || carrinho.length === 0}
-          >
-            {salvando
-              ? 'Registrando...'
-              : statusPagamento === 'pago'
-                ? `Finalizar — ${fmt(aPagar)}`
-                : entradaValor > 0
-                  ? `Finalizar — entrada ${fmt(entradaValor)}`
-                  : 'Finalizar venda'}
-          </Button>
           {/*
-            ⚠️ "Separar" fica ao lado de "Finalizar" e não escondido num menu:
-            nesta loja boa parte das vendas acaba assim, com a joia saindo para a
-            casa do cliente antes do pagamento. Esconder faria o lojista voltar a
-            registrar venda que ainda não aconteceu.
+            ⚠️ A ORDEM dos dois botões muda quando não há data combinada.
+
+            Venda a prazo sem data é quase sempre "o cliente vai buscar depois",
+            e nesse caso a peça FICA na loja — separar pedido é o registro certo,
+            porque ele reserva em vez de dar baixa. Mas fiado de cliente antigo,
+            com a peça já na mão dele e sem prazo combinado, também existe.
+
+            Por isso muda o PESO e não a existência: quem está separando acha o
+            caminho certo sem procurar, e quem está vendendo fiado confirma e
+            segue. Esconder o "Finalizar" empurraria o operador para as duas
+            saídas erradas do meio do atendimento — inventar uma data, ou marcar
+            "À vista" numa venda que não foi paga.
+
+            Quem sabe onde a mercadoria está é quem está olhando para ela.
           */}
-          <Button
-            className="w-full bg-violet-600 text-white hover:bg-violet-700"
-            onClick={() => {
-              setSepararEntrega(false)
-              setSepararEndereco(
-                clientes.find((c) => String(c.id) === clienteId)?.endereco ?? ''
-              )
-              setSepararObs('')
-              setErro('')
-              setSepararAberto(true)
-            }}
-            disabled={separando || carrinho.length === 0}
-          >
-            Separar pedido — receber depois
-          </Button>
+          {sugerirPedido ? (
+            <>
+              <Button
+                className="w-full bg-violet-600 text-white hover:bg-violet-700"
+                onClick={abrirSepararPedido}
+                disabled={separando || carrinho.length === 0}
+              >
+                <PackageCheck className="w-4 h-4 mr-2 shrink-0" aria-hidden />
+                {entradaValor > 0
+                  ? `Separar pedido — sinal ${fmt(entradaValor)}`
+                  : 'Separar pedido — a peça fica na loja'}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={finalizarVenda}
+                disabled={salvando || carrinho.length === 0}
+              >
+                <CheckCheck className="w-4 h-4 mr-2 shrink-0" aria-hidden />
+                {salvando ? 'Registrando...' : 'Finalizar venda — o cliente leva agora'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                className="w-full"
+                onClick={finalizarVenda}
+                disabled={salvando || carrinho.length === 0}
+              >
+                {/* A peça SAI com o cliente. */}
+                <CheckCheck className="w-4 h-4 mr-2 shrink-0" aria-hidden />
+                {salvando
+                  ? 'Registrando...'
+                  : statusPagamento === 'pago'
+                    ? `Finalizar — ${fmt(aPagar)}`
+                    : entradaValor > 0
+                      ? `Finalizar — entrada ${fmt(entradaValor)}`
+                      : 'Finalizar venda'}
+              </Button>
+              {/*
+                ⚠️ "Separar" fica ao lado de "Finalizar" e não escondido num menu:
+                nesta loja boa parte das vendas acaba assim, com a joia saindo para a
+                casa do cliente antes do pagamento. Esconder faria o lojista voltar a
+                registrar venda que ainda não aconteceu.
+              */}
+              <Button
+                className="w-full bg-violet-600 text-white hover:bg-violet-700"
+                onClick={abrirSepararPedido}
+                disabled={separando || carrinho.length === 0}
+              >
+                {/* A peça FICA na loja, apartada. */}
+                <PackageCheck className="w-4 h-4 mr-2 shrink-0" aria-hidden />
+                {entradaValor > 0
+                  ? `Separar pedido — sinal ${fmt(entradaValor)}`
+                  : 'Separar pedido — receber depois'}
+              </Button>
+            </>
+          )}
           <Button variant="outline" className="w-full" onClick={onSair}>
             Cancelar
           </Button>

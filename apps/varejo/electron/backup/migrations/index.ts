@@ -50,6 +50,10 @@ import { aplicar048ExigirCaixaAberto } from './048_exigir_caixa_aberto'
 import { aplicar049CobrancasMaquininha } from './049_cobrancas_maquininha'
 import { aplicar050InvestimentoTrafego } from './050_investimento_trafego'
 import { aplicar051Garantias } from './051_garantias'
+import { aplicar052ProdutoArquivado } from './052_produto_arquivado'
+import { aplicar053SinalDoPedido } from './053_sinal_do_pedido'
+import { aplicar054CategoriasConta } from './054_categorias_conta'
+import { aplicar055Transferencias } from './055_transferencias'
 
 // Lista de migrations do varejo, na ordem de aplicação. O runner genérico
 // (executarMigrations) vive em @fhvptech/core/electron/db/migrations; aqui fica
@@ -109,4 +113,8 @@ export const MIGRATIONS: Migration[] = [
   { nome: '049_cobrancas_maquininha', aplicar: aplicar049CobrancasMaquininha },
   { nome: '050_investimento_trafego', aplicar: aplicar050InvestimentoTrafego },
   { nome: '051_garantias', aplicar: aplicar051Garantias },
+  { nome: '052_produto_arquivado', aplicar: aplicar052ProdutoArquivado },
+  { nome: '053_sinal_do_pedido', aplicar: aplicar053SinalDoPedido },
+  { nome: '054_categorias_conta', aplicar: aplicar054CategoriasConta },
+  { nome: '055_transferencias', aplicar: aplicar055Transferencias },
 ]

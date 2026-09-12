@@ -101,6 +101,10 @@ const SCHEMA = `
     codigo_barras TEXT UNIQUE, referencia TEXT, nome TEXT NOT NULL, categoria TEXT,
     preco REAL NOT NULL, custo REAL NOT NULL DEFAULT 0, garantia_dias INTEGER,
     estoque INTEGER DEFAULT 0, reservado INTEGER NOT NULL DEFAULT 0,
+    -- Fora de circulacao (migration 052). A importacao de XML precisa dela
+    -- porque ela ENXERGA o arquivado de proposito: sem isso, nota nova com um
+    -- produto arquivado cadastraria uma segunda ficha do mesmo item.
+    arquivado INTEGER NOT NULL DEFAULT 0,
     fornecedor_id INTEGER, data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP,
     -- Colunas fiscais da migration 031. Precisam existir aqui porque a
     -- importação passou a herdar o NCM da nota pro produto.

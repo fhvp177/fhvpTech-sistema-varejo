@@ -14,7 +14,7 @@
  * a maior parte destes testes prova.
  */
 import { describe, expect, it } from 'vitest'
-import { formaDaVenda } from '../vendas'
+import { formaDaVenda, formaDoDinheiroQueEntrou } from '../vendas'
 import type { DadosNovaVenda } from '../vendas'
 
 const venda = (extra: Partial<DadosNovaVenda> = {}): DadosNovaVenda => ({
@@ -99,5 +99,80 @@ describe('crédito da loja', () => {
   it('venda de total zero sem crédito não vira credito_loja', () => {
     expect(formaDaVenda(venda(), 0, 0)).toBeNull()
     expect(formaDaVenda(venda({ forma_pagamento: 'dinheiro' }), 0, 0)).toBe('dinheiro')
+  })
+})
+
+/**
+ * COM QUE MEIO o dinheiro entrou AGORA — a outra pergunta.
+ *
+ * ⚠️ Ela existe porque as duas respostas convivem e discordam de propósito
+ * numa venda a prazo com sinal: a VENDA é crediário (é o que vai para
+ * `vendas.forma_pagamento` e para o relatório), e o SINAL é o meio pelo qual as
+ * notas ou o PIX chegaram hoje (é o que vai para o movimento do livro-caixa).
+ *
+ * Antes de 12/09/2026 havia uma resposta só, e o sinal herdava "crediario".
+ * Como a trava que manda especie para a gaveta compara com a palavra
+ * "dinheiro", o sinal pago em notas ia parar na conta padrao de recebimento.
+ */
+describe('o meio do dinheiro que entrou agora', () => {
+  it('na venda a vista, e a mesma resposta da venda', () => {
+    expect(formaDoDinheiroQueEntrou(venda({ forma_pagamento: 'pix' }), 'pix')).toBe('pix')
+    expect(formaDoDinheiroQueEntrou(venda({}), 'credito_loja')).toBe('credito_loja')
+  })
+
+  it.each(['dinheiro', 'debito', 'credito', 'pix'])(
+    'na venda a prazo, aceita o sinal em %s',
+    (forma) => {
+      expect(
+        formaDoDinheiroQueEntrou(
+          venda({ status_pagamento: 'pendente', entrada: 50, forma_entrada: forma }),
+          'crediario'
+        )
+      ).toBe(forma)
+    }
+  )
+
+  it('★ sem forma declarada, presume especie', () => {
+    /*
+     * ⚠️ Presuncao deliberada, e nao chute. Sinal nasce no balcao, e especie e
+     * a suposicao que a loja consegue DESMENTIR: se o dinheiro nao estiver na
+     * gaveta, a contagem do fechamento acusa no mesmo dia. Supor banco erra em
+     * silencio, e nenhuma conferencia percebe.
+     */
+    expect(
+      formaDoDinheiroQueEntrou(venda({ status_pagamento: 'pendente', entrada: 50 }), 'crediario')
+    ).toBe('dinheiro')
+  })
+
+  it('★ NUNCA devolve crediario para o livro', () => {
+    // "crediario" e a condicao da venda, nao um meio de pagamento. No livro ele
+    // vira uma linha que o operador nao sabe contar no fechamento.
+    for (const dados of [
+      venda({ status_pagamento: 'pendente', entrada: 50 }),
+      venda({ status_pagamento: 'parcelado', entrada: 50, num_parcelas: 2 }),
+      venda({ status_pagamento: 'pendente', entrada: 50, forma_entrada: 'pix' })
+    ]) {
+      expect(formaDoDinheiroQueEntrou(dados, 'crediario')).not.toBe('crediario')
+    }
+  })
+
+  it('espaco e caixa alta nao atrapalham', () => {
+    expect(
+      formaDoDinheiroQueEntrou(
+        venda({ status_pagamento: 'pendente', entrada: 50, forma_entrada: '  PIX ' }),
+        'crediario'
+      )
+    ).toBe('pix')
+  })
+
+  it('recusa o que nao e meio de pagamento', () => {
+    for (const invalida of ['boleto', 'crediario', 'credito_loja', 'fiado']) {
+      expect(() =>
+        formaDoDinheiroQueEntrou(
+          venda({ status_pagamento: 'pendente', entrada: 50, forma_entrada: invalida }),
+          'crediario'
+        )
+      ).toThrow(/inv[áa]lida/i)
+    }
   })
 })

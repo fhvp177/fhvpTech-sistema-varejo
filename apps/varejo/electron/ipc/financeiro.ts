@@ -15,6 +15,17 @@ import {
 } from '../db/queries/financeiro'
 import { resumoFinanceiroMes, mesesComMovimento } from '../db/queries/resumoFinanceiro'
 import {
+  transferir,
+  listarTransferencias,
+  mesesComTransferencia
+} from '../db/queries/transferencias'
+import {
+  listarCategoriasConta,
+  criarCategoriaConta,
+  atualizarCategoriaConta,
+  deletarCategoriaConta
+} from '../db/queries/categoriasConta'
+import {
   turnoAberto,
   caixasComTurno,
   abrirTurno,
@@ -324,6 +335,93 @@ export function registrarHandlersFinanceiro(): void {
    * GRAVAR é do dono. É uma trava de controle de dinheiro; quem opera o caixa
    * não pode desligar a conferência de si mesmo.
    */
+
+  /*
+   * Transferência entre contas da própria loja.
+   *
+   * ⚠️ Só o dono. Mover dinheiro entre contas muda o saldo de duas delas de uma
+   * vez e não tem tela de conferência própria — é exatamente o tipo de operação
+   * que não se deixa na mão de quem está operando o balcão.
+   */
+  registrarCanal('financeiro:transferir', (dados: unknown) => {
+    try {
+      requerDono()
+      const sessao = requerSessao()
+      const d = (dados ?? {}) as Record<string, unknown>
+      const r = transferir({
+        conta_origem_id: Number(d.conta_origem_id),
+        conta_destino_id: Number(d.conta_destino_id),
+        valor: Number(d.valor),
+        observacao: (d.observacao as string | null) ?? null,
+        // Quem fez vem da SESSÃO, nunca da tela: é a primeira pergunta quando
+        // o saldo não bate, e não pode depender de quem chamou dizer a verdade.
+        vendedor_id: sessao.id
+      })
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: r }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Leitura do histórico: do dono, como o resto do financeiro.
+  registrarCanal('financeiro:listarTransferencias', (mes?: string) => {
+    try {
+      requerDono()
+      return { success: true, data: listarTransferencias(mes) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('financeiro:mesesComTransferencia', () => {
+    try {
+      requerDono()
+      return { success: true, data: mesesComTransferencia() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('categoriasConta:listar', () => {
+    try {
+      return { success: true, data: listarCategoriasConta() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('categoriasConta:criar', (nome: string) => {
+    try {
+      requerDono()
+      return { success: true, data: criarCategoriaConta(String(nome ?? '')) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('categoriasConta:atualizar', (id: number, nome: string) => {
+    try {
+      requerDono()
+      atualizarCategoriaConta(Number(id), String(nome ?? ''))
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('categoriasConta:deletar', (id: number) => {
+    try {
+      requerDono()
+      deletarCategoriaConta(Number(id))
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
   registrarCanal('caixa:exigencia', () => {
     try {
       return { success: true, data: exigeCaixaAberto() }

@@ -3,6 +3,9 @@ import {
   listarVendas,
   listarVendasCanceladas,
   buscarVendaPorId,
+  recebimentosDaVenda,
+  permiteParcelamento,
+  definirPermissaoParcelamento,
   criarVenda,
   atualizarStatusVenda,
   pagarParcela,
@@ -19,7 +22,7 @@ import {
 import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
 import { lerConfig } from '@fhvptech/core/electron/backup/configBackup'
 import { exigeCaixaAberto } from '../db/queries/turnos'
-import { requerSessao, ehDono } from '../sessao'
+import { requerSessao, ehDono, requerDono } from '../sessao'
 import { verificarPinDono } from '../auth'
 
 // Dispara um backup ZIP em background após uma venda, se a opção estiver ativa.
@@ -54,6 +57,42 @@ export function registrarHandlersVendas(): void {
   registrarCanal('vendas:buscarPorId', (id: number) => {
     try {
       return { success: true, data: buscarVendaPorId(id) ?? null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  /*
+   * O interruptor "esta loja usa venda parcelada".
+   *
+   * ⚠️ LER é livre, como o da exigência de caixa: o PDV consulta para saber se
+   * desenha a opção, e negar a leitura ao vendedor faria a tela cair no padrão.
+   * GRAVAR é do dono — é decisão de como a loja vende.
+   */
+  registrarCanal('vendas:permiteParcelamento', () => {
+    try {
+      return { success: true, data: permiteParcelamento() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('vendas:definirPermissaoParcelamento', (permitir: boolean) => {
+    try {
+      requerDono()
+      definirPermissaoParcelamento(!!permitir)
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // Onde cada dinheiro desta venda entrou (e de onde saiu, nos estornos).
+  // Leitura pura: qualquer operador vê, como já vê a venda.
+  registrarCanal('vendas:recebimentos', (id: number) => {
+    try {
+      return { success: true, data: recebimentosDaVenda(id) }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

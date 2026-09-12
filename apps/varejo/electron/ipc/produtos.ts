@@ -5,6 +5,7 @@ import {
   criarProduto,
   atualizarProduto,
   deletarProduto,
+  arquivarProduto,
   type DadosProduto
 } from '../db/queries/produtos'
 import { obterBackupManager } from '@fhvptech/core/electron/backup/BackupManager'
@@ -12,9 +13,14 @@ import { requerDono, ehDono } from '../sessao'
 import { verificarPinDono } from '../auth'
 
 export function registrarHandlersProdutos(): void {
-  registrarCanal('produtos:listar', () => {
+  /*
+   * ⚠️ `incluirArquivados` e explicito, e so a tela de Produtos usa.
+   * Qualquer outra lista (caixa, etiquetas, inventario) pede a padrao, sem
+   * arquivados — senao arquivar nao teria efeito nenhum onde importa.
+   */
+  registrarCanal('produtos:listar', (incluirArquivados?: boolean) => {
     try {
-      return { success: true, data: listarProdutos() }
+      return { success: true, data: listarProdutos(!!incluirArquivados) }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
@@ -53,6 +59,23 @@ export function registrarHandlersProdutos(): void {
     try {
       requerDono()
       atualizarProduto(id, dados)
+      obterBackupManager().marcarAlteracao()
+      return { success: true, data: null }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  /*
+   * Tirar de circulacao sem apagar o passado.
+   *
+   * Do dono, como excluir e editar: sumir um produto do caixa muda o que a
+   * loja vende, e nao e decisao de quem esta operando o balcao.
+   */
+  registrarCanal('produtos:arquivar', (id: number, arquivar?: boolean) => {
+    try {
+      requerDono()
+      arquivarProduto(id, arquivar !== false)
       obterBackupManager().marcarAlteracao()
       return { success: true, data: null }
     } catch (error) {

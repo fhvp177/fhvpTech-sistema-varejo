@@ -146,3 +146,29 @@ describe('calcularInventario — o dinheiro em cada categoria', () => {
     expect(soma).toBeCloseTo(1, 10)
   })
 })
+
+describe('produto arquivado', () => {
+  it('★ não entra no inventário, nem nas unidades, nem no custo', () => {
+    /*
+     * ⚠️ A tela de Produtos pode LISTAR os arquivados (há um filtro), e a lista
+     * que ela passa para cá é a mesma. Sem este corte, o valor do estoque da
+     * loja mudaria só porque alguém apertou "Arquivados" — número que muda por
+     * causa de botão de exibição deixa de servir para decidir compra.
+     */
+    const inv = calcularInventario([
+      { categoria: 'Cabos', preco: 200, custo: 100, estoque: 3 },
+      { categoria: 'Cabos', preco: 500, custo: 400, estoque: 10, arquivado: 1 }
+    ])
+    expect(inv.unidades).toBe(3)
+    expect(inv.custo_total).toBe(300)
+    expect(inv.produtos_com_estoque).toBe(1)
+  })
+
+  it('categoria que só tem arquivado não aparece na divisão', () => {
+    const inv = calcularInventario([
+      { categoria: 'Cabos', preco: 200, custo: 100, estoque: 3 },
+      { categoria: 'Ferramentas', preco: 500, custo: 400, estoque: 10, arquivado: 1 }
+    ])
+    expect(inv.por_categoria.map((c) => c.categoria)).toEqual(['Cabos'])
+  })
+})

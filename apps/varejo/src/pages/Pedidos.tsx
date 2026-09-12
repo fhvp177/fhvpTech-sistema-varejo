@@ -24,6 +24,7 @@ import {
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
 import { FORMAS_A_VISTA } from '@/utils/formaPagamento'
+import SeletorContaEntrada from '@/components/SeletorContaEntrada'
 import { linkWhatsApp, mensagemPedidoSeparado } from '@/utils/whatsapp'
 import { obterDadosLoja } from '@/utils/dadosLoja'
 import { gerarHtmlComprovanteEntrega } from '@/utils/relatorioFinanceiro'
@@ -53,6 +54,14 @@ const Pedidos: FC = () => {
 
   const [receber, setReceber] = useState<PedidoSeparado | null>(null)
   const [forma, setForma] = useState('dinheiro')
+  /*
+   * Em qual conta o dinheiro da entrega entra.
+   *
+   * ⚠️ Esta tela era a última porta de recebimento que ainda decidia a conta
+   * sozinha. Numa loja com dois bancos recebendo PIX não havia como dizer
+   * qual deles recebeu, e o saldo dos dois ficava errado ao mesmo tempo.
+   */
+  const [conta, setConta] = useState('')
   const [ocupado, setOcupado] = useState(false)
 
   const { showToast } = useToast()
@@ -71,12 +80,23 @@ const Pedidos: FC = () => {
     void obterDadosLoja().then((l) => setNomeLoja(l?.nome || 'loja'))
   }, [carregar])
 
+  /*
+   * O que falta receber na entrega.
+   *
+   * ⚠️ O sinal NÃO é desconto: o pedido continua valendo o total, e é o total
+   * que vira venda. O que mudou é que parte dele já está paga.
+   */
+  const faltaReceber = receber ? +(receber.total - (receber.sinal ?? 0)).toFixed(2) : 0
+
   const concluir = async () => {
     if (!receber) return
     setOcupado(true)
     const r = await window.api.pedidos.concluir(receber.id, {
       status_pagamento: 'pago',
       forma_pagamento: forma,
+      // Só quando houve escolha; sem isso o backend decide como sempre.
+      // ⚠️ Ignorada quando a forma é espécie — a trava mora no banco.
+      conta_id: conta ? Number(conta) : null,
       // ⚠️ Receber é uma venda: cai no caixa deste aparelho e exige turno aberto,
       // como qualquer outra. Sem isso o dinheiro entraria fora da conferência.
       caixa_id: caixaId
@@ -84,6 +104,7 @@ const Pedidos: FC = () => {
     if (r.success) {
       showToast({ message: `Pedido #${receber.id} virou venda.`, variant: 'success' })
       setReceber(null)
+      setConta('')
       await carregar()
     } else {
       showToast({
@@ -124,7 +145,12 @@ const Pedidos: FC = () => {
       titulo: 'Cancelar pedido',
       mensagem:
         `As peças do pedido #${p.id} voltam a ficar disponíveis para venda. ` +
-        'Nada é registrado como devolução, porque a venda não chegou a acontecer.',
+        'Nada é registrado como devolução, porque a venda não chegou a acontecer.' +
+        // O dinheiro é a parte que o lojista precisa saber ANTES de confirmar:
+        // ele vai ter que devolver a nota, e o sistema já registra isso.
+        (p.sinal > 0
+          ? ` O sinal de ${fmt(p.sinal)} sai da conta em que entrou — devolva o valor ao cliente.`
+          : ''),
       variante: 'destructive'
     })
     if (!ok) return
@@ -238,7 +264,14 @@ const Pedidos: FC = () => {
                       <p className="min-w-0 flex-1 truncate text-[14.5px] font-semibold leading-tight">
                         {p.cliente_nome ?? 'Sem cliente'}
                       </p>
-                      <span className="num shrink-0 text-[14px] font-semibold">{fmt(p.total)}</span>
+                      <span className="num shrink-0 text-[14px] font-semibold">
+                        {fmt(p.total)}
+                        {p.sinal > 0 && (
+                          <span className="ml-1 text-[11.5px] font-normal text-muted-foreground">
+                            falta {fmt(p.total - p.sinal)}
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <p className="num mt-0.5 truncate text-[12.5px] text-muted-foreground">
                       #{p.id} · {p.para_entrega === 1 ? 'entrega' : 'retirada'} ·{' '}
@@ -285,9 +318,22 @@ const Pedidos: FC = () => {
             <DialogTitle>Receber o pedido #{receber?.id}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-1 [&>*]:min-w-0 [&>*>*]:min-w-0">
+            {/*
+              ⚠️ O que aparece grande é o que FALTA receber, não o total.
+              Com sinal pago, oferecer o total cheio faz o operador cobrar de
+              novo um dinheiro que já entrou — e foi exatamente o que aconteceu
+              quando o sinal passou a existir e esta tela ainda não sabia dele.
+            */}
             <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <p className="text-[12.5px] text-muted-foreground">Total combinado</p>
-              <p className="num text-xl font-bold">{receber ? fmt(receber.total) : ''}</p>
+              <p className="text-[12.5px] text-muted-foreground">
+                {receber && receber.sinal > 0 ? 'Falta receber agora' : 'Total combinado'}
+              </p>
+              <p className="num text-xl font-bold">{receber ? fmt(faltaReceber) : ''}</p>
+              {receber && receber.sinal > 0 && (
+                <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                  Total {fmt(receber.total)} · sinal de {fmt(receber.sinal)} já recebido
+                </p>
+              )}
             </div>
             {/*
               ⚠️ A forma só é perguntada AGORA, e é o ponto do recurso: o cliente
@@ -318,6 +364,11 @@ const Pedidos: FC = () => {
                 })}
               </div>
             </div>
+            {/*
+              Some sozinho no dinheiro (a nota fica na gaveta) e na loja de uma
+              conta só. Ver o componente.
+            */}
+            <SeletorContaEntrada forma={forma} value={conta} onChange={setConta} className="h-10" />
             <p className="text-[11.5px] text-muted-foreground">
               Ao confirmar, o pedido vira venda: baixa o estoque, entra no faturamento e gera
               comissão.
