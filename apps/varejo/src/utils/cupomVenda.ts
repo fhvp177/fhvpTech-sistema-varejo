@@ -12,6 +12,14 @@ type ItemCupom = {
   codigo_barras?: string
   quantidade: number
   preco_unitario: number
+  /**
+   * Prazo de garantia congelado no dia da venda (migration 051).
+   *
+   * ⚠️ Três valores, três significados. Um número é o prazo; ZERO é peça
+   * vendida sem garantia; AUSENTE é venda anterior ao módulo, e aí o cupom
+   * não imprime nada em vez de chutar uma data que ninguém prometeu.
+   */
+  garantia_dias?: number | null
 }
 
 type ParcelaCupom = {
@@ -73,6 +81,24 @@ const fmtDataCurta = (iso: string): string => {
   // aceita YYYY-MM-DD ou ISO completo
   const base = iso.length === 10 ? iso + 'T00:00' : iso
   return new Date(base).toLocaleDateString('pt-BR')
+}
+
+/**
+ * Data da venda mais N dias, para a linha de garantia.
+ *
+ * ⚠️ A conta é em UTC e só depois volta para texto, e é de propósito: somando
+ * com `setDate` no fuso da máquina, a virada do horário de verão empurra a data
+ * um dia para trás ou para frente. Um dia a menos numa garantia impressa é a
+ * loja recusando o cliente na data que o próprio papel prometeu.
+ *
+ * A mesma conta existe no núcleo das consultas (`somarDias`, em
+ * `db/queries/garantias.ts`). A repetição é obrigatória: este arquivo roda no
+ * navegador e não pode importar nada de `electron/`.
+ */
+const somarDiasIso = (dataVenda: string, dias: number): string => {
+  const base = Date.parse(`${dataVenda.slice(0, 10)}T00:00:00Z`)
+  if (!Number.isFinite(base)) return dataVenda.slice(0, 10)
+  return new Date(base + dias * 86400000).toISOString().slice(0, 10)
 }
 
 // CONDIÇÃO de pagamento (o "quando"), não a forma (o "como", que é dinheiro/
@@ -205,6 +231,49 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
   <div class="divisoria"></div>
 `
     : ''
+
+  /*
+   * ── O bloco da garantia ────────────────────────────────────────────────
+   *
+   * ⚠️ O papel é a prova que fica com o cliente. É ele que vai voltar ao
+   * balcão daqui a dois meses dizendo "está escrito aqui", e por isso a
+   * data impressa tem que sair da mesma conta que a tela de Garantias faz:
+   * o prazo CONGELADO no item, e não o padrão da loja de hoje.
+   *
+   * Quando todos os itens têm o mesmo prazo (o caso comum), sai uma linha
+   * só. Quando diferem, sai uma linha por produto — imprimir só o menor
+   * prazo encurtaria a garantia dos outros no único documento que o cliente
+   * guarda.
+   */
+  const comPrazo = venda.itens.filter((i) => i.garantia_dias != null)
+  let garantiaHtml = ''
+  if (comPrazo.length > 0) {
+    const prazos = new Set(comPrazo.map((i) => i.garantia_dias as number))
+    const linhas: string[] = []
+    if (prazos.size === 1 && comPrazo.length === venda.itens.length) {
+      const dias = [...prazos][0]
+      linhas.push(
+        dias === 0
+          ? '<div>Esta venda não tem garantia.</div>'
+          : `<div>${dias} dias, até ${fmtDataCurta(somarDiasIso(venda.data, dias))}</div>`
+      )
+    } else {
+      for (const item of comPrazo) {
+        const dias = item.garantia_dias as number
+        const nome = escapar(item.produto_nome ?? '—')
+        linhas.push(
+          dias === 0
+            ? `<div>${nome}: sem garantia</div>`
+            : `<div>${nome}: até ${fmtDataCurta(somarDiasIso(venda.data, dias))}</div>`
+        )
+      }
+    }
+    garantiaHtml = `<div class="divisoria"></div>
+  <div class="titulo-secao">GARANTIA</div>
+  <div class="divisoria"></div>
+  <div class="garantia">${linhas.join('')}</div>
+`
+  }
 
   const pix = qrPixParaDocumento({
     chave: loja.pix_chave,
@@ -340,6 +409,11 @@ export function gerarHtmlCupomVenda(venda: DadosCupomVenda, loja: DadosLoja): st
       overflow-wrap: anywhere;
     }
     .observacao .rot { font-size: 9.5px; }
+    .garantia {
+      font-size: 10.5px;
+      margin: 4px 0;
+      overflow-wrap: anywhere;
+    }
     .assinatura {
       margin-top: 60px;
       text-align: center;
@@ -467,7 +541,7 @@ ${CSS_PIX}
       ${linhasPagamento.join('\n      ')}
     </tbody>
   </table>
-${blocoPixHtml(pix, { titulo: tituloPix })}
+  ${garantiaHtml}${blocoPixHtml(pix, { titulo: tituloPix })}
   <div class="divisoria"></div>
 
   ${observacaoHtml}

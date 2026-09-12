@@ -7,6 +7,54 @@ export type ReleaseNovidades = { versao: string; itens: ItemNovidade[] }
 // A `versao` deve bater com a `version` do package.json.
 export const NOVIDADES: ReleaseNovidades[] = [
   {
+    versao: '1.44.0',
+    itens: [
+      {
+        emoji: '🛡️',
+        titulo: 'Garantias',
+        descricao:
+          'O sistema passa a controlar o prazo de garantia dos produtos, com consulta '
+          + 'por venda e registro dos atendimentos.'
+      },
+      {
+        emoji: '💹',
+        titulo: 'Relatórios financeiros na tela',
+        descricao:
+          'O resultado do mês passa a ser exibido na tela, sem necessidade de exportar.'
+      },
+      {
+        emoji: '📦',
+        titulo: 'Inventário de estoque',
+        descricao:
+          'A tela de Produtos passa a exibir a quantidade e o valor do estoque, com a '
+          + 'divisão por categoria.'
+      },
+      {
+        emoji: '📣',
+        titulo: 'Tráfego pago',
+        descricao:
+          'O Painel passa a exibir o investimento em anúncios e o retorno de cada canal.'
+      },
+      {
+        emoji: '🏦',
+        titulo: 'Conta de recebimento',
+        descricao:
+          'Ao receber um pagamento, passa a ser possível escolher em qual conta o valor '
+          + 'entra.'
+      },
+      {
+        emoji: '🧾',
+        titulo: 'Comprovante de abertura de caixa',
+        descricao:
+          'A abertura do caixa passa a ter comprovante próprio, em bobina ou em folha.'
+      },
+      {
+        emoji: '✨',
+        titulo: 'Correção de bugs'
+      }
+    ]
+  },
+  {
     versao: '1.43.1',
     itens: [
       {

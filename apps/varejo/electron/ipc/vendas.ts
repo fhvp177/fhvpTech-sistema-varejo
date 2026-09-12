@@ -101,9 +101,14 @@ export function registrarHandlersVendas(): void {
 
   registrarCanal(
     'vendas:pagarParcela',
-    (parcelaId: number, forma?: string | null, caixaId?: number | null) => {
+    (
+      parcelaId: number,
+      forma?: string | null,
+      caixaId?: number | null,
+      contaId?: number | null
+    ) => {
       try {
-        pagarParcela(parcelaId, forma, caixaId)
+        pagarParcela(parcelaId, forma, caixaId, contaId)
         obterBackupManager().marcarAlteracao()
         return { success: true, data: null }
       } catch (error) {
@@ -114,9 +119,15 @@ export function registrarHandlersVendas(): void {
 
   registrarCanal(
     'vendas:registrarPagamentoParcial',
-    (id: number, valor: number, forma?: string | null, caixaId?: number | null) => {
+    (
+      id: number,
+      valor: number,
+      forma?: string | null,
+      caixaId?: number | null,
+      contaId?: number | null
+    ) => {
       try {
-        registrarPagamentoParcial(id, valor, forma, caixaId)
+        registrarPagamentoParcial(id, valor, forma, caixaId, contaId)
         obterBackupManager().marcarAlteracao()
         return { success: true, data: null }
       } catch (error) {

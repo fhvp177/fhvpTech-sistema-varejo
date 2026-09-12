@@ -37,6 +37,8 @@ import { registrarHandlersEtiquetas } from './ipc/etiquetas'
 import { registrarHandlersBackup } from './ipc/backup'
 import { registrarHandlersImpressao } from './ipc/impressao'
 import { registrarHandlersDashboard } from './ipc/dashboard'
+import { registrarHandlersTrafego } from './ipc/trafego'
+import { registrarHandlersGarantias } from './ipc/garantias'
 import { registrarHandlersAuth } from './ipc/auth'
 import { registrarHandlersChat } from './ipc/chat'
 import { registrarHandlersDevolucoes } from './ipc/devolucoes'
@@ -253,6 +255,8 @@ app.whenReady().then(() => {
   registrarHandlersBackup({ aoMudarAgenda: () => obterBackupAutomatico().reiniciar() })
   registrarHandlersImpressao(() => janelaAtual)
   registrarHandlersDashboard()
+  registrarHandlersTrafego()
+  registrarHandlersGarantias()
   registrarHandlersAuth()
   registrarHandlersChat()
   registrarHandlersDevolucoes()

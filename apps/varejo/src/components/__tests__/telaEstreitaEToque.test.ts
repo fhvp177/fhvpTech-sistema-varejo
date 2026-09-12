@@ -1416,11 +1416,21 @@ describe('a ilha de navegação do celular (roteiro §3)', () => {
      * e não é: escrito assim, dá para provar lendo que o desktop ficou onde
      * estava. Apagar o ramo do monitor é exatamente como o desktop muda sem
      * ninguém perceber.
+     *
+     * ── O teto de largura do monitor mudou em 11/09/2026, de propósito ──────
+     * Era `undefined` (sem teto). Com período curto, o Recharts dividia a
+     * largura toda entre as barras que houvesse, e três dias de movimento
+     * viravam três blocos de 150px — "muito quadradões", nas palavras do dono.
+     * Agora tem teto de 44px, que não atrapalha o mês cheio (ali a barra já
+     * nasce mais estreita que isso e o valor é ignorado).
+     *
+     * Esta guarda pegou a mudança e obrigou a declará-la aqui, que é o que ela
+     * existe para fazer.
      */
     const PAINEL = readFileSync(join(SRC, 'pages', 'Dashboard.tsx'), 'utf8')
     expect(PAINEL).toContain('barGap={ehCelular ? 1 : 2}')
     expect(PAINEL).toContain("barCategoryGap={ehCelular ? '26%' : '10%'}")
-    expect(PAINEL).toContain('maxBarSize={ehCelular ? 10 : undefined}')
+    expect(PAINEL).toContain('maxBarSize={ehCelular ? 10 : 44}')
     expect(PAINEL).toContain("interval={ehCelular ? intervaloRotulos : 'preserveEnd'}")
     expect(PAINEL).toContain('width={ehCelular ? 40 : 60}')
   })

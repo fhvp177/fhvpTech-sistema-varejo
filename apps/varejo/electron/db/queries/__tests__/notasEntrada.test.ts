@@ -98,8 +98,9 @@ const SCHEMA = `
   );
   CREATE TABLE produtos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codigo_barras TEXT UNIQUE, nome TEXT NOT NULL, categoria TEXT,
-    preco REAL NOT NULL, custo REAL NOT NULL DEFAULT 0, estoque INTEGER DEFAULT 0,
+    codigo_barras TEXT UNIQUE, referencia TEXT, nome TEXT NOT NULL, categoria TEXT,
+    preco REAL NOT NULL, custo REAL NOT NULL DEFAULT 0, garantia_dias INTEGER,
+    estoque INTEGER DEFAULT 0, reservado INTEGER NOT NULL DEFAULT 0,
     fornecedor_id INTEGER, data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP,
     -- Colunas fiscais da migration 031. Precisam existir aqui porque a
     -- importação passou a herdar o NCM da nota pro produto.

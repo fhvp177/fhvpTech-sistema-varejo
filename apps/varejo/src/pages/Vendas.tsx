@@ -2,6 +2,8 @@ import { FC, Suspense, lazy, useCallback, useEffect, useRef, useState } from 're
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowLeftRight, Plus, Eye, CheckCircle, Search, Trash2, ShoppingCart, UserPlus, PackagePlus, Printer, User, Building2, Percent, DollarSign, RotateCcw, Ban, Wallet, FileDown, FileText, Undo2, Lock as IconeCadeado, LockOpen as IconeCadeadoAberto } from 'lucide-react'
 import MesPicker from '@/components/MesPicker'
+import DataPicker from '@/components/DataPicker'
+import SeletorContaEntrada from '@/components/SeletorContaEntrada'
 import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { IMaskInput } from 'react-imask'
 import { Button } from '@fhvptech/core/ui/button'
@@ -104,6 +106,9 @@ type ItemVenda = {
   preco_unitario: number
   produto_nome?: string
   codigo_barras?: string
+  // Prazo congelado no dia da venda: é o que o cupom imprime. NULL em
+  // venda anterior à migration 051, e aí o cupom não imprime bloco nenhum.
+  garantia_dias?: number | null
 }
 
 type VendaDetalhada = Venda & { itens: ItemVenda[]; parcelas: Parcela[] }
@@ -305,6 +310,14 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
    * momento, e dois seletores seriam duas perguntas para a mesma resposta.
    */
   const [formaRecebimento, setFormaRecebimento] = useState('dinheiro')
+  /*
+   * Em qual conta o recebimento entra. Vazio = deixa o sistema decidir pela
+   * escada de sempre, que é o que toda loja de uma conta só quer.
+   *
+   * ⚠️ Vale para dívida e para parcela: são as duas coisas que este painel
+   * recebe, e elas não podem cair em contas diferentes por descuido.
+   */
+  const [contaRecebimento, setContaRecebimento] = useState('')
   // De qual gaveta entra o dinheiro em espécie. Mesmo caixa que o PDV usa.
   const { caixaId: caixaDoAparelho } = useCaixaDoAparelho()
   const [salvandoPagamento, setSalvandoPagamento] = useState(false)
@@ -502,7 +515,8 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
       id,
       valor,
       formaRecebimento,
-      caixaDoAparelho
+      caixaDoAparelho,
+      contaRecebimento ? Number(contaRecebimento) : null
     )
     if (resp.success) {
       await verDetalhes(id)
@@ -641,7 +655,8 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
     const resp = await window.api.vendas.pagarParcela(
       parcelaId,
       formaRecebimento,
-      caixaDoAparelho
+      caixaDoAparelho,
+      contaRecebimento ? Number(contaRecebimento) : null
     )
     if (vendaDetalhada) {
       const r = await window.api.vendas.buscarPorId(vendaDetalhada.id)
@@ -1308,6 +1323,18 @@ const HistoricoVendas: FC<{ onNova: () => void }> = ({ onNova }) => {
                         { valor: 'credito', rotulo: 'Cartão de crédito' }
                       ]}
                     />
+                    {/*
+                      Some sozinho quando a forma é dinheiro (a nota fica na
+                      gaveta) e quando a loja só tem uma conta. Ver o
+                      componente.
+                    */}
+                    <SeletorContaEntrada
+                      forma={formaRecebimento}
+                      value={contaRecebimento}
+                      onChange={setContaRecebimento}
+                      classNameContainer="w-44 shrink-0"
+                      className="h-9"
+                    />
                     <Button
                       size="sm"
                       onClick={() => registrarPagamento(vendaDetalhada.id)}
@@ -1709,6 +1736,13 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
   // Sem pré-marcação de propósito: um padrão marcado vira mentira silenciosa no
   // relatório toda vez que o operador só aperta Enter.
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | null>(null)
+  /*
+   * Em qual conta o dinheiro desta venda entra. Vazio = a escada de sempre.
+   *
+   * ⚠️ Não aparece em venda no dinheiro: a nota fica na gaveta do operador,
+   * e o banco recusa a escolha de qualquer jeito (ver destinoDoRecebimento).
+   */
+  const [contaVenda, setContaVenda] = useState('')
   const [creditoDisponivel, setCreditoDisponivel] = useState(0)
   const [usarCredito, setUsarCredito] = useState(false)
   const [dataVencimento, setDataVencimento] = useState('')
@@ -1959,6 +1993,7 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
     setClienteId('')
     setStatusPagamento('pago')
     setFormaPagamento(null)
+    setContaVenda('')
     setDataVencimento('')
     setNumParcelas(2)
     setEntradaInput('')
@@ -2010,6 +2045,8 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
       // Só vai quando houve escolha. Nos outros casos o backend deriva
       // ('crediario' a prazo, 'credito_loja' quando o saldo cobre tudo).
       forma_pagamento: precisaEscolherForma ? formaPagamento : null,
+      // Só quando houve escolha; sem isso o backend decide como sempre.
+      conta_id: contaVenda ? Number(contaVenda) : null,
       observacao: observacaoVenda.trim() || null,
       itens: carrinho.map((item) => ({
         produto_id: item.produto_id,
@@ -3045,6 +3082,19 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
                 )
               })}
             </div>
+
+            {/*
+              Em qual conta o dinheiro cai. Some sozinho no dinheiro (a nota
+              fica na gaveta) e na loja de uma conta só. Ver o componente.
+            */}
+            <div className="mt-2">
+              <SeletorContaEntrada
+                forma={formaPagamento}
+                value={contaVenda}
+                onChange={setContaVenda}
+                className="h-9"
+              />
+            </div>
           </div>
         )}
 
@@ -3110,11 +3160,11 @@ const PDV: FC<{ onSair: () => void }> = ({ onSair }) => {
               {statusPagamento === 'parcelado' ? '1ª parcela — vencimento' : 'Data de vencimento'}
               {' '}<span className="text-destructive">*</span>
             </Label>
-            <Input
+            <DataPicker
               id="vencimento"
-              type="date"
               value={dataVencimento}
-              onChange={(e) => setDataVencimento(e.target.value)}
+              onChange={setDataVencimento}
+              className="w-full"
             />
           </div>
         )}

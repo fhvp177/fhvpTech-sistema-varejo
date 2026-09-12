@@ -9,12 +9,27 @@ import {
   DialogFooter
 } from '@fhvptech/core/ui/dialog'
 import { useToast } from '@fhvptech/core/ui/toast'
+import { Select } from '@fhvptech/core/ui/select'
+import SeletorContaEntrada from '@/components/SeletorContaEntrada'
+import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 
 // Recebimento de uma venda em aberto, com o MESMO comportamento da aba Vendas:
 // pagamento parcial (venda a prazo) e quitação de parcela (venda parcelada).
 // Reusa os mesmos canais IPC — só a tela é própria, para não mexer no modal
 // crítico da Vendas. O "Desfazer" não vive mais no toast (era efêmero): virou o
 // botão fixo "Desfazer último recebimento" no detalhe da venda (só o gerente).
+//
+// ── ⚠️ Esta tela NÃO perguntava a forma de pagamento, e isso era um defeito
+//
+// É a mesma família de erro corrigida na 1.43.1 pela aba Vendas, e esta
+// segunda porta tinha ficado aberta: o recebimento nascia SEM forma, e o
+// fechamento de caixa agrupa o que não tem forma como DINHEIRO. Um fiado
+// quitado por PIX aqui virava dinheiro esperado na gaveta, e a diferença
+// aparecia dias depois, sem nada na tela ligando uma coisa à outra.
+//
+// Faltava também o CAIXA: sem ele o movimento nascia sem turno e sumia do
+// fechamento, que é justamente onde alguém iria procurar de onde veio a
+// diferença.
 
 type ParcelaDetalhe = {
   id: number
@@ -77,6 +92,16 @@ const ReceberPagamentoDialog: FC<Props> = ({ vendaId, clienteNome, onFechar, onM
     carregar(vendaId)
   }, [vendaId])
 
+  /*
+   * Forma, conta e caixa — os três que faltavam.
+   *
+   * O padrão é dinheiro porque é o caso mais comum ao receber fiado no
+   * balcão, e porque é o que o sistema já assumia calado antes.
+   */
+  const [forma, setForma] = useState('dinheiro')
+  const [conta, setConta] = useState('')
+  const { caixaId } = useCaixaDoAparelho()
+
   const registrar = async () => {
     if (!venda) return
     const valor = parseFloat(valorPagamento.replace(',', '.'))
@@ -86,7 +111,13 @@ const ReceberPagamentoDialog: FC<Props> = ({ vendaId, clienteNome, onFechar, onM
     }
     setSalvando(true)
     setErro('')
-    const resp = await window.api.vendas.registrarPagamentoParcial(venda.id, valor)
+    const resp = await window.api.vendas.registrarPagamentoParcial(
+      venda.id,
+      valor,
+      forma,
+      caixaId,
+      conta ? Number(conta) : null
+    )
     if (resp.success) {
       await carregar(venda.id)
       onMudou()
@@ -99,7 +130,12 @@ const ReceberPagamentoDialog: FC<Props> = ({ vendaId, clienteNome, onFechar, onM
 
   const pagarParcela = async (parcelaId: number) => {
     if (!venda) return
-    const resp = await window.api.vendas.pagarParcela(parcelaId)
+    const resp = await window.api.vendas.pagarParcela(
+      parcelaId,
+      forma,
+      caixaId,
+      conta ? Number(conta) : null
+    )
     await carregar(venda.id)
     onMudou()
     if (resp.success) {
@@ -162,6 +198,32 @@ const ReceberPagamentoDialog: FC<Props> = ({ vendaId, clienteNome, onFechar, onM
                   <Button size="sm" onClick={registrar} disabled={salvando}>
                     {salvando ? 'Salvando...' : 'Registrar'}
                   </Button>
+                </div>
+                {/*
+                  ⚠️ A forma vale para o recebimento E para a baixa de parcela
+                  logo abaixo: as duas entram no mesmo fechamento, e escolher
+                  em dois lugares daria duas respostas para o mesmo dinheiro.
+                */}
+                <div className="flex flex-wrap gap-2">
+                  <Select
+                    value={forma}
+                    onChange={setForma}
+                    classNameContainer="w-40 shrink-0"
+                    className="h-9"
+                    opcoes={[
+                      { valor: 'dinheiro', rotulo: 'Dinheiro' },
+                      { valor: 'pix', rotulo: 'PIX' },
+                      { valor: 'debito', rotulo: 'Cartão de débito' },
+                      { valor: 'credito', rotulo: 'Cartão de crédito' }
+                    ]}
+                  />
+                  <SeletorContaEntrada
+                    forma={forma}
+                    value={conta}
+                    onChange={setConta}
+                    classNameContainer="w-44 shrink-0"
+                    className="h-9"
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Para receber tudo, deixe o valor do restante. Para um pagamento parcial, digite quanto recebeu agora.

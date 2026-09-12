@@ -5,7 +5,7 @@ import { Select } from '@fhvptech/core/ui/select'
 
 type Impressora = { name: string; displayName: string; isDefault: boolean }
 type Pref = { printer: string; direto: boolean }
-type Prefs = { cupom: Pref; documento: Pref }
+type Prefs = { cupom: Pref; documento: Pref; papelCaixa: PapelCaixa }
 type Categoria = 'cupom' | 'documento'
 
 const ConfigImpressao: FC = () => {
@@ -28,6 +28,14 @@ const ConfigImpressao: FC = () => {
     const novo: Prefs = { ...prefs, [cat]: { ...prefs[cat], ...patch } }
     setPrefs(novo)
     await window.api.impressao.salvarPreferencias({ [cat]: novo[cat] })
+    setSalvo(true)
+    setTimeout(() => setSalvo(false), 1500)
+  }
+
+  const escolherPapelCaixa = async (papelCaixa: PapelCaixa) => {
+    if (!prefs) return
+    setPrefs({ ...prefs, papelCaixa })
+    await window.api.impressao.salvarPreferencias({ papelCaixa })
     setSalvo(true)
     setTimeout(() => setSalvo(false), 1500)
   }
@@ -110,6 +118,55 @@ const ConfigImpressao: FC = () => {
         'Relatórios e etiquetas',
         'Relatórios de estoque/vendas e folhas de etiquetas A4.'
       )}
+
+      {/*
+        ⚠️ Esta escolha muda o LAYOUT do papel, não só a impressora. Os dois
+        comprovantes de caixa têm duas versões: uma de 68mm, para a bobina, e
+        uma de folha. Mandar a de bobina para a folha sai como uma tira no meio
+        da página, e a de folha para a bobina sai cortada.
+
+        O padrão é a bobina porque a impressora que existe ao lado de um caixa
+        é a térmica; a de folha costuma estar no escritório, ou não existir.
+      */}
+      <div className="space-y-2">
+        <Label className="font-medium">Abertura e fechamento de caixa</Label>
+        <p className="text-xs text-muted-foreground -mt-1">
+          Em que papel saem os dois comprovantes do turno.
+        </p>
+        <div className="grid gap-1.5">
+          {(
+            [
+              {
+                valor: 'termica' as const,
+                titulo: 'Impressora térmica (bobina 80mm)',
+                descricao: 'O formato de cupom, igual ao da venda. É o padrão.'
+              },
+              {
+                valor: 'a4' as const,
+                titulo: 'Folha A4',
+                descricao: 'Formato de relatório, para arquivar ou assinar.'
+              }
+            ]
+          ).map((op) => (
+            <button
+              key={op.valor}
+              type="button"
+              onClick={() => void escolherPapelCaixa(op.valor)}
+              aria-pressed={prefs.papelCaixa === op.valor}
+              className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                prefs.papelCaixa === op.valor
+                  ? 'border-primary bg-primary/10'
+                  : 'hover:bg-muted/50'
+              }`}
+            >
+              <span className="block text-sm font-medium">{op.titulo}</span>
+              <span className="mt-0.5 block text-[12px] text-muted-foreground">
+                {op.descricao}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="h-4">
         {salvo && (
           <span className="inline-flex items-center gap-1 text-xs text-green-600">

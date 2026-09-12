@@ -49,7 +49,15 @@ const ELECTRON = join(AQUI, '..', '..', '..')
  */
 const VIGIADAS: Array<{ tabela: string; inseridaPor: string }> = [
   { tabela: 'vendas', inseridaPor: 'criarVenda' },
-  { tabela: 'itens_venda', inseridaPor: 'criarVenda' }
+  { tabela: 'itens_venda', inseridaPor: 'criarVenda' },
+  /*
+   * `produtos` entrou na lista em 11/09/2026, e entrou pelo mesmo motivo das
+   * outras duas: custou um ciclo. Uma coluna nova em `produtos` derrubou treze
+   * testes da importação de XML de uma vez, com a mesma mensagem sem pista
+   * ("Cannot read properties of undefined"), porque a importação cria produto
+   * pelo `criarProduto` e o INSERT dele também lista todas as colunas.
+   */
+  { tabela: 'produtos', inseridaPor: 'criarProduto' }
 ]
 
 /** Extrai os nomes de coluna de um `CREATE TABLE <tabela> ( ... )`. */
@@ -68,7 +76,17 @@ function colunasDe(fonte: string, tabela: string): string[] | null {
     else if (fonte[i] === ')') profundidade--
     i++
   }
-  const corpo = fonte.slice(inicio, i - 1)
+  /*
+   * ⚠️ Os comentários de linha saem ANTES de dividir por vírgula, e isso já
+   * custou um ciclo: o corpo é fatiado na vírgula e cada pedaço tem o nome da
+   * coluna na frente, então uma coluna precedida de `-- comentário` vira um
+   * pedaço que começa com `--`. O filtro logo abaixo descarta esse pedaço, e a
+   * COLUNA some da lista junto com o comentário.
+   *
+   * O resultado é a pior forma de falha para uma guarda: ela continua verde
+   * enquanto a coluna que deveria cobrar está invisível para ela.
+   */
+  const corpo = fonte.slice(inicio, i - 1).replace(/--[^\n]*/g, '')
 
   // Cada linha começa pelo nome da coluna. Descarta o que é cláusula de tabela.
   return corpo

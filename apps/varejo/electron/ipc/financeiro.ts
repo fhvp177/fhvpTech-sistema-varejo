@@ -13,6 +13,7 @@ import {
   type DadosConta,
   type TipoConta
 } from '../db/queries/financeiro'
+import { resumoFinanceiroMes, mesesComMovimento } from '../db/queries/resumoFinanceiro'
 import {
   turnoAberto,
   caixasComTurno,
@@ -136,6 +137,31 @@ export function registrarHandlersFinanceiro(): void {
       }
     }
   )
+
+  /*
+   * ── O mês fechado na tela, sem precisar exportar ─────────────────────────
+   *
+   * ⚠️ `requerDono`, igual ao extrato, e pelo mesmo motivo: isto é o resultado
+   * do mês da loja. Um vendedor com acesso a esta tela veria o lucro, o saldo
+   * em banco e cada gasto da loja por categoria.
+   */
+  registrarCanal('financeiro:resumoMensal', (mes: unknown) => {
+    try {
+      requerDono()
+      return { success: true, data: resumoFinanceiroMes(String(mes ?? '')) }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  registrarCanal('financeiro:mesesComMovimento', () => {
+    try {
+      requerDono()
+      return { success: true, data: mesesComMovimento() }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
 
   registrarCanal('financeiro:saldoConsolidado', () => {
     try {

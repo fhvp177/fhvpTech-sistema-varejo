@@ -38,7 +38,7 @@ vi.mock('@fhvptech/core/electron/db/conexao', () => ({
   }
 }))
 
-const { criarVenda, pagarParcela } = await import('../vendas')
+const { criarVenda, pagarParcela, registrarPagamentoParcial } = await import('../vendas')
 const { listarContas, extrato } = await import('../financeiro')
 const { abrirTurno, fecharTurno, confirmarTurno, sangria, contagensDoTurno } = await import('../turnos')
 const { criarPedido, cancelarPedido, concluirPedido } = await import('../pedidos')
@@ -69,6 +69,7 @@ const SCHEMA = `
     nome TEXT NOT NULL,
     preco REAL NOT NULL,
     custo REAL NOT NULL DEFAULT 0,
+    garantia_dias INTEGER,
     estoque INTEGER DEFAULT 0,
     -- Unidades apartadas para pedidos separados. A trava de estoque compara
     -- contra estoque menos reservado, entao a coluna precisa existir aqui: este
@@ -112,7 +113,8 @@ const SCHEMA = `
     variacao_id INTEGER,
     quantidade INTEGER NOT NULL,
     preco_unitario REAL NOT NULL,
-    custo_unitario REAL
+    custo_unitario REAL,
+    garantia_dias INTEGER
   );
   CREATE TABLE parcelas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -595,5 +597,160 @@ describe('pedido separado e a reserva de estoque', () => {
         itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 1000 }]
       })
     ).toThrow(/sem estoque disponível/i)
+  })
+})
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EM QUAL CONTA O DINHEIRO ENTRA
+ *
+ * Pedido do lojista em 12/09/2026: "vamos precisar colocar na hora de receber o
+ * valor pago por uma venda, onde aquele dinheiro dessa venda ou parcela vai
+ * entrar, em qual banco ele vai entrar".
+ *
+ * Antes disso o sistema ADIVINHAVA, por uma escada de três degraus: a conta
+ * casada com a forma de pagamento, senão a marcada como padrão de recebimento,
+ * senão qualquer ativa. Numa loja com dois bancos recebendo PIX, não havia como
+ * dizer qual deles recebeu.
+ *
+ * ⚠️ A trava que estes testes protegem é a exceção: DINHEIRO EM ESPÉCIE ignora
+ * a escolha e vai para a gaveta do operador, sempre. Ela vive no banco e não na
+ * tela, porque o canal é falado por string e quem chama pode ser um segundo
+ * caixa de versão anterior.
+ */
+describe('em qual conta o dinheiro entra', () => {
+  const contaDo = (descricao: string): number | undefined =>
+    (
+      db!
+        .prepare(
+          "SELECT conta_id FROM movimentos_financeiros WHERE descricao LIKE ? ORDER BY id DESC LIMIT 1"
+        )
+        .get(`%${descricao}%`) as { conta_id: number } | undefined
+    )?.conta_id
+
+  seTiverSqlite('a venda no PIX entra na conta escolhida, e não na sugerida', () => {
+    // A conta 2 (Banco) é a casada com PIX; a 1 é o caixa. Escolhendo a 1 para
+    // um PIX, o sistema tem que obedecer — é o caso de dois bancos recebendo.
+    criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pago',
+      data_vencimento: null,
+      forma_pagamento: 'pix',
+      conta_id: 1,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 1000 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    expect(contaDo('Venda #')).toBe(1)
+  })
+
+  seTiverSqlite('sem escolha, continua caindo na escada de sempre', () => {
+    // Quem não escolhe tem exatamente o comportamento que sempre teve.
+    criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pago',
+      data_vencimento: null,
+      forma_pagamento: 'pix',
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 1000 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    // Conta 2 é a que tem forma_padrao = 'pix'.
+    expect(contaDo('Venda #')).toBe(2)
+  })
+
+  seTiverSqlite('★ ESPÉCIE ignora a conta escolhida e vai para a gaveta', () => {
+    /*
+     * O teste central. Mandar a nota para o banco faria o banco ganhar dinheiro
+     * que nunca chegou nele E o fechamento acusar sobra na gaveta, todo dia.
+     */
+    // Venda com caixa carimbado exige turno aberto — é a regra da casa.
+    abrirTurno(1, 1, 0)
+    criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pago',
+      data_vencimento: null,
+      forma_pagamento: 'dinheiro',
+      caixa_id: 1,
+      conta_id: 2,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 1000 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    expect(contaDo('Venda #')).toBe(1)
+  })
+
+  seTiverSqlite('★ recebimento de dívida: escolha vale, espécie não', () => {
+    const aPrazo = () =>
+      criarVenda({
+        cliente_id: 1,
+        vendedor_id: 1,
+        status_pagamento: 'pendente',
+        data_vencimento: '2026-12-31',
+        itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 1000 }]
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+    const comEscolha = aPrazo()
+    registrarPagamentoParcial(comEscolha.id, 100, 'pix', 1, 2)
+    expect(contaDo(`Recebimento da venda #${comEscolha.id}`)).toBe(2)
+
+    const emEspecie = aPrazo()
+    registrarPagamentoParcial(emEspecie.id, 100, 'dinheiro', 1, 2)
+    expect(contaDo(`Recebimento da venda #${emEspecie.id}`)).toBe(1)
+  })
+
+  seTiverSqlite('★ baixa de parcela: escolha vale, espécie não', () => {
+    const parcelada = () =>
+      criarVenda({
+        cliente_id: 1,
+        vendedor_id: 1,
+        status_pagamento: 'parcelado',
+        data_vencimento: '2026-12-31',
+        num_parcelas: 2,
+        itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 1000 }]
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+    const v1 = parcelada()
+    const p1 = db!
+      .prepare('SELECT id FROM parcelas WHERE venda_id = ? ORDER BY numero LIMIT 1')
+      .get(v1.id) as { id: number }
+    pagarParcela(p1.id, 'pix', 1, 2)
+    expect(contaDo(`Parcela`)).toBe(2)
+
+    const v2 = parcelada()
+    const p2 = db!
+      .prepare('SELECT id FROM parcelas WHERE venda_id = ? ORDER BY numero LIMIT 1')
+      .get(v2.id) as { id: number }
+    pagarParcela(p2.id, 'dinheiro', 1, 2)
+    expect(contaDo(`Parcela`)).toBe(1)
+  })
+
+  seTiverSqlite('conta escolhida não muda o TURNO: ele continua sendo o do caixa', () => {
+    /*
+     * ⚠️ O PIX cai no banco, mas pertence ao turno do CAIXA onde a venda foi
+     * feita. Sem isso, com dois caixas abertos, metade das vendas cairia no
+     * turno errado e o erro só apareceria no fechamento.
+     */
+    abrirTurno(1, 1, 0)
+    criarVenda({
+      cliente_id: 1,
+      vendedor_id: 1,
+      status_pagamento: 'pago',
+      data_vencimento: null,
+      forma_pagamento: 'pix',
+      caixa_id: 1,
+      conta_id: 2,
+      itens: [{ produto_id: 1, quantidade: 1, preco_unitario: 1000 }]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    const mov = db!
+      .prepare(
+        "SELECT conta_id, turno_id FROM movimentos_financeiros WHERE tipo = 'venda' ORDER BY id DESC LIMIT 1"
+      )
+      .get() as { conta_id: number; turno_id: number | null }
+    expect(mov.conta_id).toBe(2)
+    expect(mov.turno_id).not.toBeNull()
   })
 })

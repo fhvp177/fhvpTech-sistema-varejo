@@ -33,6 +33,7 @@ import {
   BadgePercent,
   Landmark,
   PackageCheck,
+  ShieldCheck,
   Calculator,
   ChevronDown,
   LogOut,
@@ -44,6 +45,7 @@ import ContasPagar from './pages/ContasPagar'
 import Comissoes from './pages/Comissoes'
 import Contas from './pages/Contas'
 import Caixa from './pages/Caixa'
+import Garantias from './pages/Garantias'
 import Pedidos from './pages/Pedidos'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
@@ -794,6 +796,14 @@ const App: FC = () => {
                       */}
                       <Route path="/caixa" element={<Caixa />} />
                       <Route path="/pedidos" element={<Pedidos />} />
+                      {/*
+                        ⚠️ Garantias NÃO é rota só do dono. Consultar se a peça
+                        está na garantia e abrir o atendimento é trabalho de
+                        balcão, com o cliente na frente. Quem só o dono faz é
+                        ENCERRAR o atendimento (é onde a loja assume o custo de
+                        uma troca), e o próprio canal cobra isso.
+                      */}
+                      <Route path="/garantias" element={<Garantias />} />
                       <Route
                         path="/comissoes"
                         element={
@@ -986,6 +996,7 @@ const CATEGORIAS_SIDEBAR: { titulo: string; itens: ItemSidebar[] }[] = [
     itens: [
       { to: '/vendas', label: 'Vendas', icon: ShoppingCart },
       { to: '/pedidos', label: 'Pedidos separados', icon: PackageCheck },
+      { to: '/garantias', label: 'Garantias', icon: ShieldCheck },
       { to: '/caixa', label: 'Caixa', icon: Lock },
       ...(__FEAT_ETIQUETAS__
         ? [{ to: '/etiquetas', label: 'Etiquetas A4', icon: Tags }]

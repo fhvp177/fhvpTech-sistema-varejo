@@ -246,8 +246,20 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
             anterior a esta tela e está anotado, mas não atrapalha mais quem só
             quer trocar de conta.)
           */}
+          {/*
+            ⚠️ O respiro nos QUATRO lados existe por causa do anel de foco.
+
+            `overflow-y-auto` faz desta lista um contêiner de rolagem, e contêiner
+            de rolagem RECORTA o que é desenhado fora da caixa dos filhos — o anel
+            de foco é desenhado exatamente aí, 2px para fora do botão.
+
+            Antes havia folga só à direita (`-mr-1 pr-1`). O anel saía inteiro de
+            um lado e cortado do outro, e o corte achatava o canto arredondado: o
+            cartão do vendedor escolhido aparecia com os cantos quadrados e
+            "meio irregular", que foi como o dono descreveu.
+          */}
           <ul
-            className="space-y-2 max-h-80 overflow-y-auto -mr-1 pr-1"
+            className="space-y-2 max-h-80 overflow-y-auto -mx-1 px-1 -my-1 py-1"
             onKeyDown={(e) => {
               if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
               e.preventDefault()
@@ -269,7 +281,14 @@ const LoginSistema: FC<Props> = ({ onDesbloquear }) => {
                   // aparece, e as setas levam aos outros a partir dali.
                   ref={i === 0 ? primeiroVendedorRef : undefined}
                   onClick={() => setSelecionado(v)}
-                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 focus:outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/40 transition text-left"
+                  /*
+                    ⚠️ No foco a borda NÃO muda de cor. Antes ela virava azul
+                    sólido e o anel entrava por fora em azul 40%: duas linhas
+                    concêntricas de tons diferentes, com uma emenda visível na
+                    curva do canto. Uma linha só, mais grossa, lê melhor e não
+                    tem emenda para desalinhar.
+                  */
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-slate-200 bg-white hover:border-blue-400 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition text-left"
                 >
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ${

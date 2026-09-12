@@ -80,6 +80,10 @@ const api = {
       ipcRenderer.invoke('financeiro:extrato', filtro),
     saldoConsolidado: (): Promise<RespostaIPC> =>
       ipcRenderer.invoke('financeiro:saldoConsolidado'),
+    resumoMensal: (mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:resumoMensal', mes),
+    mesesComMovimento: (): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('financeiro:mesesComMovimento'),
     lancar: (contaId: number, valor: number, tipo: string, descricao: string): Promise<RespostaIPC> =>
       ipcRenderer.invoke('financeiro:lancar', contaId, valor, tipo, descricao)
   },
@@ -231,16 +235,25 @@ const api = {
     pagarParcela: (
       parcelaId: number,
       forma?: string | null,
-      caixaId?: number | null
+      caixaId?: number | null,
+      contaId?: number | null
     ): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('vendas:pagarParcela', parcelaId, forma, caixaId),
+      ipcRenderer.invoke('vendas:pagarParcela', parcelaId, forma, caixaId, contaId),
     registrarPagamentoParcial: (
       id: number,
       valor: number,
       forma?: string | null,
-      caixaId?: number | null
+      caixaId?: number | null,
+      contaId?: number | null
     ): Promise<RespostaIPC> =>
-      ipcRenderer.invoke('vendas:registrarPagamentoParcial', id, valor, forma, caixaId),
+      ipcRenderer.invoke(
+        'vendas:registrarPagamentoParcial',
+        id,
+        valor,
+        forma,
+        caixaId,
+        contaId
+      ),
     estornarParcela: (parcelaId: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('vendas:estornarParcela', parcelaId),
     estornarRecebimento: (id: number): Promise<RespostaIPC> =>
@@ -475,6 +488,42 @@ const api = {
       ipcRenderer.invoke('dashboard:metricas', intervalo),
     salvarMeta: (valor: number): Promise<RespostaIPC> =>
       ipcRenderer.invoke('dashboard:salvarMeta', valor)
+  },
+
+  // Garantias: até quando a loja responde pelo que vendeu.
+  garantias: {
+    buscarItens: (termo: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('garantias:buscarItens', termo),
+    itensDaVenda: (vendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('garantias:itensDaVenda', vendaId),
+    listar: (situacao?: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('garantias:listar', situacao),
+    doItem: (itemVendaId: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('garantias:doItem', itemVendaId),
+    resumo: (): Promise<RespostaIPC> => ipcRenderer.invoke('garantias:resumo'),
+    abrir: (dados: {
+      item_venda_id: number
+      defeito: string
+      observacao?: string | null
+    }): Promise<RespostaIPC> => ipcRenderer.invoke('garantias:abrir', dados),
+    fechar: (id: number, desfecho: string, observacao?: string | null): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('garantias:fechar', id, desfecho, observacao),
+    reabrir: (id: number): Promise<RespostaIPC> => ipcRenderer.invoke('garantias:reabrir', id),
+    prazoPadrao: (): Promise<RespostaIPC> => ipcRenderer.invoke('garantias:prazoPadrao'),
+    definirPrazoPadrao: (dias: number): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('garantias:definirPrazoPadrao', dias)
+  },
+
+  // Tráfego pago: o que a loja gastou em anúncio e o que voltou.
+  trafego: {
+    resumo: (inicio: string, fim: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('trafego:resumo', inicio, fim),
+    investimentos: (mes: string): Promise<RespostaIPC> =>
+      ipcRenderer.invoke('trafego:investimentos', mes),
+    gravarInvestimentos: (
+      mes: string,
+      linhas: Array<{ origem_id: number; valor: number; observacao?: string | null }>
+    ): Promise<RespostaIPC> => ipcRenderer.invoke('trafego:gravarInvestimentos', mes, linhas)
   },
 
   // Atualização (electron-updater)

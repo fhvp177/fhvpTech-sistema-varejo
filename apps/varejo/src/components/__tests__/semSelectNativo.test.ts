@@ -20,6 +20,19 @@
  * ⚠️ Se algum dia um `<select>` nativo for mesmo a escolha certa em algum ponto,
  * a saída NÃO é apagar este teste: é acrescentar o arquivo em `EXCECOES` com o
  * motivo escrito ao lado. Assim a exceção fica visível para quem vier depois.
+ *
+ * ── ⚠️ Ele não distingue USAR de CITAR ──────────────────────────────────────
+ * A varredura é textual, então um COMENTÁRIO que soletre a etiqueta reprova o
+ * arquivo do mesmo jeito que o elemento de verdade. Aconteceu em 11/09/2026,
+ * com um componente novo cujo cabeçalho só explicava por que não usa o nativo.
+ *
+ * Ler o arquivo sem os comentários resolveria, e foi recusado: um limpador de
+ * comentários erra em texto que contenha as marcas de comentário dentro de uma
+ * string, e aí ele passa a ESCONDER um elemento de verdade. Guarda que falha
+ * para menos é pior que guarda que incomoda.
+ *
+ * Então a regra para quem escreve é a mesma do teste do nome de cliente antigo
+ * (ver AGENTS.md): descreva a etiqueta, não a soletre.
  */
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'fs'

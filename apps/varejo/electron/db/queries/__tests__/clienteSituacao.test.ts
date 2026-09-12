@@ -84,6 +84,7 @@ const SCHEMA = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo_barras TEXT UNIQUE,
     nome TEXT NOT NULL, preco REAL NOT NULL, custo REAL NOT NULL DEFAULT 0,
+    garantia_dias INTEGER,
     estoque INTEGER DEFAULT 0, reservado INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE produto_variacoes (
@@ -107,7 +108,8 @@ const SCHEMA = `
     id INTEGER PRIMARY KEY AUTOINCREMENT, venda_id INTEGER NOT NULL,
     produto_id INTEGER NOT NULL, variacao_id INTEGER,
     quantidade INTEGER NOT NULL, preco_unitario REAL NOT NULL,
-    custo_unitario REAL
+    custo_unitario REAL,
+    garantia_dias INTEGER
   );
   CREATE TABLE parcelas (
     id INTEGER PRIMARY KEY AUTOINCREMENT, venda_id INTEGER NOT NULL,

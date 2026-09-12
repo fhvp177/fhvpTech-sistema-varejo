@@ -3,6 +3,8 @@ import { Printer, Ban } from 'lucide-react'
 import { Button } from '@fhvptech/core/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@fhvptech/core/ui/dialog'
 import { gerarHtmlFechamentoCaixa } from '@/utils/relatorioFinanceiro'
+import { gerarHtmlCupomFechamentoCaixa } from '@/utils/cupomCaixa'
+import { obterDadosLoja } from '@/utils/dadosLoja'
 import { useImprimir } from '@/components/ImpressaoProvider'
 
 type Contagem = {
@@ -116,10 +118,21 @@ const DetalheTurno: FC<Props> = ({ turno, onFechar }) => {
       return
     }
     const d = r.data as { turno: TurnoLinha; contagens: Contagem[] }
+    /*
+     * ⚠️ Em que papel sai é escolha do lojista (Configurações → Impressão), e
+     * o padrão é a bobina. O layout e a CATEGORIA andam juntos: HTML de 68mm
+     * pela categoria de folha sai como uma tira no meio da A4, e o contrário
+     * sai cortado na bobina.
+     */
+    const prefs = await window.api.impressao.obterPreferencias()
+    const emA4 = prefs.success && prefs.data.papelCaixa === 'a4'
+    const html = emA4
+      ? gerarHtmlFechamentoCaixa(d.turno, d.contagens)
+      : gerarHtmlCupomFechamentoCaixa(d.turno, d.contagens, await obterDadosLoja())
     await imprimirDoc(
-      gerarHtmlFechamentoCaixa(d.turno, d.contagens),
+      html,
       `Fechamento de caixa ${turnoId}`,
-      'documento'
+      emA4 ? 'documento' : 'cupom'
     )
   }
 

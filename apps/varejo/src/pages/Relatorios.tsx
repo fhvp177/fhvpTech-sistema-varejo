@@ -4,6 +4,9 @@ import { Button } from '@fhvptech/core/ui/button'
 import { Select } from '@fhvptech/core/ui/select'
 import { Label } from '@fhvptech/core/ui/label'
 import { useImprimir } from '@/components/ImpressaoProvider'
+import PainelFinanceiroMes from '@/components/PainelFinanceiroMes'
+import DataPicker from '@/components/DataPicker'
+import MesPicker from '@/components/MesPicker'
 import { nomeImpressao } from '@/utils/nomeImpressao'
 import {
   gerarHtmlRelatorioVendas,
@@ -387,8 +390,16 @@ const Relatorios: FC = () => {
         Relatórios
       </h2>
       <p className="text-sm text-muted-foreground mb-6">
-        Todos os relatórios do sistema num lugar só — pra imprimir ou salvar em PDF.
+        O mês do dinheiro na tela, e embaixo todos os relatórios do sistema num lugar só, pra
+        imprimir ou salvar em PDF.
       </p>
+
+      {/*
+        O resumo do mês vem ANTES dos cards, e isso é o pedido: até aqui, para
+        ver qualquer número financeiro era preciso gerar um arquivo. Os cards
+        continuam embaixo, porque contador pede papel.
+      */}
+      <PainelFinanceiroMes />
 
       <div className="grid gap-4 md:grid-cols-2">
         <CardRelatorio
@@ -400,14 +411,7 @@ const Relatorios: FC = () => {
             <Label htmlFor="mes-vendas" className="text-xs shrink-0">
               Mês
             </Label>
-            <input
-              id="mes-vendas"
-              type="month"
-              value={mesVendas}
-              max={mesAtualLocal()}
-              onChange={(e) => setMesVendas(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-            />
+            <MesPicker value={mesVendas} onChange={setMesVendas} maxMes={mesAtualLocal()} />
             <span className="text-xs text-muted-foreground ml-auto">
               {vendasDoMes.length === 0 ? 'sem vendas no mês' : `${vendasDoMes.length} venda(s)`}
             </span>
@@ -523,22 +527,22 @@ const Relatorios: FC = () => {
             <Label htmlFor="caixa-de" className="text-xs shrink-0">
               De
             </Label>
-            <input
+            <DataPicker
               id="caixa-de"
-              type="date"
               value={caixaDe}
-              onChange={(e) => setCaixaDe(e.target.value)}
-              className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+              onChange={setCaixaDe}
+              max={caixaAte || undefined}
+              className="min-w-0 flex-1"
             />
             <Label htmlFor="caixa-ate" className="text-xs shrink-0">
               até
             </Label>
-            <input
+            <DataPicker
               id="caixa-ate"
-              type="date"
               value={caixaAte}
-              onChange={(e) => setCaixaAte(e.target.value)}
-              className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+              onChange={setCaixaAte}
+              min={caixaDe || undefined}
+              className="min-w-0 flex-1"
             />
           </div>
           <BotoesGerar onGerar={gerarDiferencas} desabilitado={!caixaDe || !caixaAte} gerando={gerando} />
@@ -563,22 +567,22 @@ const Relatorios: FC = () => {
             <Label htmlFor="ext-de" className="text-xs shrink-0">
               De
             </Label>
-            <input
+            <DataPicker
               id="ext-de"
-              type="date"
               value={extratoDe}
-              onChange={(e) => setExtratoDe(e.target.value)}
-              className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+              onChange={setExtratoDe}
+              max={extratoAte || undefined}
+              className="min-w-0 flex-1"
             />
             <Label htmlFor="ext-ate" className="text-xs shrink-0">
               até
             </Label>
-            <input
+            <DataPicker
               id="ext-ate"
-              type="date"
               value={extratoAte}
-              onChange={(e) => setExtratoAte(e.target.value)}
-              className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+              onChange={setExtratoAte}
+              min={extratoDe || undefined}
+              className="min-w-0 flex-1"
             />
           </div>
           <BotoesGerar

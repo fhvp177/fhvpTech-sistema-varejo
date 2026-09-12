@@ -241,6 +241,9 @@ type MetricasDashboard = {
   }>
 }
 
+/** Papel dos comprovantes de caixa. Bobina de 80mm ou folha A4. */
+type PapelCaixa = 'termica' | 'a4'
+
 type ContaFinanceira = {
   id: number
   nome: string
@@ -271,6 +274,131 @@ type MovimentoFinanceiro = {
   turno_id: number | null
   vendedor_id: number | null
   saldo_corrente: number
+}
+
+/**
+ * Um item vendido, do ponto de vista da garantia.
+ *
+ * ⚠️ `garantia_dias` já vem resolvido pela escada (o congelado no item, senão o
+ * do produto, senão o padrão da loja). A tela nunca refaz essa conta.
+ * `prazo_estimado` diz que a venda é anterior ao módulo e o prazo é palpite.
+ */
+type ItemComGarantia = {
+  item_venda_id: number
+  venda_id: number
+  data_venda: string
+  produto_id: number
+  produto_nome: string
+  tamanho: string | null
+  quantidade: number
+  preco_unitario: number
+  cliente_id: number | null
+  cliente_nome: string | null
+  cliente_telefone: string | null
+  venda_cancelada: number
+  garantia_dias: number
+  garantia_ate: string | null
+  dias_restantes: number | null
+  prazo_estimado: boolean
+  atendimentos: number
+}
+
+type Garantia = {
+  id: number
+  item_venda_id: number
+  venda_id: number
+  aberta_em: string
+  aberta_por: number | null
+  aberta_por_nome: string | null
+  defeito: string
+  situacao: 'aberta' | 'resolvida' | 'recusada'
+  desfecho: string | null
+  observacao: string | null
+  dentro_do_prazo: number
+  fechada_em: string | null
+  fechada_por: number | null
+  fechada_por_nome: string | null
+  produto_nome: string
+  cliente_nome: string | null
+  cliente_telefone: string | null
+  data_venda: string
+}
+
+type ResumoGarantias = {
+  abertas: number
+  fora_do_prazo_abertas: number
+  resolvidas_30d: number
+  recusadas_30d: number
+}
+
+/** Uma linha da tela de lançamento do investimento em anúncio. */
+type InvestimentoCanal = {
+  origem_id: number
+  origem_nome: string
+  valor: number
+  observacao: string | null
+  /** Clientes que vieram por este canal. Só para a tela explicar a linha. */
+  clientes: number
+}
+
+/**
+ * Tráfego pago no período do Painel.
+ *
+ * ⚠️ São DOIS ROAS. O `roas_atribuido` conta só o faturamento de cliente com
+ * origem preenchida, e é o honesto. O `roas_geral` divide o faturamento da loja
+ * INTEIRA pelo mesmo gasto, então sempre parece melhor: serve de ordem de
+ * grandeza, não de atribuição.
+ */
+type ResumoTrafego = {
+  inicio: string
+  fim: string
+  investimento: number
+  receita_atribuida: number
+  receita_total: number
+  roas_atribuido: number
+  roas_geral: number
+  clientes_novos_atribuidos: number
+  custo_por_cliente: number
+  clientes_sem_origem: number
+  canais: Array<{
+    origem_id: number
+    origem_nome: string
+    investimento: number
+    receita: number
+    num_vendas: number
+    clientes_novos: number
+    roas: number
+  }>
+}
+
+/**
+ * O mês fechado do dinheiro (tela de Relatórios financeiros).
+ *
+ * ⚠️ `receitas − despesas` é o RESULTADO, não a variação do saldo. O que fecha
+ * a conta até o saldo final é a linha `movimentacoes_internas`, que é sangria e
+ * suprimento: dinheiro que mudou de lugar sem a loja ganhar nem gastar.
+ */
+type ResumoFinanceiroMes = {
+  mes: string
+  primeiro_dia: string
+  ultimo_dia: string
+  saldo_inicial: number
+  saldo_final: number
+  receitas: number
+  despesas: number
+  resultado: number
+  movimentacoes_internas: number
+  lancamentos: number
+  por_dia: Array<{ dia: string; receitas: number; despesas: number }>
+  despesas_por_categoria: Array<{ categoria: string; total: number; lancamentos: number }>
+  por_conta: Array<{
+    conta_id: number
+    nome: string
+    tipo: string
+    entradas: number
+    saidas: number
+    saldo_final: number
+  }>
 }
 
 type TurnoCaixa = {
@@ -468,6 +596,8 @@ interface Window {
         limite?: number
       }) => Promise<RespostaIPC<MovimentoFinanceiro[]>>
       saldoConsolidado: () => Promise<RespostaIPC<number>>
+      resumoMensal: (mes: string) => Promise<RespostaIPC<ResumoFinanceiroMes>>
+      mesesComMovimento: () => Promise<RespostaIPC<string[]>>
       lancar: (
         contaId: number,
         valor: number,
@@ -596,16 +726,22 @@ interface Window {
       // `forma` e `caixaId` NÃO são opcionais por preguiça: sem forma o
       // movimento nasce sem ela e o fechamento do caixa conta como dinheiro.
       // São opcionais só para não quebrar chamada de versão anterior.
+      /**
+       * ⚠️ `contaId` é IGNORADO quando a forma é dinheiro em espécie: a nota
+       * está na gaveta do operador, e só lá. A trava é no banco, não aqui.
+       */
       pagarParcela: (
         parcelaId: number,
         forma?: string | null,
-        caixaId?: number | null
+        caixaId?: number | null,
+        contaId?: number | null
       ) => Promise<RespostaIPC>
       registrarPagamentoParcial: (
         id: number,
         valor: number,
         forma?: string | null,
-        caixaId?: number | null
+        caixaId?: number | null,
+        contaId?: number | null
       ) => Promise<RespostaIPC>
       estornarParcela: (parcelaId: number) => Promise<RespostaIPC>
       estornarRecebimento: (id: number) => Promise<RespostaIPC>
@@ -879,11 +1015,18 @@ interface Window {
         RespostaIPC<{
           cupom: { printer: string; direto: boolean }
           documento: { printer: string; direto: boolean }
+          /**
+           * Em que papel saem os comprovantes de abertura e fechamento de
+           * caixa. Padrão `termica`: a impressora que existe ao lado de um
+           * caixa é a de bobina.
+           */
+          papelCaixa: PapelCaixa
         }>
       >
       salvarPreferencias: (prefs: {
         cupom?: { printer?: string; direto?: boolean }
         documento?: { printer?: string; direto?: boolean }
+        papelCaixa?: PapelCaixa
       }) => Promise<RespostaIPC>
       salvarPdf: (
         html: string,
@@ -961,6 +1104,34 @@ interface Window {
         fim_anterior: string
       }) => Promise<RespostaIPC<MetricasDashboard>>
       salvarMeta: (valor: number) => Promise<RespostaIPC>
+    }
+    garantias: {
+      buscarItens: (termo: string) => Promise<RespostaIPC<ItemComGarantia[]>>
+      itensDaVenda: (vendaId: number) => Promise<RespostaIPC<ItemComGarantia[]>>
+      listar: (situacao?: string) => Promise<RespostaIPC<Garantia[]>>
+      doItem: (itemVendaId: number) => Promise<RespostaIPC<Garantia[]>>
+      resumo: () => Promise<RespostaIPC<ResumoGarantias>>
+      abrir: (dados: {
+        item_venda_id: number
+        defeito: string
+        observacao?: string | null
+      }) => Promise<RespostaIPC<{ id: number; dentro_do_prazo: boolean }>>
+      fechar: (
+        id: number,
+        desfecho: string,
+        observacao?: string | null
+      ) => Promise<RespostaIPC>
+      reabrir: (id: number) => Promise<RespostaIPC>
+      prazoPadrao: () => Promise<RespostaIPC<number>>
+      definirPrazoPadrao: (dias: number) => Promise<RespostaIPC>
+    }
+    trafego: {
+      resumo: (inicio: string, fim: string) => Promise<RespostaIPC<ResumoTrafego>>
+      investimentos: (mes: string) => Promise<RespostaIPC<InvestimentoCanal[]>>
+      gravarInvestimentos: (
+        mes: string,
+        linhas: Array<{ origem_id: number; valor: number; observacao?: string | null }>
+      ) => Promise<RespostaIPC>
     }
     atualizacao: {
       obterInfo: () => Promise<RespostaIPC<{

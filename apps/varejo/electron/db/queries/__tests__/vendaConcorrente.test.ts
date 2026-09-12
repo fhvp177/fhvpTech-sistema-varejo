@@ -98,6 +98,7 @@ const SCHEMA = `
     nome TEXT NOT NULL,
     preco REAL NOT NULL,
     custo REAL NOT NULL DEFAULT 0,
+    garantia_dias INTEGER,
     estoque INTEGER DEFAULT 0,
     -- Unidades apartadas para pedidos separados. A trava de estoque compara
     -- contra estoque menos reservado, entao a coluna precisa existir aqui: este
@@ -141,7 +142,8 @@ const SCHEMA = `
     variacao_id INTEGER,
     quantidade INTEGER NOT NULL,
     preco_unitario REAL NOT NULL,
-    custo_unitario REAL
+    custo_unitario REAL,
+    garantia_dias INTEGER
   );
   CREATE TABLE parcelas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -83,7 +83,7 @@ const cell = (d: number): string =>
     ? '<td class="valor">—</td>'
     : `<td class="valor ${d < 0 ? 'falta' : 'sobra'}">${d > 0 ? '+' : '−'}${dinheiro(Math.abs(d))}</td>`
 
-// ─── 1. Fechamento de caixa ──────────────────────────────────────────────────
+// ─── 1. Abertura e fechamento de caixa ───────────────────────────────────────
 
 export type TurnoRelatorio = {
   id: number
@@ -104,6 +104,57 @@ export type ContagemRelatorio = {
   valor_contado: number
   valor_esperado: number
   diferenca: number
+}
+
+/**
+ * O comprovante de ABERTURA do caixa.
+ *
+ * ── Por que ele existe ──────────────────────────────────────────────────────
+ * Faltava, e a falta foi notada assim: "cadê os cupons de abertura e
+ * fechamento de caixa? Só estou vendo o cupom de fechamento". Só o de
+ * fechamento tinha sido feito.
+ *
+ * ── O que ele prova, e o fechamento não ─────────────────────────────────────
+ * QUANTO havia na gaveta quando o turno começou, quem colocou, e a que horas.
+ * O papel do fechamento traz o fundo de troco também, mas ele só existe no fim
+ * do dia — e quem confere a abertura precisa do papel no começo, assinado ali,
+ * antes de o dinheiro circular.
+ *
+ * ⚠️ NÃO tem valor esperado nem contagem, e isso é o desenho do fechamento às
+ * cegas. Imprimir aqui qualquer número que o operador possa comparar com a
+ * gaveta no fim do dia tiraria o sentido da conferência.
+ */
+export function gerarHtmlAberturaCaixa(turno: {
+  id: number
+  conta_nome: string
+  aberto_por_nome: string | null
+  aberto_em: string
+  fundo_troco: number
+}): string {
+  return pagina(
+    `Abertura de caixa #${turno.id}`,
+    `${turno.conta_nome} · ${dataHora(turno.aberto_em)}`,
+    `
+    <div class="caixa">
+      <div>Caixa: <strong>${turno.conta_nome}</strong></div>
+      <div>Aberto por: <strong>${turno.aberto_por_nome ?? '—'}</strong></div>
+      <div>Data e hora: <strong>${dataHora(turno.aberto_em)}</strong></div>
+    </div>
+
+    <table>
+      <thead><tr><th>Lançamento</th><th class="valor">Valor</th></tr></thead>
+      <tbody>
+        <tr><td>Fundo de troco na abertura</td><td class="valor"><strong>${dinheiro(turno.fundo_troco)}</strong></td></tr>
+      </tbody>
+    </table>
+
+    <div class="caixa">
+      Confira o dinheiro na gaveta antes de assinar. A partir daqui, tudo o que
+      entrar e sair deste caixa entra na conferência do fechamento.
+    </div>
+
+    <div class="assinatura">Responsável pela abertura</div>`
+  )
 }
 
 export function gerarHtmlFechamentoCaixa(
@@ -611,4 +662,144 @@ export function gerarHtmlComprovanteEntrega(
   </div>
 </body>
 </html>`
+}
+
+// ─── 5. Resumo financeiro do mês ─────────────────────────────────────────────
+
+/**
+ * O mesmo mês que o painel mostra na tela, em papel.
+ *
+ * ⚠️ Ele nasce DEPOIS do painel, e é de propósito: o pedido foi justamente
+ * deixar de obrigar o lojista a exportar para ver os números. O papel continua
+ * existindo porque contador pede papel, mas agora é a segunda porta, não a
+ * única.
+ *
+ * ⚠️ Os números vêm prontos da consulta. Recalcular qualquer coisa aqui criaria
+ * um segundo lugar onde "receita" tem definição, e no dia em que um mudasse, a
+ * tela e o papel passariam a discordar sem nenhum erro aparecer.
+ */
+export type ResumoMesRelatorio = {
+  mes: string
+  saldo_inicial: number
+  saldo_final: number
+  receitas: number
+  despesas: number
+  resultado: number
+  movimentacoes_internas: number
+  lancamentos: number
+  despesas_por_categoria: Array<{ categoria: string; total: number; lancamentos: number }>
+  por_conta: Array<{
+    conta_id: number
+    nome: string
+    tipo: string
+    entradas: number
+    saidas: number
+    saldo_final: number
+  }>
+  por_dia: Array<{ dia: string; receitas: number; despesas: number }>
+}
+
+const MESES_POR_EXTENSO = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+]
+
+/** '2026-05' vira 'Maio de 2026'. */
+export function rotuloMesFinanceiro(mes: string): string {
+  const [ano, m] = mes.split('-')
+  const nome = MESES_POR_EXTENSO[Number(m) - 1]
+  return nome ? `${nome} de ${ano}` : mes
+}
+
+const TIPO_CONTA: Record<string, string> = {
+  caixa: 'Caixa',
+  banco: 'Banco',
+  a_receber: 'A receber'
+}
+
+export function gerarHtmlResumoMensal(r: ResumoMesRelatorio): string {
+  const sinal = (v: number): string => (v < 0 ? '−' : '')
+  const valor = (v: number): string => `${sinal(v)}${dinheiro(Math.abs(v))}`
+
+  const diasComMovimento = r.por_dia.filter((d) => d.receitas !== 0 || d.despesas !== 0)
+
+  const blocoTotais = `<div class="caixa">
+    <table>
+      <tbody>
+        <tr><td>Saldo no começo do mês</td><td class="valor">${valor(r.saldo_inicial)}</td></tr>
+        <tr><td>Receitas</td><td class="valor sobra">+${dinheiro(r.receitas)}</td></tr>
+        <tr><td>Despesas</td><td class="valor falta">−${dinheiro(r.despesas)}</td></tr>
+        <tr><td><strong>Resultado do mês</strong></td><td class="valor"><strong>${valor(r.resultado)}</strong></td></tr>
+        <tr><td>Sangrias e suprimentos (dinheiro que mudou de lugar)</td><td class="valor">${valor(r.movimentacoes_internas)}</td></tr>
+        <tr><td><strong>Saldo no fim do mês</strong></td><td class="valor"><strong>${valor(r.saldo_final)}</strong></td></tr>
+      </tbody>
+    </table>
+  </div>`
+
+  const blocoCategorias =
+    r.despesas_por_categoria.length === 0
+      ? '<div class="vazio">Nenhuma despesa lançada neste mês.</div>'
+      : `<table>
+      <thead><tr><th>Categoria</th><th class="num">Lançamentos</th><th class="valor">Total</th></tr></thead>
+      <tbody>${r.despesas_por_categoria
+        .map(
+          (c) => `<tr>
+          <td>${c.categoria}</td>
+          <td class="num">${c.lancamentos}</td>
+          <td class="valor">${dinheiro(c.total)}</td>
+        </tr>`
+        )
+        .join('')}</tbody>
+    </table>`
+
+  const blocoContas = `<table>
+    <thead><tr>
+      <th>Conta</th><th>Tipo</th>
+      <th class="valor">Entrou</th><th class="valor">Saiu</th><th class="valor">Saldo no fim</th>
+    </tr></thead>
+    <tbody>${r.por_conta
+      .map(
+        (c) => `<tr>
+        <td>${c.nome}</td>
+        <td>${TIPO_CONTA[c.tipo] ?? c.tipo}</td>
+        <td class="valor sobra">${dinheiro(c.entradas)}</td>
+        <td class="valor falta">${dinheiro(c.saidas)}</td>
+        <td class="valor">${valor(c.saldo_final)}</td>
+      </tr>`
+      )
+      .join('')}</tbody>
+  </table>`
+
+  const blocoDias =
+    diasComMovimento.length === 0
+      ? ''
+      : `<h2>Dia a dia</h2>
+    <table>
+      <thead><tr><th>Dia</th><th class="valor">Receitas</th><th class="valor">Despesas</th></tr></thead>
+      <tbody>${diasComMovimento
+        .map(
+          (d) => `<tr>
+          <td class="num">${dataCurta(d.dia)}</td>
+          <td class="valor">${d.receitas === 0 ? '—' : dinheiro(d.receitas)}</td>
+          <td class="valor">${d.despesas === 0 ? '—' : dinheiro(d.despesas)}</td>
+        </tr>`
+        )
+        .join('')}</tbody>
+    </table>`
+
+  const corpo =
+    r.lancamentos === 0
+      ? `${blocoTotais}<div class="vazio">Nenhum lançamento no livro-caixa neste mês.</div>${blocoContas}`
+      : `${blocoTotais}
+    <h2>Despesas por categoria</h2>
+    ${blocoCategorias}
+    <h2>Onde está o dinheiro</h2>
+    ${blocoContas}
+    ${blocoDias}`
+
+  return pagina(
+    `Resumo financeiro — ${rotuloMesFinanceiro(r.mes)}`,
+    `${r.lancamentos} lançamento(s) no livro-caixa`,
+    `<style>h2 { font-size: 12px; margin-top: 14px; }</style>${corpo}`
+  )
 }

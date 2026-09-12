@@ -7,6 +7,7 @@ import { RefreshCw, Settings, Upload, Trash2, Store, ChevronDown, Sparkles, Hard
 import { IMaskInput } from 'react-imask'
 import CadastroVendedores from '@/components/CadastroVendedores'
 import ConfigComissao from '@/components/ConfigComissao'
+import ConfigGarantia from '@/components/ConfigGarantia'
 import CadastroPixLoja from '@/components/CadastroPixLoja'
 import ConfigSeguranca from '@/components/ConfigSeguranca'
 import ConfigImpressao from '@/components/ConfigImpressao'
@@ -83,6 +84,7 @@ const Configuracoes: FC = () => {
   // Resumos das seções fechadas — é o que permite ler a tela sem abrir nada.
   const { autoLockMinutos } = useLock()
   const [totalVendedores, setTotalVendedores] = useState<number | null>(null)
+  const [prazoGarantia, setPrazoGarantia] = useState<number | null>(null)
   const [estadoMulticaixa, setEstadoMulticaixa] = useState<EstadoMulticaixa | null>(null)
   const { ehCaixaAdicional } = useSituacaoMulticaixa()
   const [prefsImpressao, setPrefsImpressao] = useState<{
@@ -115,6 +117,9 @@ const Configuracoes: FC = () => {
   useEffect(() => {
     window.api.vendedores.listar().then((r) => {
       if (r.success) setTotalVendedores((r.data as unknown[]).length)
+    })
+    window.api.garantias.prazoPadrao().then((r) => {
+      if (r.success) setPrazoGarantia(r.data)
     })
     // Só para o resumo da seção recolhida — o componente de dentro recarrega
     // por conta própria quando o lojista mexe. No Básico o canal não existe.
@@ -289,6 +294,12 @@ const Configuracoes: FC = () => {
       : `${totalVendedores} ${totalVendedores === 1 ? 'cadastrado' : 'cadastrados'}`
   const impressoraCupom = prefsImpressao?.cupom?.printer
   const resumoImpressao = impressoraCupom || 'nenhuma escolhida'
+  const resumoGarantia =
+    prazoGarantia == null
+      ? 'carregando…'
+      : prazoGarantia === 0
+        ? 'sem garantia padrão'
+        : `${prazoGarantia} dias`
   const resumoMulticaixa =
     estadoMulticaixa === null
       ? null
@@ -625,6 +636,31 @@ const Configuracoes: FC = () => {
         </p>
         <ConfigComissao />
         <CadastroVendedores />
+        </div>
+      </SecaoConfig>
+
+      {/*
+        A garantia fica em seção própria, e não dentro de Vendedores ou de Dados
+        da loja: é uma promessa ao cliente, não um ajuste de operação, e o
+        lojista vem aqui procurando por esse nome.
+      */}
+      <SecaoConfig
+        id="garantia"
+        titulo="Garantia"
+        icone={<ShieldCheck className="w-4 h-4" />}
+        resumo={resumoGarantia}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground -mt-1">
+            Até quando a loja responde pelo que vendeu. Cada produto pode ter um prazo próprio no
+            cadastro; sem isso, vale o padrão daqui.
+          </p>
+          {/*
+            O componente avisa o prazo novo para o resumo da seção fechada
+            acompanhar. Sem isso, o lojista salvaria 30 dias, fecharia a
+            seção e leria "90 dias" no cabeçalho.
+          */}
+          <ConfigGarantia onSalvo={setPrazoGarantia} />
         </div>
       </SecaoConfig>
 

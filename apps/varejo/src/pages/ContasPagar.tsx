@@ -30,6 +30,7 @@ import { Select } from '@fhvptech/core/ui/select'
 import { MenuAcoes, type AcaoMenu } from '@fhvptech/core/ui/MenuAcoes'
 import { useSessao } from '@/App'
 import { useEhCelular } from '@/hooks/useEhCelular'
+import DataPicker from '@/components/DataPicker'
 import DicaRolante from '@/components/DicaRolante'
 import { IMaskInput } from 'react-imask'
 import { CLASSE_DINHEIRO, paraMascara, paraNumero } from '@/utils/mascaras'
@@ -725,11 +726,17 @@ const ContasPagar: FC = () => {
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="vencimento">Vencimento</Label>
-                <Input
+                {/*
+                  ⚠️ Dentro de diálogo. O calendário sai num portal preso à
+                  janela, com as três regras que o ClienteSeletor documenta —
+                  `absolute` aqui deixaria a caixa cortada pela borda do modal.
+                */}
+                <DataPicker
                   id="vencimento"
-                  type="date"
                   value={form.vencimento}
-                  onChange={(e) => setCampo('vencimento')(e.target.value)}
+                  onChange={setCampo('vencimento')}
+                  permitirLimpar
+                  className="w-full"
                 />
               </div>
             </div>

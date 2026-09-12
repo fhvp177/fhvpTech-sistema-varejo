@@ -2,6 +2,7 @@ import { obterBancoDeDados } from '@fhvptech/core/electron/db/conexao'
 import { contaSugerida, lancarMovimento } from './financeiro'
 import { exigeCaixaAberto } from './turnos'
 import { obterComissaoPadrao } from './comissoes'
+import { prazoDoItem, prazoPadraoDaLoja } from './garantias'
 
 export type StatusPagamento = 'pago' | 'pendente' | 'inadimplente' | 'parcelado'
 
@@ -67,6 +68,10 @@ export type ItemVenda = {
   // Quanto a peça CUSTOU no dia em que foi vendida. NULL nas vendas anteriores
   // à migration 043, e quem lê cai no custo atual do produto — ver lá.
   custo_unitario: number | null
+  // Prazo de garantia CONGELADO no dia da venda. NULL nas vendas
+  // anteriores à migration 051, e quem lê trata isso como "não sei o que
+  // foi prometido", nunca como "sem garantia".
+  garantia_dias: number | null
   produto_nome?: string
   codigo_barras?: string
   tamanho?: string | null
@@ -89,6 +94,17 @@ export type DadosNovaVenda = {
    * assistência), e aí o movimento fica sem turno de propósito.
    */
   caixa_id?: number | null
+  /**
+   * Em qual conta o dinheiro desta venda entra.
+   *
+   * ⚠️ IGNORADA quando a forma é espécie: a nota está na gaveta do
+   * operador, e só lá. Ver `destinoDoRecebimento`.
+   *
+   * Ausente cai na escada de sempre: a conta casada com a FORMA, senão a
+   * padrão de recebimento, senão qualquer ativa. Quem não escolhe continua
+   * com o comportamento que sempre teve.
+   */
+  conta_id?: number | null
   status_pagamento: StatusPagamento
   data_vencimento: string | null
   num_parcelas?: number | null
@@ -486,8 +502,8 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
      VALUES (@cliente_id, @vendedor_id, datetime('now','localtime'), @total, @desconto, @entrada, @valor_pago, @status_pagamento, @data_vencimento, @num_parcelas, @forma_pagamento, @comissao_pct, @observacao, @turno_id)`
   )
   const inserirItem = db.prepare(
-    `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario, custo_unitario)
-     VALUES (@venda_id, @produto_id, @variacao_id, @quantidade, @preco_unitario, @custo_unitario)`
+    `INSERT INTO itens_venda (venda_id, produto_id, variacao_id, quantidade, preco_unitario, custo_unitario, garantia_dias)
+     VALUES (@venda_id, @produto_id, @variacao_id, @quantidade, @preco_unitario, @custo_unitario, @garantia_dias)`
   )
   /*
    * ⚠️ O custo é lido AGORA e guardado junto, como já acontece com o preço e o
@@ -501,7 +517,21 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
    * O custo é do PRODUTO mesmo em grade — na modelagem, preço e custo nunca
    * moram na variação.
    */
-  const custoDoProduto = db.prepare('SELECT custo FROM produtos WHERE id = ?')
+  const dadosDoProduto = db.prepare('SELECT custo, garantia_dias FROM produtos WHERE id = ?')
+  /*
+   * ⚠️ O prazo de garantia é congelado no item, exatamente como o custo logo
+   * acima e o percentual de comissão na venda.
+   *
+   * Garantia não é um número do sistema: é uma promessa feita a uma pessoa.
+   * Lida do produto na hora da consulta, ela mudaria de tamanho sozinha. Baixar
+   * o padrão da loja de 90 para 30 dias encurtaria, no mesmo instante, a
+   * garantia de todo mundo que já comprou, inclusive de quem está com o cupom
+   * na mão dizendo "aqui está escrito noventa dias". Ver a migration 051.
+   *
+   * O padrão é lido UMA vez por venda, e não por item: são dezenas de itens num
+   * carrinho grande, e o valor não muda no meio da mesma venda.
+   */
+  const garantiaPadrao = prazoPadraoDaLoja(db)
   const decrementarEstoqueProduto = db.prepare(
     'UPDATE produtos SET estoque = estoque - ? WHERE id = ?'
   )
@@ -546,14 +576,17 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
     vendaId = result.lastInsertRowid as number
 
     for (const item of dados.itens) {
-      const custo = custoDoProduto.get(item.produto_id) as { custo: number } | undefined
+      const doProduto = dadosDoProduto.get(item.produto_id) as
+        | { custo: number; garantia_dias: number | null }
+        | undefined
       inserirItem.run({
         venda_id: vendaId,
         produto_id: item.produto_id,
         variacao_id: item.variacao_id ?? null,
         quantidade: item.quantidade,
         preco_unitario: item.preco_unitario,
-        custo_unitario: custo?.custo ?? null
+        custo_unitario: doProduto?.custo ?? null,
+        garantia_dias: prazoDoItem(null, doProduto?.garantia_dias, garantiaPadrao)
       })
       if (item.variacao_id != null) {
         decrementarEstoqueVariacao.run(item.quantidade, item.variacao_id)
@@ -609,12 +642,21 @@ export function criarVenda(dados: DadosNovaVenda): VendaDetalhada {
        * Caixa 1 — e as duas contagens fechariam erradas, uma sobrando e a outra
        * faltando exatamente o mesmo valor.
        *
-       * Cartão e PIX seguem a conta da forma: eles não passam por gaveta nenhuma.
+       * Cartão e PIX não passam por gaveta nenhuma, então aí sim o operador
+       * pode dizer em qual conta o dinheiro caiu (`conta_id`). Sem escolha,
+       * segue a escada de sempre: a conta casada com a forma, senão a padrão
+       * de recebimento.
+       *
+       * A decisão inteira mora em `destinoDoRecebimento`, junto com a do
+       * recebimento de dívida e a da baixa de parcela — três telas diferentes
+       * que não podem discordar sobre onde o dinheiro entrou.
        */
-      const conta =
-        formaPagamento === 'dinheiro' && dados.caixa_id
-          ? dados.caixa_id
-          : contaSugerida(db, 'recebimento', formaPagamento)
+      const { conta } = destinoDoRecebimento(
+        db,
+        formaPagamento,
+        dados.caixa_id,
+        dados.conta_id
+      )
       if (conta) {
         lancarMovimento(db, {
           conta_id: conta,
@@ -696,10 +738,30 @@ export function atualizarStatusVenda(id: number, status: StatusPagamento): void 
 function destinoDoRecebimento(
   db: ReturnType<typeof obterBancoDeDados>,
   forma: string | null | undefined,
-  caixaId: number | null | undefined
+  caixaId: number | null | undefined,
+  contaEscolhida?: number | null
 ): { conta: number | null; turnoId: number | null } {
   const especie = (forma ?? '').toLowerCase() === 'dinheiro'
-  const conta = especie && caixaId ? caixaId : contaSugerida(db, 'recebimento', forma ?? null)
+  /*
+   * ⚠️ ESPÉCIE IGNORA A ESCOLHA, e a trava mora AQUI, não na tela.
+   *
+   * A nota que o cliente entregou está fisicamente na gaveta daquele
+   * operador. Mandá-la para um banco no livro faria duas coisas ao mesmo
+   * tempo: o banco ganharia dinheiro que nunca chegou nele, e o fechamento
+   * do turno acusaria SOBRA daquele valor na gaveta, todo dia, sem
+   * explicação. Com dois caixas abertos fica pior: uma contagem sobra e a
+   * outra falta exatamente o mesmo.
+   *
+   * A tela esconde a escolha quando a forma é dinheiro, e isso NÃO basta: o
+   * canal é falado por string, e quem chama pode ser um segundo caixa de
+   * versão anterior, a loja no navegador ou um script. Guarda que depende de
+   * quem chama é guarda que um dia não é chamada.
+   *
+   * Quem quiser levar espécie para o banco faz SANGRIA, que é o que ela é.
+   */
+  const conta = especie
+    ? (caixaId ?? contaSugerida(db, 'recebimento', forma ?? null))
+    : (contaEscolhida ?? contaSugerida(db, 'recebimento', forma ?? null))
   const turnoId = caixaId
     ? ((
         db
@@ -718,7 +780,9 @@ export function registrarPagamentoParcial(
   id: number,
   valor: number,
   forma?: string | null,
-  caixaId?: number | null
+  caixaId?: number | null,
+  /** Em qual conta o dinheiro caiu. IGNORADA quando a forma é espécie. */
+  contaId?: number | null
 ): void {
   const db = obterBancoDeDados()
   garantirVendaAtiva(id)
@@ -750,7 +814,7 @@ export function registrarPagamentoParcial(
     // Recebimento de dívida: dinheiro de verdade entrando, e por isso vai ao
     // livro — agora COM a forma, que é o que o fechamento usa para separar o
     // que está na gaveta do que está no cartão. Ver destinoDoRecebimento.
-    const { conta, turnoId } = destinoDoRecebimento(db, forma, caixaId)
+    const { conta, turnoId } = destinoDoRecebimento(db, forma, caixaId, contaId)
     if (conta) {
       lancarMovimento(db, {
         conta_id: conta,
@@ -769,7 +833,9 @@ export function registrarPagamentoParcial(
 export function pagarParcela(
   parcelaId: number,
   forma?: string | null,
-  caixaId?: number | null
+  caixaId?: number | null,
+  /** Em qual conta o dinheiro caiu. IGNORADA quando a forma é espécie. */
+  contaId?: number | null
 ): void {
   const db = obterBancoDeDados()
   const parcela = db
@@ -792,7 +858,7 @@ export function pagarParcela(
       // ⚠️ Só lança se a parcela ainda NÃO estava paga. Sem esta guarda, um
       // clique duplo lançaria o dinheiro duas vezes no livro — e aí o
       // fechamento acusaria uma sobra que ninguém conseguiria explicar.
-      const { conta, turnoId } = destinoDoRecebimento(db, forma, caixaId)
+      const { conta, turnoId } = destinoDoRecebimento(db, forma, caixaId, contaId)
       if (conta) {
         lancarMovimento(db, {
           conta_id: conta,

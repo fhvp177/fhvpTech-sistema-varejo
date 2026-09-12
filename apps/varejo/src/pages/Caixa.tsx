@@ -6,6 +6,7 @@ import {
   ArrowUpFromLine,
   ShieldCheck,
   History,
+  Printer,
   AlertTriangle,
   CheckCircle2,
   MonitorSmartphone
@@ -28,6 +29,10 @@ import { useSituacaoMulticaixa } from '@/components/AvisoSemConexao'
 import { useCaixaDoAparelho } from '@/hooks/useCaixaDoAparelho'
 import { CLASSE_DINHEIRO, paraNumero } from '@/utils/mascaras'
 import DetalheTurno from '@/components/DetalheTurno'
+import { gerarHtmlAberturaCaixa } from '@/utils/relatorioFinanceiro'
+import { gerarHtmlCupomAberturaCaixa } from '@/utils/cupomCaixa'
+import { obterDadosLoja } from '@/utils/dadosLoja'
+import { useImprimir } from '@/components/ImpressaoProvider'
 import { Interruptor } from '@fhvptech/core/ui/interruptor'
 
 /**
@@ -76,6 +81,7 @@ const Caixa: FC = () => {
   const { ehDono } = useSessao()
   const { ehCaixaAdicional } = useSituacaoMulticaixa()
   const { showToast } = useToast()
+  const imprimirDoc = useImprimir()
   const { caixaId, escolher } = useCaixaDoAparelho()
 
   const [caixas, setCaixas] = useState<CaixaComTurno[]>([])
@@ -185,6 +191,39 @@ const Caixa: FC = () => {
       showToast({ message: r.error, variant: 'destructive' })
     }
     setOcupado(false)
+  }
+
+  /**
+   * O comprovante de abertura, do turno que está aberto AGORA.
+   *
+   * ⚠️ São DOIS papéis, e a escolha é do lojista (Configurações → Impressão).
+   * O padrão é a bobina: a impressora que existe ao lado de um caixa é a
+   * térmica, não a de folha.
+   *
+   * ⚠️ O layout e a CATEGORIA andam juntos. Mandar o HTML de 68mm pela
+   * categoria `documento` sairia numa tira estreita no meio de uma folha A4;
+   * mandar o HTML de A4 pela categoria `cupom` sairia cortado na bobina.
+   */
+  const imprimirAbertura = async (caixa: CaixaComTurno): Promise<void> => {
+    const turno = caixa.turno
+    if (!turno) return
+    const dados = {
+      id: turno.id,
+      conta_nome: caixa.nome,
+      aberto_por_nome: turno.aberto_por_nome,
+      aberto_em: turno.aberto_em,
+      fundo_troco: turno.fundo_troco
+    }
+    const prefs = await window.api.impressao.obterPreferencias()
+    const emA4 = prefs.success && prefs.data.papelCaixa === 'a4'
+    const html = emA4
+      ? gerarHtmlAberturaCaixa(dados)
+      : gerarHtmlCupomAberturaCaixa(dados, await obterDadosLoja())
+    await imprimirDoc(
+      html,
+      `Abertura de caixa ${turno.id}`,
+      emA4 ? 'documento' : 'cupom'
+    )
   }
 
   const confirmar = async () => {
@@ -301,6 +340,19 @@ const Caixa: FC = () => {
                       >
                         <ArrowDownToLine className="w-4 h-4 mr-1.5" />
                         Suprimento
+                      </Button>
+                      {/*
+                        O comprovante de ABERTURA. Fica junto do turno aberto
+                        porque é ali que ele serve: no começo do dia, para
+                        assinar com o dinheiro conferido na gaveta.
+                      */}
+                      <Button
+                        variant="outline"
+                        className="h-11 flex-1 lg:flex-none"
+                        onClick={() => void imprimirAbertura(c)}
+                      >
+                        <Printer className="w-4 h-4 mr-1.5" />
+                        Comprovante de abertura
                       </Button>
                       <Button
                         className="h-11 w-full bg-slate-800 text-white hover:bg-slate-900 lg:w-auto"

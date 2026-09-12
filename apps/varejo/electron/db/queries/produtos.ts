@@ -25,6 +25,15 @@ export type Produto = {
   categoria: string | null
   preco: number
   custo: number
+  /**
+   * Prazo de garantia deste produto, em dias.
+   *
+   * ⚠️ NULO e ZERO são coisas diferentes. Nulo é "use o padrão da loja";
+   * zero é "este produto sai sem garantia", que é uma decisão (ponta de
+   * estoque, liquidação). Tratar os dois igual faria a loja prometer
+   * noventa dias em peça que ela escolheu vender sem garantia nenhuma.
+   */
+  garantia_dias: number | null
   estoque: number // simples: o próprio; grade: soma das variações
   fornecedor_id: number | null
   data_cadastro: string
@@ -46,6 +55,8 @@ export type DadosProduto = {
   categoria: string | null
   preco: number
   custo: number
+  /** Ausente/nulo => herda o padrão da loja. Zero => sem garantia. */
+  garantia_dias?: number | null
   estoque: number
   fornecedor_id: number | null
   // Presente e não-vazio => produto de grade (codigo_barras/estoque do produto
@@ -208,6 +219,25 @@ function sincronizarVariacoes(produtoId: number, variacoes: DadosVariacao[]): vo
   }
 }
 
+/**
+ * O prazo de garantia como ele pode entrar no banco.
+ *
+ * ⚠️ A limpeza mora AQUI, e não no handler, de propósito. O canal é falado
+ * por string, e quem chama pode ser o renderer do aplicativo, a loja no
+ * navegador ou um segundo caixa de versão anterior. Guarda que depende de
+ * quem chama é guarda que um dia não é chamada.
+ *
+ * ⚠️ Nulo e zero continuam diferentes ao sair daqui: nulo é "use o padrão da
+ * loja" e zero é "sem garantia". Só o lixo (texto, negativo, quebrado) vira
+ * nulo, porque para lixo a resposta certa é voltar para o padrão.
+ */
+function normalizarGarantia(valor: unknown): number | null {
+  if (valor == null || valor === '') return null
+  const n = Number(valor)
+  if (!Number.isInteger(n) || n < 0 || n > 3650) return null
+  return n
+}
+
 export function criarProduto(dados: DadosProduto): Produto {
   const db = obterBancoDeDados()
   const temGrade = !!dados.variacoes && dados.variacoes.length > 0
@@ -217,8 +247,8 @@ export function criarProduto(dados: DadosProduto): Produto {
       .prepare(
         // Hora da loja — ver criarVenda. Aqui alimenta "produtos parados", que
         // conta dias desde o cadastro.
-        `INSERT INTO produtos (codigo_barras, referencia, nome, categoria, preco, custo, estoque, fornecedor_id, data_cadastro)
-         VALUES (@codigo_barras, @referencia, @nome, @categoria, @preco, @custo, @estoque, @fornecedor_id, datetime('now','localtime'))`
+        `INSERT INTO produtos (codigo_barras, referencia, nome, categoria, preco, custo, garantia_dias, estoque, fornecedor_id, data_cadastro)
+         VALUES (@codigo_barras, @referencia, @nome, @categoria, @preco, @custo, @garantia_dias, @estoque, @fornecedor_id, datetime('now','localtime'))`
       )
       .run({
         codigo_barras: temGrade ? null : dados.codigo_barras,
@@ -227,6 +257,7 @@ export function criarProduto(dados: DadosProduto): Produto {
         categoria: dados.categoria,
         preco: dados.preco,
         custo: dados.custo,
+        garantia_dias: normalizarGarantia(dados.garantia_dias),
         estoque: temGrade ? 0 : dados.estoque,
         fornecedor_id: dados.fornecedor_id
       })
@@ -252,6 +283,7 @@ export function atualizarProduto(id: number, dados: DadosProduto): void {
            categoria = @categoria,
            preco = @preco,
            custo = @custo,
+           garantia_dias = @garantia_dias,
            estoque = @estoque,
            fornecedor_id = @fornecedor_id
        WHERE id = @id`
@@ -264,6 +296,7 @@ export function atualizarProduto(id: number, dados: DadosProduto): void {
       categoria: dados.categoria,
       preco: dados.preco,
       custo: dados.custo,
+      garantia_dias: normalizarGarantia(dados.garantia_dias),
       estoque: temGrade ? 0 : dados.estoque,
       fornecedor_id: dados.fornecedor_id
     })

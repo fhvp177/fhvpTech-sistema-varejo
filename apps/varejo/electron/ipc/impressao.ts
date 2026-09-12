@@ -22,6 +22,23 @@ function lerPrefImpressora(cat: CategoriaImpressao): { printer: string; direto: 
   }
 }
 
+/**
+ * Em que papel saem os comprovantes de abertura e fechamento de caixa.
+ *
+ * ⚠️ O padrão é a TÉRMICA, e o padrão é a decisão: a impressora que existe ao
+ * lado de um caixa é a de bobina. A de folha costuma estar no escritório, ou
+ * não existir. Quem quiser A4 escolhe em Configurações.
+ *
+ * ⚠️ Valor desconhecido cai em 'termica' em vez de lançar. É preferência de
+ * papel: errar para o padrão imprime num formato inesperado, e errar para o
+ * erro deixa o operador sem o comprovante no fim do turno.
+ */
+export type PapelCaixa = 'termica' | 'a4'
+
+function lerPapelCaixa(): PapelCaixa {
+  return lerConfig('papel_caixa') === 'a4' ? 'a4' : 'termica'
+}
+
 // Tira do nome o que o Windows não aceita em nome de arquivo.
 function nomeSeguro(nome: string): string {
   return nome.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim() || 'documento'
@@ -92,7 +109,11 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
     try {
       return {
         success: true,
-        data: { cupom: lerPrefImpressora('cupom'), documento: lerPrefImpressora('documento') }
+        data: {
+          cupom: lerPrefImpressora('cupom'),
+          documento: lerPrefImpressora('documento'),
+          papelCaixa: lerPapelCaixa()
+        }
       }
     } catch (e) {
       return { success: false, error: String(e) }
@@ -103,7 +124,10 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
   // que não veio (ex.: o diálogo lembra a impressora sem mexer no flag `direto`).
   registrarCanal(
     'impressao:salvarPreferencias',
-    async (prefs: Partial<Record<CategoriaImpressao, { printer?: string; direto?: boolean }>>
+    async (
+      prefs: Partial<Record<CategoriaImpressao, { printer?: string; direto?: boolean }>> & {
+        papelCaixa?: PapelCaixa
+      }
     ): Promise<RespostaIPC> => {
       try {
         for (const cat of ['cupom', 'documento'] as CategoriaImpressao[]) {
@@ -111,6 +135,11 @@ export function registrarHandlersImpressao(obterJanela: () => BrowserWindow | nu
           if (!p) continue
           if (typeof p.printer === 'string') gravarConfig(`impressora_${cat}`, p.printer)
           if (typeof p.direto === 'boolean') gravarConfig(`impressora_${cat}_direto`, p.direto ? '1' : '0')
+        }
+        // Só os dois valores conhecidos entram; qualquer outra coisa é ignorada
+        // em silêncio, e a leitura cai no padrão.
+        if (prefs?.papelCaixa === 'a4' || prefs?.papelCaixa === 'termica') {
+          gravarConfig('papel_caixa', prefs.papelCaixa)
         }
         return { success: true, data: null }
       } catch (e) {

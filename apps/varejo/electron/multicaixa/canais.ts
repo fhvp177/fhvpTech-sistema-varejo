@@ -80,8 +80,25 @@ export const CANAIS_LOCAIS = [
   // conta. Remoto, ela viraria o jeito de encobrir uma quebra de caixa à
   // distância — basta lançar um "ajuste" do tamanho da falta.
   'financeiro:lancar',
+  // O resumo do mês e a lista de meses com movimento. Ficam locais pelo mesmo
+  // motivo do extrato, e com mais força: este é o resultado do mês inteiro da
+  // loja, com o saldo de cada banco e cada gasto por categoria numa tela só.
+  'financeiro:mesesComMovimento',
   'financeiro:reativarConta',
+  'financeiro:resumoMensal',
   'financeiro:saldoConsolidado',
+  // Tráfego pago. Quanto a loja gasta em anúncio e o retorno de cada canal é
+  // estratégia de dono, e o lançamento é a porta por onde o número entra: de
+  // longe, ele viraria o jeito de mexer no ROAS de um mês inteiro.
+  'trafego:gravarInvestimentos',
+  'trafego:investimentos',
+  'trafego:resumo',
+  // ⚠️ Fechar a garantia é dizer quem paga a troca, e mexer no prazo padrão é
+  // mudar a promessa de toda venda nova da loja. O segundo caixa consulta e
+  // abre atendimento (esses estão em CANAIS_REDE); decidir é de quem está no PC.
+  'garantias:definirPrazoPadrao',
+  'garantias:fechar',
+  'garantias:reabrir',
   // ⚠️ Aceitar a diferença do caixa acontece ONDE ESTÁ O DINHEIRO. Confirmar de
   // longe seria assinar embaixo de uma contagem que ninguém viu — e o histórico
   // de fechamentos é dado de auditoria, como o de comissões.
@@ -205,6 +222,20 @@ export const CANAIS_REDE = [
   'devolucoes:registrar',
   'devolucoes:saldoCredito',
   'etiquetas:gerarPDF',
+  /*
+   * Garantia: consultar e ABRIR atendem o segundo caixa, porque é atendimento
+   * de balcão e acontece com o cliente na frente. FECHAR e mexer no prazo
+   * padrão ficam locais (ver CANAIS_LOCAIS): o desfecho é onde a loja assume o
+   * custo de uma troca, e o prazo padrão é uma promessa que passa a valer para
+   * toda venda nova.
+   */
+  'garantias:abrir',
+  'garantias:buscarItens',
+  'garantias:doItem',
+  'garantias:itensDaVenda',
+  'garantias:listar',
+  'garantias:prazoPadrao',
+  'garantias:resumo',
   'fiscal:aplicarEmLote',
   'fiscal:buscarCep',
   // Consulta de CNPJ. Atende o segundo caixa (é cadastro de cliente), mas de

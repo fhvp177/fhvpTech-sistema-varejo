@@ -863,3 +863,34 @@
 .cabecalho-fixo th {
   background-color: hsl(var(--muted));
 }
+
+/*
+ * ── O retângulo amarelo ao redor dos gráficos ────────────────────────────────
+ *
+ * O Recharts marca a área do gráfico como focalizável (é ela que dá o
+ * atalho de teclado para andar pelas barras). Clicar nela dá FOCO, e o
+ * navegador desenha o anel de foco padrão — no Windows, um retângulo amarelo
+ * grosso em volta do gráfico inteiro. Visto em 11/09/2026, com estas palavras:
+ * "eles são clicáveis (deveria ser?), mas o que acontece no clique é somente
+ * aparecer um quadrado amarelo ao redor deles".
+ *
+ * ⚠️ A correção NÃO é apagar o foco. Anel de foco é o que diz a quem navega
+ * pelo teclado onde ele está, e um `outline: none` seco deixaria a pessoa
+ * perdida no meio do Painel.
+ *
+ * A separação certa é `:focus-visible`: o navegador só o aplica quando o foco
+ * veio do TECLADO. No clique do mouse, que é o caso do relato, não aparece
+ * nada; no Tab, aparece o nosso anel, com a cor do sistema em vez da do
+ * Windows.
+ */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}
+
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 8px;
+}

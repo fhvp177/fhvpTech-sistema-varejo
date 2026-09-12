@@ -20,6 +20,7 @@ import { nomeImpressao } from '@/utils/nomeImpressao'
 import { gerarHtmlRelatorioEstoque, gerarHtmlTabelaReferencias } from '@/utils/relatoriosProdutos'
 import Paginacao from '@fhvptech/core/ui/paginacao'
 import { Tooltip } from '@fhvptech/core/ui/tooltip'
+import InventarioEstoque from '@/components/InventarioEstoque'
 import ModalCategorias from '@/components/ModalCategorias'
 import ModalImportarXml from '@/components/ModalImportarXml'
 import ModalNotasEntrada from '@/components/ModalNotasEntrada'
@@ -48,6 +49,8 @@ type Produto = {
   categoria: string | null
   preco: number
   custo: number
+  // Nulo = herda o padrão da loja. Zero = vendido sem garantia.
+  garantia_dias: number | null
   estoque: number // simples: o próprio; grade: soma dos tamanhos
   fornecedor_id: number | null
   fornecedor_nome?: string | null
@@ -68,6 +71,8 @@ type FormProduto = {
   categoria: string
   preco: string
   custo: string
+  // Vazio = herda o padrão da loja. "0" = vendido sem garantia.
+  garantia_dias: string
   estoque: string
   fornecedor_id: string
   temGrade: boolean
@@ -113,6 +118,7 @@ const FORM_VAZIO: FormProduto = {
   categoria: '',
   preco: '',
   custo: '',
+  garantia_dias: '',
   estoque: '0',
   fornecedor_id: '',
   temGrade: false,
@@ -146,6 +152,13 @@ const Produtos: FC = () => {
   const [relatorioAberto, setRelatorioAberto] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
+  /*
+   * O prazo padrão da loja, só para escrever na dica do campo de garantia
+   * ("padrão da loja: 90"). Fica nulo até responder, e o campo simplesmente
+   * não mostra a dica — melhor sem dica do que com um número chutado.
+   */
+  const [prazoPadraoLoja, setPrazoPadraoLoja] = useState<number | null>(null)
+
   // Importação de NF-e (XML) + histórico das notas importadas
   const [importarXmlAberto, setImportarXmlAberto] = useState(false)
   const [notasEntradaAberto, setNotasEntradaAberto] = useState(false)
@@ -177,6 +190,9 @@ const Produtos: FC = () => {
 
   useEffect(() => {
     carregar()
+    void window.api.garantias.prazoPadrao().then((r) => {
+      if (r.success) setPrazoPadraoLoja(r.data)
+    })
   }, [])
 
   // Captura leitura do leitor USB: digita rápido e envia Enter
@@ -247,6 +263,9 @@ const Produtos: FC = () => {
       categoria: p.categoria ?? '',
       preco: paraMascara(p.preco),
       custo: (p.custo ?? 0) > 0 ? paraMascara(p.custo ?? 0) : '',
+      // ⚠️ `== null` e não `||`: zero é "sem garantia", uma decisão, e com
+      // `||` ele voltaria para o campo vazio, que quer dizer o contrário.
+      garantia_dias: p.garantia_dias == null ? '' : String(p.garantia_dias),
       estoque: temGrade ? '0' : String(p.estoque),
       fornecedor_id: p.fornecedor_id ? String(p.fornecedor_id) : '',
       temGrade,
@@ -284,6 +303,12 @@ const Produtos: FC = () => {
     if (preco < 0) { setErro('Preço inválido.'); return }
     const custo = form.custo.trim() ? paraNumero(form.custo) : 0
     if (custo < 0) { setErro('Preço de compra inválido.'); return }
+    if (form.garantia_dias.trim() !== '') {
+      const dias = Number(form.garantia_dias)
+      if (!Number.isInteger(dias) || dias < 0 || dias > 3650) {
+        setErro('A garantia deve ser um número inteiro de dias, de 0 a 3650.'); return
+      }
+    }
 
     // Tamanhos efetivamente cadastrados = os que têm código de barras preenchido.
     const ativos = form.variacoes.filter((v) => v.codigo_barras.trim())
@@ -314,6 +339,8 @@ const Produtos: FC = () => {
       categoria: form.categoria.trim() || null,
       preco,
       custo,
+      // Campo em branco vai NULO: é "use o padrão da loja", não é zero.
+      garantia_dias: form.garantia_dias.trim() === '' ? null : parseInt(form.garantia_dias),
       estoque: form.temGrade ? 0 : parseInt(form.estoque) || 0,
       fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
       variacoes: form.temGrade
@@ -589,6 +616,15 @@ const Produtos: FC = () => {
           />
         </div>
       </div>
+
+      {/*
+        O inventário: quanto a prateleira vale junto, e onde esse dinheiro está.
+
+        ⚠️ Recebe a lista COMPLETA, não a filtrada pela busca. O inventário é da
+        loja; se seguisse a busca, digitar três letras no campo faria o valor do
+        estoque despencar na tela sem nada ter acontecido no depósito.
+      */}
+      {ehDono && <InventarioEstoque produtos={lista} />}
 
       {/*
         ⭐ No celular a tabela vira LISTA (roteiro §6), mesmo padrão de Clientes.
@@ -1034,6 +1070,25 @@ const Produtos: FC = () => {
                   {...CLASSE_DINHEIRO}
                   value={form.custo}
                   onAccept={(v: string) => setForm((f) => ({ ...f, custo: v }))}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="garantia" className="flex items-center gap-1.5">
+                  Garantia (dias)
+                  <Tooltip content="Em branco usa o prazo padrão da loja, que fica em Configurações. Zero significa que este produto sai sem garantia.">
+                    <Info className="w-3.5 h-3.5 cursor-help text-muted-foreground" />
+                  </Tooltip>
+                </Label>
+                <Input
+                  id="garantia"
+                  type="number"
+                  min="0"
+                  max="3650"
+                  step="1"
+                  placeholder={prazoPadraoLoja == null ? '' : `padrão da loja: ${prazoPadraoLoja}`}
+                  value={form.garantia_dias}
+                  onChange={setF('garantia_dias')}
                 />
               </div>
 

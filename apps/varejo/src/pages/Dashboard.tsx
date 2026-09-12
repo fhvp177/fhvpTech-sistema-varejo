@@ -15,6 +15,7 @@ import DividasClienteDialog, {
   type VendaDivida
 } from '@/components/DividasClienteDialog'
 import DashboardSkeleton from '@/components/DashboardSkeleton'
+import CardsTrafegoPago from '@/components/CardsTrafegoPago'
 import { useEhCelular } from '@/hooks/useEhCelular'
 import ReceberPagamentoDialog from '@/components/ReceberPagamentoDialog'
 import { Skeleton } from '@fhvptech/core/ui/skeleton'
@@ -641,7 +642,18 @@ const Dashboard: FC = () => {
                   margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
                   barGap={ehCelular ? 1 : 2}
                   barCategoryGap={ehCelular ? '26%' : '10%'}
-                  maxBarSize={ehCelular ? 10 : undefined}
+                  /*
+                    ⚠️ O teto de largura existe por causa do período CURTO.
+
+                    Sem ele, o Recharts divide a largura toda entre as barras
+                    que houver: três dias de movimento viram três blocos de
+                    150px, e o gráfico deixa de parecer gráfico. Nas palavras
+                    do dono, ficam "muito quadradões".
+
+                    O teto não atrapalha o mês cheio: com 30 barras a largura
+                    de cada uma já é bem menor que isto, e o valor é ignorado.
+                  */
+                  maxBarSize={ehCelular ? 10 : 44}
                 >
                   <CartesianGrid
                     strokeDasharray={ehCelular ? '4 4' : '3 3'}
@@ -776,6 +788,22 @@ const Dashboard: FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 lg:gap-4 lg:mt-4">
         <CardFormaPagamento metricas={metricas} carregando={carregandoMetricas} />
         <CardTopCategorias metricas={metricas} carregando={carregandoMetricas} />
+      </div>
+
+      {/*
+        ── Tráfego pago + ROAS ──
+
+        Entram aqui, logo depois de "de onde veio o dinheiro", porque respondem
+        a pergunta seguinte: quanto custou fazer esse dinheiro entrar. Os dois
+        cartões buscam os próprios dados e usam o MESMO período do filtro lá em
+        cima.
+      */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 lg:gap-4 lg:mt-4">
+        <CardsTrafegoPago
+          inicio={intervalo.inicio_atual}
+          fim={intervalo.fim_atual}
+          rotuloPeriodo={rotuloPeriodo}
+        />
       </div>
 
       {/* ── Ranking de vendedores + Vendas por dia da semana ── */}
@@ -1900,7 +1928,11 @@ const CardDiaSemana: FC<WidgetProps> = ({ metricas, carregando }) => {
         <>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dados} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+              <BarChart
+                data={dados}
+                margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+                maxBarSize={44}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis dataKey="dia" fontSize={11} tick={{ fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
                 <YAxis fontSize={11} tick={{ fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} tickFormatter={fmtCompacto} />
