@@ -20,6 +20,21 @@ export type PontoSerie = {
   total: number
   total_anterior: number // mesmo bucket no período de comparação (alinhado por posição)
   num_vendas: number
+  /**
+   * O que as peças vendidas neste dia CUSTARAM para a loja.
+   *
+   * ⚠️ É o valor da reposição, e é para isso que o lojista usa: separar todo dia
+   * o dinheiro de comprar de volta o que saiu. Por isso ele é somado do custo
+   * CONGELADO no item (`itens_venda.custo_unitario`), e não do preço de compra
+   * de hoje — ver o comentário de `custoVendas`.
+   *
+   * ⚠️ Produto sem custo cadastrado entra como ZERO e infla o lucro. É por isso
+   * que existe `itens_sem_custo` ao lado: sem o aviso, o lojista separaria menos
+   * do que devia e gastaria o dinheiro da mercadoria achando que era lucro.
+   */
+  custo: number
+  /** Faturamento menos custo. É lucro BRUTO: não desconta despesa nenhuma. */
+  lucro: number
 }
 
 export type TopProduto = {
@@ -107,6 +122,10 @@ export type MetricasDashboard = {
   meta_mensal: number
   faturamento_mes_corrente: number
   serie_temporal: PontoSerie[]
+  /** Peças vendidas no período sem custo cadastrado — o gráfico avisa. */
+  itens_sem_custo: number
+  /** Quanto do faturamento veio dessas peças. */
+  faturamento_sem_custo: number
   top_produtos: TopProduto[]
   top_categorias: TopCategoria[]
   ranking_vendedores: VendedorRanking[]
@@ -243,16 +262,65 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     )
     .all(inicio_anterior, fim_anterior) as Array<{ bucket: string; total: number }>
 
+  /*
+   * O custo das peças vendidas em cada dia do período.
+   *
+   * ⚠️ O bucket é calculado sobre `v.data`, a data da VENDA — a mesma coluna e a
+   * mesma expressão da série de faturamento acima. Agrupar por outra data (a da
+   * compra da peça, por exemplo) daria duas séries que não conversam: o custo
+   * apareceria num dia e a receita dele em outro.
+   */
+  const bucketExprVenda = bucketExpr.replace('data', 'v.data')
+  const linhasCusto = db
+    .prepare(
+      `SELECT ${bucketExprVenda} AS bucket,
+              COALESCE(SUM(iv.quantidade * COALESCE(iv.custo_unitario, p.custo)), 0) AS custo
+         FROM itens_venda iv
+         JOIN vendas v ON v.id = iv.venda_id
+         JOIN produtos p ON p.id = iv.produto_id
+        WHERE date(v.data) >= ? AND date(v.data) <= ? AND v.cancelada = 0
+        GROUP BY bucket`
+    )
+    .all(inicio_atual, fim_atual) as Array<{ bucket: string; custo: number }>
+  const custoPorBucket = new Map(linhasCusto.map((l) => [l.bucket, l.custo]))
+
   const serieTemporal: PontoSerie[] = linhasSerie.map((r, i) => {
     const dataInicio = bucketParaData(r.bucket)
+    const custo = +(custoPorBucket.get(r.bucket) ?? 0).toFixed(2)
     return {
       rotulo: formatarRotulo(dataInicio, gran),
       data_inicio: dataInicio,
       total: r.total,
       total_anterior: linhasSerieAnterior[i]?.total ?? 0,
-      num_vendas: r.num_vendas
+      num_vendas: r.num_vendas,
+      custo,
+      lucro: +(r.total - custo).toFixed(2)
     }
   })
+
+  /*
+   * Quantas peças saíram no período SEM custo conhecido.
+   *
+   * ⚠️ Este número é o que salva o gráfico de mentir calado. Produto sem custo
+   * cadastrado entra como zero: o custo do dia sai menor do que foi e o lucro
+   * sai maior. Para quem usa o gráfico para separar o dinheiro da reposição,
+   * isso é o erro caro — ele separa de menos e gasta o dinheiro da mercadoria
+   * achando que era lucro.
+   *
+   * ⚠️ Conta ITENS, não produtos distintos: dez peças de um produto sem custo
+   * pesam dez vezes mais no buraco do que uma peça de outro.
+   */
+  const semCusto = db
+    .prepare(
+      `SELECT COALESCE(SUM(iv.quantidade), 0) AS itens,
+              COALESCE(SUM(iv.quantidade * iv.preco_unitario), 0) AS faturamento
+         FROM itens_venda iv
+         JOIN vendas v ON v.id = iv.venda_id
+         JOIN produtos p ON p.id = iv.produto_id
+        WHERE date(v.data) >= ? AND date(v.data) <= ? AND v.cancelada = 0
+          AND COALESCE(iv.custo_unitario, p.custo, 0) = 0`
+    )
+    .get(inicio_atual, fim_atual) as { itens: number; faturamento: number }
 
   // Top 5 produtos por receita gerada no período.
   const topProdutos = db
@@ -543,6 +611,8 @@ export function obterMetricasDashboard(intervalo: IntervaloDashboard): MetricasD
     meta_mensal: metaMensal,
     faturamento_mes_corrente: faturamento_mes,
     serie_temporal: serieTemporal,
+    itens_sem_custo: semCusto.itens,
+    faturamento_sem_custo: +semCusto.faturamento.toFixed(2),
     top_produtos: topProdutos,
     top_categorias: topCategorias,
     ranking_vendedores: rankingVendedores,

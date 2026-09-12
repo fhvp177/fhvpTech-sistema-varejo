@@ -174,7 +174,14 @@ type MetricasDashboard = {
     total: number
     total_anterior: number
     num_vendas: number
+    /** O que as peças vendidas neste dia custaram — o valor da reposição. */
+    custo: number
+    /** Faturamento menos custo. Bruto: não desconta despesa nenhuma. */
+    lucro: number
   }>
+  /** Peças vendidas no período sem custo cadastrado. Zero infla o lucro. */
+  itens_sem_custo: number
+  faturamento_sem_custo: number
   top_produtos: Array<{
     produto_id: number
     nome: string

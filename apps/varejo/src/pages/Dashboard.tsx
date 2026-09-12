@@ -1,7 +1,7 @@
 import { CSSProperties, FC, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, Clock, TrendingUp, TrendingDown, Users, Package, LayoutDashboard,
-  ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle,
+  ShoppingBag, Receipt, BarChart3, Award, CreditCard, Tag, Wallet, AlertCircle, Layers,
   ArrowLeftRight, Target, Trophy, CalendarDays, PiggyBank, Gift, Pencil, Check, X,
   CheckCircle2
 } from 'lucide-react'
@@ -804,6 +804,18 @@ const Dashboard: FC = () => {
           fim={intervalo.fim_atual}
           rotuloPeriodo={rotuloPeriodo}
         />
+      </div>
+
+      {/*
+        ⚠️ Fica logo abaixo do gráfico de faturamento e ocupa a largura inteira.
+
+        É a continuação da mesma pergunta ("quanto entrou?" → "quanto disso é
+        meu?"), e o lojista usa este número todo dia para separar a reposição.
+        Espremido numa coluna ao lado de outro card, as barras empilhadas de um
+        mês ficariam finas demais para ele ler o dia que procura.
+      */}
+      <div className="mt-3 lg:mt-4">
+        <CardCustoLucro metricas={metricas} carregando={carregandoMetricas} />
       </div>
 
       {/* ── Ranking de vendedores + Vendas por dia da semana ── */}
@@ -1914,6 +1926,244 @@ const CardRankingVendedores: FC<WidgetProps> = ({ metricas, carregando }) => {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  )
+}
+
+
+/**
+ * Faturamento, custo e lucro em cada dia do período.
+ *
+ * ── Para que ele serve ──────────────────────────────────────────────────────
+ * O lojista separa, todo dia, o dinheiro de comprar de volta o que vendeu. A
+ * pergunta dele é "quanto eu mando hoje para a conta de reposição?", e a
+ * resposta é a parte de baixo da barra.
+ *
+ * ── Por que empilhado, e não lado a lado ────────────────────────────────────
+ * Empilhado, a barra INTEIRA é o faturamento do dia, a parte de baixo é o que
+ * volta para o fornecedor e a de cima é o que fica com a loja. É a conta que
+ * ele faz de cabeça, desenhada. Lado a lado, ele teria que comparar duas
+ * alturas para chegar na mesma coisa.
+ *
+ * ⚠️ Prejuízo no dia (desconto maior que a margem) desenha a fatia de lucro
+ * para BAIXO do zero, e é o certo: esconder o negativo daria um dia que parece
+ * normal e não foi.
+ */
+const CardCustoLucro: FC<WidgetProps> = ({ metricas, carregando }) => {
+  const ehCelular = useEhCelular()
+  const serie = metricas?.serie_temporal ?? []
+  const temDados = serie.some((p) => p.total > 0 || p.custo > 0)
+
+  const totalFat = serie.reduce((s, p) => s + p.total, 0)
+  const totalCusto = serie.reduce((s, p) => s + p.custo, 0)
+  const totalLucro = +(totalFat - totalCusto).toFixed(2)
+
+  const semCusto = metricas?.itens_sem_custo ?? 0
+  /*
+   * ⚠️ Nenhum custo no período inteiro: o gráfico NÃO é desenhado.
+   *
+   * É a mesma regra dos cartões do topo do Painel, que nesse caso mostram "—"
+   * em vez do número (ver `semCustoCadastrado`). Aqui seria pior que um número
+   * errado: a barra sairia inteirinha verde, e "lucro igual ao faturamento" é a
+   * notícia mais convincente e mais falsa que esta tela pode dar — ainda mais
+   * para quem usa este gráfico justamente para separar o dinheiro da compra.
+   *
+   * Com parte dos produtos custeada o gráfico aparece, com o aviso em cima: aí
+   * ele informa, mesmo torto, e o aviso diz o tamanho do torto.
+   */
+  const nenhumCusto = temDados && totalCusto <= 0
+
+  /*
+   * O último dia com venda do período — a resposta da pergunta que o lojista
+   * faz TODO dia: "quanto eu separo hoje?".
+   *
+   * ⚠️ O gráfico responde isso mal de propósito: ele existe para mostrar o
+   * PADRÃO de vários dias, e achar a barra de hoje no meio de trinta exige
+   * procurar. O número aqui em cima responde de relance, e o gráfico continua
+   * respondendo o resto.
+   *
+   * ⚠️ Diz a DATA junto, e não só "hoje". A série só traz dias que tiveram
+   * venda: se ainda não vendeu nada hoje, o último ponto é de ontem, e um
+   * rótulo escrito "hoje" estaria mentindo. Com a data escrita, quem lê
+   * confere sozinho.
+   *
+   * ⚠️ Só aparece quando cada barra é um DIA. Em período longo o Painel agrupa
+   * por semana ou por mês, e aí "o último ponto" não é um dia nenhum.
+   */
+  const porDia = metricas?.granularidade === 'dia'
+  const ultimo = porDia && serie.length > 0 ? serie[serie.length - 1] : null
+  const hojeIso = new Date().toLocaleDateString('sv-SE') // 'YYYY-MM-DD' local
+  const ultimoEhHoje = ultimo?.data_inicio === hojeIso
+
+  return (
+    <div className="anim-gatilho border rounded-xl p-3 lg:p-4 bg-card">
+      <div className="flex items-center gap-2 mb-1">
+        <Layers className="anim-alvo-acena w-5 h-5 text-muted-foreground" />
+        <h3 className="font-semibold">Custo e lucro por dia</h3>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        Quanto de cada dia é custo dos produtos e quanto é lucro. Os três números do meio são
+        o total do período escolhido lá em cima.
+      </p>
+
+      {/*
+        ⚠️ O aviso vem ANTES do gráfico, e não num rodapé.
+
+        Produto sem custo cadastrado entra como zero: o custo do dia sai menor do
+        que foi e o lucro sai maior. Quem usa este gráfico para separar o
+        dinheiro da reposição separaria de menos — e gastaria o dinheiro da
+        mercadoria achando que era lucro. Embaixo do gráfico, o aviso chegaria
+        depois de a conta errada já ter sido lida.
+      */}
+      {semCusto > 0 && (
+        <div className="mb-3 rounded-lg border border-warn bg-warn-soft px-3 py-2 text-[12.5px] text-warn">
+          <span className="font-semibold">
+            {semCusto} {semCusto === 1 ? 'item vendido' : 'itens vendidos'} sem preço de compra
+            cadastrado.
+          </span>{' '}
+          Eles entram com custo zero, então o custo abaixo está menor e o lucro maior do que a
+          realidade. Cadastre o preço de compra em Produtos.
+        </div>
+      )}
+
+      {carregando ? (
+        <Skeleton className="h-52 w-full" />
+      ) : !temDados ? (
+        <p className="text-sm text-muted-foreground text-center py-12">Sem vendas no período.</p>
+      ) : nenhumCusto ? (
+        <div className="py-10 text-center">
+          <p className="text-sm font-medium">Nenhum produto vendido tem preço de compra.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Cadastre o preço de compra em Produtos e este gráfico passa a mostrar quanto de cada
+            dia é custo e quanto é lucro.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/*
+            A faixa do dia vem ANTES do total do período: é o número que ele usa
+            todo dia. O total do período é conferência, não operação.
+          */}
+          {ultimo && (
+            <div className="mb-3 rounded-lg border border-primary/30 bg-primary-soft px-3 py-2.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <span className="text-[12.5px] font-medium">
+                  {ultimoEhHoje ? 'Hoje' : 'Último dia com venda'}
+                  <span className="text-muted-foreground"> · {ultimo.rotulo}</span>
+                </span>
+                <span className="text-[12.5px] text-muted-foreground">
+                  Faturamento {fmt(ultimo.total)}
+                </span>
+              </div>
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                <span className="num text-xl font-bold text-warn">{fmt(ultimo.custo)}</span>
+                <span className="text-[12.5px] text-muted-foreground">
+                  é o custo dos produtos que saíram
+                </span>
+              </div>
+              <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                Lucro bruto do dia:{' '}
+                <span className={ultimo.lucro < 0 ? 'text-critical' : 'text-positive'}>
+                  {fmt(ultimo.lucro)}
+                </span>
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            {/*
+              As três palavras são as MESMAS dos cartões do topo do Painel:
+              faturamento, custo dos produtos, lucro bruto. Dois nomes para a
+              mesma conta na mesma tela é pior que um nome mediano.
+            */}
+            <div className="rounded-lg bg-muted/60 px-2.5 py-2">
+              <p className="text-[11.5px] text-muted-foreground">Faturamento</p>
+              <p className="num text-[15px] font-bold">{fmt(totalFat)}</p>
+            </div>
+            <div className="rounded-lg bg-muted/60 px-2.5 py-2">
+              <p className="text-[11.5px] text-muted-foreground">Custo</p>
+              <p className="num text-[15px] font-bold text-warn">{fmt(totalCusto)}</p>
+            </div>
+            <div className="rounded-lg bg-muted/60 px-2.5 py-2">
+              <p className="text-[11.5px] text-muted-foreground">Lucro bruto</p>
+              <p
+                className={`num text-[15px] font-bold ${
+                  totalLucro < 0 ? 'text-critical' : 'text-positive'
+                }`}
+              >
+                {fmt(totalLucro)}
+              </p>
+            </div>
+          </div>
+
+          <div className="h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={serie}
+                margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+                maxBarSize={ehCelular ? 10 : 44}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis
+                  dataKey="rotulo"
+                  fontSize={ehCelular ? 10 : 11}
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveEnd"
+                  minTickGap={ehCelular ? 8 : 5}
+                />
+                <YAxis
+                  fontSize={ehCelular ? 10 : 11}
+                  width={ehCelular ? 40 : 60}
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={fmtCompacto}
+                />
+                <Tooltip
+                  formatter={(valor, nome) => [fmt(Number(valor)), String(nome)]}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--background))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: 8,
+                    fontSize: 12
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {/*
+                  A ordem importa: o custo é a base da pilha porque é a parte que
+                  não é da loja. O lucro se apoia nela, que é como o dinheiro
+                  realmente se comporta.
+                */}
+                {/*
+                  ⚠️ `hsl(var(--warn))` e não um hexadecimal: o recharts desenha
+                  SVG, e cor literal aqui não acompanharia o tema escuro nem
+                  poderia ser redefinida num lugar só. É a mesma regra do JSX,
+                  guardada por telaEstreitaEToque.test.ts.
+                */}
+                <Bar
+                  dataKey="custo"
+                  name="Custo dos produtos"
+                  stackId="dia"
+                  fill="hsl(var(--warn))"
+                  radius={[0, 0, 0, 0]}
+                />
+                <Bar
+                  dataKey="lucro"
+                  name="Lucro bruto"
+                  stackId="dia"
+                  fill="hsl(var(--primary))"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="mt-1 text-center text-[11.5px] text-muted-foreground">
+            O lucro bruto não desconta as despesas da loja (aluguel, energia, salário).
+          </p>
+        </>
       )}
     </div>
   )
