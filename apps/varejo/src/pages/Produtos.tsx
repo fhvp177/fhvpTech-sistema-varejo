@@ -188,6 +188,10 @@ const Produtos: FC = () => {
   )
   const mostrarOpcaoGrade = categoriaUsaTamanhos || form.temGrade
 
+  // Quantos da lista atual estão arquivados. Só faz sentido com o filtro
+  // ligado — sem ele, a lista nem traz arquivado nenhum.
+  const quantosArquivados = lista.filter((p) => p.arquivado).length
+
   const carregar = async () => {
     const [rProdutos, rFornecedores, rCategorias] = await Promise.all([
       window.api.produtos.listar(verArquivados),
@@ -621,6 +625,14 @@ const Produtos: FC = () => {
         </div>
       </div>
 
+      {/*
+        ⚠️ Com o filtro ligado, a tela PRECISA dizer o que ele encontrou.
+
+        Ligar o filtro numa loja sem nenhum produto arquivado não muda uma linha
+        da lista — e sem esta frase o lojista fica olhando para um botão aceso
+        sem efeito, achando que o sistema não respondeu. Foi exatamente o que
+        aconteceu na primeira vez que ele usou.
+      */}
       {/* Busca + Leitor USB */}
       <div className="flex items-center gap-2 mb-3 lg:gap-3 lg:mb-4 lg:max-w-xl">
         <div className="relative flex-1" data-tour="produtos-busca">
@@ -646,15 +658,24 @@ const Produtos: FC = () => {
             type="button"
             onClick={() => setVerArquivados((v) => !v)}
             aria-pressed={verArquivados}
-            title={verArquivados ? 'Ocultar os arquivados' : 'Mostrar também os arquivados'}
+            title={
+              verArquivados
+                ? 'Voltar a mostrar só os produtos ativos'
+                : 'Mostrar também os produtos arquivados'
+            }
             className={`h-11 shrink-0 rounded-md border px-3 text-sm transition-colors lg:h-10 ${
               verArquivados
                 ? 'bg-primary/10 border-primary text-primary font-medium'
                 : 'bg-background hover:bg-muted/30'
             }`}
           >
+            {/*
+              "Ver" na frente porque sem ele o botão parecia a AÇÃO de arquivar:
+              o lojista clicou, ele acendeu, e nada mudou na tela — porque não
+              havia nenhum produto arquivado para mostrar.
+            */}
             <Archive className="w-4 h-4 inline-block lg:mr-1.5" />
-            <span className="hidden lg:inline">Arquivados</span>
+            <span className="hidden lg:inline">Ver arquivados</span>
           </button>
         )}
         {/*
@@ -692,6 +713,24 @@ const Produtos: FC = () => {
           />
         </div>
       </div>
+
+      {/*
+        ⚠️ Com o filtro ligado, a tela diz o que ele encontrou.
+
+        Ligar "Ver arquivados" numa loja sem nenhum produto arquivado não muda
+        uma linha da lista. Sem esta frase, o lojista fica olhando para um botão
+        aceso sem efeito nenhum e conclui que o sistema não respondeu — foi
+        exatamente o que aconteceu na primeira vez que ele usou.
+      */}
+      {verArquivados && (
+        <p className="-mt-1 mb-3 text-[12.5px] text-muted-foreground">
+          {quantosArquivados === 0
+            ? 'Nenhum produto arquivado. Para arquivar, use o ícone de caixa na linha do produto.'
+            : `Mostrando também ${quantosArquivados} produto${
+                quantosArquivados === 1 ? ' arquivado' : 's arquivados'
+              }, com o selo cinza.`}
+        </p>
+      )}
 
       {/*
         O inventário: quanto a prateleira vale junto, e onde esse dinheiro está.
@@ -946,6 +985,31 @@ const Produtos: FC = () => {
                       <div className="flex gap-1 justify-end">
                         <Button variant="ghost" size="icon" onClick={() => abrirEdicao(p)}>
                           <Pencil className="w-4 h-4" />
+                        </Button>
+                        {/*
+                          ⚠️ Arquivar mora AQUI também, e não só no menu do
+                          celular. Esta é a tela que o lojista usa no balcão, e a
+                          ação existia apenas no cartão estreito: no computador
+                          não havia como arquivar nada, e o único botão com essa
+                          palavra na tela era o FILTRO — que parecia a ação e não
+                          fazia nada de visível.
+                        */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => alternarArquivo(p)}
+                          title={
+                            p.arquivado
+                              ? `Reativar "${p.nome}"`
+                              : `Arquivar "${p.nome}" (sai da lista e do caixa)`
+                          }
+                          aria-label={p.arquivado ? 'Reativar produto' : 'Arquivar produto'}
+                        >
+                          {p.arquivado ? (
+                            <ArchiveRestore className="w-4 h-4" />
+                          ) : (
+                            <Archive className="w-4 h-4" />
+                          )}
                         </Button>
                         <Button
                           variant="ghost"
